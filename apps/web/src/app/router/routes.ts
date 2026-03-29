@@ -1,0 +1,21 @@
+export const routes = {
+  home: "/",
+  login: "/login",
+  register: "/register",
+  suspended: "/suspended",
+  explorer: "/explorer",
+  explorerProducts: "/explorer?type=produits",
+  explorerServices: "/explorer?type=services",
+  services: "/services",
+  servicesProducts: "/services?type=produits",
+  servicesOnly: "/services?type=services",
+  plans: "/forfaits",
+  cart: "/cart",
+  account: "/account",
+  businessDashboard: "/business/dashboard",
+  adminDashboard: "/admin/dashboard",
+  userPublic: (username: string) => `/user/${username}`,
+  businessPublic: (slug: string) => `/business/${slug}`,
+  listingDetails: (id: string) => `/listing/${id}`,
+  soKin: "/sokin"
+};

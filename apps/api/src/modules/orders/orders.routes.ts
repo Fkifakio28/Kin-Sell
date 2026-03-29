@@ -1,0 +1,213 @@
+import { OrderStatus } from "@prisma/client";
+import { Router } from "express";
+import { z } from "zod";
+import { requireAuth, requireRoles, type AuthenticatedRequest } from "../../shared/auth/auth-middleware.js";
+import { asyncHandler } from "../../shared/utils/async-handler.js";
+import { Role } from "../../types/roles.js";
+import * as ordersService from "./orders.service.js";
+import { sendPushToUser } from "../notifications/push.service.js";
+
+const pagingSchema = z.object({
+  page: z.coerce.number().min(1).default(1),
+  limit: z.coerce.number().min(1).max(50).default(10),
+  inProgressOnly: z.coerce.boolean().optional(),
+  status: z.nativeEnum(OrderStatus).optional()
+});
+
+const addCartItemSchema = z.object({
+  listingId: z.string().min(8),
+  quantity: z.coerce.number().int().min(1).default(1),
+  unitPriceUsdCents: z.coerce.number().int().min(0).optional()
+});
+
+const updateCartItemSchema = z.object({
+  quantity: z.coerce.number().int().min(1).optional(),
+  unitPriceUsdCents: z.coerce.number().int().min(0).optional()
+}).refine((value) => value.quantity !== undefined || value.unitPriceUsdCents !== undefined, {
+  message: "quantity ou unitPriceUsdCents est requis"
+});
+
+const checkoutSchema = z.object({
+  notes: z.string().min(2).max(400).optional()
+});
+
+const updateStatusSchema = z.object({
+  status: z.nativeEnum(OrderStatus)
+});
+
+const router = Router();
+
+router.get(
+  "/buyer/cart",
+  requireAuth,
+  asyncHandler(async (request: AuthenticatedRequest, response) => {
+    const data = await ordersService.getBuyerCart(request.auth!.userId);
+    response.json(data);
+  })
+);
+
+router.post(
+  "/buyer/cart/items",
+  requireAuth,
+  requireRoles(Role.USER, Role.BUSINESS),
+  asyncHandler(async (request: AuthenticatedRequest, response) => {
+    const payload = addCartItemSchema.parse(request.body);
+    const data = await ordersService.addCartItem(request.auth!.userId, payload);
+    response.status(201).json(data);
+  })
+);
+
+router.patch(
+  "/buyer/cart/items/:itemId",
+  requireAuth,
+  requireRoles(Role.USER, Role.BUSINESS),
+  asyncHandler(async (request: AuthenticatedRequest, response) => {
+    const payload = updateCartItemSchema.parse(request.body);
+    const data = await ordersService.updateCartItem(request.auth!.userId, request.params.itemId, payload);
+    response.json(data);
+  })
+);
+
+router.delete(
+  "/buyer/cart/items/:itemId",
+  requireAuth,
+  asyncHandler(async (request: AuthenticatedRequest, response) => {
+    const data = await ordersService.removeCartItem(request.auth!.userId, request.params.itemId);
+    response.json(data);
+  })
+);
+
+router.post(
+  "/buyer/checkout",
+  requireAuth,
+  requireRoles(Role.USER, Role.BUSINESS),
+  asyncHandler(async (request: AuthenticatedRequest, response) => {
+    const payload = checkoutSchema.parse(request.body ?? {});
+    const data = await ordersService.checkoutBuyerCart(request.auth!.userId, payload.notes);
+    // Push notify sellers about new orders
+    for (const order of data.orders ?? []) {
+      if (order.seller?.userId && order.seller.userId !== request.auth!.userId) {
+        void sendPushToUser(order.seller.userId, {
+          title: "🛒 Nouvelle commande !",
+          body: `Vous avez reçu une nouvelle commande de ${order.itemsCount ?? 1} article(s)`,
+          tag: `order-${order.id}`,
+          data: { type: "order", orderId: order.id },
+        });
+      }
+    }
+    response.status(201).json(data);
+  })
+);
+
+router.get(
+  "/buyer/orders",
+  requireAuth,
+  asyncHandler(async (request: AuthenticatedRequest, response) => {
+    const query = pagingSchema.parse(request.query);
+    const data = await ordersService.listBuyerOrders(request.auth!.userId, query);
+    response.json(data);
+  })
+);
+
+router.get(
+  "/seller/orders",
+  requireAuth,
+  asyncHandler(async (request: AuthenticatedRequest, response) => {
+    const query = pagingSchema.parse(request.query);
+    const data = await ordersService.listSellerOrders(request.auth!.userId, query);
+    response.json(data);
+  })
+);
+
+router.get(
+  "/:orderId",
+  requireAuth,
+  asyncHandler(async (request: AuthenticatedRequest, response) => {
+    const data = await ordersService.getOrderDetails(request.auth!.userId, request.params.orderId);
+    response.json(data);
+  })
+);
+
+router.patch(
+  "/:orderId/status",
+  requireAuth,
+  asyncHandler(async (request: AuthenticatedRequest, response) => {
+    const payload = updateStatusSchema.parse(request.body);
+    const data = await ordersService.updateSellerOrderStatus(request.auth!.userId, request.params.orderId, payload.status);
+    // Push notify buyer about order status change
+    const statusLabels: Record<string, string> = { CONFIRMED: "confirmée", SHIPPED: "expédiée", DELIVERED: "livrée", CANCELED: "annulée" };
+    const label = statusLabels[payload.status] ?? payload.status;
+    if (data.buyer?.userId && data.buyer.userId !== request.auth!.userId) {
+      void sendPushToUser(data.buyer.userId, {
+        title: "📦 Commande " + label,
+        body: `Votre commande #${data.id.slice(-6)} a été ${label}`,
+        tag: `order-${data.id}`,
+        data: { type: "order", orderId: data.id },
+      });
+    }
+    response.json(data);
+  })
+);
+
+router.get(
+  "/:orderId/validation-code",
+  requireAuth,
+  asyncHandler(async (request: AuthenticatedRequest, response) => {
+    const data = await ordersService.getValidationCode(request.auth!.userId, request.params.orderId);
+    response.json(data);
+  })
+);
+
+const buyerConfirmSchema = z.object({
+  code: z.string().min(1).max(20)
+});
+
+router.post(
+  "/:orderId/buyer-confirm",
+  requireAuth,
+  asyncHandler(async (request: AuthenticatedRequest, response) => {
+    const payload = buyerConfirmSchema.parse(request.body);
+    const data = await ordersService.buyerConfirmDelivery(request.auth!.userId, request.params.orderId, payload.code);
+    response.json(data);
+  })
+);
+
+// ─────────────────────────────────────────────
+// IA COMMANDE
+// ─────────────────────────────────────────────
+
+// ── Conseil checkout (bundle, discount, urgence, livraison) ──
+router.get(
+  "/ai/checkout-advice/:cartId",
+  requireAuth,
+  asyncHandler(async (request: AuthenticatedRequest, response) => {
+    const { getCheckoutAdvice } = await import("./order-ai.service.js");
+    const advice = await getCheckoutAdvice(request.params.cartId, request.auth!.userId);
+    response.json(advice);
+  })
+);
+
+// ── Abandon panier (risque pour l'acheteur connecté) ──
+router.get(
+  "/ai/abandonment-risk",
+  requireAuth,
+  asyncHandler(async (request: AuthenticatedRequest, response) => {
+    const { detectAbandonmentRisk } = await import("./order-ai.service.js");
+    const report = await detectAbandonmentRisk(request.auth!.userId);
+    response.json(report);
+  })
+);
+
+// ── Auto-validation IA d'une commande ──
+router.get(
+  "/:orderId/ai/auto-validation",
+  requireAuth,
+  requireRoles(Role.USER, Role.BUSINESS),
+  asyncHandler(async (request: AuthenticatedRequest, response) => {
+    const { getOrderAutoValidationDecision } = await import("./order-ai.service.js");
+    const decision = await getOrderAutoValidationDecision(request.params.orderId);
+    response.json(decision);
+  })
+);
+
+export default router;

@@ -1,0 +1,502 @@
+import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import { useAuth } from "../../app/providers/AuthProvider";
+import { useLocaleCurrency } from "../../app/providers/LocaleCurrencyProvider";
+import { billing, type BillingPlanSummary, ApiError } from "../../lib/api-client";
+import "./pricing.css";
+
+type PricingTab = "users" | "business" | "addons";
+
+type Plan = {
+  code: string;
+  name: string;
+  price: string;
+  highlight?: string;
+  features: string[];
+  badge?: string;
+};
+
+type AddonCode = "IA_MERCHANT" | "IA_ORDER" | "BOOST_VISIBILITY" | "ADS_PACK" | "ADS_PREMIUM";
+
+type PaymentOrder = {
+  id: string;
+  planCode: string;
+  amountUsdCents: number;
+  currency: string;
+  status: string;
+  transferReference: string;
+  createdAt: string;
+  expiresAt: string;
+  depositorNote?: string | null;
+  proofUrl?: string | null;
+};
+
+type CheckoutInstruction = {
+  orderId: string;
+  status: string;
+  planCode: string;
+  amountUsdCents: number;
+  currency: string;
+  transferReference: string;
+  beneficiary: {
+    iban: string;
+    bic: string;
+    rib?: string | null;
+  };
+  expiresAt: string;
+  instructions: string[];
+};
+
+const USER_PLANS: Plan[] = [
+  {
+    code: "FREE",
+    name: "FREE",
+    price: "0$/mois",
+    badge: "Base",
+    highlight: "Point fort: IA marchand gratuite",
+    features: ["Publier des annonces", "Acheter sur Kin-Sell", "Messagerie intégrée", "IA marchand gratuite"]
+  },
+  {
+    code: "BOOST",
+    name: "BOOST",
+    price: "6$/mois",
+    badge: "Visibilité",
+    features: ["Boost profil", "Boost annonces", "Publicité basique", "Visibilité améliorée"]
+  },
+  {
+    code: "AUTO",
+    name: "AUTO",
+    price: "12$/mois",
+    badge: "Automation",
+    features: ["Tout BOOST", "IA commande", "Auto-réponse", "Gestion des ventes"]
+  },
+  {
+    code: "PRO_VENDOR",
+    name: "PRO VENDEUR",
+    price: "20$/mois",
+    badge: "Analytics Medium",
+    features: ["Tout AUTO", "Kin-Sell Analytique Medium", "Tendances marché", "Prix optimal"]
+  }
+];
+
+const BUSINESS_PLANS: Plan[] = [
+  {
+    code: "STARTER",
+    name: "STARTER",
+    price: "15$/mois",
+    badge: "Entrée",
+    features: ["Boutique entreprise", "Visibilité standard", "Publicité basique", "Sans IA / sans analytics"]
+  },
+  {
+    code: "BUSINESS",
+    name: "BUSINESS",
+    price: "30$/mois",
+    badge: "Croissance",
+    features: ["Tout STARTER", "IA marchand", "Analytics Medium", "Optimisation opérationnelle"]
+  },
+  {
+    code: "SCALE",
+    name: "SCALE",
+    price: "50$/mois",
+    badge: "Premium",
+    features: ["Tout BUSINESS", "IA commande", "Analytics Premium", "Insights et stratégie avancés"]
+  }
+];
+
+const ADDONS: Array<{ code: AddonCode; name: string; price: string; details: string[] }> = [
+  {
+    code: "IA_MERCHANT",
+    name: "IA MARCHAND (add-on)",
+    price: "3$/mois",
+    details: ["Aide négociation", "Suggestion prix", "Contre-offres", "Gratuite uniquement pour utilisateur FREE"]
+  },
+  {
+    code: "IA_ORDER",
+    name: "IA COMMANDE (add-on)",
+    price: "7$/mois",
+    details: ["Automation vente", "Réponse auto", "Suivi client"]
+  },
+  {
+    code: "BOOST_VISIBILITY",
+    name: "BOOST PROFIL / BOUTIQUE",
+    price: "1$ / 5$ / 15$",
+    details: ["1$ -> 24h", "5$ -> 7 jours", "15$ -> 30 jours"]
+  },
+  {
+    code: "ADS_PACK",
+    name: "PACK PUB",
+    price: "5$ / 10$ / 15$",
+    details: ["3 pubs -> 5$", "7 pubs -> 10$", "10 pubs -> 15$"]
+  },
+  {
+    code: "ADS_PREMIUM",
+    name: "PUB PREMIUM",
+    price: "25$",
+    details: ["Homepage", "Top résultats", "Ciblage ville"]
+  }
+];
+
+function PlanCard({
+  plan,
+  isCurrent,
+  canChange,
+  loading,
+  onChoose
+}: {
+  plan: Plan;
+  isCurrent: boolean;
+  canChange: boolean;
+  loading: boolean;
+  onChoose: (code: string) => void;
+}) {
+  return (
+    <article className="pricing-card glass-card">
+      <div className="pricing-card-head">
+        <h3>{plan.name}</h3>
+        {plan.badge ? <span className="pricing-card-badge">{plan.badge}</span> : null}
+      </div>
+      <p className="pricing-card-price">{plan.price}</p>
+      {plan.highlight ? <p className="pricing-card-highlight">{plan.highlight}</p> : null}
+      <ul className="pricing-list">
+        {plan.features.map((feature) => (
+          <li key={feature}>{feature}</li>
+        ))}
+      </ul>
+      {isCurrent ? (
+        <span className="pricing-current">Plan actif</span>
+      ) : canChange ? (
+        <button className="pricing-cta pricing-cta-btn" type="button" onClick={() => onChoose(plan.code)} disabled={loading}>
+          {loading ? "Création ordre..." : "Payer via PayPal"}
+        </button>
+      ) : (
+        <Link className="pricing-cta" to="/register">Créer un compte</Link>
+      )}
+    </article>
+  );
+}
+
+export function PricingPage() {
+  const { user, isLoggedIn } = useAuth();
+  const { t } = useLocaleCurrency();
+  const [currentPlan, setCurrentPlan] = useState<BillingPlanSummary | null>(null);
+  const [busyPlanCode, setBusyPlanCode] = useState<string | null>(null);
+  const [busyAddonCode, setBusyAddonCode] = useState<string | null>(null);
+  const [busyOrderAction, setBusyOrderAction] = useState<string | null>(null);
+  const [paymentOrders, setPaymentOrders] = useState<PaymentOrder[]>([]);
+  const [latestCheckout, setLatestCheckout] = useState<CheckoutInstruction | null>(null);
+  const [infoMessage, setInfoMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const role = user?.role === "BUSINESS" ? "BUSINESS" : user?.role === "USER" ? "USER" : "VISITOR";
+
+  const defaultTab: PricingTab = useMemo(() => {
+    if (role === "BUSINESS") return "business";
+    if (role === "USER") return "users";
+    return "users";
+  }, [role]);
+
+  const [activeTab, setActiveTab] = useState<PricingTab>(defaultTab);
+
+  useEffect(() => {
+    if (!isLoggedIn) {
+      setCurrentPlan(null);
+      setPaymentOrders([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadBillingData = async () => {
+      try {
+        const [planData, ordersData] = await Promise.all([billing.myPlan(), billing.paymentOrders()]);
+        if (!cancelled) {
+          setCurrentPlan(planData);
+          setPaymentOrders(ordersData.orders);
+        }
+      } catch {
+        if (!cancelled) {
+          setCurrentPlan(null);
+          setPaymentOrders([]);
+        }
+      }
+    };
+
+    void loadBillingData();
+    return () => {
+      cancelled = true;
+    };
+  }, [isLoggedIn]);
+
+  const handleChoosePlan = async (planCode: string) => {
+    if (!isLoggedIn) {
+      setInfoMessage("Connectez-vous pour activer un forfait.");
+      return;
+    }
+
+    setErrorMessage(null);
+    setInfoMessage(null);
+    setBusyPlanCode(planCode);
+
+    try {
+      const checkout = await billing.createBankTransferCheckout({ planCode, billingCycle: "MONTHLY" });
+      setLatestCheckout(checkout);
+      const orders = await billing.paymentOrders();
+      setPaymentOrders(orders.orders);
+      setInfoMessage(`Ordre de paiement créé pour ${planCode}. Effectuez le paiement via PayPal puis confirmez.`);
+    } catch (error) {
+      if (error instanceof ApiError && error.data && typeof error.data === "object" && "error" in error.data) {
+        const message = (error.data as { error?: string }).error;
+        setErrorMessage(message ?? "Impossible de créer l'ordre de paiement.");
+      } else {
+        setErrorMessage("Impossible de créer l'ordre de paiement.");
+      }
+    } finally {
+      setBusyPlanCode(null);
+    }
+  };
+
+  const handleConfirmDeposit = async (orderId: string) => {
+    setBusyOrderAction(orderId);
+    setErrorMessage(null);
+    setInfoMessage(null);
+    try {
+      const result = await billing.confirmDeposit({ orderId });
+      const orders = await billing.paymentOrders();
+      setPaymentOrders(orders.orders);
+      setInfoMessage(result.message);
+    } catch (error) {
+      if (error instanceof ApiError && error.data && typeof error.data === "object" && "error" in error.data) {
+        const message = (error.data as { error?: string }).error;
+        setErrorMessage(message ?? "Impossible de confirmer le dépôt.");
+      } else {
+        setErrorMessage("Impossible de confirmer le dépôt.");
+      }
+    } finally {
+      setBusyOrderAction(null);
+    }
+  };
+
+  const handleActivateOrder = async (orderId: string) => {
+    setBusyOrderAction(orderId);
+    setErrorMessage(null);
+    setInfoMessage(null);
+    try {
+      const result = await billing.activateOrder({ orderId });
+      setCurrentPlan(result.plan);
+      const orders = await billing.paymentOrders();
+      setPaymentOrders(orders.orders);
+      setInfoMessage(result.message);
+    } catch (error) {
+      if (error instanceof ApiError && error.data && typeof error.data === "object" && "error" in error.data) {
+        const message = (error.data as { error?: string }).error;
+        setErrorMessage(message ?? "Impossible d'activer le forfait.");
+      } else {
+        setErrorMessage("Impossible d'activer le forfait.");
+      }
+    } finally {
+      setBusyOrderAction(null);
+    }
+  };
+
+  const handleToggleAddon = async (addonCode: AddonCode) => {
+    if (!isLoggedIn || !currentPlan) {
+      setInfoMessage("Connectez-vous et activez un forfait pour gérer les add-ons.");
+      return;
+    }
+
+    const isActive = currentPlan.addOns.some((item) => item.code === addonCode && item.status === "ACTIVE");
+
+    setErrorMessage(null);
+    setInfoMessage(null);
+    setBusyAddonCode(addonCode);
+
+    try {
+      const updated = await billing.toggleAddon({ addonCode, action: isActive ? "DISABLE" : "ENABLE" });
+      setCurrentPlan(updated);
+      setInfoMessage(isActive ? `${addonCode} désactivé.` : `${addonCode} activé.`);
+    } catch (error) {
+      if (error instanceof ApiError && error.data && typeof error.data === "object" && "error" in error.data) {
+        const message = (error.data as { error?: string }).error;
+        setErrorMessage(message ?? "Impossible de modifier l'add-on.");
+      } else {
+        setErrorMessage("Impossible de modifier l'add-on.");
+      }
+    } finally {
+      setBusyAddonCode(null);
+    }
+  };
+
+  const roleHint =
+    role === "USER"
+      ? "Mode utilisateur: offres utilisateurs et add-ons affichés en priorité."
+      : role === "BUSINESS"
+        ? "Mode entreprise: offres entreprises et add-ons affichés en priorité."
+        : "Mode visiteur: comparez librement les offres utilisateurs, entreprises et options avancées.";
+
+  return (
+    <section className="pricing-shell animate-fade-in">
+      <header className="pricing-hero glass-container">
+        <p className="pricing-eyebrow">{t('pricing.eyebrow')}</p>
+        <h1>{t('pricing.title')}</h1>
+        <p>{t('pricing.subtitle')}</p>
+        <div className="pricing-role-hint">{roleHint}</div>
+        {currentPlan ? (
+          <div className="pricing-role-hint">
+            Forfait actif: {currentPlan.planName} ({(currentPlan.priceUsdCents / 100).toFixed(2)}$ / {currentPlan.billingCycle === "MONTHLY" ? "mois" : "one-shot"})
+          </div>
+        ) : null}
+        {infoMessage ? <div className="pricing-feedback pricing-feedback--ok">{infoMessage}</div> : null}
+        {errorMessage ? <div className="pricing-feedback pricing-feedback--error">{errorMessage}</div> : null}
+      </header>
+
+      <section className="pricing-tabs-wrap glass-container">
+        <div className="pricing-tabs" role="tablist" aria-label={t('pricing.tabsLabel')}>
+          <button type="button" className={`pricing-tab${activeTab === "users" ? " active" : ""}`} onClick={() => setActiveTab("users")}>{t('pricing.tabUsers')}</button>
+          <button type="button" className={`pricing-tab${activeTab === "business" ? " active" : ""}`} onClick={() => setActiveTab("business")}>{t('pricing.tabBusiness')}</button>
+          <button type="button" className={`pricing-tab${activeTab === "addons" ? " active" : ""}`} onClick={() => setActiveTab("addons")}>{t('pricing.tabAddons')}</button>
+        </div>
+
+        <div className="pricing-role-switch">
+          {role === "USER" ? <button type="button" className="pricing-switch-btn" onClick={() => setActiveTab("business")}>{t('pricing.viewBusiness')}</button> : null}
+          {role === "BUSINESS" ? <button type="button" className="pricing-switch-btn" onClick={() => setActiveTab("users")}>{t('pricing.viewUsers')}</button> : null}
+          {role === "VISITOR" ? <span className="pricing-visitor-note">{t('pricing.fullComparison')}</span> : null}
+        </div>
+      </section>
+
+      {activeTab === "users" ? (
+        <section className="pricing-grid">
+          {USER_PLANS.map((plan) => (
+            <PlanCard
+              key={plan.name}
+              plan={plan}
+              isCurrent={currentPlan?.planCode === plan.code}
+              canChange={isLoggedIn && busyPlanCode === null}
+              loading={busyPlanCode === plan.code}
+              onChoose={handleChoosePlan}
+            />
+          ))}
+        </section>
+      ) : null}
+
+      {activeTab === "business" ? (
+        <section className="pricing-grid pricing-grid--business">
+          {BUSINESS_PLANS.map((plan) => (
+            <PlanCard
+              key={plan.name}
+              plan={plan}
+              isCurrent={currentPlan?.planCode === plan.code}
+              canChange={isLoggedIn && busyPlanCode === null}
+              loading={busyPlanCode === plan.code}
+              onChoose={handleChoosePlan}
+            />
+          ))}
+        </section>
+      ) : null}
+
+      {activeTab === "addons" ? (
+        <section className="pricing-grid pricing-grid--addons">
+          {ADDONS.map((addon) => (
+            <article className="pricing-card glass-card" key={addon.name}>
+              <div className="pricing-card-head">
+                <h3>{addon.name}</h3>
+              </div>
+              <p className="pricing-card-price">{addon.price}</p>
+              <ul className="pricing-list">
+                {addon.details.map((detail) => (
+                  <li key={detail}>{detail}</li>
+                ))}
+              </ul>
+              {isLoggedIn ? (
+                <button type="button" className="pricing-cta pricing-cta-btn" onClick={() => void handleToggleAddon(addon.code)} disabled={busyAddonCode !== null}>
+                  {busyAddonCode === addon.code ? "Mise à jour..." : "Activer / désactiver"}
+                </button>
+              ) : null}
+            </article>
+          ))}
+
+          <article className="pricing-card glass-card pricing-card--analytics-lock">
+            <div className="pricing-card-head">
+              <h3>Analytics</h3>
+              <span className="pricing-card-badge">Important</span>
+            </div>
+            <p className="pricing-card-price">Uniquement en pack</p>
+            <ul className="pricing-list">
+              <li>Analytics Medium: tendances, prix, produits populaires</li>
+              <li>Analytics Premium: Medium + prédictions + stratégie</li>
+              <li>Non disponible en add-on individuel</li>
+            </ul>
+          </article>
+        </section>
+      ) : null}
+
+      {latestCheckout ? (
+        <section className="pricing-footer-note glass-container">
+          <h2>Paiement PayPal</h2>
+          <p>Ordre {latestCheckout.orderId} · {(latestCheckout.amountUsdCents / 100).toFixed(2)} {latestCheckout.currency}</p>
+          <p>Référence: <strong>{latestCheckout.transferReference}</strong></p>
+          <p>Expire le: {new Date(latestCheckout.expiresAt).toLocaleString("fr-FR")}</p>
+          <p style={{ margin: '12px 0' }}>Cliquez sur le bouton ci-dessous pour effectuer le paiement via PayPal :</p>
+          <a
+            href={`https://www.paypal.com/cgi-bin/webscr?cmd=_xclick&business=${import.meta.env.VITE_PAYPAL_MERCHANT_ID ?? import.meta.env.VITE_PAYPAL_MERCHANT_EMAIL ?? 'filikifakio@gmail.com'}&amount=${(latestCheckout.amountUsdCents / 100).toFixed(2)}&currency_code=USD&item_name=Kin-Sell+${encodeURIComponent(latestCheckout.planCode)}&custom=${latestCheckout.orderId}&return=${encodeURIComponent(window.location.origin + '/forfaits?paid=1')}&cancel_return=${encodeURIComponent(window.location.origin + '/forfaits?cancelled=1')}&notify_url=${encodeURIComponent((import.meta.env.VITE_API_URL ?? 'http://localhost:4000') + '/billing/paypal/ipn')}`}
+            className="pricing-cta pricing-cta-btn"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ display: 'inline-block', textAlign: 'center', textDecoration: 'none' }}
+          >
+            💳 Payer {(latestCheckout.amountUsdCents / 100).toFixed(2)}$ via PayPal
+          </a>
+          <ul className="pricing-list" style={{ marginTop: 16 }}>
+            {latestCheckout.instructions.map((instruction) => (
+              <li key={instruction}>{instruction}</li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      {isLoggedIn ? (
+        <section className="pricing-footer-note glass-container">
+          <h2>Mes ordres de paiement</h2>
+          {paymentOrders.length === 0 ? (
+            <p>Aucun ordre pour le moment.</p>
+          ) : (
+            <div className="pricing-orders-list">
+              {paymentOrders.map((order) => (
+                <article className="pricing-order-item" key={order.id}>
+                  <p><strong>{order.planCode}</strong> · {(order.amountUsdCents / 100).toFixed(2)} {order.currency}</p>
+                  <p>Référence: {order.transferReference}</p>
+                  <p>Statut: {order.status}</p>
+                  <div className="pricing-role-switch">
+                    <button
+                      type="button"
+                      className="pricing-switch-btn"
+                      disabled={busyOrderAction !== null || order.status !== "PENDING"}
+                      onClick={() => void handleConfirmDeposit(order.id)}
+                    >
+                      {busyOrderAction === order.id ? "En cours..." : "J'ai payé via PayPal"}
+                    </button>
+                    <button
+                      type="button"
+                      className="pricing-switch-btn"
+                      disabled={busyOrderAction !== null || order.status !== "USER_CONFIRMED"}
+                      onClick={() => void handleActivateOrder(order.id)}
+                    >
+                      {busyOrderAction === order.id ? "En cours..." : "Activer mon forfait"}
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+      ) : null}
+
+      <section className="pricing-footer-note glass-container">
+        <h2>Architecture abonnement + paiement</h2>
+        <p>
+          Paiement sécurisé via PayPal avec référence unique, suivi des ordres et activation du forfait après validation du paiement.
+        </p>
+        {!isLoggedIn ? <Link to="/register" className="pricing-cta">Créer un compte Kin-Sell</Link> : null}
+      </section>
+    </section>
+  );
+}

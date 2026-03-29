@@ -1,0 +1,62 @@
+﻿/* Données de configuration Explorer — catégories statiques uniquement.
+   Les boutiques, profils et articles sont chargés depuis l'API. */
+
+export const EXPLORER_STATS = {
+  categories: 0,
+  profiles: 0,
+  shops: 0,
+};
+
+export const PRODUCT_CATEGORIES = [
+  { id: 'food', label: 'Nourriture', icon: '🍔', color: '#ff6b6b' },
+  { id: 'phone', label: 'Téléphone', icon: '📱', color: '#6f58ff' },
+  { id: 'it', label: 'Accessoires informatiques', icon: '💻', color: '#4ecdc4' },
+  { id: 'games', label: 'Jeux vidéo', icon: '🎮', color: '#ffe66d' },
+  { id: 'pharmacy', label: 'Pharmacie', icon: '💊', color: '#95e1d3' },
+  { id: 'clothes', label: 'Vêtements', icon: '👕', color: '#f38181' },
+  { id: 'pets', label: 'Animalerie', icon: '🐾', color: '#aa96da' },
+  { id: 'furniture', label: 'Maison & mobilier', icon: '🛋️', color: '#fcbad3' },
+  { id: 'appliances', label: 'Électroménager', icon: '⚙️', color: '#c7ceea' },
+  { id: 'electronics', label: 'Électronique', icon: '🔌', color: '#b5eae0' },
+  { id: 'beauty', label: 'Beauté & cosmétiques', icon: '💄', color: '#ffddc1' },
+  { id: 'baby', label: 'Bébé & enfants', icon: '👶', color: '#ff9999' },
+  { id: 'sports', label: 'Sport & fitness', icon: '⚽', color: '#a8d8ea' },
+  { id: 'books', label: 'Livres & éducation', icon: '📚', color: '#aa96da' },
+  { id: 'diy', label: 'Bricolage', icon: '🔨', color: '#fcb4d5' },
+  { id: 'gifts', label: 'Cadeaux', icon: '🎁', color: '#fff5ba' },
+  { id: 'office', label: 'Fournitures de bureau', icon: '📎', color: '#c7f0d8' },
+  { id: 'auto', label: 'Auto & moto', icon: '🏍️', color: '#fec8d8' },
+  { id: 'health', label: 'Santé & bien-être', icon: '🏥', color: '#fddb92' },
+  { id: 'carental', label: 'Location de voiture', icon: '🚗', color: '#a1c4fd' },
+  { id: 'realestate', label: 'Immobilier', icon: '🏠', color: '#c471ed' },
+  { id: 'misc', label: 'Divers', icon: '📦', color: '#ffecd2' },
+];
+
+export const SERVICE_CATEGORIES = [
+  { id: 'teacher', label: 'Professeur', icon: '👨‍🏫', color: '#667eea' },
+  { id: 'daycare', label: 'Nounou', icon: '👶', color: '#764ba2' },
+  { id: 'cleaner', label: 'Femme de ménage', icon: '🧹', color: '#f093fb' },
+  { id: 'maid', label: 'Bonne à tout faire', icon: '👩‍🍳', color: '#4facfe' },
+  { id: 'security', label: 'Gardien / garde du corps', icon: '👮', color: '#00f2fe' },
+  { id: 'nurse', label: 'Infirmière / aide-soignant', icon: '⚕️', color: '#43e97b' },
+  { id: 'driver', label: 'Chauffeur', icon: '🚕', color: '#fa709a' },
+  { id: 'cook', label: 'Cuisinière', icon: '👨‍🍳', color: '#fee140' },
+  { id: 'developer', label: 'Développeur / IT', icon: '👨‍💻', color: '#30b0fe' },
+  { id: 'designer', label: 'Designer / graphiste', icon: '🎨', color: '#a8edea' },
+  { id: 'photographer', label: 'Photographe / vidéaste', icon: '📷', color: '#fed6e3' },
+  { id: 'plumber', label: 'Plombier', icon: '🔧', color: '#74b9ff' },
+  { id: 'electrician', label: 'Électricien', icon: '⚡', color: '#fdcb6e' },
+  { id: 'mason', label: 'Maçon', icon: '🏗️', color: '#a29bfe' },
+  { id: 'repair', label: 'Réparateur téléphone / PC', icon: '🔧', color: '#fab1a0' },
+  { id: 'consultant', label: 'Consultant', icon: '👔', color: '#48dbfb' },
+  { id: 'marketing', label: 'Marketing / publicité', icon: '📊', color: '#ff6b9d' },
+  { id: 'coach', label: 'Coach sportif', icon: '💪', color: '#1dd1a1' },
+  { id: 'beauty', label: 'Coiffure / beauté', icon: '💇', color: '#ff9ff3' },
+  { id: 'tailor', label: 'Couture', icon: '✂️', color: '#54a0ff' },
+  { id: 'events', label: 'Animation / événementiel', icon: '🎉', color: '#48dbfb' },
+  { id: 'accounting', label: 'Comptabilité', icon: '💹', color: '#1dd1a1' },
+  { id: 'admin', label: 'Assistance administrative', icon: '📋', color: '#ffa502' },
+  { id: 'delivery', label: 'Livraison / transport', icon: '🚚', color: '#ff6348' },
+  { id: 'gardening', label: 'Jardinage', icon: '🌱', color: '#2ed573' },
+  { id: 'decoration', label: 'Décoration intérieure', icon: '🏠', color: '#ff9ff3' },
+];

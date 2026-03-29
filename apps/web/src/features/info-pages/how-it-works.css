@@ -1,0 +1,409 @@
+/* ══════════════════════════════════════════════
+   HOW IT WORKS — Comment ça marche (Kin-Sell V2)
+   ══════════════════════════════════════════════ */
+
+.hiw {
+  display: flex;
+  flex-direction: column;
+  gap: 3rem;
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 1.5rem 1rem 3rem;
+}
+
+/* ══════ ACCENT ══════ */
+.hiw-accent {
+  color: var(--color-primary);
+}
+
+/* ══════ HERO ══════ */
+.hiw-hero {
+  position: relative;
+  text-align: center;
+  padding: 3rem 1.5rem 2.5rem;
+}
+.hiw-hero-glow {
+  position: absolute;
+  top: -40px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 320px;
+  height: 320px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(111, 88, 255, 0.25), transparent 70%);
+  filter: blur(60px);
+  pointer-events: none;
+}
+.hiw-hero-title {
+  font-family: var(--font-family-display);
+  font-size: clamp(2rem, 5vw, var(--font-size-4xl));
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+  margin: 0 0 1rem;
+  line-height: 1.15;
+}
+.hiw-hero-subtitle {
+  max-width: 640px;
+  margin: 0 auto 1.5rem;
+  font-size: var(--font-size-lg);
+  color: var(--color-text-secondary);
+  line-height: 1.65;
+}
+.hiw-hero-ctas {
+  display: flex;
+  justify-content: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+/* ══════ SECTION TITLE ══════ */
+.hiw-section-title {
+  font-family: var(--font-family-display);
+  font-size: clamp(1.4rem, 3.5vw, var(--font-size-3xl));
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+  margin: 0;
+  text-align: center;
+}
+
+/* ══════ VUE GLOBALE ══════ */
+.hiw-overview {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+.hiw-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.85rem;
+}
+.hiw-overview-card {
+  align-items: center;
+  text-align: center;
+  padding: 1.8rem 1.2rem;
+  gap: 0.75rem;
+}
+.hiw-overview-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.hiw-icon--buy {
+  background: linear-gradient(145deg, rgba(111, 88, 255, 0.3), rgba(111, 88, 255, 0.1));
+  color: var(--color-primary-hover);
+}
+.hiw-icon--sell {
+  background: linear-gradient(145deg, rgba(52, 211, 153, 0.3), rgba(52, 211, 153, 0.1));
+  color: #34d399;
+}
+.hiw-icon--service {
+  background: linear-gradient(145deg, rgba(146, 121, 255, 0.3), rgba(146, 121, 255, 0.1));
+  color: var(--color-secondary);
+}
+.hiw-overview-card h3 {
+  margin: 0;
+  font-family: var(--font-family-display);
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+}
+.hiw-overview-card p {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  line-height: 1.55;
+}
+
+/* ══════ PARCOURS — TABS ══════ */
+.hiw-journey {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+.hiw-tabs {
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.hiw-tab {
+  font-size: var(--font-size-sm);
+  padding: 0.5rem 1.2rem;
+  border: 1px solid var(--glass-border);
+  transition: all var(--transition-fast);
+}
+.hiw-tab--active {
+  background: var(--glass-bg-hover);
+  box-shadow: 0 0 16px rgba(111, 88, 255, 0.15);
+}
+
+/* ── Steps timeline ── */
+.hiw-steps {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 0.65rem;
+}
+.hiw-step {
+  align-items: center;
+  text-align: center;
+  padding: 1.4rem 0.8rem;
+  gap: 0.55rem;
+  position: relative;
+}
+.hiw-step-number {
+  position: absolute;
+  top: 0.6rem;
+  left: 0.7rem;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-full);
+  background: linear-gradient(145deg, rgba(111, 88, 255, 0.35), rgba(73, 12, 128, 0.2));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-family-display);
+  font-size: 0.7rem;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-primary-hover);
+}
+.hiw-step-icon {
+  color: var(--color-primary);
+}
+.hiw-step h3 {
+  margin: 0;
+  font-family: var(--font-family-display);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+.hiw-step p {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--color-text-secondary);
+  line-height: 1.45;
+}
+
+/* ══════ NÉGOCIATION ══════ */
+.hiw-negotiation {
+  display: flex;
+  justify-content: center;
+}
+.hiw-negotiation-block {
+  max-width: 780px;
+  width: 100%;
+  padding: 2rem 2rem;
+  text-align: center;
+  border-left: 3px solid var(--color-primary);
+}
+.hiw-negotiation-icon {
+  color: var(--color-primary);
+  margin-bottom: 0.5rem;
+}
+.hiw-negotiation-content {
+  text-align: left;
+  margin-top: 1rem;
+}
+.hiw-negotiation-content p {
+  margin: 0 0 0.85rem;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  line-height: 1.65;
+}
+.hiw-negotiation-content strong {
+  color: var(--color-text-primary);
+}
+.hiw-neg-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+.hiw-neg-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  line-height: 1.45;
+}
+.hiw-neg-list li svg {
+  flex-shrink: 0;
+  color: var(--color-primary);
+}
+
+/* ══════ SÉCURITÉ ══════ */
+.hiw-security {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+.hiw-security-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 0.75rem;
+}
+.hiw-security-card {
+  align-items: center;
+  text-align: center;
+  padding: 1.5rem 1rem;
+  gap: 0.65rem;
+}
+.hiw-security-icon {
+  color: var(--color-primary);
+}
+.hiw-security-card h3 {
+  margin: 0;
+  font-family: var(--font-family-display);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+.hiw-security-card p {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+}
+
+/* ══════ COMPARAISON ══════ */
+.hiw-comparison {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+.hiw-comparison-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+}
+.hiw-comparison-card {
+  align-items: center;
+  text-align: center;
+  padding: 2rem 1.4rem;
+  gap: 0.8rem;
+}
+.hiw-comparison-badge {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-full);
+  background: linear-gradient(145deg, rgba(111, 88, 255, 0.3), rgba(73, 12, 128, 0.2));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-primary-hover);
+}
+.hiw-comparison-card h3 {
+  margin: 0;
+  font-family: var(--font-family-display);
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+}
+.hiw-comparison-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  text-align: left;
+  width: 100%;
+}
+.hiw-comparison-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+.hiw-comparison-list li svg {
+  flex-shrink: 0;
+  color: var(--color-primary);
+}
+
+/* ══════ CTA FINAL ══════ */
+.hiw-cta {
+  display: flex;
+  justify-content: center;
+}
+.hiw-cta-block {
+  text-align: center;
+  padding: 3rem 2rem;
+  max-width: 720px;
+  width: 100%;
+  position: relative;
+  overflow: hidden;
+}
+.hiw-cta-block::before {
+  content: "";
+  position: absolute;
+  inset: -50%;
+  background: radial-gradient(circle at center, rgba(111, 88, 255, 0.12), transparent 60%);
+  pointer-events: none;
+}
+.hiw-cta-title {
+  font-family: var(--font-family-display);
+  font-size: clamp(1.4rem, 3.5vw, var(--font-size-3xl));
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+  margin: 0 0 0.75rem;
+  position: relative;
+}
+.hiw-cta-text {
+  font-size: var(--font-size-base);
+  color: var(--color-text-secondary);
+  line-height: 1.65;
+  margin: 0 0 1.5rem;
+  position: relative;
+}
+.hiw-cta-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  position: relative;
+}
+
+/* ══════ RESPONSIVE ══════ */
+@media (max-width: 768px) {
+  .hiw {
+    padding: 1rem 0.75rem 90px;
+    gap: 2rem;
+  }
+  .hiw-hero {
+    padding: 2rem 1rem 1.5rem;
+  }
+  .hiw-overview-grid {
+    grid-template-columns: 1fr;
+  }
+  .hiw-steps {
+    grid-template-columns: 1fr;
+  }
+  .hiw-step {
+    flex-direction: row;
+    text-align: left;
+    padding: 1rem 1.2rem 1rem 2.8rem;
+  }
+  .hiw-step-number {
+    top: 50%;
+    left: 0.7rem;
+    transform: translateY(-50%);
+  }
+  .hiw-security-grid {
+    grid-template-columns: 1fr;
+  }
+  .hiw-comparison-grid {
+    grid-template-columns: 1fr;
+  }
+  .hiw-negotiation-block {
+    padding: 1.5rem 1.2rem;
+  }
+  .hiw-cta-block {
+    padding: 1.5rem 1.2rem;
+  }
+}

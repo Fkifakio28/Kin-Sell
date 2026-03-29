@@ -1,0 +1,447 @@
+/* =====================================================================
+   INSTALL BANNER — Système PWA premium Kin-Sell
+   Design System : Glassmorphism + violet palette
+   ===================================================================== */
+
+/* ── Overlay plein écran (iOS instructions) ── */
+.ks-pwa-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9100;
+  background: rgba(10, 6, 28, 0.72);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 16px;
+  animation: ks-pwa-fade-in 0.2s ease;
+}
+
+/* ── Bouton de fermeture commun ── */
+.ks-pwa-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+.ks-pwa-close:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: var(--color-text-primary);
+}
+
+/* ─────────────────────────────────
+   iOS Instructions Sheet
+   ───────────────────────────────── */
+.ks-pwa-ios-sheet {
+  position: relative;
+  width: 100%;
+  max-width: 480px;
+  padding: 32px 24px 28px;
+  border-radius: 20px;
+  animation: ks-pwa-slide-up 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.ks-pwa-ios-header {
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.ks-pwa-ios-icon {
+  font-size: 40px;
+  display: block;
+  margin-bottom: 12px;
+}
+
+.ks-pwa-ios-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin: 0 0 6px;
+}
+
+.ks-pwa-ios-subtitle {
+  font-size: 14px;
+  color: var(--color-text-secondary);
+  margin: 0;
+}
+
+.ks-pwa-ios-steps {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ks-pwa-ios-steps li {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  color: var(--color-text-secondary);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.ks-pwa-ios-steps li strong {
+  color: var(--color-text-primary);
+}
+
+.ks-pwa-ios-step-num {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 1px;
+}
+
+.ks-pwa-ios-share-icon {
+  display: inline-block;
+  background: rgba(118, 88, 255, 0.2);
+  border: 1px solid var(--glass-border);
+  border-radius: 6px;
+  padding: 2px 6px;
+  font-size: 16px;
+  vertical-align: middle;
+  margin: 0 2px;
+}
+
+.ks-pwa-ios-hint {
+  font-size: 13px;
+  color: var(--color-text-tertiary);
+  text-align: center;
+  margin: 0;
+  padding: 12px;
+  background: rgba(111, 88, 255, 0.08);
+  border-radius: 10px;
+  border: 1px solid var(--glass-border);
+}
+
+/* ─────────────────────────────────
+   Desktop Toast (bottom-right)
+   ───────────────────────────────── */
+.ks-pwa-desktop-toast {
+  position: fixed;
+  bottom: 28px;
+  right: 28px;
+  z-index: 9000;
+  width: 320px;
+  padding: 20px 20px 18px;
+  border-radius: 18px;
+  animation: ks-pwa-slide-right 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.ks-pwa-toast-logo {
+  position: relative;
+  width: 52px;
+  height: 52px;
+  flex-shrink: 0;
+}
+
+.ks-pwa-toast-img {
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  object-fit: cover;
+  border: 2px solid var(--glass-border);
+  position: relative;
+  z-index: 1;
+}
+
+.ks-pwa-toast-pulse {
+  position: absolute;
+  inset: -6px;
+  border-radius: 18px;
+  background: radial-gradient(circle, rgba(111, 88, 255, 0.35), transparent 70%);
+  animation: ks-pwa-pulse 2.5s ease-in-out infinite;
+}
+
+.ks-pwa-toast-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ks-pwa-toast-app {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-primary);
+  margin: 0;
+}
+
+.ks-pwa-toast-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin: 0;
+}
+
+.ks-pwa-toast-sub {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  margin: 0;
+}
+
+.ks-pwa-toast-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+/* ─────────────────────────────────
+   Bottom Sheet Mobile
+   ───────────────────────────────── */
+.ks-pwa-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 8900;
+  background: rgba(10, 6, 28, 0.6);
+  backdrop-filter: blur(4px);
+  animation: ks-pwa-fade-in 0.2s ease;
+}
+
+.ks-pwa-sheet {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 9000;
+  padding: 8px 20px 32px;
+  border-radius: 20px 20px 0 0;
+  animation: ks-pwa-slide-up 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ks-pwa-sheet-handle {
+  width: 36px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 2px;
+  margin: 0 auto 8px;
+}
+
+.ks-pwa-sheet-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.ks-pwa-sheet-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  object-fit: cover;
+  border: 2px solid var(--glass-border);
+  flex-shrink: 0;
+}
+
+.ks-pwa-sheet-app {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin: 0 0 2px;
+}
+
+.ks-pwa-sheet-tag {
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+  margin: 0;
+}
+
+.ks-pwa-sheet-features {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ks-pwa-sheet-feat {
+  background: rgba(111, 88, 255, 0.12);
+  border: 1px solid var(--glass-border);
+  border-radius: 20px;
+  padding: 6px 14px;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ks-pwa-sheet-cta {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* ─────────────────────────────────
+   Boutons communs
+   ───────────────────────────────── */
+.ks-pwa-install-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  padding: 12px 20px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.15s;
+  box-shadow: 0 4px 16px rgba(111, 88, 255, 0.4);
+}
+
+.ks-pwa-install-btn:hover {
+  opacity: 0.92;
+  transform: translateY(-1px);
+}
+
+.ks-pwa-install-btn:active {
+  transform: translateY(0);
+}
+
+.ks-pwa-install-btn--full {
+  width: 100%;
+  padding: 14px 20px;
+  font-size: 16px;
+}
+
+.ks-pwa-later-btn {
+  background: transparent;
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  padding: 10px 20px;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  cursor: pointer;
+  text-align: center;
+  transition: background 0.2s;
+}
+.ks-pwa-later-btn:hover {
+  background: var(--glass-bg-hover);
+  color: var(--color-text-primary);
+}
+
+/* ─────────────────────────────────
+   Update Bar (SW mise à jour)
+   ───────────────────────────────── */
+.ks-pwa-update-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 9200;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  background: linear-gradient(135deg, var(--color-dark-blue-light), var(--color-dark-blue-lighter));
+  border-top: 1px solid var(--glass-border);
+  backdrop-filter: blur(12px);
+  animation: ks-pwa-slide-up 0.3s ease;
+}
+
+.ks-pwa-update-ico {
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.ks-pwa-update-msg {
+  flex: 1;
+  font-size: 14px;
+  color: var(--color-text-primary);
+  margin: 0;
+}
+
+.ks-pwa-update-btn {
+  background: var(--color-primary);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity 0.2s;
+  flex-shrink: 0;
+}
+.ks-pwa-update-btn:hover { opacity: 0.88; }
+
+.ks-pwa-update-dismiss {
+  background: transparent;
+  border: none;
+  color: var(--color-text-tertiary);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 4px 8px;
+  flex-shrink: 0;
+}
+.ks-pwa-update-dismiss:hover { color: var(--color-text-primary); }
+
+/* ─────────────────────────────────
+   Animations
+   ───────────────────────────────── */
+@keyframes ks-pwa-slide-up {
+  from { transform: translateY(40px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+@keyframes ks-pwa-slide-right {
+  from { transform: translateX(60px); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+
+@keyframes ks-pwa-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes ks-pwa-pulse {
+  0%, 100% { opacity: 0.3; transform: scale(1); }
+  50%       { opacity: 0.7; transform: scale(1.08); }
+}
+
+/* ─────────────────────────────────
+   Responsive
+   ───────────────────────────────── */
+@media (max-width: 480px) {
+  .ks-pwa-desktop-toast {
+    /* Le desktop toast ne doit pas s'afficher sur mobile (le sheet le remplace) */
+    display: none;
+  }
+}
+
+@media (min-width: 769px) {
+  .ks-pwa-sheet,
+  .ks-pwa-sheet-backdrop {
+    /* Le sheet mobile ne doit pas s'afficher sur desktop (le toast le remplace) */
+    display: none;
+  }
+}

@@ -1,0 +1,233 @@
+/* ============================================================
+   MOBILE PAGE SHELL — Kin-Sell
+   Layout mobile pour toutes les pages intérieures (AppLayout).
+   Top bar compact + bottom nav + create menu.
+   Affiché uniquement sur ≤ 768px via useIsMobile().
+   ============================================================ */
+
+/* ── TOP BAR ──────────────────────────────────────────────── */
+.msh-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px;
+  height: 54px;
+  background: var(--glass-bg);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border-bottom: 1px solid var(--glass-border);
+  flex-shrink: 0;
+}
+
+.msh-topbar-back,
+.msh-topbar-cart {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--color-text-secondary);
+  border-radius: 10px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.2s, color 0.2s;
+  -webkit-tap-highlight-color: transparent;
+  flex-shrink: 0;
+}
+.msh-topbar-back:active,
+.msh-topbar-cart:active {
+  background: rgba(111, 88, 255, 0.12);
+  color: var(--color-text-primary);
+}
+
+/* Logo centré absolument */
+.msh-topbar-logo {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+  pointer-events: auto;
+}
+
+.msh-topbar-logo-img {
+  height: 26px;
+  width: auto;
+  object-fit: contain;
+}
+
+.msh-topbar-logo-text {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--color-text-primary);
+  letter-spacing: -0.02em;
+}
+
+/* ── CONTENU PRINCIPAL ────────────────────────────────────── */
+.msh-content {
+  flex: 1;
+  min-height: 0;
+  overscroll-behavior-y: contain;
+}
+
+/* ── SPACER (pour le bottom nav fixe) ────────────────────── */
+.msh-bottom-spacer {
+  height: 76px;
+  flex-shrink: 0;
+}
+
+/* ── BOTTOM NAV ───────────────────────────────────────────── */
+.msh-bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  height: 64px;
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-top: 1px solid var(--glass-border);
+  padding: 0 4px;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.msh-bnav-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  color: var(--color-text-tertiary);
+  text-decoration: none;
+  font-size: 10px;
+  font-weight: 500;
+  background: transparent;
+  border: none;
+  font-family: inherit;
+  padding: 6px 4px;
+  cursor: pointer;
+  transition: color 0.2s;
+  -webkit-tap-highlight-color: transparent;
+}
+.msh-bnav-item:active,
+.msh-bnav-item--active {
+  color: var(--color-primary);
+}
+.msh-bnav-item svg { flex-shrink: 0; }
+
+/* FAB central + */
+.msh-bnav-fab {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+  border: none;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+  box-shadow: 0 4px 16px rgba(111, 88, 255, 0.45);
+  flex-shrink: 0;
+  margin: 0 6px;
+  -webkit-tap-highlight-color: transparent;
+}
+.msh-bnav-fab:active,
+.msh-bnav-fab--open {
+  transform: scale(0.93);
+  box-shadow: 0 2px 8px rgba(111, 88, 255, 0.35);
+}
+.msh-bnav-fab--open svg {
+  transform: rotate(45deg);
+  transition: transform 0.2s;
+}
+
+/* ── OVERLAY ──────────────────────────────────────────────── */
+.msh-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 350;
+  background: rgba(8, 4, 22, 0.6);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+
+/* ── CREATE MENU (bottom sheet) ───────────────────────────── */
+.msh-create-menu {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 400;
+  background: var(--glass-bg);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--glass-border);
+  border-bottom: none;
+  border-radius: 20px 20px 0 0;
+  padding: 12px 20px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  animation: msh-slide-up 0.25s cubic-bezier(0.32, 0.72, 0, 1);
+  padding-bottom: calc(32px + env(safe-area-inset-bottom, 0px));
+}
+
+@keyframes msh-slide-up {
+  from { transform: translateY(100%); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+.msh-create-handle {
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--glass-border);
+  align-self: center;
+  margin-bottom: 8px;
+  flex-shrink: 0;
+}
+
+.msh-create-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-text-secondary);
+  margin: 0 0 4px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.msh-create-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--glass-border);
+  border-radius: 14px;
+  color: var(--color-text-primary);
+  font-size: 15px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.18s, border-color 0.18s;
+  text-align: left;
+  -webkit-tap-highlight-color: transparent;
+}
+.msh-create-item:active {
+  background: rgba(111, 88, 255, 0.14);
+  border-color: rgba(111, 88, 255, 0.35);
+}
+.msh-create-item span:first-child { font-size: 22px; }

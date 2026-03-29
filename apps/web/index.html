@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+
+    <!-- ── SEO de base ── -->
+    <title>Kin-Sell — Le marché de Kinshasa</title>
+    <meta name="description" content="Achetez, vendez et découvrez les meilleures affaires de Kinshasa. Produits, services, boutiques en ligne — Kin-Sell, le marché digital de la RDC." />
+    <meta name="robots" content="index, follow" />
+    <meta name="theme-color" content="#6f58ff" />
+
+    <!-- ── Favicon ── -->
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/assets/kin-sell/pwa-192.png" />
+
+    <!-- ── PWA (iOS Safari spécifique) ── -->
+    <!-- iOS ne supporte pas encore le manifest standard pour l'installation -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Kin-Sell" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="apple-touch-startup-image" href="/assets/kin-sell/pwa-512.png" />
+
+    <!-- ── Open Graph (partage sur réseaux sociaux) ── -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Kin-Sell" />
+    <meta property="og:title" content="Kin-Sell — Le marché de Kinshasa" />
+    <meta property="og:description" content="Le marché digital de la RDC. Produits, services, boutiques en ligne." />
+    <meta property="og:image" content="/assets/kin-sell/pwa-512.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Kin-Sell" />
+    <meta name="twitter:description" content="Le marché digital de la RDC." />
+
+    <!-- ── Performance — préconnexion API ── -->
+    <link rel="preconnect" href="https://api.kin-sell.com" crossorigin />
+    <link rel="dns-prefetch" href="//api.kin-sell.com" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

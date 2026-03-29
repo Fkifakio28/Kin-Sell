@@ -1,0 +1,1293 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  VISITOR
+  USER
+  BUSINESS
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum AccountStatus {
+  ACTIVE
+  SUSPENDED
+  PENDING_DELETION
+}
+
+enum VerificationStatus {
+  UNVERIFIED
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum ListingType {
+  PRODUIT
+  SERVICE
+}
+
+enum ListingStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+  DELETED
+}
+
+enum AuthProvider {
+  EMAIL
+  PHONE
+  GOOGLE
+  FACEBOOK
+  APPLE
+}
+
+enum SessionStatus {
+  ACTIVE
+  REVOKED
+  EXPIRED
+}
+
+enum VerificationPurpose {
+  SIGN_IN
+  VERIFY_EMAIL
+  VERIFY_PHONE
+  LINK_PROVIDER
+  PASSWORD_RESET
+}
+
+enum AccountType {
+  USER
+  BUSINESS
+}
+
+enum SubscriptionScope {
+  USER
+  BUSINESS
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELED
+  EXPIRED
+}
+
+enum BillingCycle {
+  MONTHLY
+  ONE_TIME
+}
+
+enum AddonCode {
+  IA_MERCHANT
+  IA_ORDER
+  BOOST_VISIBILITY
+  ADS_PACK
+  ADS_PREMIUM
+}
+
+enum AddonStatus {
+  ACTIVE
+  DISABLED
+  EXPIRED
+}
+
+enum PaymentMethod {
+  BANK_TRANSFER_NICKEL
+}
+
+enum PaymentOrderStatus {
+  PENDING
+  USER_CONFIRMED
+  VALIDATED
+  CANCELED
+  EXPIRED
+}
+
+enum CartStatus {
+  OPEN
+  CHECKED_OUT
+  ABANDONED
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELED
+}
+
+enum NegotiationStatus {
+  PENDING
+  ACCEPTED
+  REFUSED
+  EXPIRED
+  COUNTERED
+}
+
+enum NegotiationType {
+  SIMPLE
+  QUANTITY
+  GROUPED
+}
+
+model User {
+  id            String           @id @default(cuid())
+  email         String?          @unique
+  emailVerified Boolean          @default(false)
+  phone         String?
+  phoneVerified Boolean          @default(false)
+  phoneHidden   Boolean          @default(true)
+  passwordHash  String?
+  totpSecret    String?
+  totpEnabled   Boolean          @default(false)
+  role          Role             @default(USER)
+  preferredAccountType AccountType @default(USER)
+  profileCompleted Boolean       @default(false)
+  accountStatus AccountStatus    @default(ACTIVE)
+  suspensionReason    String?
+  deletionRequestedAt DateTime?
+  deletionReason      String?
+  trustScore    Int              @default(50)
+  trustLevel    TrustLevel       @default(NEW)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  profile       UserProfile?
+  identities    UserIdentity[]
+  sessions      UserSession[]
+  preferences   UserPreference?
+  verificationCodes VerificationCode[]
+  businesses    BusinessAccount[]
+  listings      Listing[]
+  subscriptions Subscription[]
+  paymentOrders  PaymentOrder[]
+  buyerCarts    Cart[]
+  buyerOrders   Order[]          @relation("BuyerOrders")
+  sellerOrders  Order[]          @relation("SellerOrders")
+  auditLogs     AuditLog[]       @relation("AuditActor")
+  conversationParticipants ConversationParticipant[]
+  sentMessages  Message[]        @relation("SentMessages")
+  readReceipts  MessageReadReceipt[]
+  buyerNegotiations  Negotiation[] @relation("BuyerNegotiations")
+  sellerNegotiations Negotiation[] @relation("SellerNegotiations")
+  negotiationOffers  NegotiationOffer[]
+  pushSubscriptions  PushSubscription[]
+  callerCallLogs     CallLog[]          @relation("CallerCallLogs")
+  receiverCallLogs   CallLog[]          @relation("ReceiverCallLogs")
+  adminProfile       AdminProfile?
+  reportsFiled       Report[]           @relation("ReporterReports")
+  reportsReceived    Report[]           @relation("ReportedReports")
+  blogPosts          BlogPost[]         @relation("BlogPosts")
+  trustScoreHistory  TrustScoreEvent[]  @relation("TrustScoreUser")
+  securityEvents     SecurityEvent[]    @relation("SecurityUser")
+  restrictions       UserRestriction[]  @relation("RestrictedUser")
+  fraudSignals       FraudSignal[]      @relation("FraudSignalUser")
+  bundlesCreated     NegotiationBundle[] @relation("BundleCreator")
+  bundlesAsSeller    NegotiationBundle[] @relation("BundleSeller")
+  messageGuardLogs   MessageGuardLog[]   @relation("MessageGuardUser")
+  sokinPosts         SoKinPost[]         @relation("SoKinPosts")
+  adDonations        AdDonation[]        @relation("UserDonations")
+  advertisements     Advertisement[]     @relation("UserAds")
+
+  @@index([role])
+  @@index([accountStatus])
+  @@index([trustScore])
+  @@index([trustLevel])
+}
+
+model UserProfile {
+  id                 String             @id @default(cuid())
+  userId             String             @unique
+  username           String?            @unique
+  displayName        String
+  avatarUrl          String?
+  birthDate          DateTime?
+  addressLine1       String?
+  city               String?
+  country            String?
+  bio                String?
+  domain             String?
+  qualification      String?
+  experience         String?
+  workHours          String?
+  verificationStatus VerificationStatus @default(UNVERIFIED)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model BusinessAccount {
+  id                 String             @id @default(cuid())
+  ownerUserId        String
+  legalName          String
+  publicName         String
+  slug               String             @unique
+  description        String?
+  verificationStatus VerificationStatus @default(UNVERIFIED)
+  subscriptionStatus String             @default("FREE")
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  owner User           @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  shop  BusinessShop?
+  listings Listing[]
+  subscriptions Subscription[]
+  paymentOrders  PaymentOrder[]
+  sellerOrders  Order[]
+  advertisements Advertisement[] @relation("BusinessAds")
+
+  @@index([ownerUserId])
+}
+
+model UserIdentity {
+  id              String       @id @default(cuid())
+  userId          String
+  provider        AuthProvider
+  providerSubject String
+  providerEmail   String?
+  providerPhone   String?
+  isVerified      Boolean      @default(false)
+  linkedAt        DateTime     @default(now())
+  lastUsedAt      DateTime     @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerSubject])
+  @@index([userId])
+  @@index([provider, providerEmail])
+  @@index([provider, providerPhone])
+}
+
+model UserSession {
+  id               String        @id @default(cuid())
+  userId           String
+  refreshTokenHash String
+  deviceId         String?
+  userAgent        String?
+  ipAddress        String?
+  status           SessionStatus @default(ACTIVE)
+  expiresAt        DateTime
+  lastSeenAt       DateTime      @default(now())
+  revokedAt        DateTime?
+  createdAt        DateTime      @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([expiresAt])
+}
+
+model VerificationCode {
+  id             String              @id @default(cuid())
+  userId         String?
+  destination    String
+  provider       AuthProvider
+  purpose        VerificationPurpose
+  codeHash       String
+  attempts       Int                 @default(0)
+  maxAttempts    Int                 @default(5)
+  expiresAt      DateTime
+  consumedAt     DateTime?
+  createdAt      DateTime            @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([destination, provider, purpose])
+  @@index([expiresAt])
+}
+
+model UserPreference {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  locale          String   @default("fr")
+  currency        String   @default("CDF")
+  theme           String   @default("dark")
+  marketingEmails Boolean  @default(false)
+  marketingSms    Boolean  @default(false)
+  pushEnabled     Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Subscription {
+  id                String             @id @default(cuid())
+  userId            String?
+  businessId        String?
+  scope             SubscriptionScope
+  planCode          String
+  status            SubscriptionStatus @default(ACTIVE)
+  billingCycle      BillingCycle       @default(MONTHLY)
+  priceUsdCents     Int                @default(0)
+  startsAt          DateTime           @default(now())
+  endsAt            DateTime?
+  autoRenew         Boolean            @default(true)
+  metadata          Json?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  user              User?              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  business          BusinessAccount?   @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  addons            SubscriptionAddon[]
+
+  @@index([scope, status])
+  @@index([userId, status])
+  @@index([businessId, status])
+}
+
+model SubscriptionAddon {
+  id                String       @id @default(cuid())
+  subscriptionId    String
+  addonCode         AddonCode
+  status            AddonStatus  @default(ACTIVE)
+  priceUsdCents     Int          @default(0)
+  quantity          Int          @default(1)
+  startsAt          DateTime     @default(now())
+  endsAt            DateTime?
+  metadata          Json?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  subscription      Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@index([subscriptionId, status])
+  @@index([addonCode, status])
+}
+
+model PaymentOrder {
+  id                 String            @id @default(cuid())
+  userId             String?
+  businessId         String?
+  targetScope        SubscriptionScope
+  planCode           String
+  amountUsdCents     Int
+  currency           String            @default("USD")
+  method             PaymentMethod     @default(BANK_TRANSFER_NICKEL)
+  status             PaymentOrderStatus @default(PENDING)
+  transferReference  String            @unique
+  beneficiaryIban    String
+  beneficiaryBic     String
+  beneficiaryRib     String?
+  depositorNote      String?
+  proofUrl           String?
+  expiresAt          DateTime
+  validatedAt        DateTime?
+  canceledAt         DateTime?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  user               User?             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  business           BusinessAccount?  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([businessId, status])
+  @@index([targetScope, status])
+  @@index([expiresAt])
+}
+
+model Listing {
+  id                 String        @id @default(cuid())
+  type               ListingType
+  status             ListingStatus @default(ACTIVE)
+  title              String
+  description        String?
+  category           String
+  city               String
+  latitude           Float
+  longitude          Float
+  imageUrl           String?
+  mediaUrls          String[]      @default([])
+  priceUsdCents      Int           @default(0)
+  stockQuantity      Int?
+  serviceDurationMin Int?
+  serviceLocation    String?
+  isPublished        Boolean       @default(true)
+  isNegotiable       Boolean       @default(true)
+  ownerUserId        String
+  businessId         String?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  ownerUser User             @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  business  BusinessAccount? @relation(fields: [businessId], references: [id], onDelete: SetNull)
+  cartItems CartItem[]
+  orderItems OrderItem[]
+  negotiations Negotiation[]
+  bundleItems  NegotiationBundleItem[]
+
+  @@index([type])
+  @@index([city])
+  @@index([ownerUserId])
+  @@index([businessId])
+  @@index([isPublished])
+  @@index([status])
+}
+
+model Cart {
+  id           String     @id @default(cuid())
+  buyerUserId  String
+  status       CartStatus @default(OPEN)
+  currency     String     @default("USD")
+  checkedOutAt DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  buyer        User       @relation(fields: [buyerUserId], references: [id], onDelete: Cascade)
+  items        CartItem[]
+  orders       Order[]
+
+  @@index([buyerUserId, status])
+  @@index([createdAt])
+}
+
+model CartItem {
+  id               String   @id @default(cuid())
+  cartId           String
+  listingId        String
+  quantity         Int      @default(1)
+  unitPriceUsdCents Int     @default(0)
+  negotiationId    String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  cart             Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  listing          Listing  @relation(fields: [listingId], references: [id], onDelete: Restrict)
+  negotiation      Negotiation? @relation(fields: [negotiationId], references: [id], onDelete: SetNull)
+
+  @@unique([cartId, listingId])
+  @@index([cartId])
+  @@index([listingId])
+  @@index([negotiationId])
+}
+
+model Order {
+  id                String      @id @default(cuid())
+  buyerUserId       String
+  sellerUserId      String
+  sellerBusinessId  String?
+  cartId            String?
+  status            OrderStatus @default(PENDING)
+  currency          String      @default("USD")
+  totalUsdCents     Int
+  notes             String?
+  validationCode    String?
+  confirmedAt       DateTime?
+  deliveredAt       DateTime?
+  canceledAt        DateTime?
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  buyer             User            @relation("BuyerOrders", fields: [buyerUserId], references: [id], onDelete: Cascade)
+  seller            User            @relation("SellerOrders", fields: [sellerUserId], references: [id], onDelete: Cascade)
+  sellerBusiness    BusinessAccount? @relation(fields: [sellerBusinessId], references: [id], onDelete: SetNull)
+  cart              Cart?           @relation(fields: [cartId], references: [id], onDelete: SetNull)
+  items             OrderItem[]
+
+  @@index([buyerUserId, status, createdAt])
+  @@index([sellerUserId, status, createdAt])
+  @@index([sellerBusinessId, status, createdAt])
+  @@index([createdAt])
+}
+
+model OrderItem {
+  id                String      @id @default(cuid())
+  orderId           String
+  listingId         String?
+  listingType       ListingType
+  title             String
+  category          String
+  city              String
+  quantity          Int
+  unitPriceUsdCents Int
+  lineTotalUsdCents Int
+  createdAt         DateTime    @default(now())
+
+  order             Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  listing           Listing?    @relation(fields: [listingId], references: [id], onDelete: SetNull)
+
+  @@index([orderId])
+  @@index([listingId])
+}
+
+model BusinessShop {
+  id                String   @id @default(cuid())
+  businessId        String   @unique
+  coverImage        String?
+  logo              String?
+  publicDescription String?
+  city              String?
+  address           String?
+  active            Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  business BusinessAccount @relation(fields: [businessId], references: [id], onDelete: Cascade)
+}
+
+// ═══════════════════════════════════════
+// NÉGOCIATIONS / MARCHANDAGE
+// ═══════════════════════════════════════
+
+model NegotiationBundle {
+  id          String   @id @default(cuid())
+  creatorUserId String
+  sellerUserId  String
+  totalOriginalUsdCents Int
+  createdAt   DateTime @default(now())
+
+  creator     User     @relation("BundleCreator", fields: [creatorUserId], references: [id], onDelete: Cascade)
+  seller      User     @relation("BundleSeller", fields: [sellerUserId], references: [id], onDelete: Cascade)
+  items       NegotiationBundleItem[]
+  negotiations Negotiation[]
+
+  @@index([creatorUserId])
+  @@index([sellerUserId])
+}
+
+model NegotiationBundleItem {
+  id          String @id @default(cuid())
+  bundleId    String
+  listingId   String
+  quantity    Int    @default(1)
+
+  bundle      NegotiationBundle @relation(fields: [bundleId], references: [id], onDelete: Cascade)
+  listing     Listing           @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@unique([bundleId, listingId])
+  @@index([listingId])
+}
+
+model Negotiation {
+  id             String            @id @default(cuid())
+  buyerUserId    String
+  sellerUserId   String
+  listingId      String
+  bundleId       String?
+  type           NegotiationType   @default(SIMPLE)
+  status         NegotiationStatus @default(PENDING)
+  originalPriceUsdCents Int
+  finalPriceUsdCents    Int?
+  quantity       Int               @default(1)
+  groupId        String?
+  minBuyers      Int?
+  expiresAt      DateTime
+  resolvedAt     DateTime?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  buyer          User              @relation("BuyerNegotiations", fields: [buyerUserId], references: [id], onDelete: Cascade)
+  seller         User              @relation("SellerNegotiations", fields: [sellerUserId], references: [id], onDelete: Cascade)
+  listing        Listing           @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  bundle         NegotiationBundle? @relation(fields: [bundleId], references: [id], onDelete: SetNull)
+  offers         NegotiationOffer[]
+  cartItems      CartItem[]
+
+  @@index([buyerUserId, status])
+  @@index([sellerUserId, status])
+  @@index([listingId])
+  @@index([status, expiresAt])
+  @@index([groupId])
+  @@index([bundleId])
+}
+
+model NegotiationOffer {
+  id              String   @id @default(cuid())
+  negotiationId   String
+  fromUserId      String
+  priceUsdCents   Int
+  quantity        Int      @default(1)
+  message         String?
+  createdAt       DateTime @default(now())
+
+  negotiation     Negotiation @relation(fields: [negotiationId], references: [id], onDelete: Cascade)
+  fromUser        User        @relation(fields: [fromUserId], references: [id], onDelete: Cascade)
+
+  @@index([negotiationId, createdAt])
+  @@index([fromUserId])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorUserId String?
+  action     String
+  entityType String
+  entityId   String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  actor User? @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([actorUserId])
+  @@index([entityType])
+}
+
+// ═══════════════════════════════════════
+// MESSAGING
+// ═══════════════════════════════════════
+
+enum MessageType {
+  TEXT
+  IMAGE
+  AUDIO
+  VIDEO
+  FILE
+  SYSTEM
+}
+
+model Conversation {
+  id          String    @id @default(cuid())
+  isGroup     Boolean   @default(false)
+  groupName   String?
+  groupAvatar String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  participants ConversationParticipant[]
+  messages     Message[]
+  callLogs     CallLog[]
+
+  @@index([updatedAt])
+}
+
+model ConversationParticipant {
+  id             String    @id @default(cuid())
+  conversationId String
+  userId         String
+  joinedAt       DateTime  @default(now())
+  lastReadAt     DateTime  @default(now())
+  isAdmin        Boolean   @default(false)
+  muted          Boolean   @default(false)
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+  @@index([userId])
+  @@index([conversationId])
+}
+
+model Message {
+  id             String      @id @default(cuid())
+  conversationId String
+  senderId       String
+  type           MessageType @default(TEXT)
+  content        String?
+  mediaUrl       String?
+  fileName       String?
+  replyToId      String?
+  isEdited       Boolean     @default(false)
+  isDeleted      Boolean     @default(false)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User         @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  replyTo      Message?     @relation("MessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies      Message[]    @relation("MessageReplies")
+  readReceipts MessageReadReceipt[]
+
+  @@index([conversationId, createdAt])
+  @@index([senderId])
+}
+
+model MessageReadReceipt {
+  id        String   @id @default(cuid())
+  messageId String
+  userId    String
+  readAt    DateTime @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId])
+  @@index([userId])
+}
+
+// ══════════════════════════════════════════════
+// Call Log (Journal des appels)
+// ══════════════════════════════════════════════
+
+enum CallType {
+  AUDIO
+  VIDEO
+}
+
+enum CallStatus {
+  MISSED
+  ANSWERED
+  REJECTED
+  NO_ANSWER
+}
+
+model CallLog {
+  id              String     @id @default(cuid())
+  conversationId  String
+  callerUserId    String
+  receiverUserId  String
+  callType        CallType
+  status          CallStatus @default(MISSED)
+  startedAt       DateTime   @default(now())
+  answeredAt      DateTime?
+  endedAt         DateTime?
+  durationSeconds Int?
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  caller       User         @relation("CallerCallLogs", fields: [callerUserId], references: [id], onDelete: Cascade)
+  receiver     User         @relation("ReceiverCallLogs", fields: [receiverUserId], references: [id], onDelete: Cascade)
+
+  @@index([callerUserId, startedAt])
+  @@index([receiverUserId, startedAt])
+  @@index([conversationId])
+}
+
+// ══════════════════════════════════════════════
+// Push Notifications (Web Push API)
+// ══════════════════════════════════════════════
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  endpoint  String
+  p256dh    String
+  auth      String
+  userAgent String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, endpoint])
+  @@index([userId])
+}
+
+// ══════════════════════════════════════════════
+// ADMIN — Accréditations, Permissions, Blog, Signalements, Devis, IA
+// ══════════════════════════════════════════════
+
+enum AdminLevel {
+  LEVEL_1
+  LEVEL_2
+  LEVEL_3
+  LEVEL_4
+  LEVEL_5
+}
+
+enum AdminPermission {
+  DASHBOARD
+  USERS
+  BLOG
+  TRANSACTIONS
+  REPORTS
+  FEED
+  DONATIONS
+  ADS
+  ADVERTISEMENTS
+  SECURITY
+  ANTIFRAUD
+  SECURITY_AI
+  AI_MANAGEMENT
+  RANKINGS
+  ADMINS
+  CURRENCY
+  AUDIT
+  SETTINGS
+  MESSAGING
+  LISTINGS
+  NEGOTIATION_RULES
+}
+
+model AdminProfile {
+  id             String           @id @default(cuid())
+  userId         String           @unique
+  level          AdminLevel       @default(LEVEL_5)
+  permissions    AdminPermission[]
+  promotedBy     String?
+  promotedAt     DateTime         @default(now())
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([level])
+}
+
+enum ReportStatus {
+  PENDING
+  IN_PROGRESS
+  RESOLVED
+}
+
+model Report {
+  id              String       @id @default(cuid())
+  reporterUserId  String
+  reportedUserId  String
+  reason          String
+  message         String?
+  status          ReportStatus @default(PENDING)
+  resolvedBy      String?
+  resolvedAt      DateTime?
+  resolution      String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  reporter        User         @relation("ReporterReports", fields: [reporterUserId], references: [id], onDelete: Cascade)
+  reported        User         @relation("ReportedReports", fields: [reportedUserId], references: [id], onDelete: Cascade)
+
+  @@index([reporterUserId])
+  @@index([reportedUserId])
+  @@index([status])
+}
+
+enum BlogPostStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+model BlogPost {
+  id          String         @id @default(cuid())
+  authorId    String
+  title       String
+  content     String
+  excerpt     String?
+  coverImage  String?
+  mediaUrl    String?
+  mediaType   String?
+  status      BlogPostStatus @default(DRAFT)
+  publishedAt DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  author      User           @relation("BlogPosts", fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([authorId])
+  @@index([status])
+  @@index([publishedAt])
+}
+
+enum AdOfferStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+model AdOffer {
+  id          String        @id @default(cuid())
+  name        String
+  description String?
+  priceUsdCents Int
+  durationDays  Int
+  features    String[]      @default([])
+  status      AdOfferStatus @default(ACTIVE)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  donations   AdDonation[]  @relation("AdOfferDonations")
+
+  @@index([status])
+}
+
+model CurrencyRate {
+  id          String   @id @default(cuid())
+  fromCurrency String
+  toCurrency   String
+  rate         Float
+  isManual     Boolean  @default(false)
+  updatedBy    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([fromCurrency, toCurrency])
+  @@index([fromCurrency])
+}
+
+model AiAgent {
+  id          String     @id @default(cuid())
+  name        String
+  domain      String
+  description String?
+  action      String?
+  level       AdminLevel @default(LEVEL_1)
+  enabled     Boolean    @default(true)
+  config      Json?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+}
+
+model SiteSetting {
+  id    String @id @default(cuid())
+  key   String @unique
+  value String
+  updatedAt DateTime @updatedAt
+}
+
+// ══════════════════════════════════════════════
+// SECURITY & TRUST SYSTEM
+// ══════════════════════════════════════════════
+
+enum TrustLevel {
+  NEW          // 0-39  — Très restreint
+  STANDARD     // 40-59 — Usage normal
+  VERIFIED     // 60-79 — Fiable
+  PREMIUM      // 80+   — Badge confiance
+}
+
+enum SanctionLevel {
+  WARNING
+  RESTRICTION
+  FUNCTION_BLOCK
+  SUSPENSION
+  BAN
+}
+
+enum RestrictionType {
+  MESSAGE_LIMIT
+  LISTING_LIMIT
+  NEGOTIATION_BLOCK
+  VISIBILITY_REDUCED
+  MANUAL_REVIEW
+  SOKIN_RESTRICTED
+  FULL_READONLY
+}
+
+model TrustScoreEvent {
+  id        String   @id @default(cuid())
+  userId    String
+  delta     Int
+  reason    String
+  source    String
+  newScore  Int
+  newLevel  TrustLevel
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  user User @relation("TrustScoreUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+model SecurityEvent {
+  id         String   @id @default(cuid())
+  userId     String?
+  eventType  String
+  ipAddress  String?
+  userAgent  String?
+  deviceId   String?
+  metadata   Json?
+  riskLevel  Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  user User? @relation("SecurityUser", fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([eventType, createdAt])
+  @@index([ipAddress, createdAt])
+  @@index([riskLevel])
+}
+
+model UserRestriction {
+  id              String          @id @default(cuid())
+  userId          String
+  restrictionType RestrictionType
+  reason          String
+  sanctionLevel   SanctionLevel   @default(RESTRICTION)
+  isActive        Boolean         @default(true)
+  appliedBy       String?
+  expiresAt       DateTime?
+  liftedAt        DateTime?
+  createdAt       DateTime        @default(now())
+
+  user User @relation("RestrictedUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isActive])
+  @@index([restrictionType, isActive])
+  @@index([expiresAt])
+}
+
+model FraudSignal {
+  id          String   @id @default(cuid())
+  userId      String
+  signalType  String
+  severity    Int      @default(1)
+  description String?
+  metadata    Json?
+  resolved    Boolean  @default(false)
+  resolvedBy  String?
+  resolvedAt  DateTime?
+  createdAt   DateTime @default(now())
+
+  user User @relation("FraudSignalUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, resolved])
+  @@index([signalType, createdAt])
+  @@index([severity])
+}
+
+model RateLimitEntry {
+  id        String   @id @default(cuid())
+  key       String
+  count     Int      @default(1)
+  windowStart DateTime @default(now())
+  expiresAt DateTime
+
+  @@unique([key])
+  @@index([expiresAt])
+}
+
+// ══════════════════════════════════════════════
+// MESSAGE GUARD AI — Contrôle conversationnel
+// ══════════════════════════════════════════════
+
+enum MessageGuardVerdict {
+  ALLOWED
+  WARNED
+  BLOCKED
+}
+
+enum MessageGuardCategory {
+  PHONE_NUMBER
+  EMAIL
+  EXTERNAL_LINK
+  SOCIAL_HANDLE
+  PLATFORM_EXIT_INTENT
+  OFF_PLATFORM_TRADE
+  OFF_PLATFORM_PAYMENT
+  FRAGMENTED_INFO
+  OBFUSCATED_CONTACT
+  OTHER
+}
+
+model MessageGuardLog {
+  id               String               @id @default(cuid())
+  userId           String
+  conversationId   String
+  messageContent   String?
+  verdict          MessageGuardVerdict
+  riskScore        Int                  @default(0)
+  categories       MessageGuardCategory[]
+  detections       Json?
+  engineResults    Json?
+  warningShown     String?
+  createdAt        DateTime             @default(now())
+
+  user User @relation("MessageGuardUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([verdict, createdAt])
+  @@index([riskScore])
+  @@index([conversationId, createdAt])
+}
+
+model MessageGuardFragment {
+  id               String   @id @default(cuid())
+  userId           String
+  conversationId   String
+  content          String
+  normalizedContent String
+  createdAt        DateTime @default(now())
+  expiresAt        DateTime
+
+  @@index([userId, conversationId, createdAt])
+  @@index([expiresAt])
+}
+
+model MessageGuardConfig {
+  id              String   @id @default(cuid())
+  key             String   @unique
+  value           Json
+  updatedBy       String?
+  updatedAt       DateTime @updatedAt
+  createdAt       DateTime @default(now())
+}
+
+// ══════════════════════════════════════════
+// So-Kin Feed
+// ══════════════════════════════════════════
+
+enum SoKinPostStatus {
+  ACTIVE
+  FLAGGED
+  HIDDEN
+  DELETED
+}
+
+model SoKinPost {
+  id             String          @id @default(cuid())
+  authorId       String
+  text           String
+  visibility     String          @default("PUBLIC")
+  mediaUrls      String[]        @default([])
+  hashtags       String[]        @default([])
+  tags           String[]        @default([])
+  location       String?
+  linkedListingId String?
+  likes          Int             @default(0)
+  comments       Int             @default(0)
+  shares         Int             @default(0)
+  sponsored      Boolean         @default(false)
+  status         SoKinPostStatus @default(ACTIVE)
+  moderatedBy    String?
+  moderatedAt    DateTime?
+  moderationNote String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  author User @relation("SoKinPosts", fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([authorId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// ══════════════════════════════════════════
+// Donations & Achats publicitaires
+// ══════════════════════════════════════════
+
+enum DonationType {
+  AD_PURCHASE
+  DONATION
+  BOOST
+}
+
+enum DonationStatus {
+  PENDING
+  COMPLETED
+  REFUNDED
+  FAILED
+}
+
+model AdDonation {
+  id              String         @id @default(cuid())
+  userId          String
+  type            DonationType
+  amountUsdCents  Int
+  description     String?
+  adOfferId       String?
+  status          DonationStatus @default(PENDING)
+  processedBy     String?
+  processedAt     DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  user    User     @relation("UserDonations", fields: [userId], references: [id], onDelete: Cascade)
+  adOffer AdOffer? @relation("AdOfferDonations", fields: [adOfferId], references: [id])
+
+  @@index([userId])
+  @@index([status])
+  @@index([type])
+  @@index([createdAt])
+}
+
+// ══════════════════════════════════════════
+// Système de Publicités (Bannières)
+// ══════════════════════════════════════════
+
+enum AdvertisementStatus {
+  PENDING
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+  CANCELLED
+}
+
+enum AdvertisementType {
+  KIN_SELL
+  USER
+  BUSINESS
+}
+
+model Advertisement {
+  id              String              @id @default(cuid())
+  title           String
+  description     String?
+  imageUrl        String?
+  linkUrl         String              @default("/")
+  ctaText         String?             @default("Découvrir")
+  type            AdvertisementType   @default(USER)
+  status          AdvertisementStatus @default(PENDING)
+  targetPages     String[]            @default([])
+  startDate       DateTime?
+  endDate         DateTime?
+  paymentRef      String?
+  amountPaidCents Int                 @default(0)
+  impressions     Int                 @default(0)
+  clicks          Int                 @default(0)
+  priority        Int                 @default(0)
+  cancelledBy     String?
+  cancelledAt     DateTime?
+  cancelNote      String?
+  advertiserEmail String?
+  advertiserName  String?
+  userId          String?
+  businessId      String?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  user     User?            @relation("UserAds", fields: [userId], references: [id], onDelete: SetNull)
+  business BusinessAccount? @relation("BusinessAds", fields: [businessId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([type])
+  @@index([userId])
+  @@index([businessId])
+  @@index([startDate, endDate])
+}
+
+// ══════════════════════════════════════════════
+// CATEGORY NEGOTIATION RULES — Verrouillage négociation par catégorie (Admin)
+// ══════════════════════════════════════════════
+
+model CategoryNegotiationRule {
+  id                String   @id @default(cuid())
+  category          String   @unique          // Nom exact de la catégorie (lowercase-trimmed)
+  negotiationLocked Boolean  @default(false)  // true = négociation interdite pour cette catégorie
+  updatedByUserId   String?                   // Admin qui a modifié
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([category])
+}
+
+// ══════════════════════════════════════════════
+// AI MEMORY & AUTONOMY SYSTEM
+// ══════════════════════════════════════════════
+
+model AiMemorySnapshot {
+  id           String   @id @default(cuid())
+  userId       String
+  agentName    String
+  snapshotType String   // WEEKLY, MONTHLY, ANOMALY, TREND
+  data         Json
+  periodStart  DateTime
+  periodEnd    DateTime
+  createdAt    DateTime @default(now())
+
+  @@index([userId, agentName, createdAt])
+  @@index([agentName, snapshotType])
+}
+
+model AiAutonomyLog {
+  id           String   @id @default(cuid())
+  agentName    String
+  actionType   String   // AUTO_NEGOTIATE, AUTO_RECOVER_CART, AUTO_AD_OPTIMIZE, etc.
+  targetId     String?
+  targetUserId String?
+  decision     String
+  reasoning    String?
+  success      Boolean  @default(true)
+  metadata     Json?
+  createdAt    DateTime @default(now())
+
+  @@index([agentName, createdAt])
+  @@index([targetUserId, createdAt])
+  @@index([actionType])
+}

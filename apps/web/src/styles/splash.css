@@ -1,0 +1,127 @@
+/* ─────────────────────────────────────────────
+   SPLASH SCREEN
+   ───────────────────────────────────────────── */
+.ks-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  cursor: pointer;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ks-splash__img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: none;
+}
+
+/* PC : image 16:9 */
+@media (min-width: 768px) {
+  .ks-splash__img--desktop { display: block; }
+  .ks-splash__img--mobile  { display: none;  }
+}
+
+/* Mobile : image 9:16 */
+@media (max-width: 767px) {
+  .ks-splash__img--desktop { display: none;  }
+  .ks-splash__img--mobile  { display: block; }
+}
+
+.ks-splash__hint {
+  position: absolute;
+  bottom: 2.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 0.8rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  animation: ksSplashPulse 2s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes ksSplashPulse {
+  0%, 100% { opacity: 0.4; }
+  50%       { opacity: 1;   }
+}
+
+/* Barre de progression auto-dismiss */
+.ks-splash__bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+  background: var(--color-primary, #6f58ff);
+  width: 0%;
+  animation: ksSplashBar 3.5s linear forwards;
+}
+
+@keyframes ksSplashBar {
+  from { width: 0%;   }
+  to   { width: 100%; }
+}
+
+/* Fade-out */
+.ks-splash--fading {
+  animation: ksSplashFade 0.6s ease forwards;
+}
+
+@keyframes ksSplashFade {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+/* ─────────────────────────────────────────────
+   BOUTON MUTE (fixe, bas gauche, permanent)
+   ───────────────────────────────────────────── */
+.ks-mute-btn {
+  position: fixed;
+  bottom: 1.5rem;
+  left: 1.5rem;
+  z-index: 200;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: rgba(255, 255, 255, 0.45);
+  border-radius: 50%;
+  width: 2.6rem;
+  height: 2.6rem;
+  font-size: 1.05rem;
+  cursor: pointer;
+  opacity: 0.38;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.25s ease, background 0.25s ease, transform 0.2s ease;
+  user-select: none;
+}
+
+.ks-mute-btn:hover {
+  opacity: 0.88;
+  background: rgba(111, 88, 255, 0.18);
+  border-color: rgba(111, 88, 255, 0.35);
+  color: #fff;
+  transform: scale(1.08);
+}
+
+.ks-mute-btn:active {
+  transform: scale(0.94);
+}
+
+/* Sur mobile : au-dessus de la bottom nav (≈72px) */
+@media (max-width: 767px) {
+  .ks-mute-btn {
+    width: 3rem;
+    height: 3rem;
+    bottom: calc(72px + 1rem);
+    left: 1rem;
+  }
+}

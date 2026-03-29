@@ -1,0 +1,137 @@
+/** 
+ * ⚠️  GLASS COMPONENTS — VERROUILLÉ (26 mars 2026)
+ * 
+ * 🔒 IMMUTABLE: Ne modifiez PAS les composants existants
+ * ✅ ALLOWED: Ajouter des NEW variants (ex: .glass-variant-premium)
+ * 
+ * Source: /docs/KIN-SELL-DESIGN-SYSTEM.md
+ * Memos: /memories/repo/DESIGN-SYSTEM-LOCKED.md
+ * 
+ * Tous les changements de couleur DOIVENT utiliser var(--color-*)
+ */
+/* Composants réutilisables - Glassmorphism */
+
+.glass-container {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  backdrop-filter: blur(10px);
+  box-shadow: var(--shadow-glass);
+  transition: all var(--transition-base);
+}
+
+.glass-container:hover {
+  background: var(--glass-bg-hover);
+  border-color: rgba(185, 166, 255, 0.45);
+  box-shadow: 0 12px 40px rgba(111, 88, 255, 0.22);
+}
+
+.glass-card {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-lg);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  backdrop-filter: blur(10px);
+  box-shadow: var(--shadow-glass);
+  transition: all var(--transition-base);
+}
+
+.glass-card:hover {
+  transform: translateY(-4px);
+  background: var(--glass-bg-hover);
+  box-shadow: 0 12px 40px rgba(111, 88, 255, 0.24);
+}
+
+.glass-button {
+  padding: var(--space-sm) var(--space-md);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-primary);
+  font-family: var(--font-family-base);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.glass-button:hover {
+  background: var(--glass-bg-hover);
+  box-shadow: 0 4px 12px rgba(111, 88, 255, 0.2);
+}
+
+.glass-button.primary {
+  background: linear-gradient(135deg, var(--color-primary), var(--color-accent-dark));
+  border-color: var(--color-primary);
+  color: #ffffff;
+  font-weight: var(--font-weight-bold);
+}
+
+.glass-button.primary:hover {
+  background: var(--color-primary-hover);
+  color: var(--color-dark-blue);
+  box-shadow: 0 8px 24px rgba(185, 166, 255, 0.4);
+}
+
+.glass-button.secondary {
+  background: linear-gradient(135deg, var(--color-dark-blue-light), var(--color-dark-blue-lighter));
+  border-color: var(--color-secondary);
+  color: var(--color-primary-hover);
+  font-weight: var(--font-weight-bold);
+}
+
+.glass-button.secondary:hover {
+  background: rgba(185, 166, 255, 0.16);
+  box-shadow: 0 8px 24px rgba(111, 88, 255, 0.35);
+}
+
+.glass-button.btn-sm {
+  font-size: var(--font-size-sm);
+  padding: 8px 12px;
+}
+
+.glass-button.btn-md {
+  font-size: var(--font-size-base);
+  padding: 10px 14px;
+}
+
+.glass-button.btn-lg {
+  font-size: var(--font-size-lg);
+  padding: 12px 18px;
+}
+
+/* ── (?) Bouton info/aide — style unifié ── */
+.ks-help-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  background: var(--glass-bg);
+  border: 1.5px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  color: var(--color-primary);
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+  font-family: inherit;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+  animation: ks-help-pulse 2s ease-in-out infinite;
+}
+
+@keyframes ks-help-pulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(111, 88, 255, 0); }
+  50% { transform: scale(1.12); box-shadow: 0 0 8px 2px rgba(111, 88, 255, 0.35); }
+}
+
+.ks-help-btn:hover {
+  background: var(--glass-bg-hover);
+  border-color: rgba(185, 166, 255, 0.5);
+  color: var(--color-text-primary);
+  box-shadow: 0 4px 14px rgba(111, 88, 255, 0.25);
+  animation-play-state: paused;
+}

@@ -1,0 +1,48 @@
+/** 
+ * ⚠️  PALETTE SECONDAIRE — VERROUILLÉ (26 mars 2026)
+ * 
+ * 🔒 IMMUTABLE: Synchronisé avec design-tokens.css
+ * Cette palette sert de garde en cas d'erreur
+ * 
+ * Source: /docs/KIN-SELL-DESIGN-SYSTEM.md
+ * Memos: /memories/repo/DESIGN-SYSTEM-LOCKED.md
+ */
+/* Palette Kin-Sel V2 Premium */
+
+:root {
+  /* Couleurs principales */
+  --color-bg-primary: #120B2B;
+  --color-bg-secondary: #1E1240;
+  --color-bg-tertiary: #2B1B58;
+  --color-primary: #6F58FF;
+  --color-primary-light: #B9A6FF;
+  --color-accent-dark: #490C80;
+  
+  /* Texte */
+  --color-text-white: #FFFFFF;
+  --color-text-gray: #C7BEDF;
+  --color-text-light: #9D92BB;
+  
+  /* Statut */
+  --color-success: #4CAF50;
+  --color-warning: #FFC107;
+  --color-danger: #F44336;
+  
+  /* Effets */
+  --shadow-sm: 0 2px 8px rgba(16, 8, 34, 0.35);
+  --shadow-md: 0 8px 24px rgba(16, 8, 34, 0.4);
+  --shadow-lg: 0 12px 40px rgba(111, 88, 255, 0.24);
+  --glow-primary: 0 0 20px rgba(111, 88, 255, 0.4);
+  
+  /* Espacements */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --space-2xl: 48px;
+  
+  /* Transitions */
+  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-base: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+}

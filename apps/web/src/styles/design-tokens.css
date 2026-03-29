@@ -1,0 +1,105 @@
+/** 
+ * ⚠️  DESIGN TOKENS — VERROUILLÉ (26 mars 2026)
+ * 
+ * 🔒 IMMUTABLE: Ne modifiez PAS les valeurs existantes
+ * ✅ ALLOWED: Ajouter de NEW tokens si nécessaire (jamais supprimer)
+ * 
+ * Source: /docs/KIN-SELL-DESIGN-SYSTEM.md
+ * Memos: /memories/repo/DESIGN-SYSTEM-LOCKED.md
+ * 
+ * Si modification requise → Consulter la documentation & demander approbation
+ */
+/* Design Tokens - Palette et variables globales */
+
+:root,
+:root[data-theme="dark"] {
+  /* Couleurs principales Kin-Sell */
+  --color-dark-blue: #120b2b;
+  --color-dark-blue-light: #1e1240;
+  --color-dark-blue-lighter: #2b1b58;
+
+  /* Accents */
+  --color-primary: #6f58ff;
+  --color-primary-hover: #b9a6ff;
+  --color-secondary: #9279ff;
+  --color-accent: #8f74ff;
+  --color-accent-dark: #490c80;
+  
+  /* Surfaces glassmorphism */
+  --glass-bg: rgba(35, 24, 72, 0.66);
+  --glass-bg-hover: rgba(42, 29, 87, 0.84);
+  --glass-border: rgba(180, 160, 255, 0.24);
+  
+  /* Texte */
+  --color-text-primary: #ffffff;
+  --color-text-secondary: #c7bedf;
+  --color-text-tertiary: #9d92bb;
+  
+  /* Ombres et profondeur */
+  --shadow-sm: 0 4px 12px rgba(16, 8, 34, 0.28);
+  --shadow-md: 0 8px 24px rgba(16, 8, 34, 0.36);
+  --shadow-lg: 0 12px 40px rgba(16, 8, 34, 0.45);
+  --shadow-glass: 0 8px 32px rgba(22, 12, 47, 0.5);
+  
+  /* Espacements */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --space-2xl: 48px;
+  
+  /* Typographie */
+  --font-family-base: "Space Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+  --font-family-display: "Sora", -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+  
+  --font-size-xs: 12px;
+  --font-size-sm: 14px;
+  --font-size-base: 16px;
+  --font-size-lg: 18px;
+  --font-size-xl: 20px;
+  --font-size-2xl: 24px;
+  --font-size-3xl: 32px;
+  --font-size-4xl: 48px;
+  
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  
+  /* Border radius */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-full: 9999px;
+  
+  /* Transitions */
+  --transition-fast: 150ms ease-out;
+  --transition-base: 300ms ease-out;
+  --transition-slow: 500ms ease-out;
+}
+
+:root[data-theme="light"] {
+  --color-dark-blue: #f4efff;
+  --color-dark-blue-light: #eae2ff;
+  --color-dark-blue-lighter: #ddd1ff;
+
+  --color-primary: #6247ec;
+  --color-primary-hover: #4b32ce;
+  --color-secondary: #6247ec;
+  --color-accent: #6247ec;
+
+  --glass-bg: rgba(255, 255, 255, 0.68);
+  --glass-bg-hover: rgba(255, 255, 255, 0.9);
+  --glass-border: rgba(94, 72, 194, 0.2);
+
+  --color-text-primary: #241a48;
+  --color-text-secondary: #4f4476;
+  --color-text-tertiary: #746897;
+
+  --shadow-sm: 0 4px 12px rgba(54, 35, 129, 0.1);
+  --shadow-md: 0 8px 24px rgba(54, 35, 129, 0.14);
+  --shadow-lg: 0 12px 40px rgba(54, 35, 129, 0.18);
+  --shadow-glass: 0 8px 32px rgba(54, 35, 129, 0.14);
+}

@@ -1,0 +1,332 @@
+/* ═══════════════════════════════════════════════════════
+   Kin-Sell — PWA Install Prompt & Update Banner
+   Design conforme au design system (glass + violet palette)
+   ═══════════════════════════════════════════════════════ */
+
+/* ── Bouton d'installation (dans le header) ── */
+.pwa-install-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  border: 1px solid rgba(111, 88, 255, 0.5);
+  background: rgba(111, 88, 255, 0.15);
+  color: var(--color-text-primary);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+  white-space: nowrap;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.pwa-install-btn:hover {
+  background: rgba(111, 88, 255, 0.28);
+  border-color: rgba(111, 88, 255, 0.8);
+}
+.pwa-install-icon { font-size: 1rem; }
+@media (max-width: 480px) {
+  .pwa-install-label { display: none; }
+  .pwa-install-btn { padding: 6px 8px; }
+}
+
+/* ── Popup instructions iOS ── */
+.pwa-ios-popup {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: 280px;
+  padding: 18px 16px 14px;
+  border-radius: 16px;
+  z-index: 9999;
+  /* Flèche vers le haut */
+}
+.pwa-ios-popup::before {
+  content: '';
+  position: absolute;
+  top: -8px;
+  right: 20px;
+  width: 16px;
+  height: 8px;
+  background: var(--glass-bg, rgba(18, 11, 43, 0.85));
+  clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+}
+.pwa-ios-close {
+  position: absolute;
+  top: 8px; right: 10px;
+  background: none; border: none;
+  color: var(--color-text-secondary);
+  font-size: 0.9rem; cursor: pointer;
+  padding: 4px 6px;
+}
+.pwa-ios-title {
+  font-weight: 700;
+  font-size: 0.92rem;
+  margin: 0 0 10px;
+  color: var(--color-text-primary);
+}
+.pwa-ios-steps {
+  margin: 0 0 8px;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.pwa-ios-steps li {
+  font-size: 0.84rem;
+  color: var(--color-text-secondary);
+  line-height: 1.45;
+}
+.pwa-ios-hint {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--color-text-muted, rgba(255,255,255,0.45));
+}
+
+/* ── Bandeau mise à jour ── */
+.pwa-update-banner {
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-radius: 14px;
+  background: rgba(18, 11, 43, 0.92);
+  border: 1px solid rgba(111, 88, 255, 0.4);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  color: var(--color-text-primary);
+  font-size: 0.875rem;
+  font-weight: 500;
+  z-index: 10000;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.35);
+  white-space: nowrap;
+  animation: ksCardFade 0.3s ease;
+}
+.pwa-update-btn {
+  padding: 5px 14px;
+  border-radius: 10px;
+  background: var(--color-primary, #6f58ff);
+  color: #fff;
+  border: none;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+.pwa-update-btn:hover { opacity: 0.85; }
+.pwa-update-dismiss {
+  background: none; border: none;
+  color: var(--color-text-secondary);
+  cursor: pointer; font-size: 0.9rem;
+  padding: 2px 4px;
+  transition: color 0.2s;
+}
+.pwa-update-dismiss:hover { color: var(--color-text-primary); }
+@media (max-width: 480px) {
+  .pwa-update-banner { width: calc(100% - 32px); justify-content: space-between; }
+}
+
+/* ════════════════════════════════════════════════════════
+   Bannière d'installation proéminente (style Netflix)
+   Apparaît en bas de l'écran, glassmorphism
+   ════════════════════════════════════════════════════════ */
+
+.ks-install-banner {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 9998;
+  padding: 0 0 env(safe-area-inset-bottom, 0);
+  animation: ksBannerSlideUp 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes ksBannerSlideUp {
+  from { transform: translateY(100%); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+.ks-install-banner-inner {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 20px 16px;
+  background: rgba(14, 9, 34, 0.92);
+  border-top: 1px solid rgba(111, 88, 255, 0.35);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.45);
+}
+
+.ks-install-banner-icon-wrap {
+  flex-shrink: 0;
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid rgba(111, 88, 255, 0.4);
+  background: rgba(111, 88, 255, 0.12);
+  box-shadow: 0 0 16px rgba(111, 88, 255, 0.25);
+}
+
+.ks-install-banner-icon {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.ks-install-banner-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.ks-install-banner-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  line-height: 1.2;
+  font-family: var(--font-family-display);
+}
+
+.ks-install-banner-sub {
+  margin: 4px 0 0;
+  font-size: 0.78rem;
+  color: var(--color-text-secondary);
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ks-install-banner-btn {
+  flex-shrink: 0;
+  padding: 9px 20px;
+  border-radius: 24px;
+  background: var(--color-primary, #6f58ff);
+  border: none;
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.15s;
+  white-space: nowrap;
+  box-shadow: 0 4px 18px rgba(111, 88, 255, 0.45);
+  font-family: var(--font-family-base);
+}
+
+.ks-install-banner-btn:hover {
+  background: var(--color-primary-hover, #856aff);
+  transform: scale(1.03);
+}
+
+.ks-install-banner-btn:active {
+  transform: scale(0.97);
+}
+
+.ks-install-banner-dismiss {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--color-text-secondary);
+  font-size: 1.1rem;
+  cursor: pointer;
+  padding: 6px 8px;
+  border-radius: 50%;
+  transition: background 0.2s, color 0.2s;
+  line-height: 1;
+}
+
+.ks-install-banner-dismiss:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--color-text-primary);
+}
+
+/* ── iOS steps overlay ── */
+.ks-install-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(8, 5, 20, 0.72);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 16px;
+  animation: ksCardFade 0.25s ease;
+}
+
+.ks-install-ios-sheet {
+  position: relative;
+  width: 100%;
+  max-width: 420px;
+  padding: 22px 20px 24px;
+  border-radius: 20px 20px 16px 16px;
+  background: rgba(18, 11, 43, 0.97);
+  border: 1px solid rgba(111, 88, 255, 0.3);
+  backdrop-filter: blur(20px);
+  animation: ksBannerSlideUp 0.35s cubic-bezier(0.34, 1.3, 0.64, 1) both;
+}
+
+.ks-install-ios-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  background: rgba(255,255,255,0.08);
+  border: none;
+  color: var(--color-text-secondary);
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ks-install-ios-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin: 0 0 14px;
+  padding-right: 36px;
+}
+
+.ks-install-ios-steps {
+  padding-left: 20px;
+  margin: 0 0 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ks-install-ios-steps li {
+  font-size: 0.88rem;
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+}
+
+.ks-install-ios-hint {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.38);
+  margin: 0;
+}
+
+/* Responsive */
+@media (min-width: 640px) {
+  .ks-install-banner-inner {
+    max-width: 680px;
+    margin: 0 auto;
+    border-radius: 18px 18px 0 0;
+  }
+  .ks-install-banner {
+    padding-bottom: 0;
+  }
+}
