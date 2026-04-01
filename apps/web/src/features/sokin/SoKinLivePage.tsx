@@ -21,6 +21,44 @@ function StartLiveModal({ onClose, onStart }: { onClose: () => void; onStart: (d
   const [description, setDescription] = useState('');
   const [aspect, setAspect] = useState<'LANDSCAPE' | 'PORTRAIT'>('PORTRAIT');
   const [city, setCity] = useState('');
+  const [mediaReady, setMediaReady] = useState(false);
+  const [mediaError, setMediaError] = useState<string | null>(null);
+  const previewRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const requestMedia = async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'user' },
+          audio: true,
+        });
+        if (cancelled) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+        streamRef.current = stream;
+        if (previewRef.current) {
+          previewRef.current.srcObject = stream;
+        }
+        setMediaReady(true);
+        setMediaError(null);
+      } catch {
+        setMediaReady(false);
+        setMediaError('Autorise la camera et le micro pour demarrer un live.');
+      }
+    };
+
+    void requestMedia();
+
+    return () => {
+      cancelled = true;
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    };
+  }, []);
 
   return (
     <div className="sklive-modal-overlay" onClick={onClose}>
@@ -98,10 +136,24 @@ function StartLiveModal({ onClose, onStart }: { onClose: () => void; onStart: (d
           />
         </div>
 
+        <div className="sklive-form-group">
+          <label>Apercu camera</label>
+          <div className="sklive-camera-preview">
+            {mediaReady ? (
+              <video ref={previewRef} autoPlay muted playsInline className="sklive-camera-preview-video" />
+            ) : (
+              <div className="sklive-camera-preview-empty">
+                <span>📷</span>
+                <p>{mediaError ?? 'Demande d acces camera en cours...'}</p>
+              </div>
+            )}
+          </div>
+        </div>
+
         <button
           type="button"
           className="sklive-start-btn"
-          disabled={!title.trim()}
+          disabled={!title.trim() || !mediaReady}
           onClick={() => onStart({ title: title.trim(), description: description.trim(), aspect, city: city.trim() })}
         >
           🔴 Lancer le Live
@@ -186,6 +238,8 @@ function LiveViewer({
   const chatEndRef = useRef<HTMLDivElement>(null);
   const chatPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const statusPollInFlightRef = useRef(false);
+  const hostPreviewRef = useRef<HTMLVideoElement>(null);
+  const hostPreviewStreamRef = useRef<MediaStream | null>(null);
   const isMobile = useIsMobile();
   const [deviceOrientation, setDeviceOrientation] = useState<'portrait' | 'landscape'>('portrait');
 
@@ -211,6 +265,38 @@ function LiveViewer({
       window.removeEventListener('resize', updateOrientation);
     };
   }, []);
+
+  useEffect(() => {
+    if (!isHost) return;
+    let cancelled = false;
+
+    const requestHostPreview = async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'user' },
+          audio: true,
+        });
+        if (cancelled) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+        hostPreviewStreamRef.current = stream;
+        if (hostPreviewRef.current) {
+          hostPreviewRef.current.srcObject = stream;
+        }
+      } catch {
+        // Le placeholder reste visible si l'autorisation echoue.
+      }
+    };
+
+    void requestHostPreview();
+
+    return () => {
+      cancelled = true;
+      hostPreviewStreamRef.current?.getTracks().forEach((track) => track.stop());
+      hostPreviewStreamRef.current = null;
+    };
+  }, [isHost]);
 
   // Rejoindre le live au montage
   useEffect(() => {
@@ -349,6 +435,9 @@ function LiveViewer({
       {/* Video area */}
       <div className={`sklive-viewer-video${isPortrait ? ' portrait' : ' landscape'}`}>
         <div className="sklive-video-placeholder">
+          {isHost && liveStatus !== 'ENDED' && (
+            <video ref={hostPreviewRef} autoPlay muted playsInline className="sklive-host-preview-video" />
+          )}
           {liveStatus === 'WAITING' && (
             <div className="sklive-waiting-screen">
               <div className="sklive-waiting-pulse" />
