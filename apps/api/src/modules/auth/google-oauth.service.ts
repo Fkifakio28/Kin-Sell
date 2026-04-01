@@ -105,7 +105,6 @@ export const handleGoogleCallback = async (code: string) => {
       where: { id: existingIdentity.id },
       data: {
         providerEmail: googleUser.email,
-        providerAvatar: googleUser.picture,
         isVerified: googleUser.email_verified,
         lastUsedAt: new Date(),
       },
@@ -125,7 +124,6 @@ export const handleGoogleCallback = async (code: string) => {
           provider: AuthProvider.GOOGLE,
           providerSubject: googleUser.sub,
           providerEmail: googleUser.email,
-          providerAvatar: googleUser.picture,
           isVerified: googleUser.email_verified,
         },
       });
@@ -167,7 +165,6 @@ export const handleGoogleCallback = async (code: string) => {
             provider: AuthProvider.GOOGLE,
             providerSubject: googleUser.sub,
             providerEmail: googleUser.email,
-            providerAvatar: googleUser.picture,
             isVerified: googleUser.email_verified,
           },
         });
