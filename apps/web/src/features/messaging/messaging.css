@@ -6,6 +6,7 @@
 .msg-shell {
   display: flex;
   height: calc(100vh - 72px);
+  min-height: 0;
   background: var(--color-bg-primary, #0d0820);
   color: var(--color-text-primary, #f0eef6);
   overflow: hidden;
@@ -47,6 +48,7 @@
 .msg-sidebar-actions {
   display: flex;
   gap: 6px;
+  flex-shrink: 0;
 }
 .msg-online-dot {
   width: 8px;
@@ -308,6 +310,7 @@
 .msg-chat-header-actions {
   display: flex;
   gap: 8px;
+  flex-shrink: 0;
 }
 
 /* ── Messages area ── */
@@ -1156,6 +1159,10 @@
 
 /* ═══ Responsive ═══ */
 @media (max-width: 768px) {
+  .msg-shell {
+    height: 100%;
+  }
+
   .msg-sidebar {
     position: absolute;
     inset: 0;
