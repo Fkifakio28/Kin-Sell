@@ -2,11 +2,12 @@ import { Router } from "express";
 import { z } from "zod";
 import { requireAuth, type AuthenticatedRequest } from "../../shared/auth/auth-middleware.js";
 import { asyncHandler } from "../../shared/utils/async-handler.js";
+import { isAcceptedImageInput } from "../../shared/utils/media-storage.js";
 import * as usersService from "./users.service.js";
 
 const updateMeSchema = z.object({
   displayName: z.string().min(2).max(80).optional(),
-  avatarUrl: z.string().url().optional(),
+  avatarUrl: z.string().refine(isAcceptedImageInput, "Image invalide").optional(),
   city: z.string().min(2).max(80).optional(),
   country: z.string().min(2).max(80).optional(),
   bio: z.string().max(500).optional(),

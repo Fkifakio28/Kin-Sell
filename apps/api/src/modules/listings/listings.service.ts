@@ -2,6 +2,7 @@ import { ListingStatus } from "@prisma/client";
 import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
 import { Role } from "../../types/roles.js";
+import { normalizeImageInput, normalizeImageInputs } from "../../shared/utils/media-storage.js";
 
 export type ListingType = "PRODUIT" | "SERVICE";
 
@@ -91,6 +92,11 @@ export const createListing = async (userId: string, payload: CreateListingInput)
     businessId = business.id;
   }
 
+  const [imageUrl, mediaUrls] = await Promise.all([
+    normalizeImageInput(payload.imageUrl, { folder: "listings" }),
+    normalizeImageInputs(payload.mediaUrls, { folder: "listings" }),
+  ]);
+
   const listing = await prisma.$transaction(async (tx) => {
     const created = await tx.listing.create({
       data: {
@@ -101,8 +107,8 @@ export const createListing = async (userId: string, payload: CreateListingInput)
         city: payload.city,
         latitude: payload.latitude,
         longitude: payload.longitude,
-        imageUrl: payload.imageUrl,
-        mediaUrls: payload.mediaUrls ?? [],
+        imageUrl,
+        mediaUrls: mediaUrls ?? [],
         priceUsdCents: payload.priceUsdCents ?? 0,
         stockQuantity: payload.stockQuantity ?? null,
         serviceDurationMin: payload.serviceDurationMin ?? null,
@@ -202,6 +208,11 @@ export const updateListing = async (userId: string, listingId: string, payload: 
   if (!existing) throw new HttpError(404, "Article introuvable");
   if (existing.status === ListingStatus.DELETED) throw new HttpError(400, "Article supprimé, impossible de le modifier");
 
+  const [imageUrl, mediaUrls] = await Promise.all([
+    normalizeImageInput(payload.imageUrl, { folder: "listings" }),
+    normalizeImageInputs(payload.mediaUrls, { folder: "listings" }),
+  ]);
+
   const updated = await prisma.listing.update({
     where: { id: listingId },
     data: {
@@ -211,8 +222,8 @@ export const updateListing = async (userId: string, listingId: string, payload: 
       ...(payload.city !== undefined && { city: payload.city }),
       ...(payload.latitude !== undefined && { latitude: payload.latitude }),
       ...(payload.longitude !== undefined && { longitude: payload.longitude }),
-      ...(payload.imageUrl !== undefined && { imageUrl: payload.imageUrl }),
-      ...(payload.mediaUrls !== undefined && { mediaUrls: payload.mediaUrls }),
+      ...(payload.imageUrl !== undefined && { imageUrl }),
+      ...(payload.mediaUrls !== undefined && { mediaUrls }),
       ...(payload.priceUsdCents !== undefined && { priceUsdCents: payload.priceUsdCents }),
       ...(payload.stockQuantity !== undefined && { stockQuantity: payload.stockQuantity }),
       ...(payload.serviceDurationMin !== undefined && { serviceDurationMin: payload.serviceDurationMin }),

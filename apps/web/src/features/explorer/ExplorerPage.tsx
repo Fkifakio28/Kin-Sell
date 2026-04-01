@@ -16,6 +16,7 @@ import { NegotiatePopup } from '../negotiations/NegotiatePopup';
 import { useLockedCategories, isCategoryLocked } from '../../hooks/useLockedCategories';
 import { AdBanner } from '../../components/AdBanner';
 import MapView from '../../components/MapView';
+import { SeoMeta } from '../../components/SeoMeta';
 
 const PREVIEW_PAGE_SIZE = 4;
 const MODAL_PAGE_SIZE = 8;
@@ -438,6 +439,11 @@ export function ExplorerPage() {
 
   return (
     <div className="explorer-shell">
+      <SeoMeta
+        title="Explorer — Boutiques et services à Kinshasa"
+        description="Parcourez les boutiques, produits et services disponibles à Kinshasa et partout en RDC. Recherchez par catégorie, prix et localité."
+        canonical="https://kin-sell.com/explorer"
+      />
       {/* ═══════════════════════════════════════════════
           HERO SECTION
           ═══════════════════════════════════════════════ */}

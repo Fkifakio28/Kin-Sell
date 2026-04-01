@@ -1,5 +1,39 @@
 import { prisma } from "../../shared/db/prisma.js";
 
+type LiveFeaturedListing = {
+  id: string;
+  title: string;
+  priceUsdCents: number;
+  city: string;
+  imageUrl: string | null;
+  type: "PRODUIT" | "SERVICE";
+};
+
+async function attachFeaturedListing<T extends { featuredListingId: string | null }>(lives: T[]) {
+  const listingIds = Array.from(new Set(lives.map((l) => l.featuredListingId).filter((id): id is string => Boolean(id))));
+  if (listingIds.length === 0) {
+    return lives.map((live) => ({ ...live, featuredListing: null }));
+  }
+
+  const listings = await prisma.listing.findMany({
+    where: { id: { in: listingIds }, status: "ACTIVE" },
+    select: {
+      id: true,
+      title: true,
+      priceUsdCents: true,
+      city: true,
+      imageUrl: true,
+      type: true,
+    },
+  });
+
+  const map = new Map<string, LiveFeaturedListing>(listings.map((l) => [l.id, l]));
+  return lives.map((live) => ({
+    ...live,
+    featuredListing: live.featuredListingId ? map.get(live.featuredListingId) ?? null : null,
+  }));
+}
+
 /* ── Créer un live ── */
 export async function createLive(
   hostId: string,
@@ -39,7 +73,7 @@ export async function endLive(liveId: string, hostId: string) {
 
 /* ── Obtenir un live par ID ── */
 export async function getLiveById(liveId: string) {
-  return prisma.soKinLive.findUnique({
+  const live = await prisma.soKinLive.findUnique({
     where: { id: liveId },
     include: {
       host: { include: { profile: { select: { username: true, displayName: true, avatarUrl: true, city: true } } } },
@@ -53,11 +87,14 @@ export async function getLiveById(liveId: string) {
       },
     },
   });
+  if (!live) return null;
+  const [withListing] = await attachFeaturedListing([live]);
+  return withListing;
 }
 
 /* ── Lister les lives actifs (WAITING + LIVE) ── */
 export async function getActiveLives(limit = 20) {
-  return prisma.soKinLive.findMany({
+  const lives = await prisma.soKinLive.findMany({
     where: { status: { in: ["WAITING", "LIVE"] } },
     include: {
       host: { include: { profile: { select: { username: true, displayName: true, avatarUrl: true, city: true } } } },
@@ -65,6 +102,61 @@ export async function getActiveLives(limit = 20) {
     orderBy: [{ status: "asc" }, { viewerCount: "desc" }, { createdAt: "desc" }],
     take: limit,
   });
+  return attachFeaturedListing(lives);
+}
+
+/* ── Lister l'historique des lives terminés / annulés ── */
+export async function getLiveHistory(limit = 20) {
+  const lives = await prisma.soKinLive.findMany({
+    where: { status: { in: ["ENDED", "CANCELED"] } },
+    include: {
+      host: { include: { profile: { select: { username: true, displayName: true, avatarUrl: true, city: true } } } },
+    },
+    orderBy: [{ endedAt: "desc" }, { createdAt: "desc" }],
+    take: limit,
+  });
+  return attachFeaturedListing(lives);
+}
+
+export async function getHostLiveListings(liveId: string, hostId: string) {
+  const live = await prisma.soKinLive.findUnique({ where: { id: liveId }, select: { id: true, hostId: true } });
+  if (!live || live.hostId !== hostId) return [];
+
+  return prisma.listing.findMany({
+    where: { ownerUserId: hostId, status: "ACTIVE" },
+    orderBy: { updatedAt: "desc" },
+    take: 30,
+    select: {
+      id: true,
+      title: true,
+      priceUsdCents: true,
+      city: true,
+      imageUrl: true,
+      type: true,
+    },
+  });
+}
+
+export async function setLiveFeaturedListing(liveId: string, hostId: string, listingId: string | null) {
+  const live = await prisma.soKinLive.findUnique({ where: { id: liveId }, select: { id: true, hostId: true } });
+  if (!live || live.hostId !== hostId) {
+    throw new Error("Live introuvable ou non autorisé");
+  }
+
+  if (listingId) {
+    const listing = await prisma.listing.findFirst({
+      where: { id: listingId, ownerUserId: hostId, status: "ACTIVE" },
+      select: { id: true },
+    });
+    if (!listing) throw new Error("Article introuvable ou non autorisé");
+  }
+
+  await prisma.soKinLive.update({
+    where: { id: liveId },
+    data: { featuredListingId: listingId },
+  });
+
+  return getLiveById(liveId);
 }
 
 /* ── Rejoindre un live ── */

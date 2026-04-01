@@ -4,6 +4,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../app/providers/AuthProvider';
 import { getDashboardPath } from '../../utils/role-routing';
 import { useLocaleCurrency } from '../../app/providers/LocaleCurrencyProvider';
+import { compressAndEncodeMedia } from '../../utils/media-compress';
 import { DashboardMessaging } from './DashboardMessaging';
 import {
   ApiError, auth as authApi, businesses, listings, orders, billing, messaging, sokin, invalidateCache, analyticsAi,
@@ -154,14 +155,18 @@ export function BusinessDashboard() {
   const [sokinPublishing, setSokinPublishing] = useState(false);
 
   // ─── Helper : lire un fichier local → data URL base64 ───
-  const readFileAndSet = (file: File, setter: (dataUrl: string) => void) => {
-    if (file.size > 5 * 1024 * 1024) {
+  const readFileAndSet = async (file: File, setter: (dataUrl: string) => void) => {
+    if (file.size > 15 * 1024 * 1024) {
       alert(t('biz.fileTooLarge'));
       return;
     }
-    const reader = new FileReader();
-    reader.onload = e => { if (e.target?.result) setter(e.target.result as string); };
-    reader.readAsDataURL(file);
+
+    try {
+      const [encoded] = await compressAndEncodeMedia([file]);
+      if (encoded) setter(encoded);
+    } catch {
+      alert(t('biz.saveError'));
+    }
   };
 
   const navItems: { key: BizSection; labelKey: string; icon: string }[] = [

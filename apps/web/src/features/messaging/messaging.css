@@ -4,6 +4,7 @@
 
 /* ── Shell / Layout ── */
 .msg-shell {
+  --ks-kb-offset: 0px;
   display: flex;
   position: relative;
   height: calc(100vh - 72px);
@@ -464,8 +465,12 @@
 }
 .msg-read-status {
   font-size: 0.72rem;
-  color: #22c55e;
   font-weight: 700;
+  line-height: 1;
+  color: var(--color-text-secondary, #a8a0c0); /* gris = envoyé */
+}
+.msg-read-status--read {
+  color: var(--color-primary, #6f58ff); /* violet = lu ✓✓ */
 }
 
 /* ── Bubble hover actions ── */
@@ -1180,7 +1185,23 @@
   }
   .msg-chat {
     padding-top: calc(54px + env(safe-area-inset-top, 0px));
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + var(--ks-kb-offset, 0px));
     box-sizing: border-box;
+  }
+  .msg-messages {
+    padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px) + var(--ks-kb-offset, 0px));
+  }
+  .msg-input-bar,
+  .msg-reply-bar,
+  .msg-waveform-bar,
+  .msg-admin-notice,
+  .msg-guard-alert {
+    position: sticky;
+    bottom: 0;
+    z-index: 8;
+  }
+  .msg-input-bar {
+    padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
   }
   .msg-sidebar--hidden {
     display: none;
@@ -1200,9 +1221,11 @@
     left: auto;
   }
   .msg-emoji-picker {
+    bottom: calc(56px + var(--ks-kb-offset, 0px));
     left: 8px;
     right: 8px;
     width: auto;
+    max-height: min(50vh, 320px);
   }
 }
 

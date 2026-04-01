@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback, type FormEvent } from "react";
+import { useEffect, useState, useRef, useCallback, type CSSProperties, type FormEvent } from "react";
 import { useAuth } from "../../app/providers/AuthProvider";
 import {
   messaging,
@@ -7,7 +7,7 @@ import {
   type CallLogEntry,
 } from "../../lib/api-client";
 import { useSocket } from "../../hooks/useSocket";
-import { compressAndEncodeMedia } from "../../utils/media-compress";
+import { createOptimizedAudioRecorder, createUploadFile, prepareMediaUrl } from "../../utils/media-upload";
 import { useGlobalNotification } from "../../app/providers/GlobalNotificationProvider";
 import "./dashboard-messaging.css";
 
@@ -186,6 +186,7 @@ export function DashboardMessaging() {
   const [sidebarTab, setSidebarTab] = useState<"messages" | "journal">("messages");
   const [callLogs, setCallLogs] = useState<CallLogEntry[]>([]);
   const [loadingCallLogs, setLoadingCallLogs] = useState(false);
+  const [keyboardOffset, setKeyboardOffset] = useState(0);
 
   useEffect(() => {
     if (sidebarTab !== "journal" || !isLoggedIn) return;
@@ -232,14 +233,15 @@ export function DashboardMessaging() {
     const handleDeleted = (data: { messageId: string }) => { setMessages((p) => p.map((m) => m.id === data.messageId ? { ...m, isDeleted: true, content: null, mediaUrl: null } : m)); };
     const handleTypingStart = (data: { conversationId: string; userId: string }) => { setTypingUsers((p) => { const n = new Map(p); if (!n.has(data.conversationId)) n.set(data.conversationId, new Set()); n.get(data.conversationId)!.add(data.userId); return n; }); };
     const handleTypingStop = (data: { conversationId: string; userId: string }) => { setTypingUsers((p) => { const n = new Map(p); n.get(data.conversationId)?.delete(data.userId); return n; }); };
+    const handlePresenceSnapshot = (data: { userIds: string[] }) => { setOnlineUserIds(new Set(data.userIds)); };
     const handleOnline = (data: { userId: string }) => { setOnlineUserIds((p) => new Set(p).add(data.userId)); };
     const handleOffline = (data: { userId: string }) => { setOnlineUserIds((p) => { const n = new Set(p); n.delete(data.userId); return n; }); };
     const handleRead = (data: { conversationId: string; userId: string }) => { if (data.conversationId === activeConv?.id) { setMessages((p) => p.map((m) => ({ ...m, readReceipts: m.senderId === myId && !m.readReceipts.some((r) => r.userId === data.userId) ? [...m.readReceipts, { userId: data.userId, readAt: new Date().toISOString() }] : m.readReceipts }))); } };
 
     on("message:new", handleNew); on("message:edited", handleEdited); on("message:deleted", handleDeleted);
     on("typing:start", handleTypingStart); on("typing:stop", handleTypingStop);
-    on("user:online", handleOnline); on("user:offline", handleOffline); on("conversation:read", handleRead);
-    return () => { off("message:new", handleNew); off("message:edited", handleEdited); off("message:deleted", handleDeleted); off("typing:start", handleTypingStart); off("typing:stop", handleTypingStop); off("user:online", handleOnline); off("user:offline", handleOffline); off("conversation:read", handleRead); };
+    on("presence:snapshot", handlePresenceSnapshot); on("user:online", handleOnline); on("user:offline", handleOffline); on("conversation:read", handleRead);
+    return () => { off("message:new", handleNew); off("message:edited", handleEdited); off("message:deleted", handleDeleted); off("typing:start", handleTypingStart); off("typing:stop", handleTypingStop); off("presence:snapshot", handlePresenceSnapshot); off("user:online", handleOnline); off("user:offline", handleOffline); off("conversation:read", handleRead); };
   }, [on, off, activeConv?.id, myId, emit]);
 
   /* ── WebRTC call events ── */
@@ -338,9 +340,7 @@ export function DashboardMessaging() {
       const isImage = file.type.startsWith("image/");
       const isAudio = file.type.startsWith("audio/");
       const isVideo = file.type.startsWith("video/");
-      let mediaUrl: string;
-      if (isImage) { const r = await compressAndEncodeMedia([file]); mediaUrl = r[0]; }
-      else { mediaUrl = await new Promise<string>((res) => { const rd = new FileReader(); rd.onloadend = () => res(rd.result as string); rd.readAsDataURL(file); }); }
+      const mediaUrl = await prepareMediaUrl(file);
       emit("message:send", { conversationId: activeConv.id, type: isImage ? "IMAGE" : isAudio ? "AUDIO" : isVideo ? "VIDEO" : "FILE", mediaUrl, fileName: file.name, replyToId: replyTo?.id }, () => {});
     }
     setReplyTo(null);
@@ -359,11 +359,11 @@ export function DashboardMessaging() {
   const startRecordingAudio = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const rec = new MediaRecorder(stream); audioChunksRef.current = [];
+      const rec = createOptimizedAudioRecorder(stream); audioChunksRef.current = [];
       const actx = new AudioContext(); const src = actx.createMediaStreamSource(stream); const an = actx.createAnalyser(); an.fftSize = 2048; src.connect(an);
       audioContextRef.current = actx; analyserRef.current = an;
       rec.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
-      rec.onstop = () => { const blob = new Blob(audioChunksRef.current, { type: "audio/webm" }); const rd = new FileReader(); rd.onloadend = () => { if (!activeConv) return; emit("message:send", { conversationId: activeConv.id, type: "AUDIO", mediaUrl: rd.result as string, fileName: "audio-message.webm" }, () => {}); }; rd.readAsDataURL(blob); stream.getTracks().forEach((t) => t.stop()); actx.close(); };
+      rec.onstop = () => { const blob = new Blob(audioChunksRef.current, { type: "audio/webm" }); void (async () => { if (!activeConv) return; const mediaUrl = await prepareMediaUrl(createUploadFile(blob, "audio-message.webm", "audio/webm")); emit("message:send", { conversationId: activeConv.id, type: "AUDIO", mediaUrl, fileName: "audio-message.webm" }, () => {}); })(); stream.getTracks().forEach((t) => t.stop()); actx.close(); };
       rec.start(); setMediaRecorder(rec); setRecordingAudio(true); setRecordingTime(0);
       recordingTimerRef.current = setInterval(() => setRecordingTime((t) => t + 1), 1000);
       setTimeout(() => drawWaveform(), 50);
@@ -421,6 +421,36 @@ export function DashboardMessaging() {
   /* ── Context menu close ── */
   useEffect(() => { const close = () => { setContextMenu(null); setConvContextMenu(null); }; window.addEventListener("click", close); return () => window.removeEventListener("click", close); }, []);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+
+    const updateKeyboardOffset = () => {
+      if (!window.matchMedia("(max-width: 768px)").matches) {
+        setKeyboardOffset(0);
+        return;
+      }
+
+      const nextOffset = Math.max(0, Math.round(window.innerHeight - viewport.height - viewport.offsetTop));
+      setKeyboardOffset(nextOffset);
+      if (nextOffset > 0) {
+        messagesEndRef.current?.scrollIntoView({ block: "end" });
+      }
+    };
+
+    updateKeyboardOffset();
+    viewport.addEventListener("resize", updateKeyboardOffset);
+    viewport.addEventListener("scroll", updateKeyboardOffset);
+    window.addEventListener("orientationchange", updateKeyboardOffset);
+
+    return () => {
+      viewport.removeEventListener("resize", updateKeyboardOffset);
+      viewport.removeEventListener("scroll", updateKeyboardOffset);
+      window.removeEventListener("orientationchange", updateKeyboardOffset);
+    };
+  }, []);
+
   /* ── Guards ── */
   if (!isLoggedIn) return <div className="dm-empty" style={{ padding: 40 }}><p>Connectez-vous pour accéder à la messagerie</p></div>;
 
@@ -428,7 +458,10 @@ export function DashboardMessaging() {
   const typingNames = typingInConv ? Array.from(typingInConv).filter((uid) => uid !== myId).map((uid) => { const p = activeConv?.participants.find((pp) => pp.userId === uid); return p?.user.profile.displayName ?? "Quelqu'un"; }) : [];
 
   return (
-    <div className="dm-shell">
+    <div
+      className="dm-shell"
+      style={{ "--ks-kb-offset": `${keyboardOffset}px` } as CSSProperties}
+    >
       {/* Call overlays */}
       {callState && callState.status === "ringing" && callState.direction === "incoming" && (
         <div className="dm-call-overlay">

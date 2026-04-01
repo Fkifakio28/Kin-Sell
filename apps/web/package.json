@@ -5,11 +5,15 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "sitemap": "node ./scripts/generate-sitemap.mjs",
+    "notify:sitemaps": "node ./scripts/notify-search-engines.mjs",
+    "prebuild": "npm run sitemap",
     "build": "tsc -b && vite build",
     "preview": "vite preview"
   },
   "dependencies": {
     "@types/qrcode": "^1.5.6",
+    "hls.js": "^1.6.15",
     "html5-qrcode": "^2.3.8",
     "qrcode": "^1.5.4",
     "react": "^18.3.1",

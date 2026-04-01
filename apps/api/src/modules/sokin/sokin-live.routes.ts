@@ -11,6 +11,9 @@ import {
   endLive,
   getLiveById,
   getActiveLives,
+  getLiveHistory,
+  getHostLiveListings,
+  setLiveFeaturedListing,
   joinLive,
   leaveLive,
   requestJoinAsGuest,
@@ -33,6 +36,10 @@ const chatMessageSchema = z.object({
   giftType: z.string().max(50).optional(),
 });
 
+const featuredListingSchema = z.object({
+  listingId: z.string().min(1).nullable(),
+});
+
 const router = Router();
 
 /* ── Routes publiques ── */
@@ -44,6 +51,16 @@ router.get(
     const raw = req.query.limit;
     const limit = Math.min(parseInt(typeof raw === "string" ? raw : "20", 10) || 20, 50);
     const lives = await getActiveLives(limit);
+    res.json({ lives });
+  })
+);
+
+router.get(
+  "/history",
+  asyncHandler(async (req, res) => {
+    const raw = req.query.limit;
+    const limit = Math.min(parseInt(typeof raw === "string" ? raw : "20", 10) || 20, 50);
+    const lives = await getLiveHistory(limit);
     res.json({ lives });
   })
 );
@@ -153,6 +170,25 @@ router.post(
   asyncHandler(async (_req: AuthenticatedRequest, res) => {
     const live = await likeLive(_req.params.id);
     res.json({ likesCount: live.likesCount });
+  })
+);
+
+router.get(
+  "/:id/my-listings",
+  requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const listings = await getHostLiveListings(req.params.id, req.auth!.userId);
+    res.json({ listings });
+  })
+);
+
+router.patch(
+  "/:id/featured-listing",
+  requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const { listingId } = featuredListingSchema.parse(req.body);
+    const live = await setLiveFeaturedListing(req.params.id, req.auth!.userId, listingId);
+    res.json(live);
   })
 );
 

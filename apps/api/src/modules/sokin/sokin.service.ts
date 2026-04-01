@@ -1,5 +1,6 @@
 import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
+import { normalizeImageInputs } from "../../shared/utils/media-storage.js";
 
 export const getMySoKinPosts = async (authorId: string) => {
   return prisma.soKinPost.findMany({
@@ -17,11 +18,13 @@ export const createSoKinPost = async (
   tags?: string[],
   hashtags?: string[]
 ) => {
+  const normalizedMediaUrls = await normalizeImageInputs(mediaUrls, { folder: "sokin" });
+
   return prisma.soKinPost.create({
     data: {
       authorId,
       text,
-      mediaUrls,
+      mediaUrls: normalizedMediaUrls ?? [],
       location: location || null,
       tags: tags || [],
       hashtags: hashtags || [],
@@ -61,8 +64,8 @@ export const deleteSoKinPost = async (authorId: string, postId: string) => {
   });
 };
 
-export const getPublicFeed = async (limit = 20) => {
-  return prisma.soKinPost.findMany({
+export const getPublicFeed = async (limit = 20, viewerUserId?: string) => {
+  const posts = await prisma.soKinPost.findMany({
     where: {
       status: "ACTIVE",
       author: {
@@ -85,8 +88,52 @@ export const getPublicFeed = async (limit = 20) => {
           },
         },
       },
+      reactions: {
+        select: { type: true, userId: true },
+      },
     },
   });
+
+  return posts.map((post) => {
+    const reactionCounts: Record<string, number> = {};
+    let myReaction: string | null = null;
+    for (const r of post.reactions) {
+      reactionCounts[r.type] = (reactionCounts[r.type] ?? 0) + 1;
+      if (viewerUserId && r.userId === viewerUserId) {
+        myReaction = r.type;
+      }
+    }
+    const { reactions: _r, ...rest } = post;
+    return { ...rest, reactionCounts, myReaction };
+  });
+};
+
+export const reactToPost = async (
+  userId: string,
+  postId: string,
+  type: "LIKE" | "LOVE" | "HAHA" | "WOW" | "SAD" | "ANGRY"
+) => {
+  const post = await prisma.soKinPost.findUnique({ where: { id: postId }, select: { id: true, status: true } });
+  if (!post || post.status === "DELETED") throw new HttpError(404, "Publication introuvable");
+
+  await prisma.soKinReaction.upsert({
+    where: { postId_userId: { postId, userId } },
+    update: { type },
+    create: { postId, userId, type },
+  });
+
+  // Update cached likes counter (total reactions)
+  const total = await prisma.soKinReaction.count({ where: { postId } });
+  await prisma.soKinPost.update({ where: { id: postId }, data: { likes: total } });
+
+  return { ok: true, type };
+};
+
+export const unreactToPost = async (userId: string, postId: string) => {
+  await prisma.soKinReaction.deleteMany({ where: { postId, userId } });
+  const total = await prisma.soKinReaction.count({ where: { postId } });
+  await prisma.soKinPost.update({ where: { id: postId }, data: { likes: total } });
+  return { ok: true };
 };
 
 export const getPublicUsers = async (

@@ -4,6 +4,7 @@ import { z } from "zod";
 import { requireAuth, type AuthenticatedRequest } from "../../shared/auth/auth-middleware.js";
 import { HttpError } from "../../shared/errors/http-error.js";
 import { asyncHandler } from "../../shared/utils/async-handler.js";
+import { isAcceptedImageInput } from "../../shared/utils/media-storage.js";
 import { verifyTurnstile } from "../../shared/utils/turnstile.js";
 import { env } from "../../config/env.js";
 import * as accountService from "./account.service.js";
@@ -28,7 +29,7 @@ const entrySchema = z.discriminatedUnion("method", [
     providerSubject: z.string().min(3).max(300),
     providerEmail: z.string().email().optional(),
     displayName: z.string().min(2).max(80).optional(),
-    avatarUrl: z.string().url().optional(),
+    avatarUrl: z.string().refine(isAcceptedImageInput, "Image invalide").optional(),
     accountType: accountTypeSchema
   }).merge(deviceMetaSchema)
 ]);
@@ -53,8 +54,9 @@ const profileCompletionSchema = z.object({
   country: z.string().min(2).max(80).optional(),
   city: z.string().min(2).max(80).optional(),
   addressLine1: z.string().min(3).max(160).optional(),
-  avatarUrl: z.string().url().optional(),
+  avatarUrl: z.string().refine(isAcceptedImageInput, "Image invalide").optional(),
   displayName: z.string().min(2).max(80).optional(),
+  onlineStatusVisible: z.boolean().optional(),
   accountType: accountTypeSchema,
   email: z.string().email().optional(),
   phone: z.string().min(8).max(32).optional()

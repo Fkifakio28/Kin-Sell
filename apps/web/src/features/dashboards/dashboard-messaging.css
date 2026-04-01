@@ -6,6 +6,7 @@
 
 /* ── Shell ── */
 .dm-shell {
+  --ks-kb-offset: 0px;
   display: flex;
   height: 100%;
   min-height: 520px;
@@ -1205,6 +1206,22 @@
     height: 100%;
     min-height: 0;
   }
+  .dm-chat {
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + var(--ks-kb-offset, 0px));
+  }
+  .dm-messages {
+    padding-bottom: calc(74px + env(safe-area-inset-bottom, 0px) + var(--ks-kb-offset, 0px));
+  }
+  .dm-input-bar,
+  .dm-reply-bar,
+  .dm-waveform-bar {
+    position: sticky;
+    bottom: 0;
+    z-index: 8;
+  }
+  .dm-input-bar {
+    padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+  }
   .dm-sidebar {
     position: relative;
     inset: auto;
@@ -1223,8 +1240,10 @@
   }
   .dm-bubble-wrap--mine .dm-bubble-actions { left: auto; }
   .dm-emoji-picker {
+    bottom: calc(52px + var(--ks-kb-offset, 0px));
     left: 6px;
     right: 6px;
     width: auto;
+    max-height: min(50vh, 320px);
   }
 }

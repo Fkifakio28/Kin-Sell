@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { blog, type PublicBlogPost } from "../../lib/api-client";
+import { SeoMeta } from "../../components/SeoMeta";
 
 function formatDate(value: string | null, fallback: string): string {
   return new Date(value ?? fallback).toLocaleDateString("fr-FR", {
@@ -40,6 +41,11 @@ export function BlogPage() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1rem", padding: "1rem 0 2rem" }}>
+      <SeoMeta
+        title="Blog Kin-Sell — Actualités et nouveautés"
+        description="Suivez les dernières actualités, améliorations et annonces de la plateforme Kin-Sell: sécurité, IA, So-Kin, négociation et outils business."
+        canonical="https://kin-sell.com/blog"
+      />
       <section className="glass-container" style={{ padding: "1.2rem" }}>
         <p style={{ margin: 0, fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.12em", color: "var(--color-primary-hover)" }}>Kin-Sell Blog</p>
         <h1 style={{ margin: "0.35rem 0 0.55rem", fontFamily: "var(--font-family-display)", color: "var(--color-text-primary)" }}>Actualités produit et évolutions de la plateforme</h1>

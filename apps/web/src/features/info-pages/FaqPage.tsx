@@ -1,5 +1,6 @@
 import { useState } from "react";
 import "./faq.css";
+import { SeoMeta } from "../../components/SeoMeta";
 
 /* ── SVG icon helpers ── */
 const IconChevronDown = () => (
@@ -235,6 +236,11 @@ export function FaqPage() {
 
   return (
     <div className="faq">
+      <SeoMeta
+        title="FAQ — Questions fréquentes sur Kin-Sell"
+        description="Retrouvez les réponses aux questions les plus fréquentes sur Kin-Sell: compte, commandes, paiements, sécurité et So-Kin."
+        canonical="https://kin-sell.com/faq"
+      />
       {/* ══════ HERO ══════ */}
       <section className="faq-hero">
         <div className="faq-hero-glow" aria-hidden="true" />

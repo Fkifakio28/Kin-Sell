@@ -122,7 +122,9 @@ export type AccountUser = {
     country: string | null;
     addressLine1: string | null;
   };
-  preferences?: unknown;
+  preferences?: {
+    onlineStatusVisible?: boolean;
+  };
 };
 
 type AccountAuthResponse = {
@@ -291,6 +293,7 @@ export const auth = {
     addressLine1?: string;
     avatarUrl?: string;
     displayName?: string;
+    onlineStatusVisible?: boolean;
     accountType?: "USER" | "BUSINESS";
     email?: string;
     phone?: string;
@@ -1497,6 +1500,8 @@ export type SoKinApiPost = {
   updatedAt: string;
 };
 
+export type SoKinReactionType = 'LIKE' | 'LOVE' | 'HAHA' | 'WOW' | 'SAD' | 'ANGRY';
+
 export type SoKinApiFeedPost = SoKinApiPost & {
   author: {
     id: string;
@@ -1507,6 +1512,8 @@ export type SoKinApiFeedPost = SoKinApiPost & {
       city: string | null;
     } | null;
   };
+  reactionCounts: Partial<Record<SoKinReactionType, number>>;
+  myReaction: SoKinReactionType | null;
 };
 
 export type SoKinPublicUser = {
@@ -1518,6 +1525,27 @@ export type SoKinPublicUser = {
   domain: string | null;
   qualification: string | null;
   verificationStatus: string;
+};
+
+export type SoKinStory = {
+  id: string;
+  authorId: string;
+  author: {
+    id: string;
+    profile: {
+      username: string | null;
+      displayName: string;
+      avatarUrl: string | null;
+    } | null;
+  };
+  mediaUrl: string | null;
+  mediaType: 'IMAGE' | 'VIDEO' | 'TEXT';
+  caption: string | null;
+  bgColor: string | null;
+  viewCount: number;
+  viewedByMe: boolean;
+  expiresAt: string;
+  createdAt: string;
 };
 
 export const sokin = {
@@ -1537,6 +1565,18 @@ export const sokin = {
     request<{ users: SoKinPublicUser[] }>('/sokin/users', {
       params: params as Record<string, string | undefined>,
     }),
+  reactToPost: (id: string, type: SoKinReactionType) =>
+    request<{ ok: boolean; type: string }>(`/sokin/posts/${encodeURIComponent(id)}/react`, { method: 'POST', body: { type } }),
+  unreactToPost: (id: string) =>
+    request<{ ok: boolean }>(`/sokin/posts/${encodeURIComponent(id)}/react`, { method: 'DELETE' }),
+  stories: () =>
+    request<{ stories: SoKinStory[] }>('/sokin/stories'),
+  createStory: (body: { mediaUrl?: string; mediaType?: 'IMAGE' | 'VIDEO' | 'TEXT'; caption?: string; bgColor?: string }) =>
+    request<SoKinStory>('/sokin/stories', { method: 'POST', body }),
+  viewStory: (id: string) =>
+    request<{ ok: boolean }>(`/sokin/stories/${encodeURIComponent(id)}/view`, { method: 'POST' }),
+  deleteStory: (id: string) =>
+    request<{ ok: boolean }>(`/sokin/stories/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 };
 
 // ── So-Kin Live ──
@@ -1561,6 +1601,15 @@ export type SoKinLiveData = {
   peakViewers: number;
   likesCount: number;
   giftsCount: number;
+  featuredListingId?: string | null;
+  featuredListing?: {
+    id: string;
+    title: string;
+    priceUsdCents: number;
+    city: string;
+    imageUrl: string | null;
+    type: 'PRODUIT' | 'SERVICE';
+  } | null;
   tags: string[];
   city: string | null;
   startedAt: string | null;
@@ -1592,6 +1641,10 @@ export const sokinLive = {
     request<{ lives: SoKinLiveData[] }>('/sokin/lives', {
       params: limit ? { limit } : undefined,
     }),
+  history: (limit?: number) =>
+    request<{ lives: SoKinLiveData[] }>('/sokin/lives/history', {
+      params: limit ? { limit } : undefined,
+    }),
   get: (id: string) =>
     request<SoKinLiveData>(`/sokin/lives/${encodeURIComponent(id)}`),
   create: (body: { title: string; description?: string; aspect: 'LANDSCAPE' | 'PORTRAIT'; tags?: string[]; city?: string }) =>
@@ -1614,6 +1667,10 @@ export const sokinLive = {
     request<SoKinLiveChatMsg>(`/sokin/lives/${encodeURIComponent(id)}/chat`, { method: 'POST', body }),
   like: (id: string) =>
     request<{ likesCount: number }>(`/sokin/lives/${encodeURIComponent(id)}/like`, { method: 'POST' }),
+  myListings: (id: string) =>
+    request<{ listings: Array<{ id: string; title: string; priceUsdCents: number; city: string; imageUrl: string | null; type: 'PRODUIT' | 'SERVICE' }> }>(`/sokin/lives/${encodeURIComponent(id)}/my-listings`),
+  setFeaturedListing: (id: string, listingId: string | null) =>
+    request<SoKinLiveData>(`/sokin/lives/${encodeURIComponent(id)}/featured-listing`, { method: 'PATCH', body: { listingId } }),
 };
 
 export const blog = {
@@ -1665,11 +1722,20 @@ export type BuyerNegotiationHint = {
 
 export type SellerNegotiationAdvice = {
   recommendation: "ACCEPT" | "COUNTER" | "REFUSE";
-  counterPrice: number | null;
-  marginImpact: string;
+  counterSuggestionUsdCents: number | null;
+  marginImpact: {
+    originalPriceUsdCents: number;
+    proposedPriceUsdCents: number;
+    discountPercent: number;
+  };
   conversionProbability: number;
-  buyerProfile: { trustLevel: string; totalOrders: number };
-  reasoning: string;
+  buyerProfile: {
+    trustLevel: "LOW" | "MEDIUM" | "HIGH";
+    previousPurchases: number;
+    isRepeatBuyer: boolean;
+  };
+  insight: string;
+  urgency: "LOW" | "MEDIUM" | "HIGH";
 };
 
 export type AutoRespondRules = {

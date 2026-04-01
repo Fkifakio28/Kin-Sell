@@ -1,5 +1,6 @@
 ﻿import { useEffect, useMemo, useState, useCallback } from 'react';
 import './public-pages.css';
+import { SeoMeta } from '../../components/SeoMeta';
 
 type BusinessShopPageProps = {
   slug: string;
@@ -236,6 +237,14 @@ export function BusinessShopPage({ slug }: BusinessShopPageProps) {
 
   return (
     <section className="public-page-shell business-lux-shell animate-fade-in">
+      {business && (
+        <SeoMeta
+          title={`${business.publicName} — Boutique sur Kin-Sell`}
+          description={`Visitez la boutique ${business.publicName} sur Kin-Sell. ${business.shop?.publicDescription ?? `Produits et services disponibles à ${business.shop?.city ?? 'Kinshasa'}.`}`}
+          canonical={`https://kin-sell.com/business/${slug}`}
+          ogImage={business.shop?.logo ?? undefined}
+        />
+      )}
 
       {/* ═══ HERO + CAROUSEL ═════════════════════════════════ */}
       <header className="business-lux-hero">

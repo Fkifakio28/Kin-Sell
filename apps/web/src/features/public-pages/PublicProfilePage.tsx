@@ -8,6 +8,7 @@ import { useScrollRestore } from '../../utils/useScrollRestore';
 import { NegotiatePopup } from '../negotiations/NegotiatePopup';
 import { useLockedCategories, isCategoryLocked } from '../../hooks/useLockedCategories';
 import './public-pages.css';
+import { SeoMeta } from '../../components/SeoMeta';
 
 type PublicProfilePageProps = {
   username: string;
@@ -387,6 +388,12 @@ export function PublicProfilePage({ username }: PublicProfilePageProps) {
 
   return (
     <section className="public-page-shell animate-fade-in">
+      <SeoMeta
+        title={`${profileMeta.displayName} — Vendeur sur Kin-Sell`}
+        description={`Découvrez le profil de ${profileMeta.displayName} sur Kin-Sell. Parcourez ses produits et services disponibles à Kinshasa.`}
+        canonical={`https://kin-sell.com/user/${username}`}
+        ogImage={profileMeta.avatarUrl ?? undefined}
+      />
       {/* ── Banner + Avatar Hero ── */}
       <div className="public-hero-banner">
         <div className="public-hero-backdrop" />

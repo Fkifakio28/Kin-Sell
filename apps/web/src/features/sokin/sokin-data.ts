@@ -44,11 +44,15 @@ export type SoKinPost = {
   media: SoKinMedia[];
   linkedCard?: SoKinLinkedCard;
   likes: number;
+  reactionCounts: Partial<Record<SoKinReactionType, number>>;
+  myReaction: SoKinReactionType | null;
   comments: number;
   shares: number;
   sponsored?: boolean;
   thread: SoKinComment[];
 };
+
+export type SoKinReactionType = 'LIKE' | 'LOVE' | 'HAHA' | 'WOW' | 'SAD' | 'ANGRY';
 
 export type SoKinTrend = {
   label: string;

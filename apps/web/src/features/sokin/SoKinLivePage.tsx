@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
+import Hls from 'hls.js';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../app/providers/AuthProvider';
 import { useLocaleCurrency } from '../../app/providers/LocaleCurrencyProvider';
@@ -11,6 +12,18 @@ import './sokin-live.css';
    ═══════════════════════════════════════════════════ */
 
 type LiveView = 'browse' | 'watch' | 'create';
+
+function formatHistoryDate(iso: string | null): string {
+  if (!iso) return 'Date indisponible';
+  return new Date(iso).toLocaleString('fr-FR', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  });
+}
+
+function isHlsSource(url: string): boolean {
+  return /\.m3u8(?:$|[?#])/i.test(url);
+}
 
 /* ═══════════════════════════════════════════════════
    FORMAT OVERLAY MODAL — choix 16:9 / 9:16
@@ -168,8 +181,23 @@ function StartLiveModal({ onClose, onStart }: { onClose: () => void; onStart: (d
    ═══════════════════════════════════════════════════ */
 
 function LiveCard({ live, onClick }: { live: SoKinLiveData; onClick: () => void }) {
-  const isLive = live.status === 'LIVE';
   const hostProfile = live.host?.profile;
+  const badgeConfig =
+    live.status === 'LIVE'
+      ? { className: 'live', label: '🔴 LIVE' }
+      : live.status === 'WAITING'
+        ? { className: 'waiting', label: '⏳ En attente' }
+        : live.status === 'ENDED'
+          ? { className: 'ended', label: '⬛ Terminé' }
+          : { className: 'ended', label: '🚫 Annulé' };
+  const viewersLabel = live.status === 'ENDED' || live.status === 'CANCELED'
+    ? `👁️ Pic ${live.peakViewers}`
+    : `👁️ ${live.viewerCount}`;
+  const secondaryLabel = live.status === 'ENDED' || live.status === 'CANCELED'
+    ? formatHistoryDate(live.endedAt ?? live.createdAt)
+    : live.city
+      ? `📍 ${live.city}`
+      : null;
 
   return (
     <button type="button" className="sklive-card" onClick={onClick}>
@@ -182,12 +210,8 @@ function LiveCard({ live, onClick }: { live: SoKinLiveData; onClick: () => void 
           </div>
         )}
         <div className="sklive-card-badges">
-          {isLive ? (
-            <span className="sklive-badge live">🔴 LIVE</span>
-          ) : (
-            <span className="sklive-badge waiting">⏳ En attente</span>
-          )}
-          <span className="sklive-badge viewers">👁️ {live.viewerCount}</span>
+          <span className={`sklive-badge ${badgeConfig.className}`}>{badgeConfig.label}</span>
+          <span className="sklive-badge viewers">{viewersLabel}</span>
         </div>
       </div>
 
@@ -201,12 +225,13 @@ function LiveCard({ live, onClick }: { live: SoKinLiveData; onClick: () => void 
           <div className="sklive-card-host-text">
             <span className="sklive-card-title">{live.title}</span>
             <span className="sklive-card-hostname">{hostProfile?.displayName ?? 'Utilisateur'}</span>
-            {live.city && <span className="sklive-card-city">📍 {live.city}</span>}
+            {secondaryLabel && <span className="sklive-card-city">{secondaryLabel}</span>}
           </div>
         </div>
 
         <div className="sklive-card-stats">
           <span>❤️ {live.likesCount}</span>
+          {(live.status === 'ENDED' || live.status === 'CANCELED') && <span>💬 Archive</span>}
           {live.tags.length > 0 && <span className="sklive-card-tag">#{live.tags[0]}</span>}
         </div>
       </div>
@@ -227,21 +252,32 @@ function LiveViewer({
   onBack: () => void;
   isHost: boolean;
 }) {
-  const { isLoggedIn } = useAuth();
+  const { isLoggedIn, user } = useAuth();
   const [chatMessages, setChatMessages] = useState<SoKinLiveChatMsg[]>([]);
   const [chatInput, setChatInput] = useState('');
+  const [liveData, setLiveData] = useState(live);
   const [localLikes, setLocalLikes] = useState(live.likesCount);
   const [localViewers, setLocalViewers] = useState(live.viewerCount);
   const [liveStatus, setLiveStatus] = useState(live.status);
   const [hearts, setHearts] = useState<{ id: number; x: number }[]>([]);
+  const [hasReacted, setHasReacted] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(false);
+  const [liveNotice, setLiveNotice] = useState<string | null>(null);
+  const [hostListings, setHostListings] = useState<Array<{ id: string; title: string; priceUsdCents: number; city: string; imageUrl: string | null; type: 'PRODUIT' | 'SERVICE' }>>([]);
+  const [showListingPicker, setShowListingPicker] = useState(false);
+  const [listingBusy, setListingBusy] = useState(false);
   const heartIdRef = useRef(0);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const chatPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const statusPollInFlightRef = useRef(false);
   const hostPreviewRef = useRef<HTMLVideoElement>(null);
   const hostPreviewStreamRef = useRef<MediaStream | null>(null);
+  const playbackVideoRef = useRef<HTMLVideoElement>(null);
+  const playbackHlsRef = useRef<Hls | null>(null);
   const isMobile = useIsMobile();
   const [deviceOrientation, setDeviceOrientation] = useState<'portrait' | 'landscape'>('portrait');
+  const playbackUrl = liveData.replayUrl?.trim() || null;
+  const canPlayPublicStream = Boolean(playbackUrl) && liveStatus !== 'WAITING' && liveStatus !== 'CANCELED';
 
   // Détecter l'orientation de l'appareil pour adapter le layout automatiquement
   useEffect(() => {
@@ -267,7 +303,17 @@ function LiveViewer({
   }, []);
 
   useEffect(() => {
-    if (!isHost) return;
+    setLiveData(live);
+    setLocalLikes(live.likesCount);
+    setLocalViewers(live.viewerCount);
+    setLiveStatus(live.status);
+    setHasReacted(false);
+    setSoundEnabled(false);
+    setLiveNotice(null);
+  }, [live]);
+
+  useEffect(() => {
+    if (!isHost || canPlayPublicStream || liveStatus === 'ENDED') return;
     let cancelled = false;
 
     const requestHostPreview = async () => {
@@ -296,7 +342,67 @@ function LiveViewer({
       hostPreviewStreamRef.current?.getTracks().forEach((track) => track.stop());
       hostPreviewStreamRef.current = null;
     };
-  }, [isHost]);
+  }, [canPlayPublicStream, isHost, liveStatus]);
+
+  useEffect(() => {
+    const video = playbackVideoRef.current;
+    if (!video || !playbackUrl || !canPlayPublicStream) {
+      playbackHlsRef.current?.destroy();
+      playbackHlsRef.current = null;
+      return;
+    }
+
+    let cancelled = false;
+    setLiveNotice(null);
+    video.muted = !soundEnabled;
+    video.volume = soundEnabled ? 1 : 0;
+
+    const tryPlay = async () => {
+      try {
+        await video.play();
+      } catch {
+        if (!cancelled && soundEnabled) {
+          setLiveNotice('Touchez Audio pour activer le son du live sur cet appareil.');
+        }
+      }
+    };
+
+    if (isHlsSource(playbackUrl)) {
+      if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        video.src = playbackUrl;
+        video.load();
+        void tryPlay();
+      } else if (Hls.isSupported()) {
+        playbackHlsRef.current?.destroy();
+        const hls = new Hls({ enableWorker: true, lowLatencyMode: true });
+        playbackHlsRef.current = hls;
+        hls.loadSource(playbackUrl);
+        hls.attachMedia(video);
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          void tryPlay();
+        });
+        hls.on(Hls.Events.ERROR, (_event, data) => {
+          if (!cancelled && data.fatal) {
+            setLiveNotice('Impossible de lire ce flux live pour le moment.');
+          }
+        });
+      } else {
+        setLiveNotice('Ce navigateur ne sait pas lire ce flux live.');
+      }
+    } else {
+      playbackHlsRef.current?.destroy();
+      playbackHlsRef.current = null;
+      video.src = playbackUrl;
+      video.load();
+      void tryPlay();
+    }
+
+    return () => {
+      cancelled = true;
+      playbackHlsRef.current?.destroy();
+      playbackHlsRef.current = null;
+    };
+  }, [canPlayPublicStream, playbackUrl, soundEnabled]);
 
   // Rejoindre le live au montage
   useEffect(() => {
@@ -332,6 +438,7 @@ function LiveViewer({
       try {
         const updated = await sokinLive.get(live.id);
         if (cancelled) return;
+        setLiveData(updated);
         setLocalViewers(updated.viewerCount);
         setLocalLikes(updated.likesCount);
         // Stabilisation: ne jamais revenir de LIVE vers WAITING
@@ -365,18 +472,25 @@ function LiveViewer({
     } catch { /* ignore */ }
   }, [chatInput, isLoggedIn, live.id]);
 
-  const handleLike = useCallback(async () => {
-    if (!isLoggedIn) return;
-    setLocalLikes((n) => n + 1);
-    // Floating heart animation
+  const spawnHeart = useCallback(() => {
     const id = ++heartIdRef.current;
     const x = Math.random() * 60 + 20;
     setHearts((prev) => [...prev, { id, x }]);
     setTimeout(() => setHearts((prev) => prev.filter((h) => h.id !== id)), 1500);
+  }, []);
+
+  const handleLike = useCallback(async () => {
+    if (!isLoggedIn) return;
+    setHasReacted(true);
+    setLocalLikes((n) => n + 1);
+    spawnHeart();
     try {
-      await sokinLive.like(live.id);
-    } catch { /* ignore */ }
-  }, [isLoggedIn, live.id]);
+      const result = await sokinLive.like(live.id);
+      setLocalLikes((current) => Math.max(current, result.likesCount));
+    } catch {
+      setLocalLikes((current) => Math.max(0, current - 1));
+    }
+  }, [isLoggedIn, live.id, spawnHeart]);
 
   const handleEndLive = useCallback(async () => {
     try {
@@ -399,10 +513,69 @@ function LiveViewer({
     } catch { /* ignore */ }
   }, [isLoggedIn, live.id]);
 
-  const isPortrait = live.aspect === 'PORTRAIT';
+  const handleToggleSound = useCallback(() => {
+    setSoundEnabled((prev) => !prev);
+    setLiveNotice(null);
+  }, []);
+
+  const handleShareLive = useCallback(async () => {
+    const shareUrl = `${window.location.origin}/sokin/live?watch=${encodeURIComponent(live.id)}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: liveData.title,
+          text: `${liveData.host?.profile?.displayName ?? 'Un créateur'} est en live sur Kin-Sell`,
+          url: shareUrl,
+        });
+        return;
+      }
+
+      await navigator.clipboard.writeText(shareUrl);
+      setLiveNotice('Lien du live copié.');
+    } catch {
+      setLiveNotice('Impossible de partager ce live pour le moment.');
+    }
+  }, [live.id, liveData.host?.profile?.displayName, liveData.title]);
+
+  const isPortrait = liveData.aspect === 'PORTRAIT';
   // Sur mobile, adapter le layout à l'orientation réelle de l'appareil
   const layoutOrientation = isMobile ? deviceOrientation : (isPortrait ? 'portrait' : 'landscape');
-  const hostProfile = live.host?.profile;
+  const hostProfile = liveData.host?.profile;
+  const creatorHandle = hostProfile?.username ? `@${hostProfile.username}` : '@kin-sell-live';
+  const liveDescription = liveData.description?.trim() || (liveData.city ? `En direct depuis ${liveData.city}` : 'Live Kin-Sell');
+  const canReact = isLoggedIn && liveStatus === 'LIVE';
+  const canShowComposer = isLoggedIn && liveStatus === 'LIVE';
+  const canShowJoinAsGuest = !isHost && liveStatus === 'LIVE';
+  const hostOwnsLive = liveData.hostId === user?.id;
+
+  useEffect(() => {
+    if (!isHost) return;
+    let cancelled = false;
+    const loadListings = async () => {
+      try {
+        const data = await sokinLive.myListings(live.id);
+        if (!cancelled) setHostListings(data.listings);
+      } catch {
+        if (!cancelled) setHostListings([]);
+      }
+    };
+    void loadListings();
+    return () => { cancelled = true; };
+  }, [isHost, live.id]);
+
+  const handlePinListing = useCallback(async (listingId: string | null) => {
+    if (!hostOwnsLive || listingBusy) return;
+    setListingBusy(true);
+    try {
+      const updated = await sokinLive.setFeaturedListing(live.id, listingId);
+      setLiveData(updated);
+      setShowListingPicker(false);
+    } catch {
+      setLiveNotice('Impossible de mettre à jour le produit épinglé.');
+    } finally {
+      setListingBusy(false);
+    }
+  }, [hostOwnsLive, listingBusy, live.id]);
 
   return (
     <div className={`sklive-viewer ${layoutOrientation}${isMobile ? ' mobile' : ''}${isMobile && deviceOrientation === 'landscape' ? ' device-landscape' : ''}`}>
@@ -420,7 +593,7 @@ function LiveViewer({
           )}
           <div>
             <span className="sklive-viewer-hostname">{hostProfile?.displayName ?? 'Live'}</span>
-            {live.city && <span className="sklive-viewer-city">📍 {live.city}</span>}
+            {liveData.city && <span className="sklive-viewer-city">📍 {liveData.city}</span>}
           </div>
         </div>
 
@@ -435,9 +608,36 @@ function LiveViewer({
       {/* Video area */}
       <div className={`sklive-viewer-video${isPortrait ? ' portrait' : ' landscape'}`}>
         <div className="sklive-video-placeholder">
-          {isHost && liveStatus !== 'ENDED' && (
+          {canPlayPublicStream && (
+            <video
+              ref={playbackVideoRef}
+              className="sklive-playback-video"
+              playsInline
+              autoPlay
+              muted={!soundEnabled}
+              poster={liveData.thumbnailUrl ?? undefined}
+            />
+          )}
+          {!canPlayPublicStream && isHost && liveStatus !== 'ENDED' && (
             <video ref={hostPreviewRef} autoPlay muted playsInline className="sklive-host-preview-video" />
           )}
+          {!canPlayPublicStream && !isHost && liveData.thumbnailUrl && (
+            <img src={liveData.thumbnailUrl} alt={liveData.title} className="sklive-fallback-poster" />
+          )}
+          <div className="sklive-video-shade" />
+
+          <div className="sklive-video-topbar">
+            <div className="sklive-video-host-badge">
+              <span className="sklive-video-host-name">{hostProfile?.displayName ?? 'Live'}</span>
+              <span className="sklive-video-host-handle">{creatorHandle}</span>
+            </div>
+            <div className="sklive-video-meta-pill">
+              <span>👁️ {localViewers}</span>
+              <span>❤️ {localLikes}</span>
+              {hostOwnsLive && <span>Toi</span>}
+            </div>
+          </div>
+
           {liveStatus === 'WAITING' && (
             <div className="sklive-waiting-screen">
               <div className="sklive-waiting-pulse" />
@@ -455,10 +655,10 @@ function LiveViewer({
                 <span className="sklive-live-dot" />
                 <span>EN DIRECT</span>
               </div>
-              <p className="sklive-live-title">{live.title}</p>
-              {!live.replayUrl && (
-                <p className="sklive-live-title" style={{ fontSize: '0.85rem', opacity: 0.85 }}>
-                  Flux video non configure pour ce live.
+              <p className="sklive-live-title">{liveData.title}</p>
+              {!playbackUrl && (
+                <p className="sklive-live-title sklive-live-warning">
+                  Flux public non configuré: les spectateurs voient l’habillage du live, mais pas encore l’image ni le son.
                 </p>
               )}
               {isHost && (
@@ -471,66 +671,131 @@ function LiveViewer({
           {liveStatus === 'ENDED' && (
             <div className="sklive-ended-screen">
               <span>📺 Ce live est terminé</span>
-              <p>👁️ {live.peakViewers} spectateurs au pic · ❤️ {localLikes} likes</p>
+              <p>👁️ {liveData.peakViewers} spectateurs au pic · ❤️ {localLikes} likes</p>
               <button type="button" className="sklive-back-btn-large" onClick={onBack}>Retour aux lives</button>
             </div>
           )}
+
+          {liveNotice && <div className="sklive-live-notice">{liveNotice}</div>}
+
+          {liveStatus === 'LIVE' && (
+            <div className="sklive-side-actions">
+              <button
+                type="button"
+                className={`sklive-action-btn like${hasReacted ? ' reacted' : ''}`}
+                onClick={handleLike}
+                title={hostOwnsLive ? 'Réagir à ton live' : 'Réagir'}
+                disabled={!canReact}
+              >
+                <span className="sklive-action-icon">❤️</span>
+                <span>{localLikes}</span>
+                <small>Réagir</small>
+              </button>
+
+              {canPlayPublicStream && (
+                <button type="button" className="sklive-action-btn sound" onClick={handleToggleSound} title={soundEnabled ? 'Couper le son' : 'Activer le son'}>
+                  <span className="sklive-action-icon">{soundEnabled ? '🔊' : '🔇'}</span>
+                  <span>{soundEnabled ? 'Son' : 'Muet'}</span>
+                  <small>Audio</small>
+                </button>
+              )}
+
+              {canShowJoinAsGuest && (
+                <button type="button" className="sklive-action-btn participate" onClick={handleJoinAsGuest}>
+                  <span className="sklive-action-icon">🎤</span>
+                  <span>Participer</span>
+                  <small>Invité</small>
+                </button>
+              )}
+
+              <button type="button" className="sklive-action-btn share" title="Partager" onClick={handleShareLive}>
+                <span className="sklive-action-icon">🔗</span>
+                <span>Partager</span>
+                <small>Lien</small>
+              </button>
+            </div>
+          )}
+
+          <div className="sklive-live-bottom">
+            {liveData.featuredListing && liveStatus === 'LIVE' && (
+              <a href={`/listing/${liveData.featuredListing.id}`} className="sklive-featured-product" target="_blank" rel="noreferrer">
+                {liveData.featuredListing.imageUrl ? <img src={liveData.featuredListing.imageUrl} alt={liveData.featuredListing.title} /> : <span className="sklive-featured-placeholder">🛍️</span>}
+                <div>
+                  <strong>{liveData.featuredListing.title}</strong>
+                  <span>{(liveData.featuredListing.priceUsdCents / 100).toFixed(2)} $ • {liveData.featuredListing.city}</span>
+                </div>
+                <em>Acheter</em>
+              </a>
+            )}
+
+            <div className="sklive-live-copy">
+              <p className="sklive-live-copy-handle">{creatorHandle}</p>
+              <p className="sklive-live-copy-title">{liveData.title}</p>
+              <p className="sklive-live-copy-description">{liveDescription}</p>
+              {liveData.tags.length > 0 && (
+                <div className="sklive-live-tags">
+                  {liveData.tags.slice(0, 3).map((tag) => (
+                    <span key={tag} className="sklive-live-tag">#{tag}</span>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {hostOwnsLive && liveStatus === 'LIVE' && (
+              <div className="sklive-host-pin-wrap">
+                <button type="button" className="sklive-host-pin-btn" onClick={() => setShowListingPicker((v) => !v)}>
+                  {liveData.featuredListing ? '📌 Modifier le produit épinglé' : '📌 Épingler un produit'}
+                </button>
+                {showListingPicker && (
+                  <div className="sklive-host-pin-list">
+                    <button type="button" disabled={listingBusy} onClick={() => void handlePinListing(null)}>Retirer le produit épinglé</button>
+                    {hostListings.map((item) => (
+                      <button key={item.id} type="button" disabled={listingBusy} onClick={() => void handlePinListing(item.id)}>
+                        {item.title} — {(item.priceUsdCents / 100).toFixed(2)} $
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="sklive-chat">
+              <div className="sklive-chat-messages">
+                {chatMessages.map((msg) => (
+                  <div key={msg.id} className={`sklive-chat-msg${msg.isGift ? ' gift' : ''}${msg.isPinned ? ' pinned' : ''}`}>
+                    <span className="sklive-chat-author">{msg.user?.profile?.displayName ?? 'Anonyme'}</span>
+                    {msg.isGift && <span className="sklive-chat-gift-icon">🎁</span>}
+                    <span className="sklive-chat-text">{msg.text}</span>
+                  </div>
+                ))}
+                <div ref={chatEndRef} />
+              </div>
+
+              {canShowComposer && (
+                <div className="sklive-chat-input-wrap">
+                  <input
+                    type="text"
+                    className="sklive-chat-input"
+                    placeholder="Écris comme sur TikTok Live..."
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') void handleSendChat(); }}
+                    maxLength={300}
+                  />
+                  <button type="button" className="sklive-chat-send" onClick={() => void handleSendChat()}>
+                    ➤
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
-        {/* Floating hearts */}
         <div className="sklive-hearts-container">
           {hearts.map((h) => (
             <span key={h.id} className="sklive-floating-heart" style={{ left: `${h.x}%` }}>❤️</span>
           ))}
         </div>
-      </div>
-
-      {/* Actions & Participate button */}
-      <div className="sklive-viewer-actions">
-        <button type="button" className="sklive-action-btn like" onClick={handleLike} title="J'aime">
-          ❤️ <span>{localLikes}</span>
-        </button>
-
-        {!isHost && liveStatus === 'LIVE' && (
-          <button type="button" className="sklive-participate-btn" onClick={handleJoinAsGuest}>
-            🎤 Participer
-          </button>
-        )}
-
-        <button type="button" className="sklive-action-btn share" title="Partager">
-          🔗
-        </button>
-      </div>
-
-      {/* Chat */}
-      <div className="sklive-chat">
-        <div className="sklive-chat-messages">
-          {chatMessages.map((msg) => (
-            <div key={msg.id} className={`sklive-chat-msg${msg.isGift ? ' gift' : ''}${msg.isPinned ? ' pinned' : ''}`}>
-              <span className="sklive-chat-author">{msg.user?.profile?.displayName ?? 'Anonyme'}</span>
-              {msg.isGift && <span className="sklive-chat-gift-icon">🎁</span>}
-              <span className="sklive-chat-text">{msg.text}</span>
-            </div>
-          ))}
-          <div ref={chatEndRef} />
-        </div>
-
-        {isLoggedIn && liveStatus === 'LIVE' && (
-          <div className="sklive-chat-input-wrap">
-            <input
-              type="text"
-              className="sklive-chat-input"
-              placeholder="Envoyer un message..."
-              value={chatInput}
-              onChange={(e) => setChatInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') void handleSendChat(); }}
-              maxLength={300}
-            />
-            <button type="button" className="sklive-chat-send" onClick={() => void handleSendChat()}>
-              ➤
-            </button>
-          </div>
-        )}
       </div>
     </div>
   );
@@ -549,6 +814,7 @@ export function SoKinLivePage() {
 
   const [view, setView] = useState<LiveView>('browse');
   const [lives, setLives] = useState<SoKinLiveData[]>([]);
+  const [historyLives, setHistoryLives] = useState<SoKinLiveData[]>([]);
   const [selectedLive, setSelectedLive] = useState<SoKinLiveData | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
@@ -568,8 +834,14 @@ export function SoKinLivePage() {
     let cancelled = false;
     const load = async () => {
       try {
-        const data = await sokinLive.list(30);
-        if (!cancelled) setLives(data.lives);
+        const [activeData, historyData] = await Promise.all([
+          sokinLive.list(30),
+          sokinLive.history(18),
+        ]);
+        if (!cancelled) {
+          setLives(activeData.lives);
+          setHistoryLives(historyData.lives);
+        }
       } catch { /* ignore */ }
     };
     void load();
@@ -700,8 +972,23 @@ export function SoKinLivePage() {
         </section>
       )}
 
+      {historyLives.length > 0 && (
+        <section className="sklive-section">
+          <h2 className="sklive-section-title">
+            <span className="sklive-section-dot history" />
+            Journal des lives
+            <span className="sklive-section-count">{historyLives.length}</span>
+          </h2>
+          <div className="sklive-grid">
+            {historyLives.map((live) => (
+              <LiveCard key={live.id} live={live} onClick={() => void handleOpenLive(live)} />
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* Empty state */}
-      {lives.length === 0 && (
+      {lives.length === 0 && historyLives.length === 0 && (
         <div className="sklive-empty">
           <span className="sklive-empty-icon">📹</span>
           <p>Aucun live en cours</p>

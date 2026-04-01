@@ -257,6 +257,11 @@ cd /var/www/kin-sell
 cd apps/web
 VITE_API_URL="https://api.kin-sell.com" pnpm run build
 # → Génère le dossier apps/web/dist/ avec les fichiers statiques
+
+# 7.2 — Notifier les moteurs sur le sitemap index
+SITE_URL="https://kin-sell.com" pnpm run notify:sitemaps
+# → Utilise IndexNow si INDEXNOW_KEY est défini
+# → Google: soumettre https://kin-sell.com/sitemap.xml dans Search Console
 cd ../..
 
 # 7.2 — Build le backend (TypeScript → JavaScript)

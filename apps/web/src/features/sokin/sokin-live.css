@@ -137,6 +137,9 @@
 .sklive-section-dot.waiting {
   background: #ffaa00;
 }
+.sklive-section-dot.history {
+  background: rgba(255, 255, 255, 0.72);
+}
 .sklive-section-count {
   background: rgba(111, 88, 255, 0.2);
   padding: 2px 10px;
@@ -525,7 +528,7 @@
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  background: rgba(10, 6, 26, 0.95);
+  background: #05030f;
 }
 .sklive-viewer.mobile {
   padding-bottom: 0;
@@ -537,7 +540,7 @@
   align-items: center;
   gap: 12px;
   padding: 12px 16px;
-  background: rgba(18, 11, 43, 0.8);
+  background: linear-gradient(180deg, rgba(7, 5, 18, 0.92) 0%, rgba(7, 5, 18, 0.58) 100%);
   backdrop-filter: blur(12px);
   position: sticky;
   top: 0;
@@ -590,7 +593,7 @@
   position: relative;
   width: 100%;
   flex: 1;
-  min-height: 300px;
+  min-height: calc(100vh - 72px);
 }
 .sklive-viewer-video.portrait {
   max-width: 450px;
@@ -599,7 +602,7 @@
 }
 .sklive-viewer-video.landscape {
   aspect-ratio: 16 / 9;
-  max-height: 60vh;
+  max-height: calc(100vh - 72px);
 }
 .sklive-viewer.mobile .sklive-viewer-video.portrait {
   max-width: 100%;
@@ -614,18 +617,92 @@
   background: linear-gradient(180deg, rgba(18, 11, 43, 0.8) 0%, rgba(10, 6, 26, 0.95) 100%);
   border-radius: 12px;
   overflow: hidden;
+  position: relative;
 }
 
+.sklive-playback-video,
 .sklive-host-preview-video {
   position: absolute;
   inset: 0;
   z-index: 1;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: #000;
+}
+
+.sklive-fallback-poster {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: 1;
+}
+
+.sklive-video-shade {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.52) 0%, rgba(0, 0, 0, 0.14) 28%, rgba(0, 0, 0, 0.18) 58%, rgba(0, 0, 0, 0.82) 100%),
+    radial-gradient(circle at top right, rgba(111, 88, 255, 0.18), transparent 35%);
+}
+
+.sklive-video-topbar {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  right: 16px;
+  z-index: 4;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.sklive-video-host-badge,
+.sklive-video-meta-pill,
+.sklive-live-notice {
+  background: rgba(12, 8, 28, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.sklive-video-host-badge {
+  border-radius: 18px;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sklive-video-host-name {
+  font-size: 0.94rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.sklive-video-host-handle {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.68);
+}
+
+.sklive-video-meta-pill {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-radius: 999px;
+  padding: 10px 14px;
+  font-size: 0.82rem;
+  color: rgba(255, 255, 255, 0.84);
 }
 
 /* Waiting screen */
 .sklive-waiting-screen {
   position: relative;
-  z-index: 2;
+  z-index: 4;
   text-align: center;
   color: rgba(255, 255, 255, 0.7);
   display: flex;
@@ -665,14 +742,18 @@
 
 /* Live screen */
 .sklive-live-screen {
-  position: relative;
-  z-index: 2;
+  position: absolute;
+  top: 88px;
+  left: 16px;
+  right: 92px;
+  z-index: 4;
   text-align: center;
   color: #fff;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 12px;
+  pointer-events: none;
 }
 .sklive-live-indicator {
   display: flex;
@@ -693,6 +774,14 @@
   font-size: 1.2rem;
   font-weight: 600;
   color: rgba(255, 255, 255, 0.9);
+  margin: 0;
+}
+
+.sklive-live-warning {
+  max-width: 420px;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.82);
 }
 .sklive-end-broadcast-btn {
   padding: 10px 24px;
@@ -705,6 +794,7 @@
   margin-top: 8px;
   font-family: inherit;
   transition: background 0.2s;
+  pointer-events: auto;
 }
 .sklive-end-broadcast-btn:hover {
   background: rgba(150, 50, 50, 0.7);
@@ -713,7 +803,7 @@
 /* Ended screen */
 .sklive-ended-screen {
   position: relative;
-  z-index: 2;
+  z-index: 4;
   text-align: center;
   color: rgba(255, 255, 255, 0.6);
   display: flex;
@@ -742,12 +832,13 @@
 /* Floating hearts */
 .sklive-hearts-container {
   position: absolute;
-  bottom: 40px;
-  right: 12px;
+  bottom: 142px;
+  right: 18px;
   width: 80px;
   height: 200px;
   pointer-events: none;
   overflow: hidden;
+  z-index: 5;
 }
 .sklive-floating-heart {
   position: absolute;
@@ -763,34 +854,60 @@
   100% { transform: translateY(-180px) scale(0.5); opacity: 0; }
 }
 
-/* ── Actions bar ── */
-.sklive-viewer-actions {
+/* ── Actions overlay ── */
+.sklive-side-actions {
+  position: absolute;
+  right: 16px;
+  bottom: 132px;
+  z-index: 6;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 16px;
-  padding: 14px 16px;
-  background: rgba(18, 11, 43, 0.6);
+  gap: 12px;
 }
 .sklive-action-btn {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 6px;
-  padding: 10px 18px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 20px;
+  justify-content: center;
+  gap: 4px;
+  min-width: 68px;
+  padding: 10px 12px;
+  background: rgba(12, 8, 28, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 22px;
   color: var(--color-text, #fff);
   cursor: pointer;
   font-family: inherit;
-  font-size: 0.92rem;
+  font-size: 0.84rem;
   transition: background 0.2s, transform 0.15s;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
 }
 .sklive-action-btn:hover {
   background: rgba(255, 255, 255, 0.1);
 }
+.sklive-action-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
 .sklive-action-btn.like:active {
   transform: scale(1.2);
+}
+
+.sklive-action-btn.like.reacted {
+  border-color: rgba(255, 90, 132, 0.52);
+  box-shadow: 0 0 20px rgba(255, 90, 132, 0.18);
+}
+
+.sklive-action-icon {
+  font-size: 1.24rem;
+  line-height: 1;
+}
+
+.sklive-action-btn small {
+  font-size: 0.68rem;
+  color: rgba(255, 255, 255, 0.64);
 }
 
 /* Participate button — always visible, prominent */
@@ -820,21 +937,167 @@
   50% { box-shadow: 0 0 20px rgba(111, 88, 255, 0.5); }
 }
 
-/* ── Chat ── */
-.sklive-chat {
-  background: rgba(18, 11, 43, 0.7);
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+/* ── Live bottom overlay ── */
+.sklive-live-bottom {
+  position: absolute;
+  left: 16px;
+  right: 96px;
+  bottom: 18px;
+  z-index: 5;
   display: flex;
   flex-direction: column;
-  max-height: 300px;
+  gap: 14px;
+}
+
+.sklive-featured-product {
+  display: grid;
+  grid-template-columns: 56px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: #fff;
+  background: rgba(12, 8, 28, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 14px;
+  padding: 8px;
+  backdrop-filter: blur(10px);
+}
+
+.sklive-featured-product img,
+.sklive-featured-placeholder {
+  width: 56px;
+  height: 56px;
+  border-radius: 10px;
+  object-fit: cover;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.sklive-featured-product strong {
+  display: block;
+  font-size: 0.9rem;
+  line-height: 1.2;
+}
+
+.sklive-featured-product span {
+  display: block;
+  font-size: 0.76rem;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.sklive-featured-product em {
+  font-style: normal;
+  border: 1px solid rgba(111, 88, 255, 0.5);
+  background: rgba(111, 88, 255, 0.2);
+  color: #d8d1ff;
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 0.72rem;
+}
+
+.sklive-host-pin-wrap {
+  position: relative;
+  align-self: flex-start;
+}
+
+.sklive-host-pin-btn {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 999px;
+  background: rgba(12, 8, 28, 0.74);
+  color: #fff;
+  font-size: 0.8rem;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.sklive-host-pin-list {
+  margin-top: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 12px;
+  background: rgba(8, 6, 19, 0.96);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 220px;
+  overflow: auto;
+}
+
+.sklive-host-pin-list button {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+  border-radius: 10px;
+  text-align: left;
+  font-size: 0.78rem;
+  padding: 7px 8px;
+  cursor: pointer;
+}
+
+.sklive-live-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 520px;
+}
+
+.sklive-live-copy-handle,
+.sklive-live-copy-title,
+.sklive-live-copy-description {
+  margin: 0;
+}
+
+.sklive-live-copy-handle {
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.sklive-live-copy-title {
+  font-size: 1.06rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.sklive-live-copy-description {
+  font-size: 0.92rem;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.sklive-live-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.sklive-live-tag {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(111, 88, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 0.76rem;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+/* ── Chat ── */
+.sklive-chat {
+  background: transparent;
+  border-top: none;
+  display: flex;
+  flex-direction: column;
+  max-width: 430px;
+  max-height: 38vh;
 }
 .sklive-viewer.mobile .sklive-chat {
-  max-height: 220px;
+  max-height: 34vh;
 }
 .sklive-chat-messages {
   flex: 1;
   overflow-y: auto;
-  padding: 12px 16px;
+  padding: 0 6px 0 0;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -844,7 +1107,14 @@
   align-items: baseline;
   gap: 6px;
   font-size: 0.88rem;
-  padding: 4px 0;
+  width: fit-content;
+  max-width: 100%;
+  padding: 8px 12px;
+  border-radius: 16px;
+  background: rgba(12, 8, 28, 0.56);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
 }
 .sklive-chat-msg.gift {
   background: rgba(255, 200, 0, 0.08);
@@ -875,22 +1145,23 @@
 .sklive-chat-input-wrap {
   display: flex;
   gap: 8px;
-  padding: 10px 16px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 24px;
+  background: rgba(12, 8, 28, 0.68);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
 }
 .sklive-chat-input {
   flex: 1;
   padding: 10px 14px;
-  background: rgba(18, 11, 43, 0.5);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: transparent;
+  border: none;
   border-radius: 20px;
   color: var(--color-text, #fff);
   font-family: inherit;
   font-size: 0.9rem;
   outline: none;
-}
-.sklive-chat-input:focus {
-  border-color: var(--color-primary, #6f58ff);
 }
 .sklive-chat-send {
   padding: 10px 16px;
@@ -904,6 +1175,18 @@
 }
 .sklive-chat-send:hover {
   transform: scale(1.05);
+}
+
+.sklive-live-notice {
+  position: absolute;
+  left: 16px;
+  right: 96px;
+  bottom: calc(18px + min(38vh, 320px) + 20px);
+  z-index: 5;
+  border-radius: 16px;
+  padding: 10px 14px;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.88);
 }
 
 /* ── Mobile bottom nav for Live page ── */
@@ -1009,7 +1292,39 @@
     max-width: 100%;
   }
   .sklive-viewer-video.landscape {
-    max-height: 40vh;
+    max-height: none;
+  }
+  .sklive-video-placeholder {
+    min-height: calc(100vh - 64px);
+    border-radius: 0;
+  }
+  .sklive-live-screen {
+    top: 92px;
+    right: 76px;
+  }
+  .sklive-side-actions {
+    right: 10px;
+    bottom: 128px;
+  }
+  .sklive-action-btn {
+    min-width: 62px;
+    padding: 9px 10px;
+  }
+  .sklive-live-bottom {
+    left: 12px;
+    right: 82px;
+    bottom: 12px;
+  }
+  .sklive-live-copy-title {
+    font-size: 1rem;
+  }
+  .sklive-live-copy-description {
+    font-size: 0.86rem;
+  }
+  .sklive-live-notice {
+    left: 12px;
+    right: 82px;
+    bottom: calc(12px + min(34vh, 260px) + 20px);
   }
 }
 
@@ -1055,29 +1370,20 @@
   min-height: 100%;
   border-radius: 0;
 }
-.sklive-viewer.mobile.device-landscape .sklive-chat-section {
-  position: absolute;
-  right: 0;
-  top: 0;
-  bottom: 0;
-  width: 280px;
-  max-height: 100vh;
-  background: rgba(10, 6, 26, 0.7);
-  backdrop-filter: blur(12px);
-  z-index: 110;
-  border-radius: 0;
-}
-.sklive-viewer.mobile.device-landscape .sklive-action-bar {
-  position: absolute;
-  bottom: 8px;
-  left: 8px;
-  z-index: 115;
-  flex-direction: column;
-  gap: 10px;
-}
 .sklive-viewer.mobile.device-landscape .sklive-hearts-container {
   position: absolute;
-  bottom: 80px;
-  left: 16px;
+  bottom: 96px;
+  right: 90px;
   z-index: 115;
+}
+.sklive-viewer.mobile.device-landscape .sklive-live-bottom {
+  right: 92px;
+  max-width: 420px;
+}
+.sklive-viewer.mobile.device-landscape .sklive-side-actions {
+  right: 16px;
+  bottom: 112px;
+}
+.sklive-viewer.mobile.device-landscape .sklive-live-screen {
+  right: 96px;
 }

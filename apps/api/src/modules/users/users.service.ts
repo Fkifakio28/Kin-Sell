@@ -1,5 +1,6 @@
 import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
+import { normalizeImageInput } from "../../shared/utils/media-storage.js";
 
 type UpdateMeInput = {
   displayName?: string;
@@ -47,12 +48,14 @@ export const updateMe = async (userId: string, payload: UpdateMeInput) => {
     throw new HttpError(404, "Utilisateur introuvable");
   }
 
+  const avatarUrl = await normalizeImageInput(payload.avatarUrl, { folder: "avatars" });
+
   const profile = await prisma.userProfile.upsert({
     where: { userId },
     create: {
       userId,
       displayName: payload.displayName ?? "Utilisateur Kin-Sell",
-      avatarUrl: payload.avatarUrl,
+      avatarUrl,
       city: payload.city,
       country: payload.country,
       bio: payload.bio,
@@ -63,7 +66,7 @@ export const updateMe = async (userId: string, payload: UpdateMeInput) => {
     },
     update: {
       ...(payload.displayName !== undefined && { displayName: payload.displayName }),
-      ...(payload.avatarUrl !== undefined && { avatarUrl: payload.avatarUrl }),
+      ...(payload.avatarUrl !== undefined && { avatarUrl }),
       ...(payload.city !== undefined && { city: payload.city }),
       ...(payload.country !== undefined && { country: payload.country }),
       ...(payload.bio !== undefined && { bio: payload.bio }),

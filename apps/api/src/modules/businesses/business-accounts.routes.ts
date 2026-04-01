@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireAuth, requireRoles, type AuthenticatedRequest } from "../../shared/auth/auth-middleware.js";
 import { Role } from "../../types/roles.js";
 import { asyncHandler } from "../../shared/utils/async-handler.js";
+import { isAcceptedImageInput } from "../../shared/utils/media-storage.js";
 import * as businessService from "./business-accounts.service.js";
 
 const createSchema = z.object({
@@ -18,8 +19,8 @@ const updateSchema = z.object({
   description: z.string().max(800).optional(),
   city: z.string().min(2).max(80).optional(),
   address: z.string().max(200).optional(),
-  coverImage: z.string().url().optional(),
-  logo: z.string().url().optional(),
+  coverImage: z.string().refine(isAcceptedImageInput, "Image invalide").optional(),
+  logo: z.string().refine(isAcceptedImageInput, "Image invalide").optional(),
   publicDescription: z.string().max(800).optional(),
   active: z.boolean().optional()
 });

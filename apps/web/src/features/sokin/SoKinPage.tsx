@@ -5,12 +5,15 @@ import { formatPriceLabelToCdf } from '../../utils/currency';
 import { useAuth } from '../../app/providers/AuthProvider';
 import { useLocaleCurrency } from '../../app/providers/LocaleCurrencyProvider';
 import { getDashboardPath } from '../../utils/role-routing';
+import { prepareMediaUrl, prepareMediaUrls } from '../../utils/media-upload';
 import { useScrollRestore } from '../../utils/useScrollRestore';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { orders as ordersApi, sokin as sokinApi, type SoKinApiFeedPost } from '../../lib/api-client';
+import type { SoKinReactionType as ApiReactionType } from '../../lib/api-client';
 import { useHoverPopup, ProfileHoverPopup, ArticleHoverPopup, type ProfileHoverData, type ArticleHoverData } from '../../components/HoverPopup';
 import './sokin.css';
 import { AdBanner } from '../../components/AdBanner';
+import { SeoMeta } from '../../components/SeoMeta';
 import {
   SOKIN_ANALYTICS_FALLBACK,
   SOKIN_SUGGESTIONS,
@@ -19,6 +22,7 @@ import {
   SOKIN_VIRAL_POSTS,
   type SoKinPost,
 } from './sokin-data';
+import type { SoKinReactionType } from './sokin-data';
 
 type VideoUiState = {
   played: boolean;
@@ -100,9 +104,11 @@ function mapApiFeedPost(p: SoKinApiFeedPost): SoKinPost {
     sponsored: false,
     media: p.mediaUrls.map((src) => ({ kind: 'image' as const, src, label: '' })),
     linkedCard: undefined,
-    likes: 0,
-    comments: 0,
-    shares: 0,
+    likes: p.likes,
+    reactionCounts: (p.reactionCounts ?? {}) as Partial<Record<SoKinReactionType, number>>,
+    myReaction: (p.myReaction ?? null) as SoKinReactionType | null,
+    comments: p.comments,
+    shares: p.shares,
     thread: [],
   };
 }
@@ -134,6 +140,15 @@ export function SoKinPage() {
   const [showEditorPopup, setShowEditorPopup] = useState(false);
   const [showPreviewPopup, setShowPreviewPopup] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
+  const [reactionPickerPostId, setReactionPickerPostId] = useState<string | null>(null);
+  const [reactionBusy, setReactionBusy] = useState<string | null>(null);
+  const [stories, setStories] = useState<Awaited<ReturnType<typeof sokinApi.stories>>["stories"]>([]);
+  const [storyViewerOpen, setStoryViewerOpen] = useState(false);
+  const [storyViewerIndex, setStoryViewerIndex] = useState(0);
+  const [showStoryComposer, setShowStoryComposer] = useState(false);
+  const [storyText, setStoryText] = useState('');
+  const [storyBgColor, setStoryBgColor] = useState('#241752');
+  const [storyFile, setStoryFile] = useState<File | null>(null);
   const navigate = useNavigate();
   const { isLoggedIn, user, logout } = useAuth();
   const { t } = useLocaleCurrency();
@@ -184,6 +199,21 @@ export function SoKinPage() {
     };
     void load();
     return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadStories = async () => {
+      try {
+        const data = await sokinApi.stories();
+        if (!cancelled) setStories(data.stories);
+      } catch {
+        if (!cancelled) setStories([]);
+      }
+    };
+    void loadStories();
+    const timer = setInterval(loadStories, 45_000);
+    return () => { cancelled = true; clearInterval(timer); };
   }, []);
 
   const visiblePosts = useMemo(() => {
@@ -355,9 +385,12 @@ export function SoKinPage() {
     if (!text || isPublishing || !isLoggedIn) return;
     setIsPublishing(true);
     try {
+      const mediaUrls = composerMediaFiles.length > 0
+        ? await prepareMediaUrls(composerMediaFiles)
+        : undefined;
       const newPost = await sokinApi.createPost({
         text,
-        mediaUrls: composerMediaFiles.length > 0 ? composerMediaFiles.map((f) => URL.createObjectURL(f)) : undefined,
+        mediaUrls,
         location: composerLocation || undefined,
         tags: composerTags.length > 0 ? composerTags : undefined,
         hashtags: composerHashtags.length > 0 ? composerHashtags : undefined,
@@ -373,6 +406,8 @@ export function SoKinPage() {
             city: user?.profile.city ?? null,
           },
         },
+        reactionCounts: {},
+        myReaction: null,
       });
       setPosts((prev) => [mapped, ...prev]);
       /* Reset composer */
@@ -389,8 +424,80 @@ export function SoKinPage() {
     }
   };
 
+  const handleReaction = async (postId: string, type: SoKinReactionType) => {
+    if (!isLoggedIn || reactionBusy === postId) return;
+    setReactionBusy(postId);
+    setReactionPickerPostId(null);
+    try {
+      setPosts((prev) => prev.map((p) => {
+        if (p.id !== postId) return p;
+        const prevCounts = { ...p.reactionCounts };
+        const prevMine = p.myReaction;
+        if (prevMine) {
+          prevCounts[prevMine] = Math.max(0, (prevCounts[prevMine] ?? 1) - 1);
+          if (prevCounts[prevMine] === 0) delete prevCounts[prevMine];
+        }
+        if (prevMine === type) {
+          return { ...p, reactionCounts: prevCounts, myReaction: null, likes: Math.max(0, p.likes - 1) };
+        }
+        prevCounts[type] = (prevCounts[type] ?? 0) + 1;
+        return { ...p, reactionCounts: prevCounts, myReaction: type, likes: (prevMine ? p.likes : p.likes + 1) };
+      }));
+      const currentPost = posts.find((p) => p.id === postId);
+      if (currentPost?.myReaction === type) {
+        await sokinApi.unreactToPost(postId);
+      } else {
+        await sokinApi.reactToPost(postId, type as ApiReactionType);
+      }
+    } catch {
+      const data = await sokinApi.publicFeed(20).catch(() => null);
+      if (data) setPosts(data.posts.map(mapApiFeedPost));
+    } finally {
+      setReactionBusy(null);
+    }
+  };
+
+  const handleOpenStory = async (index: number) => {
+    const story = stories[index];
+    if (!story) return;
+    setStoryViewerIndex(index);
+    setStoryViewerOpen(true);
+    if (isLoggedIn && !story.viewedByMe) {
+      void sokinApi.viewStory(story.id).catch(() => {});
+      setStories((prev) => prev.map((s) => (s.id === story.id ? { ...s, viewedByMe: true, viewCount: s.viewCount + 1 } : s)));
+    }
+  };
+
+  const handleCreateStory = async () => {
+    if (!isLoggedIn) return;
+    const text = storyText.trim();
+    if (!text && !storyFile) return;
+    try {
+      const mediaUrl = storyFile ? await prepareMediaUrl(storyFile) : undefined;
+      const mediaType = storyFile ? (storyFile.type.startsWith('video/') ? 'VIDEO' : 'IMAGE') : 'TEXT';
+      await sokinApi.createStory({
+        mediaUrl,
+        mediaType,
+        caption: text || undefined,
+        bgColor: mediaType === 'TEXT' ? storyBgColor : undefined,
+      });
+      const refreshed = await sokinApi.stories();
+      setStories(refreshed.stories);
+      setShowStoryComposer(false);
+      setStoryText('');
+      setStoryFile(null);
+    } catch {
+      // Ignore - l'utilisateur peut réessayer
+    }
+  };
+
   return (
     <>
+      <SeoMeta
+        title="So-Kin — Le réseau social de Kinshasa"
+        description="Partagez vos actualités, suivez vos contacts et découvrez les lives et tendances sur So-Kin, le réseau social de Kin-Sell."
+        canonical="https://kin-sell.com/so-kin"
+      />
       {isMobile ? (
         <header className="sokin-mobile-header" role="banner">
           <button className="sokin-mobile-icon-btn" type="button" onClick={() => navigate(-1)} aria-label="Retour">
@@ -560,6 +667,23 @@ export function SoKinPage() {
         {accountMenuOpen ? <button className="sokin-account-overlay" onClick={() => setAccountMenuOpen(false)} aria-label={t('sokin.closeMenuAccount')} type="button" /> : null}
 
         {notifOpen ? <button className="sokin-notif-overlay" onClick={() => setNotifOpen(false)} aria-label={t('sokin.closeNotifications')} type="button" /> : null}
+
+        <section className="sokin-stories" aria-label="Stories So-Kin">
+          <div className="sokin-stories-head">
+            <h3>Stories 24h</h3>
+            {isLoggedIn ? <button type="button" className="sokin-story-add-btn" onClick={() => setShowStoryComposer(true)}>＋ Ajouter</button> : null}
+          </div>
+          <div className="sokin-stories-row">
+            {stories.length === 0 ? <p className="sokin-stories-empty">Aucune story active pour le moment.</p> : stories.map((story, index) => (
+              <button key={story.id} type="button" className={`sokin-story-item${story.viewedByMe ? ' viewed' : ''}`} onClick={() => void handleOpenStory(index)}>
+                <span className="sokin-story-avatar-wrap">
+                  {story.author.profile?.avatarUrl ? <img src={story.author.profile.avatarUrl} alt={story.author.profile.displayName} className="sokin-story-avatar" /> : <span className="sokin-story-avatar-fallback">👤</span>}
+                </span>
+                <span className="sokin-story-name">{story.author.profile?.displayName ?? 'Utilisateur'}</span>
+              </button>
+            ))}
+          </div>
+        </section>
 
         <section className="sokin-composer" aria-label={t('sokin.createPost')}>
           <div className="sokin-composer-head">
@@ -848,7 +972,38 @@ export function SoKinPage() {
               ) : null}
 
               <footer className="sokin-post-actions">
-                <button className="sokin-action-btn" type="button" aria-label="Likes">❤️ {post.likes}</button>
+                {/* ── Reaction picker style Facebook ── */}
+                <div className="sokin-reaction-wrap" onMouseLeave={() => setReactionPickerPostId(null)}>
+                  <button
+                    className={`sokin-action-btn sokin-action-btn--react${post.myReaction ? ' sokin-action-btn--reacted' : ''}`}
+                    type="button"
+                    aria-label="Réagir"
+                    onMouseEnter={() => setReactionPickerPostId(post.id)}
+                    onClick={() => handleReaction(post.id, post.myReaction ?? 'LIKE')}
+                  >
+                    {post.myReaction === 'LOVE' ? '❤️' : post.myReaction === 'HAHA' ? '😂' : post.myReaction === 'WOW' ? '😮' : post.myReaction === 'SAD' ? '😢' : post.myReaction === 'ANGRY' ? '😡' : '👍'}
+                    {' '}{post.likes > 0 ? post.likes : ''}
+                  </button>
+                  {reactionPickerPostId === post.id && (
+                    <div className="sokin-reaction-picker" role="toolbar" aria-label="Choisir une réaction">
+                      {(['LIKE', 'LOVE', 'HAHA', 'WOW', 'SAD', 'ANGRY'] as const).map((type) => {
+                        const emoji = type === 'LIKE' ? '👍' : type === 'LOVE' ? '❤️' : type === 'HAHA' ? '😂' : type === 'WOW' ? '😮' : type === 'SAD' ? '😢' : '😡';
+                        const label = type === 'LIKE' ? 'J\'aime' : type === 'LOVE' ? 'J\'adore' : type === 'HAHA' ? 'Haha' : type === 'WOW' ? 'Wow' : type === 'SAD' ? 'Triste' : 'En colère';
+                        return (
+                          <button
+                            key={type}
+                            className={`sokin-reaction-btn${post.myReaction === type ? ' sokin-reaction-btn--active' : ''}`}
+                            type="button"
+                            title={label}
+                            onClick={() => handleReaction(post.id, type)}
+                          >
+                            {emoji}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
                 <button
                   className="sokin-action-btn"
                   type="button"
@@ -1071,6 +1226,38 @@ export function SoKinPage() {
             </button>
           </nav>
         </>
+      ) : null}
+
+      {showStoryComposer ? (
+        <div className="sokin-story-modal" onClick={() => setShowStoryComposer(false)}>
+          <div className="sokin-story-modal-card" onClick={(e) => e.stopPropagation()}>
+            <h3>Publier une Story</h3>
+            <textarea value={storyText} onChange={(e) => setStoryText(e.target.value)} placeholder="Ton texte (optionnel si image/vidéo)" maxLength={180} />
+            <input type="file" accept="image/*,video/*" onChange={(e) => setStoryFile(e.target.files?.[0] ?? null)} />
+            {!storyFile ? (
+              <input type="color" value={storyBgColor} onChange={(e) => setStoryBgColor(e.target.value)} />
+            ) : null}
+            <div className="sokin-story-modal-actions">
+              <button type="button" onClick={() => setShowStoryComposer(false)}>Annuler</button>
+              <button type="button" onClick={() => void handleCreateStory()}>Publier</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {storyViewerOpen && stories[storyViewerIndex] ? (
+        <div className="sokin-story-modal" onClick={() => setStoryViewerOpen(false)}>
+          <div className="sokin-story-viewer" onClick={(e) => e.stopPropagation()} style={{ background: stories[storyViewerIndex].mediaType === 'TEXT' ? (stories[storyViewerIndex].bgColor ?? '#241752') : undefined }}>
+            {stories[storyViewerIndex].mediaType !== 'TEXT' && stories[storyViewerIndex].mediaUrl ? (
+              stories[storyViewerIndex].mediaType === 'VIDEO' ? <video src={stories[storyViewerIndex].mediaUrl!} controls autoPlay /> : <img src={stories[storyViewerIndex].mediaUrl!} alt="Story" />
+            ) : null}
+            {stories[storyViewerIndex].caption ? <p>{stories[storyViewerIndex].caption}</p> : null}
+            <div className="sokin-story-nav">
+              <button type="button" disabled={storyViewerIndex <= 0} onClick={() => setStoryViewerIndex((n) => Math.max(0, n - 1))}>◀</button>
+              <button type="button" disabled={storyViewerIndex >= stories.length - 1} onClick={() => setStoryViewerIndex((n) => Math.min(stories.length - 1, n + 1))}>▶</button>
+            </div>
+          </div>
+        </div>
       ) : null}
     </>
   );

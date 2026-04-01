@@ -29,6 +29,7 @@ import {
 } from '../../lib/api-client';
 import { NegotiationRespondPopup } from '../negotiations/NegotiationRespondPopup';
 import { compressAndEncodeMedia } from '../../utils/media-compress';
+import { prepareMediaUrls } from '../../utils/media-upload';
 import { AdBanner } from '../../components/AdBanner';
 import { OrderValidationQrModal } from '../../components/OrderValidationQrModal';
 import LocationPicker from '../../components/LocationPicker';
@@ -104,6 +105,7 @@ type SettingsForm = {
   address1: string;
   address2: string;
   address3: string;
+  onlineStatusVisible: boolean;
 };
 
 const SECTION_DEFS: Array<{ key: HubSection; labelKey: string; icon: string }> = [
@@ -294,7 +296,8 @@ export function UserDashboard() {
     city: '',
     address1: '',
     address2: '',
-    address3: ''
+    address3: '',
+    onlineStatusVisible: true,
   });
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
@@ -374,7 +377,8 @@ export function UserDashboard() {
       birthDate: toDateInput(user.profile.birthDate),
       country: user.profile.country ?? '',
       city: user.profile.city ?? '',
-      address1: user.profile.addressLine1 ?? ''
+      address1: user.profile.addressLine1 ?? '',
+      onlineStatusVisible: user.preferences?.onlineStatusVisible ?? true,
     }));
   }, [isLoggedIn, user]);
 
@@ -732,7 +736,7 @@ export function UserDashboard() {
       // Compression + encodage base64 directement dans le payload
       let mediaUrls: string[] = [];
       if (uploadFiles.length > 0) {
-        mediaUrls = await compressAndEncodeMedia(uploadFiles);
+        mediaUrls = await prepareMediaUrls(uploadFiles);
       }
       await listingsApi.create({
         type: articleForm.type,
@@ -786,7 +790,7 @@ export function UserDashboard() {
       // Compression + encodage base64 directement dans le payload
       let mediaUrls: string[] | undefined;
       if (uploadFiles.length > 0) {
-        mediaUrls = await compressAndEncodeMedia(uploadFiles);
+        mediaUrls = await prepareMediaUrls(uploadFiles);
       }
       await listingsApi.update(editingArticle.id, {
         title: articleForm.title.trim(),
@@ -1125,7 +1129,8 @@ export function UserDashboard() {
         birthDate: settingsForm.birthDate || undefined,
         country: settingsForm.country.trim() || undefined,
         city: settingsForm.city.trim() || undefined,
-        addressLine1: settingsForm.address1.trim() || undefined
+        addressLine1: settingsForm.address1.trim() || undefined,
+        onlineStatusVisible: settingsForm.onlineStatusVisible,
       });
       await refreshUser();
       setAvatarFile(null);
@@ -3209,6 +3214,27 @@ export function UserDashboard() {
                     <input className="ud-input" value={settingsForm.address1} onChange={(e) => setSettingsForm((prev) => ({ ...prev, address1: e.target.value }))} placeholder={t('user.settingsAddressPlaceholder')} />
                   </label>
                 </div>
+              </section>
+
+              <section className="ud-glass-panel ud-settings-section">
+                <div className="ud-settings-section-head">
+                  <span className="ud-settings-section-icon">👁️</span>
+                  <h3 className="ud-settings-section-title">Confidentialité messagerie</h3>
+                </div>
+                <label className="ud-pp-toggle-row" style={{ marginTop: 6 }}>
+                  <span>Afficher mon statut en ligne aux autres utilisateurs</span>
+                  <label className="ud-pp-toggle">
+                    <input
+                      type="checkbox"
+                      checked={settingsForm.onlineStatusVisible}
+                      onChange={(e) => setSettingsForm((prev) => ({ ...prev, onlineStatusVisible: e.target.checked }))}
+                    />
+                    <span className="ud-pp-toggle-slider" />
+                  </label>
+                </label>
+                <p className="ud-placeholder-text" style={{ marginTop: 8, fontSize: '0.82rem' }}>
+                  Si désactivé, les autres ne verront plus "en ligne" sur tes conversations.
+                </p>
               </section>
 
               <div className="ud-page-header-actions" style={{ marginTop: 12 }}>

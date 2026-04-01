@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../../app/providers/AuthProvider";
 import { useLocaleCurrency } from "../../app/providers/LocaleCurrencyProvider";
 import { billing, type BillingPlanSummary, ApiError } from "../../lib/api-client";
+import { SeoMeta } from "../../components/SeoMeta";
 import "./pricing.css";
 
 type PricingTab = "users" | "business" | "addons";
@@ -437,6 +438,11 @@ export function PricingPage() {
 
   return (
     <section className="pricing-shell animate-fade-in">
+      <SeoMeta
+        title="Tarifs et abonnements | Kin-Sell"
+        description="Choisissez le plan adapté à vos besoins: FREE, BOOST, AUTO, PRO VENDEUR pour les particuliers; STARTER, BUSINESS, SCALE pour les entreprises."
+        canonical="https://kin-sell.com/pricing"
+      />
       <header className="pricing-hero glass-container">
         <p className="pricing-eyebrow">{t('pricing.eyebrow')}</p>
         <h1>{t('pricing.title')}</h1>

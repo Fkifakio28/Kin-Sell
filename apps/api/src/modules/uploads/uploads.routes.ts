@@ -6,6 +6,7 @@ import crypto from "node:crypto";
 import { requireAuth } from "../../shared/auth/auth-middleware.js";
 import { asyncHandler } from "../../shared/utils/async-handler.js";
 import { HttpError } from "../../shared/errors/http-error.js";
+import { optimizeUploadedImageFile } from "../../shared/utils/media-storage.js";
 
 const UPLOADS_DIR = path.resolve(process.cwd(), "uploads");
 
@@ -15,8 +16,9 @@ if (!fs.existsSync(UPLOADS_DIR)) {
 }
 
 const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+const ALLOWED_AUDIO_TYPES = ["audio/webm", "audio/ogg", "audio/mpeg", "audio/mp4", "audio/wav", "audio/x-m4a"];
 const ALLOWED_VIDEO_TYPES = ["video/mp4", "video/webm", "video/quicktime"];
-const ALLOWED_TYPES = [...ALLOWED_IMAGE_TYPES, ...ALLOWED_VIDEO_TYPES];
+const ALLOWED_TYPES = [...ALLOWED_IMAGE_TYPES, ...ALLOWED_AUDIO_TYPES, ...ALLOWED_VIDEO_TYPES];
 
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10 MB
 const MAX_VIDEO_SIZE = 50 * 1024 * 1024; // 50 MB
@@ -77,7 +79,15 @@ router.post(
       throw new HttpError(400, "Maximum 1 vidéo autorisée.");
     }
 
-    const urls = files.map((f) => `/uploads/${f.filename}`);
+    const urls = await Promise.all(
+      files.map(async (file) => {
+        if (ALLOWED_IMAGE_TYPES.includes(file.mimetype)) {
+          const stored = await optimizeUploadedImageFile(file.path, { folder: "media" });
+          return stored.url;
+        }
+        return `/uploads/${file.filename}`;
+      })
+    );
 
     response.status(201).json({ urls });
   })

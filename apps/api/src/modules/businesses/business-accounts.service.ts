@@ -1,6 +1,7 @@
 import { Role } from "../../types/roles.js";
 import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
+import { normalizeImageInput } from "../../shared/utils/media-storage.js";
 
 type CreateBusinessInput = {
   legalName: string;
@@ -122,6 +123,11 @@ export const updateMyBusinessAccount = async (ownerUserId: string, payload: Upda
     throw new HttpError(404, "Compte entreprise introuvable");
   }
 
+  const [coverImage, logo] = await Promise.all([
+    normalizeImageInput(payload.coverImage, { folder: "business" }),
+    normalizeImageInput(payload.logo, { folder: "business" }),
+  ]);
+
   const nextSlug = payload.publicName
     ? await ensureUniqueSlug(slugify(payload.publicName), current.id)
     : current.slug;
@@ -142,8 +148,8 @@ export const updateMyBusinessAccount = async (ownerUserId: string, payload: Upda
       data: {
         city: payload.city,
         address: payload.address,
-        coverImage: payload.coverImage,
-        logo: payload.logo,
+        coverImage,
+        logo,
         publicDescription: payload.publicDescription,
         active: payload.active
       }

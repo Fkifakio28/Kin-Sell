@@ -33,6 +33,9 @@ export function NegotiationRespondPopup({ negotiation, onClose, onUpdated, showA
   }, [negotiation.id, showAi]);
 
   const lastOffer = negotiation.offers[negotiation.offers.length - 1];
+  const aiMarginLabel = aiAdvice
+    ? `${aiAdvice.marginImpact.discountPercent}% de remise par rapport au prix catalogue`
+    : null;
 
   const handleAction = async (action: "ACCEPT" | "REFUSE" | "COUNTER") => {
     setBusy(true);
@@ -163,16 +166,16 @@ export function NegotiationRespondPopup({ negotiation, onClose, onUpdated, showA
                     <span className="neg-ai-reco-badge">
                       {aiAdvice.recommendation === "ACCEPT" ? "✅ Accepter" : aiAdvice.recommendation === "COUNTER" ? "🔄 Contre-offre" : "❌ Refuser"}
                     </span>
-                    <span className="neg-ai-reco-prob">{Math.round(aiAdvice.conversionProbability * 100)}% chances de conversion</span>
+                    <span className="neg-ai-reco-prob">{aiAdvice.conversionProbability}% chances de conversion</span>
                   </div>
-                  {aiAdvice.counterPrice != null && (
-                    <p className="neg-ai-counter">Prix suggéré : <strong>{formatMoneyFromUsdCents(aiAdvice.counterPrice)}</strong></p>
+                  {aiAdvice.counterSuggestionUsdCents != null && (
+                    <p className="neg-ai-counter">Prix suggéré : <strong>{formatMoneyFromUsdCents(aiAdvice.counterSuggestionUsdCents)}</strong></p>
                   )}
-                  <p className="neg-ai-margin">Impact marge : {aiAdvice.marginImpact}</p>
-                  <p className="neg-ai-reason">{aiAdvice.reasoning}</p>
+                  {aiMarginLabel && <p className="neg-ai-margin">Impact marge : {aiMarginLabel}</p>}
+                  <p className="neg-ai-reason">{aiAdvice.insight}</p>
                   <div className="neg-ai-buyer">
                     <span>Acheteur : Confiance {aiAdvice.buyerProfile.trustLevel}</span>
-                    <span>{aiAdvice.buyerProfile.totalOrders} commande(s)</span>
+                    <span>{aiAdvice.buyerProfile.previousPurchases} commande(s)</span>
                   </div>
                 </div>
               ) : null}

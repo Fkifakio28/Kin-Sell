@@ -8,6 +8,8 @@ import { prisma } from "../../shared/db/prisma.js";
 
 /** userId → Set<socketId> (one user can have multiple tabs) */
 const onlineUsers = new Map<string, Set<string>>();
+/** userId → true si le statut en ligne est visible aux autres */
+const onlineVisibility = new Map<string, boolean>();
 
 /** conversationId → active call log ID (tracks in-progress calls) */
 const activeCallLogs = new Map<string, string>();
@@ -38,7 +40,24 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
     /* ── Track online status ── */
     if (!onlineUsers.has(userId)) onlineUsers.set(userId, new Set());
     onlineUsers.get(userId)!.add(socket.id);
-    io.emit("user:online", { userId });
+
+    void (async () => {
+      const pref = await prisma.userPreference.findUnique({
+        where: { userId },
+        select: { onlineStatusVisible: true },
+      }).catch(() => null);
+
+      const isVisible = pref?.onlineStatusVisible ?? true;
+      onlineVisibility.set(userId, isVisible);
+
+      socket.emit("presence:snapshot", {
+        userIds: Array.from(onlineUsers.keys()).filter((id) => id !== userId && (onlineVisibility.get(id) ?? true)),
+      });
+
+      if (isVisible) {
+        io.emit("user:online", { userId });
+      }
+    })();
 
     /* ── Join conversation rooms ── */
     void messagingService.getUserConversations(userId).then((conversations: { id: string }[]) => {
@@ -270,8 +289,18 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
       if (sockets) {
         sockets.delete(socket.id);
         if (sockets.size === 0) {
+          const wasVisible = onlineVisibility.get(userId) ?? true;
           onlineUsers.delete(userId);
-          io.emit("user:offline", { userId });
+          onlineVisibility.delete(userId);
+          const lastSeenAt = new Date();
+          // Persist lastSeenAt (respect privacy: only if status was visible)
+          void prisma.userProfile.updateMany({
+            where: { userId },
+            data: { lastSeenAt },
+          }).catch(() => {});
+          if (wasVisible) {
+            io.emit("user:offline", { userId, lastSeenAt: lastSeenAt.toISOString() });
+          }
         }
       }
     });
@@ -281,5 +310,5 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
 }
 
 export function getOnlineUserIds(): string[] {
-  return Array.from(onlineUsers.keys());
+  return Array.from(onlineUsers.keys()).filter((id) => onlineVisibility.get(id) ?? true);
 }

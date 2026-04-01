@@ -15,6 +15,7 @@ import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
 import { sendOtpEmail } from "../../shared/email/mailer.js";
 import { normalizeEmail, normalizePhone, slugifyUsername } from "../../shared/utils/identity-normalizers.js";
+import { normalizeImageInput } from "../../shared/utils/media-storage.js";
 
 type EntryEmailInput = {
   method: "email";
@@ -627,6 +628,7 @@ export const completeProfile = async (userId: string, payload: {
   addressLine1?: string;
   avatarUrl?: string;
   displayName?: string;
+  onlineStatusVisible?: boolean;
   accountType?: AccountType;
   email?: string;
   phone?: string;
@@ -642,6 +644,7 @@ export const completeProfile = async (userId: string, payload: {
 
   const normalizedEmail = payload.email ? normalizeEmail(payload.email) : undefined;
   const normalizedPhone = payload.phone ? normalizePhone(payload.phone) : undefined;
+  const avatarUrl = await normalizeImageInput(payload.avatarUrl, { folder: "avatars" });
 
   let username = payload.username ? slugifyUsername(payload.username) : user.profile?.username ?? undefined;
   if (!username) {
@@ -679,7 +682,7 @@ export const completeProfile = async (userId: string, payload: {
         userId,
         username,
         displayName: payload.displayName ?? user.profile?.displayName ?? "Utilisateur Kin-Sell",
-        avatarUrl: payload.avatarUrl,
+        avatarUrl,
         birthDate: payload.birthDate,
         city: payload.city,
         country: payload.country,
@@ -688,13 +691,26 @@ export const completeProfile = async (userId: string, payload: {
       update: {
         username,
         displayName: payload.displayName,
-        avatarUrl: payload.avatarUrl,
+        avatarUrl,
         birthDate: payload.birthDate,
         city: payload.city,
         country: payload.country,
         addressLine1: payload.addressLine1
       }
     });
+
+    if (payload.onlineStatusVisible !== undefined) {
+      await tx.userPreference.upsert({
+        where: { userId },
+        create: {
+          userId,
+          onlineStatusVisible: payload.onlineStatusVisible,
+        },
+        update: {
+          onlineStatusVisible: payload.onlineStatusVisible,
+        },
+      });
+    }
 
     if (normalizedEmail) {
       await tx.userIdentity.upsert({

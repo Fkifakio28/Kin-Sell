@@ -11,6 +11,7 @@ type SocketEvents = {
   "typing:start": (data: { conversationId: string; userId: string }) => void;
   "typing:stop": (data: { conversationId: string; userId: string }) => void;
   "conversation:read": (data: { conversationId: string; userId: string }) => void;
+  "presence:snapshot": (data: { userIds: string[] }) => void;
   "user:online": (data: { userId: string }) => void;
   "user:offline": (data: { userId: string }) => void;
   "call:incoming": (data: { conversationId: string; callerId: string; callType: "audio" | "video" }) => void;

@@ -12,6 +12,8 @@ import {
   deleteSoKinPost,
   getPublicFeed,
   getPublicUsers,
+  reactToPost,
+  unreactToPost,
 } from "./sokin.service.js";
 
 const createPostSchema = z.object({
@@ -34,7 +36,17 @@ router.get(
       parseInt(typeof raw === "string" ? raw : "20", 10) || 20,
       50
     );
-    const posts = await getPublicFeed(limit);
+    // Optionnel : passer l'userId connecté pour savoir ses réactions
+    const token = req.headers.authorization?.replace("Bearer ", "");
+    let viewerUserId: string | undefined;
+    if (token) {
+      try {
+        const { verifyAccessToken } = await import("../../shared/auth/jwt.js");
+        const payload = verifyAccessToken(token);
+        viewerUserId = payload.sub;
+      } catch { /* token invalide, on ignore */ }
+    }
+    const posts = await getPublicFeed(limit, viewerUserId);
     res.json({ posts });
   })
 );
@@ -107,6 +119,31 @@ router.delete(
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     await deleteSoKinPost(req.auth!.userId, req.params.id);
     res.json({ success: true });
+  })
+);
+
+/* ── Réactions style Facebook ── */
+
+const reactionSchema = z.object({
+  type: z.enum(["LIKE", "LOVE", "HAHA", "WOW", "SAD", "ANGRY"]),
+});
+
+router.post(
+  "/posts/:id/react",
+  requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const { type } = reactionSchema.parse(req.body);
+    const result = await reactToPost(req.auth!.userId, req.params.id, type);
+    res.json(result);
+  })
+);
+
+router.delete(
+  "/posts/:id/react",
+  requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const result = await unreactToPost(req.auth!.userId, req.params.id);
+    res.json(result);
   })
 );
 

@@ -9,6 +9,7 @@ import { useScrollRestore } from "../../utils/useScrollRestore";
 import { NegotiatePopup } from "../negotiations/NegotiatePopup";
 import { useLockedCategories, isCategoryLocked } from "../../hooks/useLockedCategories";
 import { AdBanner } from "../../components/AdBanner";
+import { SeoMeta } from "../../components/SeoMeta";
 import "./home.css";
 
 /* ════════════════════════════════════════
@@ -377,6 +378,11 @@ export function HomePage() {
 
   return (
     <div className="h-shell">
+      <SeoMeta
+        title="Kin-Sell — La marketplace de Kinshasa"
+        description="Achetez, vendez et découvrez les meilleures offres à Kinshasa. Boutiques locales, services, So-Kin feed et lives en direct."
+        canonical="https://kin-sell.com/"
+      />
       {/* ═══════ TOP BAR ═══════ */}
       <header className="h-topbar">
         {/* Enseigne KIN-SELL */}

@@ -1,4 +1,5 @@
 import "./about.css";
+import { SeoMeta } from "../../components/SeoMeta";
 
 /* ── SVG icon helpers ── */
 const IconShield = () => (
@@ -36,6 +37,11 @@ const IconCheck = () => (
 export function AboutPage() {
   return (
     <div className="about">
+      <SeoMeta
+        title="À propos de Kin-Sell — La marketplace de Kinshasa"
+        description="Kin-Sell est la première marketplace de Kinshasa. Découvrez notre mission, nos valeurs et comment nous connectons acheteurs et vendeurs en RDC."
+        canonical="https://kin-sell.com/about"
+      />
       {/* ══════ 1. HERO ══════ */}
       <section className="about-hero">
         <div className="about-hero-glow" aria-hidden="true" />

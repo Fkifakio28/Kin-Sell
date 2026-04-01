@@ -223,6 +223,9 @@ model User {
   liveChatMessages         SoKinLiveChat[]           @relation("SoKinLiveChatMessages")
   reviewsGiven             UserReview[]               @relation("ReviewsGiven")
   reviewsReceived          UserReview[]               @relation("ReviewsReceived")
+  soKinReactions           SoKinReaction[]
+  soKinStories             SoKinStory[]              @relation("SoKinStories")
+  soKinStoryViews          SoKinStoryView[]
 
   @@index([role])
   @@index([accountStatus])
@@ -246,6 +249,7 @@ model UserProfile {
   experience         String?
   workHours          String?
   verificationStatus VerificationStatus @default(UNVERIFIED)
+  lastSeenAt         DateTime?
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
 
@@ -338,6 +342,7 @@ model UserPreference {
   locale            String   @default("fr")
   currency          String   @default("CDF")
   theme             String   @default("dark")
+  onlineStatusVisible Boolean @default(true)
   marketingEmails   Boolean  @default(false)
   marketingSms      Boolean  @default(false)
   pushEnabled       Boolean  @default(true)
@@ -1203,6 +1208,7 @@ model SoKinPost {
   updatedAt       DateTime        @updatedAt
 
   author User @relation("SoKinPosts", fields: [authorId], references: [id], onDelete: Cascade)
+  reactions SoKinReaction[]
 
   @@index([authorId])
   @@index([status])
@@ -1237,6 +1243,7 @@ model SoKinLive {
   peakViewers   Int               @default(0)
   likesCount    Int               @default(0)
   giftsCount    Int               @default(0)
+  featuredListingId String?
   replayUrl     String?
   startedAt     DateTime?
   endedAt       DateTime?
@@ -1625,4 +1632,73 @@ model SoKinConnection {
   @@unique([requesterId, receiverId])
   @@index([requesterId, status])
   @@index([receiverId, status])
+}
+
+// ══════════════════════════════════════════════
+// SO-KIN REACTIONS — Réactions Facebook sur les posts
+// ══════════════════════════════════════════════
+
+enum SoKinReactionType {
+  LIKE
+  LOVE
+  HAHA
+  WOW
+  SAD
+  ANGRY
+}
+
+model SoKinReaction {
+  id        String            @id @default(cuid())
+  postId    String
+  userId    String
+  type      SoKinReactionType
+  createdAt DateTime          @default(now())
+
+  post SoKinPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  @@index([postId])
+  @@index([userId])
+}
+
+// ══════════════════════════════════════════════
+// SO-KIN STORIES — Publications éphémères 24h
+// ══════════════════════════════════════════════
+
+enum SoKinStoryMediaType {
+  IMAGE
+  VIDEO
+  TEXT
+}
+
+model SoKinStory {
+  id          String              @id @default(cuid())
+  authorId    String
+  mediaUrl    String?
+  mediaType   SoKinStoryMediaType @default(IMAGE)
+  caption     String?
+  bgColor     String?             // Pour les stories texte
+  viewCount   Int                 @default(0)
+  expiresAt   DateTime            // Auto-expiration 24h après création
+  createdAt   DateTime            @default(now())
+
+  author  User             @relation("SoKinStories", fields: [authorId], references: [id], onDelete: Cascade)
+  viewers SoKinStoryView[]
+
+  @@index([authorId])
+  @@index([expiresAt])
+}
+
+model SoKinStoryView {
+  id       String   @id @default(cuid())
+  storyId  String
+  userId   String
+  viewedAt DateTime @default(now())
+
+  story SoKinStory @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  user  User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([storyId, userId])
+  @@index([userId])
 }

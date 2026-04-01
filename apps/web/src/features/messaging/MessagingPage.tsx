@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback, useMemo, type FormEvent } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo, type CSSProperties, type FormEvent } from "react";
 import { useAuth } from "../../app/providers/AuthProvider";
 import { Navigate } from "react-router-dom";
 import {
@@ -8,7 +8,7 @@ import {
   type MessageUser,
 } from "../../lib/api-client";
 import { useSocket } from "../../hooks/useSocket";
-import { compressAndEncodeMedia } from "../../utils/media-compress";
+import { createOptimizedAudioRecorder, createUploadFile, prepareMediaUrl } from "../../utils/media-upload";
 import "./messaging.css";
 
 /* ── Emoji data ── */
@@ -69,6 +69,18 @@ function formatAudioTime(seconds: number) {
   const m = Math.floor(seconds / 60);
   const s = Math.floor(seconds % 60);
   return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+function formatLastSeen(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60_000);
+  if (mins < 1) return "vu à l'instant";
+  if (mins < 60) return `vu il y a ${mins} min`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `vu il y a ${hrs}h`;
+  const days = Math.floor(hrs / 24);
+  if (days === 1) return "vu hier";
+  return `vu il y a ${days}j`;
 }
 
 /* ── Custom Audio Player Component ── */
@@ -146,6 +158,7 @@ export function MessagingPage() {
   const [editingMsg, setEditingMsg] = useState<ChatMessage | null>(null);
   const [typingUsers, setTypingUsers] = useState<Map<string, Set<string>>>(new Map());
   const [onlineUserIds, setOnlineUserIds] = useState<Set<string>>(new Set());
+  const [lastSeenMap, setLastSeenMap] = useState<Map<string, string>>(new Map());
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; message: ChatMessage } | null>(null);
   const [recordingAudio, setRecordingAudio] = useState(false);
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
@@ -183,6 +196,7 @@ export function MessagingPage() {
 
   /* ── MessageGuard feedback ── */
   const [guardAlert, setGuardAlert] = useState<{ type: "warn" | "block"; message: string } | null>(null);
+  const [keyboardOffset, setKeyboardOffset] = useState(0);
   const guardAlertTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const myId = user?.id ?? "";
@@ -304,12 +318,19 @@ export function MessagingPage() {
       setOnlineUserIds((prev) => new Set(prev).add(data.userId));
     };
 
-    const handleOffline = (data: { userId: string }) => {
+    const handlePresenceSnapshot = (data: { userIds: string[] }) => {
+      setOnlineUserIds(new Set(data.userIds));
+    };
+
+    const handleOffline = (data: { userId: string; lastSeenAt?: string }) => {
       setOnlineUserIds((prev) => {
         const next = new Set(prev);
         next.delete(data.userId);
         return next;
       });
+      if (data.lastSeenAt) {
+        setLastSeenMap((prev) => new Map(prev).set(data.userId, data.lastSeenAt!));
+      }
     };
 
     const handleConvRead = (data: { conversationId: string; userId: string }) => {
@@ -330,6 +351,7 @@ export function MessagingPage() {
     on("message:deleted", handleDeletedMessage);
     on("typing:start", handleTypingStart);
     on("typing:stop", handleTypingStop);
+    on("presence:snapshot", handlePresenceSnapshot);
     on("user:online", handleOnline);
     on("user:offline", handleOffline);
     on("conversation:read", handleConvRead);
@@ -340,6 +362,7 @@ export function MessagingPage() {
       off("message:deleted", handleDeletedMessage);
       off("typing:start", handleTypingStart);
       off("typing:stop", handleTypingStop);
+      off("presence:snapshot", handlePresenceSnapshot);
       off("user:online", handleOnline);
       off("user:offline", handleOffline);
       off("conversation:read", handleConvRead);
@@ -564,18 +587,7 @@ export function MessagingPage() {
       const isAudio = file.type.startsWith("audio/");
       const isVideo = file.type.startsWith("video/");
 
-      let mediaUrl: string;
-      if (isImage) {
-        const results = await compressAndEncodeMedia([file]);
-        mediaUrl = results[0];
-      } else {
-        // Convert to base64
-        mediaUrl = await new Promise<string>((resolve) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result as string);
-          reader.readAsDataURL(file);
-        });
-      }
+      const mediaUrl = await prepareMediaUrl(file);
 
       emit("message:send", {
         conversationId: activeConv.id,
@@ -630,7 +642,7 @@ export function MessagingPage() {
   const startRecordingAudio = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
+      const recorder = createOptimizedAudioRecorder(stream);
       audioChunksRef.current = [];
 
       // Set up waveform analyser
@@ -645,13 +657,13 @@ export function MessagingPage() {
       recorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
       recorder.onstop = () => {
         const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
-        const reader = new FileReader();
-        reader.onloadend = () => {
+        void (async () => {
           if (!activeConv) return;
+          const mediaUrl = await prepareMediaUrl(createUploadFile(blob, "audio-message.webm", "audio/webm"));
           emit("message:send", {
             conversationId: activeConv.id,
             type: "AUDIO",
-            mediaUrl: reader.result as string,
+            mediaUrl,
             fileName: "audio-message.webm",
           }, (res: any) => {
             if (res && !res.ok) {
@@ -662,8 +674,7 @@ export function MessagingPage() {
               showGuardAlert("warn", res.guardWarning);
             }
           });
-        };
-        reader.readAsDataURL(blob);
+        })();
         stream.getTracks().forEach((t) => t.stop());
         actx.close();
       };
@@ -744,6 +755,36 @@ export function MessagingPage() {
     return () => window.removeEventListener("click", close);
   }, []);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+
+    const updateKeyboardOffset = () => {
+      if (!window.matchMedia("(max-width: 768px)").matches) {
+        setKeyboardOffset(0);
+        return;
+      }
+
+      const nextOffset = Math.max(0, Math.round(window.innerHeight - viewport.height - viewport.offsetTop));
+      setKeyboardOffset(nextOffset);
+      if (nextOffset > 0) {
+        messagesEndRef.current?.scrollIntoView({ block: "end" });
+      }
+    };
+
+    updateKeyboardOffset();
+    viewport.addEventListener("resize", updateKeyboardOffset);
+    viewport.addEventListener("scroll", updateKeyboardOffset);
+    window.addEventListener("orientationchange", updateKeyboardOffset);
+
+    return () => {
+      viewport.removeEventListener("resize", updateKeyboardOffset);
+      viewport.removeEventListener("scroll", updateKeyboardOffset);
+      window.removeEventListener("orientationchange", updateKeyboardOffset);
+    };
+  }, []);
+
   /* ── Guards ── */
   if (isLoading) return <div className="msg-loading">Chargement...</div>;
   if (!isLoggedIn) return <Navigate to="/login" replace />;
@@ -759,7 +800,10 @@ export function MessagingPage() {
     : [];
 
   return (
-    <div className="msg-shell">
+    <div
+      className="msg-shell"
+      style={{ "--ks-kb-offset": `${keyboardOffset}px` } as CSSProperties}
+    >
       {/* ══ Incoming call overlay ══ */}
       {callState && callState.status === "ringing" && callState.direction === "incoming" && (
         <div className="msg-call-overlay">
@@ -996,7 +1040,11 @@ export function MessagingPage() {
                     ? `${typingNames.join(", ")} écrit${typingNames.length > 1 ? "ent" : ""}...`
                     : !activeConv.isGroup && getOtherUserId(activeConv, myId) && onlineUserIds.has(getOtherUserId(activeConv, myId)!)
                     ? "En ligne"
-                    : ""}
+                    : !activeConv.isGroup && (() => {
+                        const otherId = getOtherUserId(activeConv, myId);
+                        return otherId && lastSeenMap.has(otherId) ? formatLastSeen(lastSeenMap.get(otherId)!) : "";
+                      })()
+                  }
                 </span>
               </div>
               <div className="msg-chat-header-actions">
@@ -1064,7 +1112,10 @@ export function MessagingPage() {
                           <span className="msg-time">{new Date(msg.createdAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</span>
                           {msg.isEdited && <span className="msg-edited">modifié</span>}
                           {isMine && (
-                            <span className="msg-read-status">
+                            <span
+                              className={`msg-read-status${readByOthers.length > 0 ? " msg-read-status--read" : ""}`}
+                              title={readByOthers.length > 0 ? "Lu" : "Envoyé"}
+                            >
                               {readByOthers.length > 0 ? "✓✓" : "✓"}
                             </span>
                           )}

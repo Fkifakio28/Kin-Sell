@@ -1,4 +1,5 @@
 import "./terms.css";
+import { SeoMeta } from "../../components/SeoMeta";
 
 /* ── Icons ── */
 const IconCheck = () => (
@@ -15,6 +16,11 @@ const IconX = () => (
 export function TermsPage() {
   return (
     <div className="terms">
+      <SeoMeta
+        title="Conditions d'utilisation | Kin-Sell"
+        description="Lisez les conditions générales d'utilisation de Kin-Sell: droits des utilisateurs, responsabilités, contenus autorisés et règles de la plateforme."
+        canonical="https://kin-sell.com/terms"
+      />
       {/* ══════ HERO ══════ */}
       <section className="terms-hero">
         <div className="terms-hero-glow" aria-hidden="true" />
