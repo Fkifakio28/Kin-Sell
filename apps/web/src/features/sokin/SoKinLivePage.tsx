@@ -185,6 +185,7 @@ function LiveViewer({
   const heartIdRef = useRef(0);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const chatPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const statusPollInFlightRef = useRef(false);
   const isMobile = useIsMobile();
   const [deviceOrientation, setDeviceOrientation] = useState<'portrait' | 'landscape'>('portrait');
 
@@ -238,15 +239,30 @@ function LiveViewer({
 
   // Polling du live status
   useEffect(() => {
+    let cancelled = false;
     const poll = setInterval(async () => {
+      if (statusPollInFlightRef.current) return;
+      statusPollInFlightRef.current = true;
       try {
         const updated = await sokinLive.get(live.id);
+        if (cancelled) return;
         setLocalViewers(updated.viewerCount);
         setLocalLikes(updated.likesCount);
-        setLiveStatus(updated.status);
+        // Stabilisation: ne jamais revenir de LIVE vers WAITING
+        // (évite les effets visuels de coupure/redémarrage)
+        setLiveStatus((prev) => {
+          if (prev === 'LIVE' && updated.status === 'WAITING') return prev;
+          return updated.status;
+        });
       } catch { /* ignore */ }
+      finally {
+        statusPollInFlightRef.current = false;
+      }
     }, 5000);
-    return () => clearInterval(poll);
+    return () => {
+      cancelled = true;
+      clearInterval(poll);
+    };
   }, [live.id]);
 
   useEffect(() => {
@@ -351,6 +367,11 @@ function LiveViewer({
                 <span>EN DIRECT</span>
               </div>
               <p className="sklive-live-title">{live.title}</p>
+              {!live.replayUrl && (
+                <p className="sklive-live-title" style={{ fontSize: '0.85rem', opacity: 0.85 }}>
+                  Flux video non configure pour ce live.
+                </p>
+              )}
               {isHost && (
                 <button type="button" className="sklive-end-broadcast-btn" onClick={handleEndLive}>
                   ⬛ Terminer le live

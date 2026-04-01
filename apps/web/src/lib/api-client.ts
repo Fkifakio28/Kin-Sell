@@ -1554,6 +1554,7 @@ export type SoKinLiveData = {
   title: string;
   description: string | null;
   thumbnailUrl: string | null;
+  replayUrl?: string | null;
   aspect: 'LANDSCAPE' | 'PORTRAIT';
   status: 'WAITING' | 'LIVE' | 'ENDED' | 'CANCELED';
   viewerCount: number;
