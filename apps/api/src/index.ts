@@ -49,7 +49,7 @@ if (env.NODE_ENV === "production") {
 }
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
 app.use(compression());
-app.use(pinoHttp({ logger, autoLogging: { ignore: (req) => (req as any).url === "/health" } }));
+app.use(pinoHttp({ logger, autoLogging: { ignore: (req: any) => req.url === "/health" } }) as any);
 app.use(express.json({ limit: "20mb" }));
 app.use(cors({ origin: env.CORS_ORIGIN }));
 
