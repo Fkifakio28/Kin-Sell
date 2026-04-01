@@ -915,6 +915,65 @@ export function UserDashboard() {
     setUploadPreviews(prev => prev.filter((_, i) => i !== index));
   };
 
+  useEffect(() => {
+    if (!buyerConfirmOrderId || buyerConfirmMode !== 'scan') {
+      return;
+    }
+
+    let scanner: any = null;
+    let cancelled = false;
+
+    setBuyerConfirmScanError(null);
+    setBuyerConfirmScanMessage(null);
+
+    const startScanner = async () => {
+      try {
+        const { Html5Qrcode } = await import('html5-qrcode');
+        if (cancelled) {
+          return;
+        }
+
+        scanner = new Html5Qrcode('ks-order-validation-reader', { verbose: false });
+        await scanner.start(
+          { facingMode: 'environment' },
+          { fps: 10, qrbox: { width: 220, height: 220 }, aspectRatio: 1 },
+          (decodedText: string) => {
+            const scannedCode = extractValidationCodeFromQrPayload(decodedText, buyerConfirmOrderId);
+            if (!scannedCode) {
+              setBuyerConfirmScanError(t('user.validationQrInvalid'));
+              return;
+            }
+
+            setBuyerConfirmCode(scannedCode);
+            setBuyerConfirmMode('manual');
+            setBuyerConfirmScanMessage(t('user.validationScanDetected'));
+            setBuyerConfirmScanError(null);
+          },
+          () => {}
+        );
+
+        if (!cancelled) {
+          setBuyerConfirmScanMessage(t('user.validationScanReady'));
+        }
+      } catch {
+        if (!cancelled) {
+          setBuyerConfirmScanError(t('user.validationScanError'));
+        }
+      }
+    };
+
+    void startScanner();
+
+    return () => {
+      cancelled = true;
+      if (scanner) {
+        void scanner.stop().catch(() => {}).finally(() => {
+          scanner?.clear();
+        });
+      }
+    };
+  }, [buyerConfirmMode, buyerConfirmOrderId, t]);
+
   if (isLoading) {
     return (
       <div className="ud-shell">
@@ -1286,65 +1345,6 @@ export function UserDashboard() {
       setBuyerConfirmBusy(false);
     }
   };
-
-  useEffect(() => {
-    if (!buyerConfirmOrderId || buyerConfirmMode !== 'scan') {
-      return;
-    }
-
-    let scanner: any = null;
-    let cancelled = false;
-
-    setBuyerConfirmScanError(null);
-    setBuyerConfirmScanMessage(null);
-
-    const startScanner = async () => {
-      try {
-        const { Html5Qrcode } = await import('html5-qrcode');
-        if (cancelled) {
-          return;
-        }
-
-        scanner = new Html5Qrcode('ks-order-validation-reader', { verbose: false });
-        await scanner.start(
-          { facingMode: 'environment' },
-          { fps: 10, qrbox: { width: 220, height: 220 }, aspectRatio: 1 },
-          (decodedText: string) => {
-            const scannedCode = extractValidationCodeFromQrPayload(decodedText, buyerConfirmOrderId);
-            if (!scannedCode) {
-              setBuyerConfirmScanError(t('user.validationQrInvalid'));
-              return;
-            }
-
-            setBuyerConfirmCode(scannedCode);
-            setBuyerConfirmMode('manual');
-            setBuyerConfirmScanMessage(t('user.validationScanDetected'));
-            setBuyerConfirmScanError(null);
-          },
-          () => {}
-        );
-
-        if (!cancelled) {
-          setBuyerConfirmScanMessage(t('user.validationScanReady'));
-        }
-      } catch {
-        if (!cancelled) {
-          setBuyerConfirmScanError(t('user.validationScanError'));
-        }
-      }
-    };
-
-    void startScanner();
-
-    return () => {
-      cancelled = true;
-      if (scanner) {
-        void scanner.stop().catch(() => {}).finally(() => {
-          scanner?.clear();
-        });
-      }
-    };
-  }, [buyerConfirmMode, buyerConfirmOrderId, t]);
 
   /* ── Computed: all seller / buyer orders + filtered ── */
   const allSellerOrders = [...sellerInProgress, ...sellerRecent, ...sellerHistory]
