@@ -105,6 +105,8 @@ export function HomePage() {
   const [tipIndex, setTipIndex] = useState(0);
   const [shopIndex, setShopIndex] = useState(0);
   const [sellerIndex, setSellerIndex] = useState(0);
+  const [blogIndex, setBlogIndex] = useState(0);
+  const [heroCatIndex, setHeroCatIndex] = useState(0);
   const [accountMenuPos, setAccountMenuPos] = useState<{ top: number; left: number; width: number } | null>(null);
   const [liveProducts, setLiveProducts] = useState<PublicListing[]>([]);
   const [liveServices, setLiveServices] = useState<PublicListing[]>([]);
@@ -115,6 +117,9 @@ export function HomePage() {
   const [blogPosts, setBlogPosts] = useState<PublicBlogPost[]>([]);
   const [buyerCart, setBuyerCart] = useState<CartSummary | null>(null);
   const [notificationsCount, setNotificationsCount] = useState(0);
+  const [notifDropdownOpen, setNotifDropdownOpen] = useState(false);
+  const [notifItems, setNotifItems] = useState<{ id: string; label: string; detail: string; icon: string; section: string }[]>([]);
+  const notifRef = useRef<HTMLDivElement>(null);
   const [sellerStats, setSellerStats] = useState<{ total: number; delivered: number; inProgress: number; revenue: number }>({ total: 0, delivered: 0, inProgress: 0, revenue: 0 });
   const [lastBuyerOrder, setLastBuyerOrder] = useState<OrderSummary | null>(null);
   const sokinTimer = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -194,6 +199,7 @@ export function HomePage() {
     if (!isLoggedIn) {
       setBuyerCart(null);
       setNotificationsCount(0);
+      setNotifItems([]);
       setSellerStats({ total: 0, delivered: 0, inProgress: 0, revenue: 0 });
       setLastBuyerOrder(null);
       return;
@@ -210,7 +216,21 @@ export function HomePage() {
         ]);
         if (cancelled) return;
         if (cart) setBuyerCart(cart);
-        setNotificationsCount((buyerNotifs?.orders.length ?? 0) + (sellerNotifs?.orders.length ?? 0));
+        // Build notification items
+        const items: typeof notifItems = [];
+        if (buyerNotifs) {
+          for (const o of buyerNotifs.orders) {
+            const sl = o.status === 'SHIPPED' ? 'Expédié' : o.status === 'CONFIRMED' ? 'Confirmé' : 'En cours';
+            items.push({ id: `buy-${o.id}`, label: `Commande ${sl}`, detail: `#${o.id.slice(0, 8).toUpperCase()} — ${o.itemsCount} article${o.itemsCount > 1 ? 's' : ''}`, icon: '📦', section: 'purchases' });
+          }
+        }
+        if (sellerNotifs) {
+          for (const o of sellerNotifs.orders) {
+            items.push({ id: `sell-${o.id}`, label: 'Nouvelle commande reçue', detail: `#${o.id.slice(0, 8).toUpperCase()} de ${o.buyer.displayName}`, icon: '🛒', section: 'sales' });
+          }
+        }
+        setNotifItems(items);
+        setNotificationsCount(items.length);
         if (sellerData) {
           const all = sellerData.orders;
           setSellerStats({
@@ -301,13 +321,44 @@ export function HomePage() {
     return () => clearInterval(timer);
   }, [sokinFeed.length]);
 
+  // Blog auto-rotate
+  useEffect(() => {
+    if (blogPosts.length <= 1) return;
+    const timer = setInterval(() => {
+      setBlogIndex((prev) => (prev + 1) % blogPosts.length);
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [blogPosts.length]);
+
+  // Hero categories auto-slide (groups of 5)
+  const HERO_CATS_PER_SLIDE = 5;
+  const heroCatSlides = Math.ceil(PRODUCT_CATEGORIES.length / HERO_CATS_PER_SLIDE);
+  useEffect(() => {
+    if (heroCatSlides <= 1) return;
+    const timer = setInterval(() => {
+      setHeroCatIndex((prev) => (prev + 1) % heroCatSlides);
+    }, 3500);
+    return () => clearInterval(timer);
+  }, [heroCatSlides]);
+
   // Close popups on Escape
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") { setIsInfoOpen(false); setIsAccountOpen(false); }
+      if (e.key === "Escape") { setIsInfoOpen(false); setIsAccountOpen(false); setNotifDropdownOpen(false); }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
+  }, []);
+
+  // Close notif dropdown on click outside
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
+        setNotifDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
   }, []);
 
   const handleSearch = (e: FormEvent<HTMLFormElement>) => {
@@ -364,18 +415,71 @@ export function HomePage() {
           <button type="button" className="h-action-btn ks-help-btn" onClick={() => setIsInfoOpen(true)} aria-label={t('home.info')} title={t('home.info')}>
             <span>?</span>
           </button>
-          {isLoggedIn && (
+          {isLoggedIn ? (
             <>
-              <button type="button" className="h-action-btn h-action-btn--notif" aria-label={t('home.notifications')} title={t('home.notifications')} onClick={() => { sessionStorage.setItem('ud-section', 'overview'); navigate(getDashboardPath(user?.role)); }}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-                {notificationsCount > 0 && <span className="h-notif-badge">{notificationsCount}</span>}
-              </button>
+              {/* Notifications dropdown */}
+              <div className="h-notif-wrap" ref={notifRef} style={{ position: 'relative' }}>
+                <button type="button" className="h-action-btn h-action-btn--notif" aria-label={t('home.notifications')} title={t('home.notifications')} onClick={() => setNotifDropdownOpen((p) => !p)}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                  {notificationsCount > 0 && <span className="h-notif-badge">{notificationsCount}</span>}
+                </button>
+                {notifDropdownOpen && (
+                  <div className="h-notif-dropdown glass-container">
+                    <div className="h-notif-dropdown-head">
+                      <strong>Notifications</strong>
+                      <span className="h-notif-dropdown-count">{notifItems.length}</span>
+                    </div>
+                    {notifItems.length > 0 ? (
+                      <div className="h-notif-dropdown-list">
+                        {notifItems.map((n) => (
+                          <button key={n.id} type="button" className="h-notif-dropdown-item" onClick={() => { setNotifDropdownOpen(false); sessionStorage.setItem('ud-section', n.section); navigate(getDashboardPath(user?.role)); }}>
+                            <span className="h-notif-dropdown-icon">{n.icon}</span>
+                            <div className="h-notif-dropdown-text">
+                              <span className="h-notif-dropdown-label">{n.label}</span>
+                              <span className="h-notif-dropdown-detail">{n.detail}</span>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="h-notif-dropdown-empty">Aucune notification</p>
+                    )}
+                  </div>
+                )}
+              </div>
               <button type="button" className="h-action-btn" aria-label={t('home.messaging')} title={t('home.messaging')} onClick={() => { sessionStorage.setItem('ud-section', 'messages'); navigate(getDashboardPath(user?.role)); }}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
               </button>
               <button type="button" className="h-action-btn h-action-btn--cart" aria-label={t('home.cartLabel')} title={t('home.cartLabel')} onClick={() => navigate('/cart')}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
                 {buyerCart && buyerCart.itemsCount > 0 && <span className="h-cart-count">{buyerCart.itemsCount}</span>}
+              </button>
+              {/* Account button */}
+              <button
+                type="button"
+                className="h-action-btn"
+                aria-label={t('home.account')}
+                title={t('home.account')}
+                onClick={(e) => {
+                  const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect();
+                  setAccountMenuPos({ top: rect.bottom + 10, left: rect.left - 120, width: 260 });
+                  setIsAccountOpen(true);
+                }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              </button>
+            </>
+          ) : (
+            <>
+              {/* Login / Register for non-logged users */}
+              <button
+                type="button"
+                className="h-action-btn"
+                aria-label="Connexion"
+                title="Connexion"
+                onClick={() => navigate('/login')}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
               </button>
             </>
           )}
@@ -394,6 +498,31 @@ export function HomePage() {
           </div>
         </div>
       </header>
+
+      {/* ═══════ HERO BANNER ═══════ */}
+      <section className="h-hero h-reveal">
+        <div className="h-hero-glow" aria-hidden="true" />
+        <div className="h-hero-content">
+          <h1 className="h-hero-title">
+            {isLoggedIn ? `Bienvenue, ${userName}` : 'Kin-Sell — Le marché de Kinshasa'}
+          </h1>
+          <p className="h-hero-sub">Achetez, vendez et découvrez les meilleures affaires</p>
+          <div className="h-hero-cats">
+            {PRODUCT_CATEGORIES.slice(heroCatIndex * HERO_CATS_PER_SLIDE, heroCatIndex * HERO_CATS_PER_SLIDE + HERO_CATS_PER_SLIDE).map((c) => (
+              <button key={c.code + c.nameKey} type="button" className="h-hero-chip" onClick={() => navigate(c.href)}>
+                <span>{c.code}</span> {t(c.nameKey)}
+              </button>
+            ))}
+          </div>
+          {heroCatSlides > 1 && (
+            <div className="h-sokin-dots" style={{ justifyContent: 'center', marginTop: '0.4rem' }}>
+              {Array.from({ length: heroCatSlides }).map((_, i) => (
+                <button key={i} type="button" className={`h-sokin-dot${i === heroCatIndex ? " active" : ""}`} onClick={() => setHeroCatIndex(i)} aria-label={`Catégories page ${i + 1}`} />
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
 
       {/* ═══════ MAIN 3-COLUMN ═══════ */}
       <main className="h-main">
@@ -723,14 +852,21 @@ export function HomePage() {
                   <span className="h-blog-card-title">Kin-Sell continue d'évoluer</span>
                   <span className="h-blog-card-excerpt">Les prochains articles publiés via l'espace admin apparaîtront ici.</span>
                 </div>
-              ) : blogPosts.map((post) => (
-                <button key={post.id} type="button" className="h-blog-card glass-card" onClick={() => navigate('/blog')}>
-                  <span className="h-blog-card-meta">{post.author} · {new Date(post.publishedAt ?? post.createdAt).toLocaleDateString('fr-FR')}</span>
-                  <span className="h-blog-card-title">{post.title}</span>
-                  <span className="h-blog-card-excerpt">{post.excerpt ?? `${post.content.slice(0, 110)}…`}</span>
+              ) : (
+                <button key={blogPosts[blogIndex % blogPosts.length].id} type="button" className="h-blog-card glass-card" onClick={() => navigate('/blog')}>
+                  <span className="h-blog-card-meta">{blogPosts[blogIndex % blogPosts.length].author} · {new Date(blogPosts[blogIndex % blogPosts.length].publishedAt ?? blogPosts[blogIndex % blogPosts.length].createdAt).toLocaleDateString('fr-FR')}</span>
+                  <span className="h-blog-card-title">{blogPosts[blogIndex % blogPosts.length].title}</span>
+                  <span className="h-blog-card-excerpt">{blogPosts[blogIndex % blogPosts.length].excerpt ?? `${blogPosts[blogIndex % blogPosts.length].content.slice(0, 110)}…`}</span>
                 </button>
-              ))}
+              )}
             </div>
+            {blogPosts.length > 1 && (
+              <div className="h-sokin-dots">
+                {blogPosts.map((_, i) => (
+                  <button key={i} type="button" className={`h-sokin-dot${i === blogIndex % blogPosts.length ? " active" : ""}`} onClick={() => setBlogIndex(i)} aria-label={`Blog ${i + 1}`} />
+                ))}
+              </div>
+            )}
             <button type="button" onClick={() => navigate('/blog')} className="glass-button secondary h-sokin-cta">{t('home.readBlog')}</button>
           </div>
 

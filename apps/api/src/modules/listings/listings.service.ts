@@ -398,6 +398,8 @@ export const latestListings = async (input: { type?: ListingType; limit: number 
     imageUrl: row.imageUrl,
     priceUsdCents: row.priceUsdCents,
     isNegotiable: row.isNegotiable,
+    latitude: row.latitude,
+    longitude: row.longitude,
     createdAt: row.createdAt,
     owner: {
       userId: row.ownerUserId,

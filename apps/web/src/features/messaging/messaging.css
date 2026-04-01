@@ -1186,3 +1186,32 @@
     width: auto;
   }
 }
+
+/* ═══ Mobile FAB — nouvelle conversation ═══ */
+.msg-mobile-fab {
+  display: none;
+}
+@media (max-width: 768px) {
+  .msg-mobile-fab {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: fixed;
+    bottom: 24px;
+    right: 20px;
+    z-index: 90;
+    width: 54px;
+    height: 54px;
+    border-radius: 50%;
+    border: none;
+    background: linear-gradient(135deg, var(--color-accent, #6f58ff) 0%, #9b7aff 100%);
+    color: #fff;
+    box-shadow: 0 4px 18px rgba(111, 88, 255, 0.45);
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+  .msg-mobile-fab:active {
+    transform: scale(0.92);
+    box-shadow: 0 2px 10px rgba(111, 88, 255, 0.35);
+  }
+}

@@ -9,6 +9,7 @@ const ExplorerProfilesPage = lazy(() => import("../../features/explorer/Explorer
 const SoKinPage = lazy(() => import("../../features/sokin/SoKinPage").then(m => ({ default: m.SoKinPage })));
 const SoKinProfilesPage = lazy(() => import("../../features/sokin/SoKinProfilesPage").then(m => ({ default: m.SoKinProfilesPage })));
 const SoKinMarketPage = lazy(() => import("../../features/sokin/SoKinMarketPage").then(m => ({ default: m.SoKinMarketPage })));
+const SoKinLivePage = lazy(() => import("../../features/sokin/SoKinLivePage").then(m => ({ default: m.SoKinLivePage })));
 const LoginPage = lazy(() => import("../../features/auth/LoginPage").then(m => ({ default: m.LoginPage })));
 const RegisterPage = lazy(() => import("../../features/auth/RegisterPage").then(m => ({ default: m.RegisterPage })));
 const SuspendedPage = lazy(() => import("../../features/auth/SuspendedPage").then(m => ({ default: m.SuspendedPage })));
@@ -27,6 +28,7 @@ const FaqPage = lazy(() => import("../../features/info-pages/FaqPage").then(m =>
 const ContactPage = lazy(() => import("../../features/info-pages/ContactPage").then(m => ({ default: m.ContactPage })));
 const PricingPage = lazy(() => import("../../features/pricing/PricingPage").then(m => ({ default: m.PricingPage })));
 const CartPage = lazy(() => import("../../features/cart/CartPage").then(m => ({ default: m.CartPage })));
+const MessagingPage = lazy(() => import("../../features/messaging/MessagingPage").then(m => ({ default: m.MessagingPage })));
 
 /* Param wrappers */
 import { PublicProfileWrapper, BusinessShopWrapper } from "./ParamWrappers";
@@ -35,9 +37,14 @@ import { PublicProfileWrapper, BusinessShopWrapper } from "./ParamWrappers";
 import { RootLayout } from "./RootLayout";
 import { AppLayout } from "./AppLayout";
 
+/* Error pages */
+import { NotFoundPage } from "../../features/error/NotFoundPage";
+import { ErrorBoundaryPage } from "../../features/error/ErrorBoundaryPage";
+
 export const router = createBrowserRouter([
   {
     element: <RootLayout />,
+    errorElement: <ErrorBoundaryPage />,
     children: [
       /* Pages without header (Home + So-Kin) */
       { path: "/", element: <HomeEntry /> },
@@ -48,6 +55,7 @@ export const router = createBrowserRouter([
       { path: "/sokin", element: <SoKinPage /> },
       { path: "/sokin/profiles", element: <SoKinProfilesPage /> },
       { path: "/sokin/market", element: <SoKinMarketPage /> },
+      { path: "/sokin/live", element: <SoKinLivePage /> },
 
       /* All other pages — with header */
       {
@@ -70,12 +78,17 @@ export const router = createBrowserRouter([
           { path: "/admin/dashboard", element: <AdminDashboard /> },
 
           { path: "/explorer", element: <ExplorerPage /> },
+          { path: "/messaging", element: <MessagingPage /> },
+          { path: "/messaging/:conversationId", element: <MessagingPage /> },
           { path: "/explorer/shops-online", element: <ExplorerShopsPage /> },
           { path: "/explorer/public-profiles", element: <ExplorerProfilesPage /> },
           { path: "/user/:username", element: <PublicProfileWrapper /> },
           { path: "/business/:slug", element: <BusinessShopWrapper /> },
         ],
       },
+
+      /* Catch-all 404 */
+      { path: "*", element: <NotFoundPage /> },
     ],
   },
 ]);

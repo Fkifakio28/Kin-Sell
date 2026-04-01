@@ -17,6 +17,7 @@
 import { CartStatus } from "@prisma/client";
 import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
+import { getMarketMedian, computePricePosition, getTrendingCategories, PRICE_THRESHOLD_PERCENT } from "../../shared/market/market-shared.js";
 
 // ─────────────────────────────────────────────
 // Utils
@@ -80,7 +81,6 @@ export async function getBasicInsights(userId: string): Promise<BasicInsights> {
     totalNegotiations,
     acceptedNegotiations,
     orderAgg,
-    trendingRaw,
     peakOrders,
   ] = await Promise.all([
     prisma.listing.count({ where: { ownerUserId: userId } }),
@@ -96,14 +96,6 @@ export async function getBasicInsights(userId: string): Promise<BasicInsights> {
       _count: { id: true },
       _sum: { totalUsdCents: true },
     }),
-    // Catégories tendances (7j)
-    prisma.listing.groupBy({
-      by: ["category"],
-      where: { status: "ACTIVE", createdAt: { gte: sevenDaysAgo } },
-      _count: { category: true },
-      orderBy: { _count: { category: "desc" } },
-      take: 5,
-    }),
     // Commandes par heure pour calculer best hour
     prisma.order.findMany({
       where: { createdAt: { gte: thirtyDaysAgo } },
@@ -111,6 +103,9 @@ export async function getBasicInsights(userId: string): Promise<BasicInsights> {
       take: 1000,
     }),
   ]);
+
+  // Catégories tendances via source unique (market-shared → SoKinTrend / fallback listings)
+  const trendingCategories = await getTrendingCategories(5);
 
   // Market position
   const avgMyPrice =
@@ -131,37 +126,17 @@ export async function getBasicInsights(userId: string): Promise<BasicInsights> {
     : {};
   const mainCategory = Object.entries(topCategory).sort((a, b) => b[1] - a[1])[0]?.[0];
 
+  // ── Position marché via source unique (market-shared) ──
   let marketMedianCents = avgMyPrice;
   if (mainCategory) {
-    const marketListings = await prisma.listing.findMany({
-      where: { category: mainCategory, status: "ACTIVE", priceUsdCents: { gt: 0 } },
-      select: { priceUsdCents: true },
-      orderBy: { priceUsdCents: "asc" },
-      take: 200,
-    });
-    if (marketListings.length > 0) {
-      const sorted = marketListings.map((l) => l.priceUsdCents).sort((a, b) => a - b);
-      const mid = Math.floor(sorted.length / 2);
-      marketMedianCents =
-        sorted.length % 2 !== 0 ? sorted[mid] : Math.round((sorted[mid - 1] + sorted[mid]) / 2);
-    }
+    const median = await getMarketMedian(mainCategory);
+    if (median.medianPriceCents > 0) marketMedianCents = median.medianPriceCents;
   }
 
-  let positionStatus: BasicInsights["marketPosition"]["status"];
-  let positionMessage: string;
-  const diff = avgMyPrice - marketMedianCents;
-  const diffPercent = marketMedianCents > 0 ? Math.round((diff / marketMedianCents) * 100) : 0;
-
-  if (diffPercent > 20) {
-    positionStatus = "ABOVE_MARKET";
-    positionMessage = `Vos prix sont ${diffPercent}% au-dessus du marché. Ajustez pour attirer plus d'acheteurs.`;
-  } else if (diffPercent < -20) {
-    positionStatus = "BELOW_MARKET";
-    positionMessage = `Vos prix sont ${Math.abs(diffPercent)}% sous le marché. Vous pouvez augmenter votre marge.`;
-  } else {
-    positionStatus = "ON_MARKET";
-    positionMessage = "Vos prix sont bien alignés avec le marché local. 👍";
-  }
+  const pricePos = computePricePosition(avgMyPrice, marketMedianCents);
+  const positionStatus = pricePos.position;
+  const positionMessage = pricePos.message;
+  const diffPercent = pricePos.diffPercent;
 
   // Best publication hour
   const hourCounts = new Array(24).fill(0);
@@ -208,7 +183,7 @@ export async function getBasicInsights(userId: string): Promise<BasicInsights> {
       status: positionStatus,
       message: positionMessage,
     },
-    trendingCategories: trendingRaw.map((t) => t.category),
+    trendingCategories,
     bestPublicationHour: {
       hour: bestHour,
       label: bestHourLabel,

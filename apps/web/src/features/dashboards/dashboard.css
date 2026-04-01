@@ -2465,6 +2465,21 @@
   color: #fde68a;
 }
 
+.ud-table-action-stack {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.ud-table-action--code {
+  border-color: rgba(251, 191, 36, 0.4);
+  color: #fde68a;
+}
+
+.ud-table-action--code:hover {
+  background: rgba(251, 191, 36, 0.18);
+}
+
 .ud-ord-vcode {
   display: inline-flex;
   align-items: center;
@@ -4664,6 +4679,145 @@
   flex-wrap: wrap;
 }
 
+.ud-validation-modal {
+  position: relative;
+  width: min(460px, 95vw);
+}
+
+.ud-validation-shield {
+  position: absolute;
+  inset: 0;
+  border-radius: 16px;
+  background: rgba(7, 5, 18, 0.88);
+  backdrop-filter: blur(8px);
+  display: grid;
+  place-items: center;
+  color: #fef08a;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  z-index: 4;
+  pointer-events: none;
+}
+
+.ud-validation-qr-card {
+  display: grid;
+  grid-template-columns: minmax(0, 240px) 1fr;
+  gap: 1rem;
+  align-items: center;
+  padding: 1rem;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(35, 24, 72, 0.42);
+}
+
+.ud-validation-sensitive {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.ud-validation-sensitive img {
+  pointer-events: none;
+  -webkit-user-drag: none;
+}
+
+.ud-validation-qr-image,
+.ud-validation-qr-placeholder {
+  width: 100%;
+  max-width: 240px;
+  aspect-ratio: 1;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #120b2b;
+}
+
+.ud-validation-qr-placeholder {
+  display: grid;
+  place-items: center;
+  color: var(--ud-text-2);
+  font-size: 2rem;
+  font-weight: 700;
+}
+
+.ud-validation-qr-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.ud-validation-qr-label,
+.ud-validation-qr-order {
+  color: var(--ud-text-2);
+  font-size: 0.82rem;
+}
+
+.ud-validation-qr-code {
+  font-family: monospace;
+  font-size: 1.35rem;
+  letter-spacing: 0.2em;
+  color: #fde68a;
+}
+
+.ud-validation-mode-switch {
+  display: inline-flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.ud-validation-mode-btn {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--ud-text-2);
+  padding: 0.55rem 0.9rem;
+  cursor: pointer;
+  transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+}
+
+.ud-validation-mode-btn--active {
+  background: rgba(111, 88, 255, 0.22);
+  border-color: rgba(111, 88, 255, 0.55);
+  color: var(--ud-text-1);
+}
+
+.ud-validation-scan-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.9rem;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(35, 24, 72, 0.35);
+}
+
+.ud-validation-scanner {
+  overflow: hidden;
+  border-radius: 14px;
+  background: rgba(7, 5, 18, 0.6);
+}
+
+.ud-validation-scanner video {
+  width: 100%;
+  border-radius: 14px;
+}
+
+.ud-validation-scan-message {
+  margin: 0;
+  color: #86efac;
+  font-size: 0.88rem;
+}
+
+.ud-validation-scan-error {
+  margin: 0;
+  color: #fca5a5;
+  font-size: 0.88rem;
+}
+
+.ud-validation-expiry {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--ud-text-2);
+}
+
 @media (max-width: 700px) {
   .ud-neg-grid {
     grid-template-columns: 1fr;
@@ -4672,6 +4826,12 @@
   .ud-neg-filters {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .ud-validation-qr-card {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    text-align: center;
   }
 }
 
@@ -5640,4 +5800,502 @@
   .bz-setup-panel { margin: 16px auto; padding: 18px 14px; }
   .ud-section { gap: 16px; }
   .bz-shop-photos-grid { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); }
+}
+
+/* ══════════════════════════════════════
+   KIN-SELL ANALYTIQUE – User Dashboard
+   ══════════════════════════════════════ */
+
+.ud-analytics-loading {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+  animation: udAnalyticsPulse 1.2s ease-in-out infinite;
+}
+
+@keyframes udAnalyticsPulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
+.ud-analytics-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.ud-analytics-card {
+  padding: 16px;
+  border: 1px solid rgba(111, 88, 255, 0.2);
+  border-radius: var(--radius-lg);
+}
+
+.ud-analytics-card--wide {
+  grid-column: 1 / -1;
+}
+
+.ud-analytics-card-title {
+  font-size: 13px;
+  font-weight: 700;
+  margin: 0 0 12px;
+  background: linear-gradient(135deg, #b9a6ff, #6f58ff);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.ud-analytics-stats {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.ud-analytics-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.ud-analytics-stat-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.ud-analytics-stat-label {
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+}
+
+.ud-analytics-market p {
+  margin: 4px 0;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+
+.ud-analytics-market-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.ud-analytics-market-badge--below-market { background: rgba(239, 68, 68, 0.15); color: #f87171; }
+.ud-analytics-market-badge--on-market { background: rgba(74, 222, 128, 0.15); color: #4ade80; }
+.ud-analytics-market-badge--above-market { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
+
+.ud-analytics-trending {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ud-analytics-trending-item {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+}
+
+.ud-analytics-trending-count {
+  font-weight: 600;
+  color: var(--color-accent, #b9a6ff);
+}
+
+.ud-analytics-reco-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  color: var(--color-text-primary);
+}
+
+.ud-analytics-reco-list li {
+  margin-bottom: 4px;
+}
+
+/* ── Funnel ── */
+
+.ud-analytics-funnel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ud-analytics-funnel-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.ud-analytics-funnel-label {
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+}
+
+.ud-analytics-funnel-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.ud-analytics-funnel-arrow {
+  font-size: 18px;
+  color: var(--color-text-tertiary);
+}
+
+.ud-analytics-funnel-rate {
+  margin-left: auto;
+  font-size: 13px;
+  font-weight: 600;
+  color: #4ade80;
+}
+
+/* ── Audience ── */
+
+.ud-analytics-audience {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ud-analytics-audience-seg {
+  display: grid;
+  grid-template-columns: 120px 1fr 40px;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.ud-analytics-audience-bar {
+  height: 8px;
+  border-radius: 4px;
+  background: rgba(111, 88, 255, 0.15);
+  overflow: hidden;
+}
+
+.ud-analytics-audience-fill {
+  height: 100%;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #6f58ff, #b9a6ff);
+}
+
+.ud-analytics-audience-pct {
+  text-align: right;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+/* ── Predictions ── */
+
+.ud-analytics-predictions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ud-analytics-pred-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+}
+
+.ud-analytics-pred-score {
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.ud-analytics-pred-score--low { color: #4ade80; }
+.ud-analytics-pred-score--medium { color: #fbbf24; }
+.ud-analytics-pred-score--high { color: #f87171; }
+.ud-analytics-pred-score--growth { color: #6f58ff; }
+
+@media (max-width: 600px) {
+  .ud-analytics-grid { grid-template-columns: 1fr; }
+  .ud-analytics-audience-seg { grid-template-columns: 80px 1fr 35px; }
+}
+
+/* ══════════════════════════════════════
+   AI TOGGLES – Gestion IA section
+   ══════════════════════════════════════ */
+
+.ud-ai-toggles {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.ud-ai-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 0;
+  border-bottom: 1px solid rgba(111, 88, 255, 0.1);
+}
+
+.ud-ai-toggle-row:last-child {
+  border-bottom: none;
+}
+
+.ud-ai-toggle-row--locked {
+  opacity: 0.6;
+}
+
+.ud-ai-toggle-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.ud-ai-toggle-info strong {
+  font-size: 13px;
+  color: var(--color-text-primary);
+}
+
+.ud-ai-toggle-hint {
+  font-size: 11.5px;
+  color: var(--color-text-tertiary);
+  line-height: 1.35;
+}
+
+/* ── Toggle Switch ── */
+
+.ud-ai-switch {
+  position: relative;
+  width: 44px;
+  height: 24px;
+  border-radius: 12px;
+  border: 1px solid rgba(111, 88, 255, 0.25);
+  background: rgba(255, 255, 255, 0.06);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.25s, border-color 0.25s;
+  padding: 0;
+}
+
+.ud-ai-switch--on {
+  background: rgba(111, 88, 255, 0.4);
+  border-color: rgba(111, 88, 255, 0.6);
+}
+
+.ud-ai-switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--color-text-tertiary);
+  transition: transform 0.25s, background 0.25s;
+}
+
+.ud-ai-switch--on .ud-ai-switch-thumb {
+  transform: translateX(20px);
+  background: #b9a6ff;
+}
+
+/* ── Upgrade Link ── */
+
+.ud-ai-upgrade-link {
+  font-size: 12px;
+  font-weight: 600;
+  color: #fbbf24;
+  text-decoration: none;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.ud-ai-upgrade-link:hover {
+  text-decoration: underline;
+}
+
+/* ── Auto status badge ── */
+
+.ud-ai-auto-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  background: rgba(74, 222, 128, 0.1);
+  border: 1px solid rgba(74, 222, 128, 0.25);
+  font-size: 12px;
+  font-weight: 600;
+  color: #4ade80;
+}
+
+.ud-ai-auto-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #4ade80;
+  animation: udAiDotPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes udAiDotPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* ══════════════════════════════════════════════════════════
+   MOBILE HEADER — all dashboards (≤ 640px)
+   ══════════════════════════════════════════════════════════ */
+.dash-mobile-header {
+  display: none;                       /* hidden on desktop */
+}
+
+.ud-drawer-logout {
+  display: none;                       /* hidden on desktop/tablet */
+}
+
+@media (max-width: 640px) {
+  /* ── Header bar ── */
+  .dash-mobile-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 300;
+    padding: 10px 14px;
+    background: rgba(18, 11, 43, 0.85);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border-bottom: 1px solid rgba(111, 88, 255, 0.18);
+  }
+
+  .dash-mob-hamburger,
+  .dash-mob-search {
+    background: none;
+    border: none;
+    color: var(--color-text, #f0eef6);
+    font-size: 22px;
+    cursor: pointer;
+    padding: 6px 8px;
+    border-radius: 10px;
+    transition: background 0.2s;
+  }
+  .dash-mob-hamburger:hover,
+  .dash-mob-search:hover {
+    background: rgba(111, 88, 255, 0.15);
+  }
+
+  .dash-mob-logo {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    text-decoration: none;
+    color: var(--color-text, #f0eef6);
+    font-weight: 700;
+    font-size: 16px;
+  }
+  .dash-mob-logo img {
+    height: 30px;
+    width: auto;
+    border-radius: 6px;
+  }
+
+  /* ── Overlay ── */
+  .dash-mob-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(7, 5, 18, 0.6);
+    backdrop-filter: blur(3px);
+    z-index: 399;
+  }
+
+  /* ── Sidebar drawer (User + Business reuse .ud-sidebar) ── */
+  .ud-sidebar {
+    display: flex !important;     /* override the display:none at 640px */
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 270px;
+    z-index: 400;
+    transform: translateX(-100%);
+    transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+    overflow-y: auto;
+    flex-direction: column;
+    background: rgba(18, 11, 43, 0.97);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    border-right: 1px solid rgba(111, 88, 255, 0.15);
+  }
+  .ud-sidebar.ud-sidebar-open {
+    transform: translateX(0);
+  }
+
+  /* Show labels in the drawer even if sidebar was collapsed */
+  .ud-sidebar.ud-sidebar-open .ud-nav-label,
+  .ud-sidebar.ud-sidebar-open .ud-profile-info,
+  .ud-sidebar.ud-sidebar-open .ud-premium-cta {
+    display: block !important;
+  }
+
+  /* Hide collapse toggle in drawer */
+  .ud-sidebar .ud-collapse-btn {
+    display: none;
+  }
+
+  /* ── Drawer nav: vertical layout ── */
+  .ud-sidebar .ud-nav {
+    flex-direction: column;
+    gap: 2px;
+    padding: 0 8px;
+    width: auto;
+  }
+  .ud-sidebar .ud-nav-item {
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 10px;
+    padding: 10px 16px;
+    font-size: 13px;
+    min-width: unset;
+    white-space: normal;
+    border-radius: 10px;
+  }
+  .ud-sidebar .ud-nav-icon { font-size: 18px; width: auto; }
+
+  /* Show profile card inside drawer */
+  .ud-sidebar.ud-sidebar-open .ud-profile-card,
+  .ud-sidebar.ud-sidebar-open .bz-profile-card {
+    display: flex !important;
+  }
+
+  /* ── Logout button at drawer bottom ── */
+  .ud-drawer-logout {
+    display: block;
+    margin-top: auto;
+    padding: 12px 16px;
+  }
+  .ud-drawer-logout-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    padding: 10px 16px;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-radius: 10px;
+    background: rgba(239, 68, 68, 0.1);
+    color: #f87171;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  .ud-drawer-logout-btn:hover {
+    background: rgba(239, 68, 68, 0.2);
+  }
 }

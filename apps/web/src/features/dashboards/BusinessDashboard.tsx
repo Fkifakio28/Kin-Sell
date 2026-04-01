@@ -6,11 +6,13 @@ import { getDashboardPath } from '../../utils/role-routing';
 import { useLocaleCurrency } from '../../app/providers/LocaleCurrencyProvider';
 import { DashboardMessaging } from './DashboardMessaging';
 import {
-  ApiError, auth as authApi, businesses, listings, orders, billing, messaging, sokin, invalidateCache,
+  ApiError, auth as authApi, businesses, listings, orders, billing, messaging, sokin, invalidateCache, analyticsAi,
   type BusinessAccount, type MyListing, type MyListingsStats,
   type OrderSummary, type BillingPlanSummary, type OrderStatus,
-  type SoKinApiPost,
+  type SoKinApiPost, type BasicInsights, type DeepInsights,
 } from '../../lib/api-client';
+import { OrderValidationQrModal } from '../../components/OrderValidationQrModal';
+import LocationPicker from '../../components/LocationPicker';
 import './dashboard.css';
 
 type BizSection =
@@ -61,10 +63,18 @@ const INITIAL_BUSINESS_FORM = {
 
 export function BusinessDashboard() {
   const navigate = useNavigate();
-  const { user, isLoading, isLoggedIn, refreshUser } = useAuth();
+  const { user, isLoading, isLoggedIn, refreshUser, logout } = useAuth();
   const { t } = useLocaleCurrency();
-  const [activeSection, setActiveSection] = useState<BizSection>('dashboard');
+  const [activeSection, setActiveSection] = useState<BizSection>(() => {
+    const stored = sessionStorage.getItem('ud-section');
+    if (stored) {
+      sessionStorage.removeItem('ud-section');
+      return stored as BizSection;
+    }
+    return 'dashboard';
+  });
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [business, setBusiness] = useState<BusinessAccount | null>(null);
   const [businessLoading, setBusinessLoading] = useState(true);
   const [businessError, setBusinessError] = useState<string | null>(null);
@@ -78,6 +88,15 @@ export function BusinessDashboard() {
   const [listingStats, setListingStats] = useState<MyListingsStats | null>(null);
   const [myPlan, setMyPlan] = useState<BillingPlanSummary | null>(null);
   const [dataLoading, setDataLoading] = useState(false);
+  const [bizBasicInsights, setBizBasicInsights] = useState<BasicInsights | null>(null);
+  const [bizDeepInsights, setBizDeepInsights] = useState<DeepInsights | null>(null);
+  const [bizAnalyticsLoading, setBizAnalyticsLoading] = useState(false);
+  // ── AI preferences (localStorage-persisted) ──
+  const [bizAiAdviceEnabled, setBizAiAdviceEnabled] = useState(() => localStorage.getItem('ks-biz-ai-advice') !== 'off');
+  const [bizAiAutoNegoEnabled, setBizAiAutoNegoEnabled] = useState(() => localStorage.getItem('ks-biz-ai-auto-nego') === 'on');
+  const [bizAiCommandeEnabled, setBizAiCommandeEnabled] = useState(() => localStorage.getItem('ks-biz-ai-commande') !== 'off');
+  const [validationCodeBusyId, setValidationCodeBusyId] = useState<string | null>(null);
+  const [sellerValidationQr, setSellerValidationQr] = useState<{ orderId: string; code: string } | null>(null);
 
   // ─── Boutique ────────────────────────────────────────────
   const [shopSaving, setShopSaving] = useState(false);
@@ -113,7 +132,7 @@ export function BusinessDashboard() {
 
   // ─── Créer listing ───────────────────────────────────────
   const [createMode, setCreateMode] = useState<'produit' | 'service' | null>(null);
-  const [createForm, setCreateForm] = useState({ title: '', category: '', city: 'Kinshasa', priceCdf: '', stock: '', description: '', isNegotiable: true });
+  const [createForm, setCreateForm] = useState({ title: '', category: '', city: 'Kinshasa', priceCdf: '', stock: '', description: '', isNegotiable: true, latitude: -4.3216965, longitude: 15.3124553 });
   const [createBusy, setCreateBusy] = useState(false);
   const [createMsg, setCreateMsg] = useState<string | null>(null);
 
@@ -219,6 +238,54 @@ export function BusinessDashboard() {
     return () => { cancelled = true; };
   }, [business]);
 
+  /* ── Kin-Sell Analytique: fetch AI insights for business ── */
+  const bizHasAnalytics = useMemo(() => {
+    if (!myPlan) return false;
+    return myPlan.analyticsTier !== 'NONE';
+  }, [myPlan]);
+
+  const bizHasPremium = useMemo(() => {
+    return myPlan?.analyticsTier === 'PREMIUM';
+  }, [myPlan]);
+
+  useEffect(() => {
+    if (activeSection !== 'analytics' || !bizHasAnalytics || bizBasicInsights) return;
+    let cancelled = false;
+    setBizAnalyticsLoading(true);
+
+    const load = async () => {
+      try {
+        const basic = await analyticsAi.basic();
+        if (!cancelled) setBizBasicInsights(basic);
+        if (bizHasPremium) {
+          const deep = await analyticsAi.deep();
+          if (!cancelled) setBizDeepInsights(deep);
+        }
+      } catch { /* silent */ }
+      finally { if (!cancelled) setBizAnalyticsLoading(false); }
+    };
+
+    void load();
+    return () => { cancelled = true; };
+  }, [activeSection, bizHasAnalytics, bizHasPremium, bizBasicInsights]);
+
+  /* ── AI plan gating for business ── */
+  const bizHasIaMarchandPlan = useMemo(() => {
+    if (!myPlan) return false;
+    const planIncludes = ['BUSINESS', 'SCALE'].includes(myPlan.planCode);
+    const addonActive = myPlan.addOns?.some((a) => a.code === 'IA_MERCHANT' && a.status === 'ACTIVE');
+    return planIncludes || addonActive;
+  }, [myPlan]);
+
+  const bizHasIaOrderPlan = useMemo(() => {
+    if (!myPlan) return false;
+    const planIncludes = ['SCALE'].includes(myPlan.planCode);
+    const addonActive = myPlan.addOns?.some((a) => a.code === 'IA_ORDER' && a.status === 'ACTIVE');
+    return planIncludes || addonActive;
+  }, [myPlan]);
+
+  const bizAutoNegoActive = bizHasIaMarchandPlan && bizAiAutoNegoEnabled;
+
   // ─── Pré-remplir formulaires quand business change ───────
   useEffect(() => {
     if (!business) return;
@@ -305,13 +372,13 @@ export function BusinessDashboard() {
         priceUsdCents,
         stockQuantity: createMode === 'produit' && createForm.stock ? parseInt(createForm.stock) : null,
         description: createForm.description.trim() || null,
-        latitude: -4.3216965,
-        longitude: 15.3124553,
+        latitude: createForm.latitude,
+        longitude: createForm.longitude,
         isNegotiable: createForm.isNegotiable,
       });
       invalidateCache('/listings/mine');
       setCreateMsg(t('biz.listingSuccess'));
-      setCreateForm({ title: '', category: '', city: 'Kinshasa', priceCdf: '', stock: '', description: '', isNegotiable: true });
+      setCreateForm({ title: '', category: '', city: 'Kinshasa', priceCdf: '', stock: '', description: '', isNegotiable: true, latitude: -4.3216965, longitude: 15.3124553 });
       setCreateMode(null);
       const [lRes, sRes] = await Promise.allSettled([listings.mine({ limit: 50 }), listings.mineStats()]);
       if (lRes.status === 'fulfilled') setMyListings(lRes.value.listings);
@@ -430,6 +497,15 @@ export function BusinessDashboard() {
       const res = await orders.sellerOrders({ limit: 50 });
       setSellerOrders(res.orders);
     } catch { /* ignore */ }
+  };
+
+  const handleRevealCode = async (orderId: string) => {
+    setValidationCodeBusyId(orderId);
+    try {
+      const data = await orders.getValidationCode(orderId);
+      setSellerValidationQr({ orderId, code: data.validationCode });
+    } catch { /* ignore */ }
+    finally { setValidationCodeBusyId(null); }
   };
 
   // ─── So-Kin : publier / supprimer ───────────────────────
@@ -619,8 +695,21 @@ export function BusinessDashboard() {
 
   return (
     <div className={`ud-shell bz-shell${sidebarCollapsed ? ' ud-sidebar-collapsed' : ''}`}>
+      {/* ─── MOBILE HEADER ───────────────────────────────── */}
+      <header className="dash-mobile-header">
+        <button className="dash-mob-hamburger" onClick={() => setMobileSidebarOpen(o => !o)} aria-label="Menu">☰</button>
+        <Link to="/" className="dash-mob-logo">
+          <img src="/assets/kin-sell/logo.png" alt="Kin-Sell" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+          <span>Kin-Sell</span>
+        </Link>
+        <button className="dash-mob-search" aria-label="Rechercher">🔍</button>
+      </header>
+
+      {/* ─── OVERLAY MOBILE ──────────────────────────────── */}
+      {mobileSidebarOpen && <div className="dash-mob-overlay" onClick={() => setMobileSidebarOpen(false)} />}
+
       {/* ─── SIDEBAR ─────────────────────────────────────── */}
-      <aside className="ud-sidebar bz-sidebar">
+      <aside className={`ud-sidebar bz-sidebar${mobileSidebarOpen ? ' ud-sidebar-open' : ''}`}>
         <button
           type="button"
           className="ud-collapse-btn"
@@ -654,7 +743,7 @@ export function BusinessDashboard() {
               key={item.key}
               type="button"
               className={`ud-nav-item${activeSection === item.key ? ' ud-nav-item--active' : ''}`}
-              onClick={() => setActiveSection(item.key)}
+              onClick={() => { setActiveSection(item.key); setMobileSidebarOpen(false); }}
             >
               <span className="ud-nav-icon">{item.icon}</span>
               {!sidebarCollapsed && <span className="ud-nav-label">{t(item.labelKey)}</span>}
@@ -670,6 +759,12 @@ export function BusinessDashboard() {
             <a href="/forfaits" className="ud-premium-btn bz-upgrade-btn">{t('biz.upgradeBtn')}</a>
           </div>
         )}
+
+        <div className="ud-drawer-logout">
+          <button type="button" className="ud-drawer-logout-btn" onClick={() => { logout(); navigate('/'); }}>
+            🚪 {t('common.logout')}
+          </button>
+        </div>
       </aside>
 
       {/* ─── CONTENU PRINCIPAL ───────────────────────────── */}
@@ -1049,7 +1144,7 @@ export function BusinessDashboard() {
                   <div className="bz-setup-grid">
                     <label className="bz-setup-field"><span>{t('biz.titleLabel')} *</span><input type="text" required minLength={2} maxLength={200} value={createForm.title} onChange={e => setCreateForm(f => ({ ...f, title: e.target.value }))} placeholder={t('biz.titleProductPh')} /></label>
                     <label className="bz-setup-field"><span>{t('biz.categoryLabel')} *</span><input type="text" required value={createForm.category} onChange={e => setCreateForm(f => ({ ...f, category: e.target.value }))} placeholder={t('biz.categoryPh')} /></label>
-                    <label className="bz-setup-field"><span>{t('biz.cityLabel')} *</span><input type="text" required value={createForm.city} onChange={e => setCreateForm(f => ({ ...f, city: e.target.value }))} /></label>
+                    <label className="bz-setup-field"><span>{t('biz.cityLabel')} *</span><LocationPicker value={{ lat: createForm.latitude, lng: createForm.longitude, address: createForm.city }} onChange={({ address, city, lat, lng }) => setCreateForm(f => ({ ...f, city: city || address, latitude: lat, longitude: lng }))} placeholder="Kinshasa" /></label>
                     <label className="bz-setup-field"><span>{t('biz.priceCdf')} *</span><input type="number" required min={0} value={createForm.priceCdf} onChange={e => setCreateForm(f => ({ ...f, priceCdf: e.target.value }))} placeholder={t('biz.pricePh')} /></label>
                     <label className="bz-setup-field"><span>{t('biz.stockLabel')}</span><input type="number" min={0} value={createForm.stock} onChange={e => setCreateForm(f => ({ ...f, stock: e.target.value }))} placeholder={t('biz.stockPh')} /></label>
                     <label className="bz-setup-field bz-setup-field--full"><span>{t('biz.descriptionLabel')}</span><textarea rows={3} value={createForm.description} onChange={e => setCreateForm(f => ({ ...f, description: e.target.value }))} placeholder={t('biz.descProductPh')} /></label>
@@ -1105,7 +1200,7 @@ export function BusinessDashboard() {
                   <div className="bz-setup-grid">
                     <label className="bz-setup-field"><span>{t('biz.titleLabel')} *</span><input type="text" required minLength={2} maxLength={200} value={createForm.title} onChange={e => setCreateForm(f => ({ ...f, title: e.target.value }))} placeholder={t('biz.titleServicePh')} /></label>
                     <label className="bz-setup-field"><span>{t('biz.categoryLabel')} *</span><input type="text" required value={createForm.category} onChange={e => setCreateForm(f => ({ ...f, category: e.target.value }))} placeholder={t('biz.categoryServicePh')} /></label>
-                    <label className="bz-setup-field"><span>{t('biz.cityLabel')} *</span><input type="text" required value={createForm.city} onChange={e => setCreateForm(f => ({ ...f, city: e.target.value }))} /></label>
+                    <label className="bz-setup-field"><span>{t('biz.cityLabel')} *</span><LocationPicker value={{ lat: createForm.latitude, lng: createForm.longitude, address: createForm.city }} onChange={({ address, city, lat, lng }) => setCreateForm(f => ({ ...f, city: city || address, latitude: lat, longitude: lng }))} placeholder="Kinshasa" /></label>
                     <label className="bz-setup-field"><span>{t('biz.rateCdf')} *</span><input type="number" required min={0} value={createForm.priceCdf} onChange={e => setCreateForm(f => ({ ...f, priceCdf: e.target.value }))} placeholder={t('biz.ratePh')} /></label>
                     <label className="bz-setup-field bz-setup-field--full"><span>{t('biz.descriptionLabel')}</span><textarea rows={3} value={createForm.description} onChange={e => setCreateForm(f => ({ ...f, description: e.target.value }))} placeholder={t('biz.descServicePh')} /></label>
                     <label className="bz-setup-field" style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}><input type="checkbox" checked={createForm.isNegotiable} onChange={e => setCreateForm(f => ({ ...f, isNegotiable: e.target.checked }))} /><span>{t('negotiation.allowPrice')}</span></label>
@@ -1170,12 +1265,24 @@ export function BusinessDashboard() {
                           <td>{fmtK(toCdf(o.totalUsdCents))}</td>
                           <td><span className={s.cls}>{t(s.labelKey)}</span></td>
                           <td>
-                            {o.status === 'PENDING' && (
-                              <button type="button" className="ud-table-action" onClick={() => void handleOrderStatus(o.id, 'CONFIRMED')}>{t('biz.confirmOrder')} →</button>
-                            )}
-                            {o.status === 'CONFIRMED' && (
-                              <button type="button" className="ud-table-action" onClick={() => void handleOrderStatus(o.id, 'SHIPPED')}>{t('biz.shipOrder')} →</button>
-                            )}
+                            <div className="ud-table-action-stack">
+                              {o.status === 'PENDING' && (
+                                <button type="button" className="ud-table-action" onClick={() => void handleOrderStatus(o.id, 'CONFIRMED')}>{t('biz.confirmOrder')} →</button>
+                              )}
+                              {o.status === 'CONFIRMED' && (
+                                <button type="button" className="ud-table-action" onClick={() => void handleOrderStatus(o.id, 'SHIPPED')}>{t('biz.shipOrder')} →</button>
+                              )}
+                              {(o.status === 'PROCESSING' || o.status === 'SHIPPED') && (
+                                <button
+                                  type="button"
+                                  className="ud-table-action ud-table-action--code"
+                                  disabled={validationCodeBusyId === o.id}
+                                  onClick={() => void handleRevealCode(o.id)}
+                                >
+                                  {validationCodeBusyId === o.id ? '...' : '🔑 QR / Code'}
+                                </button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       );
@@ -1184,6 +1291,17 @@ export function BusinessDashboard() {
                 </table>
               )}
             </section>
+
+            {sellerValidationQr && (
+              <OrderValidationQrModal
+                orderId={sellerValidationQr.orderId}
+                code={sellerValidationQr.code}
+                title={t('user.validationQrTitle')}
+                helpText={t('user.validationQrHelp')}
+                closeLabel={t('common.close')}
+                onClose={() => setSellerValidationQr(null)}
+              />
+            )}
           </div>
         )}
 
@@ -1582,6 +1700,145 @@ export function BusinessDashboard() {
                 )}
               </div>
             </section>
+
+            {/* ── IA Analytique – Insights ── */}
+            {bizHasAnalytics && (bizAnalyticsLoading || bizBasicInsights) && (
+              <section className="ud-glass-panel bz-glass-panel">
+                <div className="ud-panel-head" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <h2 className="ud-panel-title">🤖 Kin-Sell Analytique</h2>
+                  {bizAnalyticsLoading && <span className="ud-analytics-loading">Analyse…</span>}
+                </div>
+
+                {bizBasicInsights && (
+                  <div className="ud-analytics-grid">
+                    <div className="ud-analytics-card glass-container">
+                      <h3 className="ud-analytics-card-title">{t('user.analyticsSummary')}</h3>
+                      <div className="ud-analytics-stats">
+                        <div className="ud-analytics-stat">
+                          <span className="ud-analytics-stat-value">{bizBasicInsights.activitySummary.listings}</span>
+                          <span className="ud-analytics-stat-label">Articles</span>
+                        </div>
+                        <div className="ud-analytics-stat">
+                          <span className="ud-analytics-stat-value">{bizBasicInsights.activitySummary.negotiations}</span>
+                          <span className="ud-analytics-stat-label">Négociations</span>
+                        </div>
+                        <div className="ud-analytics-stat">
+                          <span className="ud-analytics-stat-value">{bizBasicInsights.activitySummary.orders}</span>
+                          <span className="ud-analytics-stat-label">Commandes</span>
+                        </div>
+                        <div className="ud-analytics-stat">
+                          <span className="ud-analytics-stat-value">{fmtK(toCdf(bizBasicInsights.activitySummary.revenueCents))}</span>
+                          <span className="ud-analytics-stat-label">Revenus</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="ud-analytics-card glass-container">
+                      <h3 className="ud-analytics-card-title">{t('user.analyticsMarket')}</h3>
+                      <div className="ud-analytics-market">
+                        <span className={`ud-analytics-market-badge ud-analytics-market-badge--${bizBasicInsights.marketPosition.position.toLowerCase().replace('_', '-')}`}>
+                          {bizBasicInsights.marketPosition.position === 'BELOW_MARKET' ? '📉 Sous le marché' :
+                           bizBasicInsights.marketPosition.position === 'ON_MARKET' ? '📊 Au marché' : '📈 Au-dessus du marché'}
+                        </span>
+                        <p>Prix moyen : {fmtK(toCdf(bizBasicInsights.marketPosition.avgPriceCents))}</p>
+                        <p>Médiane : {fmtK(toCdf(bizBasicInsights.marketPosition.medianCents))}</p>
+                      </div>
+                    </div>
+
+                    {bizBasicInsights.trendingCategories.length > 0 && (
+                      <div className="ud-analytics-card glass-container">
+                        <h3 className="ud-analytics-card-title">{t('user.analyticsTrending')}</h3>
+                        <div className="ud-analytics-trending">
+                          {bizBasicInsights.trendingCategories.map((cat, i) => (
+                            <div key={i} className="ud-analytics-trending-item">
+                              <span>{cat.category}</span>
+                              <span className="ud-analytics-trending-count">{cat.count}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {bizBasicInsights.recommendations.length > 0 && (
+                      <div className="ud-analytics-card ud-analytics-card--wide glass-container">
+                        <h3 className="ud-analytics-card-title">🤖 {t('user.analyticsRecommendations')}</h3>
+                        <ul className="ud-analytics-reco-list">
+                          {bizBasicInsights.recommendations.map((r, i) => <li key={i}>{r}</li>)}
+                        </ul>
+                      </div>
+                    )}
+
+                    {bizDeepInsights && (
+                      <>
+                        <div className="ud-analytics-card glass-container">
+                          <h3 className="ud-analytics-card-title">{t('user.analyticsFunnel')}</h3>
+                          <div className="ud-analytics-funnel">
+                            <div className="ud-analytics-funnel-step">
+                              <span className="ud-analytics-funnel-label">Vues</span>
+                              <span className="ud-analytics-funnel-value">{bizDeepInsights.funnel.views}</span>
+                            </div>
+                            <span className="ud-analytics-funnel-arrow">→</span>
+                            <div className="ud-analytics-funnel-step">
+                              <span className="ud-analytics-funnel-label">Négociations</span>
+                              <span className="ud-analytics-funnel-value">{bizDeepInsights.funnel.negotiations}</span>
+                            </div>
+                            <span className="ud-analytics-funnel-arrow">→</span>
+                            <div className="ud-analytics-funnel-step">
+                              <span className="ud-analytics-funnel-label">Commandes</span>
+                              <span className="ud-analytics-funnel-value">{bizDeepInsights.funnel.orders}</span>
+                            </div>
+                            <span className="ud-analytics-funnel-rate">{(bizDeepInsights.funnel.conversionRate * 100).toFixed(1)}% conversion</span>
+                          </div>
+                        </div>
+
+                        {bizDeepInsights.audienceSegments.length > 0 && (
+                          <div className="ud-analytics-card glass-container">
+                            <h3 className="ud-analytics-card-title">{t('user.analyticsAudience')}</h3>
+                            <div className="ud-analytics-audience">
+                              {bizDeepInsights.audienceSegments.map((seg, i) => (
+                                <div key={i} className="ud-analytics-audience-seg">
+                                  <span>{seg.label}</span>
+                                  <div className="ud-analytics-audience-bar">
+                                    <div className="ud-analytics-audience-fill" style={{ width: `${seg.percent}%` }} />
+                                  </div>
+                                  <span className="ud-analytics-audience-pct">{seg.percent}%</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="ud-analytics-card glass-container">
+                          <h3 className="ud-analytics-card-title">{t('user.analyticsVelocity')}</h3>
+                          <p style={{ margin: '4px 0', fontSize: 13 }}>Jours moyens pour vendre : <strong>{bizDeepInsights.velocityMetrics.avgDaysToSell}</strong></p>
+                          {bizDeepInsights.velocityMetrics.fastestCategory && (
+                            <p style={{ margin: '4px 0', fontSize: 13 }}>Catégorie la plus rapide : <strong>{bizDeepInsights.velocityMetrics.fastestCategory}</strong></p>
+                          )}
+                        </div>
+
+                        <div className="ud-analytics-card glass-container">
+                          <h3 className="ud-analytics-card-title">{t('user.analyticsPredictions')}</h3>
+                          <div className="ud-analytics-predictions">
+                            <div className="ud-analytics-pred-item">
+                              <span>Risque de churn</span>
+                              <span className={`ud-analytics-pred-score ud-analytics-pred-score--${bizDeepInsights.predictiveScores.churnRisk > 0.6 ? 'high' : bizDeepInsights.predictiveScores.churnRisk > 0.3 ? 'medium' : 'low'}`}>
+                                {(bizDeepInsights.predictiveScores.churnRisk * 100).toFixed(0)}%
+                              </span>
+                            </div>
+                            <div className="ud-analytics-pred-item">
+                              <span>Potentiel de croissance</span>
+                              <span className="ud-analytics-pred-score ud-analytics-pred-score--growth">
+                                {(bizDeepInsights.predictiveScores.growthPotential * 100).toFixed(0)}%
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+              </section>
+            )}
           </div>
         )}
 
@@ -1793,6 +2050,98 @@ export function BusinessDashboard() {
                   <p style={{ fontSize: '0.84rem', color: 'var(--color-text-secondary)', margin: 0 }}>
                     {t('biz.deleteDoneDesc')}
                   </p>
+                </div>
+              )}
+            </section>
+
+            {/* ── Section: Gestion IA ── */}
+            <section className="ud-glass-panel ud-settings-section">
+              <div className="ud-settings-section-head">
+                <span className="ud-settings-section-icon">🤖</span>
+                <h3 className="ud-settings-section-title">{t('user.settingsAiTitle')}</h3>
+              </div>
+              <p className="ud-placeholder-text" style={{ margin: '0 0 12px', fontSize: '0.82rem' }}>
+                {t('user.settingsAiDesc')}
+              </p>
+
+              <div className="ud-ai-toggles">
+                {/* ── Conseils IA ── */}
+                <div className="ud-ai-toggle-row">
+                  <div className="ud-ai-toggle-info">
+                    <strong>💡 {t('user.aiAdviceLabel')}</strong>
+                    <span className="ud-ai-toggle-hint">{t('user.aiAdviceHint')}</span>
+                  </div>
+                  <button
+                    type="button"
+                    className={`ud-ai-switch${bizAiAdviceEnabled ? ' ud-ai-switch--on' : ''}`}
+                    onClick={() => {
+                      const next = !bizAiAdviceEnabled;
+                      setBizAiAdviceEnabled(next);
+                      localStorage.setItem('ks-biz-ai-advice', next ? 'on' : 'off');
+                    }}
+                    aria-pressed={bizAiAdviceEnabled}
+                  >
+                    <span className="ud-ai-switch-thumb" />
+                  </button>
+                </div>
+
+                {/* ── Marchandage automatique ── */}
+                <div className={`ud-ai-toggle-row${!bizHasIaMarchandPlan ? ' ud-ai-toggle-row--locked' : ''}`}>
+                  <div className="ud-ai-toggle-info">
+                    <strong>🤝 {t('user.aiAutoNegoLabel')}</strong>
+                    <span className="ud-ai-toggle-hint">
+                      {bizHasIaMarchandPlan ? t('user.aiAutoNegoHint') : t('user.aiAutoNegoLocked')}
+                    </span>
+                  </div>
+                  {bizHasIaMarchandPlan ? (
+                    <button
+                      type="button"
+                      className={`ud-ai-switch${bizAiAutoNegoEnabled ? ' ud-ai-switch--on' : ''}`}
+                      onClick={() => {
+                        const next = !bizAiAutoNegoEnabled;
+                        setBizAiAutoNegoEnabled(next);
+                        localStorage.setItem('ks-biz-ai-auto-nego', next ? 'on' : 'off');
+                      }}
+                      aria-pressed={bizAiAutoNegoEnabled}
+                    >
+                      <span className="ud-ai-switch-thumb" />
+                    </button>
+                  ) : (
+                    <Link to="/forfaits" className="ud-ai-upgrade-link">★ {t('user.aiUpgrade')}</Link>
+                  )}
+                </div>
+
+                {/* ── IA Commande ── */}
+                <div className={`ud-ai-toggle-row${!bizHasIaOrderPlan ? ' ud-ai-toggle-row--locked' : ''}`}>
+                  <div className="ud-ai-toggle-info">
+                    <strong>📦 {t('user.aiCommandeLabel')}</strong>
+                    <span className="ud-ai-toggle-hint">
+                      {bizHasIaOrderPlan ? t('user.aiCommandeHint') : t('user.aiCommandeLocked')}
+                    </span>
+                  </div>
+                  {bizHasIaOrderPlan ? (
+                    <button
+                      type="button"
+                      className={`ud-ai-switch${bizAiCommandeEnabled ? ' ud-ai-switch--on' : ''}`}
+                      onClick={() => {
+                        const next = !bizAiCommandeEnabled;
+                        setBizAiCommandeEnabled(next);
+                        localStorage.setItem('ks-biz-ai-commande', next ? 'on' : 'off');
+                      }}
+                      aria-pressed={bizAiCommandeEnabled}
+                    >
+                      <span className="ud-ai-switch-thumb" />
+                    </button>
+                  ) : (
+                    <Link to="/forfaits" className="ud-ai-upgrade-link">★ {t('user.aiUpgrade')}</Link>
+                  )}
+                </div>
+              </div>
+
+              {bizAutoNegoActive && (
+                <div className="ud-ai-auto-status">
+                  <span className="ud-ai-auto-dot" />
+                  <span>{t('user.aiAutoNegoActive')}</span>
                 </div>
               )}
             </section>

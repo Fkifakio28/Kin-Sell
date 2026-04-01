@@ -16,6 +16,12 @@ const updateMeSchema = z.object({
   workHours: z.string().max(80).optional()
 });
 
+const reportSchema = z.object({
+  reportedUserId: z.string().min(1),
+  reason: z.string().min(2).max(200),
+  message: z.string().max(500).optional(),
+});
+
 const router = Router();
 
 router.get("/me", requireAuth, asyncHandler(async (request: AuthenticatedRequest, response) => {
@@ -37,6 +43,12 @@ router.get("/public/:username", asyncHandler(async (request, response) => {
 router.get("/:id/public", asyncHandler(async (request, response) => {
   const result = await usersService.getPublicProfile(request.params.id);
   response.json(result);
+}));
+
+router.post("/report", requireAuth, asyncHandler(async (request: AuthenticatedRequest, response) => {
+  const payload = reportSchema.parse(request.body);
+  const result = await usersService.createReport(request.auth!.userId, payload);
+  response.status(201).json(result);
 }));
 
 export default router;

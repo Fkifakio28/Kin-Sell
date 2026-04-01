@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../app/providers/AuthProvider";
 import { useLocaleCurrency } from "../../app/providers/LocaleCurrencyProvider";
-import { orders, negotiations, type CartSummary, type NegotiationSummary, ApiError } from "../../lib/api-client";
+import { orders, negotiations, billing, orderAi, type CartSummary, type NegotiationSummary, type BillingPlanSummary, type CheckoutAdvice, ApiError } from "../../lib/api-client";
 import { NegotiationRespondPopup } from "../negotiations/NegotiationRespondPopup";
 import { NegotiatePopup } from "../negotiations/NegotiatePopup";
 import { BundleNegotiatePopup, type BundleListingItem } from "../negotiations/BundleNegotiatePopup";
@@ -30,6 +30,9 @@ export function CartPage() {
   const [cancellingNeg, setCancellingNeg] = useState<string | null>(null);
   const [bundleTarget, setBundleTarget] = useState<{ sellerId: string; sellerName: string; listings: BundleListingItem[] } | null>(null);
   const [negotiateItem, setNegotiateItem] = useState<{ id: string; title: string; imageUrl: string | null; type: string; priceUsdCents: number; ownerDisplayName: string } | null>(null);
+  const [activePlan, setActivePlan] = useState<BillingPlanSummary | null>(null);
+  const [checkoutAdviceData, setCheckoutAdviceData] = useState<CheckoutAdvice | null>(null);
+  const [adviceLoading, setAdviceLoading] = useState(false);
   const [checkoutForm, setCheckoutForm] = useState({
     deliveryAddress: "",
     serviceMaintenanceAddress: "",
@@ -70,6 +73,34 @@ export function CartPage() {
     void load();
     return () => { cancelled = true; };
   }, [isLoggedIn, authLoading]);
+
+  /* ── Fetch billing plan ── */
+  useEffect(() => {
+    if (!isLoggedIn || authLoading) return;
+    let cancelled = false;
+    billing.myPlan().then((p) => { if (!cancelled) setActivePlan(p); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [isLoggedIn, authLoading]);
+
+  /* ── IA Commande: fetch checkout advice when plan allows ── */
+  const aiCommandeOn = useMemo(() => localStorage.getItem('ks-ai-commande') !== 'off', []);
+  const hasIaOrder = useMemo(() => {
+    if (!aiCommandeOn || !activePlan) return false;
+    const planIncludes = ["AUTO", "PRO_VENDOR", "SCALE"].includes(activePlan.planCode);
+    const addonActive = activePlan.addOns?.some((a) => a.code === "IA_ORDER" && a.status === "ACTIVE");
+    return planIncludes || addonActive;
+  }, [activePlan, aiCommandeOn]);
+
+  useEffect(() => {
+    if (!hasIaOrder || !cart?.id) return;
+    let cancelled = false;
+    setAdviceLoading(true);
+    orderAi.checkoutAdvice(cart.id)
+      .then((data) => { if (!cancelled) setCheckoutAdviceData(data); })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setAdviceLoading(false); });
+    return () => { cancelled = true; };
+  }, [hasIaOrder, cart?.id]);
 
   /* ── Handlers ── */
   const handleQuantity = useCallback(async (itemId: string, next: number) => {
@@ -563,6 +594,49 @@ export function CartPage() {
               </div>
             )}
 
+            {/* ── IA Commande – Conseil checkout ── */}
+            {hasIaOrder && (adviceLoading || checkoutAdviceData) && (
+              <div className="cart-ai-panel glass-container">
+                <div className="cart-ai-header">
+                  <span className="cart-ai-icon">🤖</span>
+                  <span className="cart-ai-title">IA Commande</span>
+                  {adviceLoading && <span className="cart-ai-loading">Analyse…</span>}
+                </div>
+                {checkoutAdviceData && (
+                  <div className="cart-ai-body">
+                    {checkoutAdviceData.bundles.length > 0 && (
+                      <div className="cart-ai-section">
+                        <strong>📦 Offres groupées</strong>
+                        {checkoutAdviceData.bundles.map((b, i) => (
+                          <div key={i} className="cart-ai-bundle">
+                            <span>{b.title}</span>
+                            <span className="cart-ai-bundle-save">-{b.discount}% ({formatMoneyFromUsdCents(b.savingsCents)} économisés)</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {checkoutAdviceData.urgency?.active && (
+                      <div className="cart-ai-urgency">⚡ {checkoutAdviceData.urgency.message}</div>
+                    )}
+                    {checkoutAdviceData.shippingEstimate && (
+                      <div className="cart-ai-section">
+                        <strong>🚚 Livraison estimée</strong>
+                        <p>{checkoutAdviceData.shippingEstimate.minDays}–{checkoutAdviceData.shippingEstimate.maxDays} jours vers {checkoutAdviceData.shippingEstimate.city}</p>
+                      </div>
+                    )}
+                    {checkoutAdviceData.tips.length > 0 && (
+                      <div className="cart-ai-section">
+                        <strong>💡 Conseils</strong>
+                        <ul className="cart-ai-tips">
+                          {checkoutAdviceData.tips.map((tip, i) => <li key={i}>{tip}</li>)}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
             <textarea
               className="cart-checkout-notes"
               placeholder="Notes pour le vendeur (optionnel)..."
@@ -609,6 +683,7 @@ export function CartPage() {
           negotiation={respondNeg}
           onClose={() => setRespondNeg(null)}
           onUpdated={handleNegotiationUpdated}
+          showAi={localStorage.getItem('ks-ai-advice') !== 'off'}
         />
       )}
 

@@ -24,6 +24,33 @@ const schema = z.object({
   VAPID_PUBLIC_KEY: z.string().min(20).optional(),
   VAPID_PRIVATE_KEY: z.string().min(20).optional(),
   VAPID_SUBJECT: z.string().default("mailto:contact@kin-sell.com"),
+
+  // ── Mobile Money ──
+  ORANGE_MONEY_CLIENT_ID: z.string().optional(),
+  ORANGE_MONEY_CLIENT_SECRET: z.string().optional(),
+  ORANGE_MONEY_MERCHANT_KEY: z.string().optional(),
+  ORANGE_MONEY_BASE_URL: z.string().default("https://api.orange.com/orange-money-webpay/dev/v1"),
+  ORANGE_MONEY_RETURN_URL: z.string().default("http://localhost:5173/payment/callback"),
+  ORANGE_MONEY_CANCEL_URL: z.string().default("http://localhost:5173/payment/cancel"),
+  ORANGE_MONEY_NOTIF_URL: z.string().default("http://localhost:4000/mobile-money/webhook/orange"),
+
+  MPESA_API_KEY: z.string().optional(),
+  MPESA_PUBLIC_KEY: z.string().optional(),
+  MPESA_SERVICE_PROVIDER_CODE: z.string().optional(),
+  MPESA_BASE_URL: z.string().default("https://openapi.m-pesa.com/sandbox/ipg/v2/vodacomDRC"),
+  MPESA_CALLBACK_URL: z.string().default("http://localhost:4000/mobile-money/webhook/mpesa"),
+
+  // ── PayPal ──
+  PAYPAL_CLIENT_ID: z.string().optional(),
+  PAYPAL_CLIENT_SECRET: z.string().optional(),
+  PAYPAL_MERCHANT_EMAIL: z.string().default("filikifakio@gmail.com"),
+  PAYPAL_MODE: z.enum(["sandbox", "live"]).default("live"),
+  PAYPAL_IPN_VERIFY_URL: z.string().default("https://ipnpb.paypal.com/cgi-bin/webscr"),
+  PAYPAL_RETURN_URL: z.string().default("http://localhost:5173/forfaits?paid=1"),
+  PAYPAL_CANCEL_URL: z.string().default("http://localhost:5173/forfaits?cancelled=1"),
+
+  // ── Google Maps ──
+  GOOGLE_MAPS_API_KEY: z.string().optional(),
 });
 
 export const env = schema.parse(process.env);

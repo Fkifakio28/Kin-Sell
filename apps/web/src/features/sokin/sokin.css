@@ -84,6 +84,17 @@
   background: rgba(111, 88, 255, 0.14);
 }
 
+.sokin-nav-live {
+  position: relative;
+  border-color: rgba(255, 68, 68, 0.25);
+  color: #ff6b6b;
+}
+.sokin-nav-live:hover {
+  border-color: rgba(255, 68, 68, 0.5);
+  background: rgba(255, 68, 68, 0.1);
+  color: #ff4444;
+}
+
 .sokin-main {
   min-width: 0;
   display: flex;
@@ -1125,10 +1136,20 @@
     grid-template-columns: 1fr;
   }
 
+  /* Logo topbar doit apparaître AVANT la navigation */
+  .sokin-main {
+    order: -1;
+  }
+
   .sokin-left-nav {
     position: static;
     flex-direction: row;
     flex-wrap: wrap;
+    order: 0;
+    gap: 4px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--glass-border);
+    justify-content: center;
   }
 
   .sokin-left-ad {
@@ -1142,6 +1163,7 @@
 
   .sokin-topbar {
     grid-template-columns: 1fr;
+    gap: var(--space-sm);
   }
 
   .sokin-composer-head {

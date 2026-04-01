@@ -125,6 +125,14 @@ export const getPublicProfileByUsername = async (username: string) => {
         where: { isPublished: true, status: "ACTIVE" },
         take: 20,
         orderBy: { createdAt: "desc" }
+      },
+      reviewsReceived: {
+        orderBy: { createdAt: "desc" },
+        include: {
+          author: {
+            include: { profile: { select: { displayName: true, avatarUrl: true } } }
+          }
+        }
       }
     }
   });
@@ -132,6 +140,12 @@ export const getPublicProfileByUsername = async (username: string) => {
   if (!user || !user.profile) {
     throw new HttpError(404, "Profil public introuvable");
   }
+
+  const reviews = user.reviewsReceived;
+  const avgRating =
+    reviews.length > 0
+      ? Math.round((reviews.reduce((s, r) => s + r.rating, 0) / reviews.length) * 10) / 10
+      : 0;
 
   return {
     id: user.id,
@@ -147,6 +161,16 @@ export const getPublicProfileByUsername = async (username: string) => {
     workHours: user.profile.workHours,
     verificationStatus: user.profile.verificationStatus,
     accountType: user.preferredAccountType,
+    averageRating: avgRating,
+    reviewCount: reviews.length,
+    reviews: reviews.map((r) => ({
+      id: r.id,
+      authorName: r.author.profile?.displayName ?? "Utilisateur",
+      authorAvatar: r.author.profile?.avatarUrl ?? null,
+      rating: r.rating,
+      text: r.text,
+      createdAt: r.createdAt,
+    })),
     listings: user.listings.map((listing) => ({
       id: listing.id,
       type: listing.type,
@@ -158,4 +182,24 @@ export const getPublicProfileByUsername = async (username: string) => {
       createdAt: listing.createdAt
     }))
   };
+};
+
+export const createReport = async (
+  reporterUserId: string,
+  input: { reportedUserId: string; reason: string; message?: string }
+) => {
+  if (reporterUserId === input.reportedUserId) {
+    throw new HttpError(400, "Vous ne pouvez pas vous signaler vous-même");
+  }
+
+  const report = await prisma.report.create({
+    data: {
+      reporterUserId,
+      reportedUserId: input.reportedUserId,
+      reason: input.reason,
+      message: input.message ?? null,
+    },
+  });
+
+  return { id: report.id, status: report.status };
 };

@@ -7,10 +7,12 @@
  */
 
 import { Suspense, useState } from "react";
-import { Link, Outlet, useNavigate } from "react-router-dom";
+import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../app/providers/AuthProvider";
 import { getDashboardPath } from "../utils/role-routing";
 import "./mobile-shell.css";
+
+const DASHBOARD_PATHS = ["/account", "/business/dashboard", "/admin/dashboard"];
 
 // ─────────────────────────────────────────────────────────────
 // Create Menu (bottom sheet)
@@ -175,25 +177,31 @@ function MobileBottomNav({
 export function MobilePageShell() {
   const { isLoggedIn } = useAuth();
   const [createOpen, setCreateOpen] = useState(false);
+  const { pathname } = useLocation();
+  const isDashboard = DASHBOARD_PATHS.some((p) => pathname.startsWith(p));
 
   return (
     <>
-      <MobileTopBar />
+      {!isDashboard && <MobileTopBar />}
       <div className="msh-content">
         <Suspense fallback={<div className="ks-page-loader">Chargement…</div>}>
           <Outlet />
         </Suspense>
       </div>
-      <div className="msh-bottom-spacer" aria-hidden="true" />
-      <CreateMenu
-        open={createOpen}
-        onClose={() => setCreateOpen(false)}
-        isLoggedIn={isLoggedIn}
-      />
-      <MobileBottomNav
-        createOpen={createOpen}
-        onToggleCreate={() => setCreateOpen((p) => !p)}
-      />
+      {!isDashboard && (
+        <>
+          <div className="msh-bottom-spacer" aria-hidden="true" />
+          <CreateMenu
+            open={createOpen}
+            onClose={() => setCreateOpen(false)}
+            isLoggedIn={isLoggedIn}
+          />
+          <MobileBottomNav
+            createOpen={createOpen}
+            onToggleCreate={() => setCreateOpen((p) => !p)}
+          />
+        </>
+      )}
     </>
   );
 }

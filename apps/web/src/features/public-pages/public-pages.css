@@ -54,6 +54,27 @@
   object-fit: cover;
 }
 
+.public-avatar-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 3rem;
+  font-weight: 700;
+  color: var(--color-primary-hover);
+  background: var(--glass-bg);
+}
+
+.public-card-no-img {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  background: var(--glass-bg);
+  min-height: 120px;
+}
+
 .public-status-dot {
   position: absolute;
   bottom: 6px;
@@ -195,6 +216,18 @@
   font-weight: var(--font-weight-semibold);
   padding: 8px 14px;
   cursor: pointer;
+}
+
+.public-call-btn {
+  border: 1px solid rgba(185, 166, 255, 0.48);
+  background: rgba(73, 12, 128, 0.36);
+  color: var(--color-text-primary);
+  border-radius: 999px;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  padding: 8px 14px;
+  cursor: pointer;
+  text-align: center;
 }
 
 .public-kicker {
@@ -681,6 +714,202 @@
   font-size: var(--font-size-sm);
 }
 
+/* ── Clickable pill (rating) ── */
+.public-pill--clickable {
+  cursor: pointer;
+  border: 1px solid var(--glass-border);
+  background: rgba(35, 24, 72, 0.45);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  font-family: inherit;
+  border-radius: 999px;
+  padding: 5px 12px;
+  transition: border-color 0.2s, background 0.2s;
+}
+.public-pill--clickable:hover {
+  border-color: rgba(185, 166, 255, 0.72);
+  background: rgba(111, 88, 255, 0.18);
+}
+
+/* ── Star rating component ── */
+.pp-star-row {
+  display: inline-flex;
+  gap: 2px;
+  line-height: 1;
+}
+.pp-star {
+  color: rgba(185, 166, 255, 0.3);
+  transition: color 0.15s;
+}
+.pp-star--filled {
+  color: #f5c518;
+}
+.pp-star[role='button'] {
+  cursor: pointer;
+}
+
+/* ── "Voir tous les avis" button ── */
+.pp-show-all-btn {
+  margin-top: var(--space-sm);
+  align-self: center;
+}
+
+/* ── Popup overlay ── */
+.pp-popup-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  background: rgba(8, 5, 20, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-md);
+  animation: ppFadeIn 0.2s ease;
+}
+@keyframes ppFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.pp-popup {
+  width: 100%;
+  max-width: 640px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  background: rgba(18, 11, 43, 0.96);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+  animation: ppSlideUp 0.25s ease;
+}
+@keyframes ppSlideUp {
+  from { transform: translateY(24px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.pp-popup--sm {
+  max-width: 440px;
+}
+.pp-popup-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-md) var(--space-lg);
+  border-bottom: 1px solid var(--glass-border);
+}
+.pp-popup-head h2 {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  color: var(--color-text-primary);
+}
+.pp-popup-close {
+  border: none;
+  background: none;
+  color: var(--color-text-secondary);
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 8px;
+  transition: background 0.15s;
+}
+.pp-popup-close:hover {
+  background: rgba(111, 88, 255, 0.18);
+}
+.pp-popup-body {
+  padding: var(--space-lg);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+/* ── Review form ── */
+.pp-review-form label {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+.pp-review-textarea {
+  width: 100%;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: rgba(35, 24, 72, 0.38);
+  color: var(--color-text-primary);
+  padding: var(--space-sm);
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+  resize: vertical;
+}
+.pp-review-textarea:focus {
+  outline: none;
+  border-color: rgba(185, 166, 255, 0.62);
+}
+.pp-char-count {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-xs);
+  align-self: flex-end;
+}
+.pp-review-msg {
+  text-align: center;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+/* ── Qualifications & Expérience highlight section ── */
+.public-highlights-section {
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  background: rgba(35, 24, 72, 0.34);
+  backdrop-filter: blur(10px);
+  padding: var(--space-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+.public-highlights-title {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-xl);
+  font-family: var(--font-family-display);
+}
+.public-highlights-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-md);
+}
+.public-highlight-card {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-sm);
+  border: 1px solid rgba(185, 166, 255, 0.32);
+  border-radius: var(--radius-md);
+  background: rgba(111, 88, 255, 0.08);
+  backdrop-filter: blur(8px);
+  padding: var(--space-md);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.public-highlight-card:hover {
+  border-color: rgba(185, 166, 255, 0.62);
+  box-shadow: 0 8px 24px rgba(111, 88, 255, 0.16);
+}
+.public-highlight-icon {
+  font-size: 1.6rem;
+  flex-shrink: 0;
+}
+.public-highlight-card strong {
+  display: block;
+  color: var(--color-primary-hover);
+  font-size: var(--font-size-sm);
+  margin-bottom: 2px;
+}
+.public-highlight-card p {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+}
+
 .public-empty {
   border: 1px dashed var(--glass-border);
   border-radius: var(--radius-md);
@@ -724,6 +953,39 @@
   .public-title {
     font-size: var(--font-size-2xl);
   }
+
+  /* ── Hero profil : stack vertical sur tablette / mobile ── */
+  .public-hero-inner {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: var(--space-md);
+    padding: var(--space-lg);
+  }
+
+  .public-avatar-frame {
+    width: 100px;
+    height: 100px;
+  }
+
+  .public-hero-info {
+    align-items: center;
+  }
+
+  .public-hero-name-row {
+    justify-content: center;
+  }
+
+  .public-meta-row {
+    justify-content: center;
+  }
+
+  .public-hero-actions {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+    width: 100%;
+  }
 }
 
 @media (max-width: 560px) {
@@ -737,6 +999,58 @@
 
   .public-card-actions {
     flex-wrap: wrap;
+  }
+
+  /* ── Hero profil : encore plus compact ── */
+  .public-hero-inner {
+    padding: var(--space-md);
+    gap: var(--space-sm);
+  }
+
+  .public-avatar-frame {
+    width: 80px;
+    height: 80px;
+  }
+
+  .public-title {
+    font-size: var(--font-size-lg);
+  }
+
+  .public-hero-actions {
+    gap: 6px;
+  }
+
+  .public-contact-btn,
+  .public-call-btn,
+  .public-connect-btn,
+  .public-favorite-btn {
+    padding: 6px 10px;
+    font-size: var(--font-size-xs);
+  }
+
+  /* ── Highlights: stack on mobile ── */
+  .public-highlights-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .public-highlights-section {
+    padding: var(--space-md);
+  }
+
+  /* ── Popup: full-width on small screens ── */
+  .pp-popup {
+    max-width: 100%;
+    max-height: 90vh;
+    border-radius: var(--radius-md);
+  }
+  .pp-popup--sm {
+    max-width: 100%;
+  }
+  .pp-popup-head {
+    padding: var(--space-sm) var(--space-md);
+  }
+  .pp-popup-body {
+    padding: var(--space-md);
   }
 }
 
@@ -1258,10 +1572,55 @@
 }
 
 @media (max-width: 760px) {
+  .business-lux-hero {
+    border-radius: 18px;
+  }
+
+  .business-lux-hero-media {
+    aspect-ratio: 16 / 10;
+    min-height: 180px;
+  }
+
   .business-lux-hero-overlay {
-    left: 14px;
-    right: 14px;
-    bottom: 14px;
+    position: relative;
+    left: auto;
+    right: auto;
+    bottom: auto;
+    padding: var(--space-md);
+    gap: var(--space-sm);
+  }
+
+  .business-lux-logo-card {
+    min-height: 80px;
+    max-width: 80px;
+    margin: 0 auto;
+    border-radius: 16px;
+  }
+
+  .business-lux-logo {
+    width: 56px;
+    height: 56px;
+    font-size: 1.2rem;
+    border-radius: 14px;
+  }
+
+  .business-lux-identity-center {
+    padding: 14px 16px;
+    border-radius: 16px;
+    gap: 8px;
+  }
+
+  .business-lux-identity-center .public-title {
+    font-size: var(--font-size-lg);
+  }
+
+  .business-lux-cta-row {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .business-lux-side-info {
+    display: none;
   }
 
   .business-lux-promo {

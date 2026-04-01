@@ -1285,6 +1285,36 @@
     flex-direction: column;
     align-items: flex-start;
   }
+
+  /* Profils : shell + hero compact pour tablette */
+  .skd-shell {
+    padding: var(--space-lg) var(--space-md) var(--space-xl);
+  }
+
+  .skd-hero {
+    padding: var(--space-md);
+  }
+
+  .skd-hero-title {
+    font-size: clamp(1.2rem, 2.5vw, 1.8rem);
+  }
+
+  .skd-hero-metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .skd-hero-metrics article {
+    padding: 8px;
+  }
+
+  .skd-search-zone {
+    gap: var(--space-sm);
+  }
+
+  .skd-title {
+    font-size: var(--font-size-xl);
+  }
 }
 
 @media (max-width: 760px) {
@@ -1353,6 +1383,13 @@
    MOBILE ≤ 768px — SoKin Profils & Marché
    ══════════════════════════════════════════ */
 @media (max-width: 768px) {
+  /* Grille profils : 2 colonnes au lieu de 3 */
+  .skd-grid,
+  .skd-slider-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-sm);
+  }
+
   /* Shell principal : padding réduit + espace bottom nav */
   .skd-shell {
     padding: var(--space-md) var(--space-sm) var(--space-xl);
@@ -1539,5 +1576,28 @@
   .skd-inline-ad-cta {
     align-self: stretch;
     text-align: center;
+  }
+
+  /* Cards profils : plus compact sur mobile */
+  .skd-card-cover-wrap {
+    height: 130px;
+  }
+  .skd-card-body {
+    padding: var(--space-sm);
+    gap: 6px;
+  }
+  .skd-card-name {
+    font-size: var(--font-size-sm);
+    min-height: 2.4em;
+  }
+  .skd-card-domain {
+    font-size: 11px;
+    min-height: auto;
+    -webkit-line-clamp: 1;
+    line-clamp: 1;
+  }
+  .skd-card-meta-row {
+    gap: 6px;
+    font-size: 11px;
   }
 }

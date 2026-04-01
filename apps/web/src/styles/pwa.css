@@ -26,6 +26,10 @@
   border-color: rgba(111, 88, 255, 0.8);
 }
 .pwa-install-icon { font-size: 1rem; }
+@media (max-width: 900px) {
+  .pwa-install-label { display: none; }
+  .pwa-install-btn { padding: 5px 7px; font-size: 0.75rem; }
+}
 @media (max-width: 480px) {
   .pwa-install-label { display: none; }
   .pwa-install-btn { padding: 6px 8px; }

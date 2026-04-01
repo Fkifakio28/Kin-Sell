@@ -1,7 +1,8 @@
-import { NegotiationStatus, NegotiationType, CartStatus } from "@prisma/client";
+import { NegotiationStatus, NegotiationType, CartStatus, OrderStatus } from "@prisma/client";
 import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
 import { randomBytes } from "crypto";
+import { sendPushToUser } from "../notifications/push.service.js";
 
 const NEGOTIATION_TTL_MS = 48 * 60 * 60 * 1000; // 48 heures
 const GROUPED_TTL_MS = 72 * 60 * 60 * 1000; // 72 heures pour groupé
@@ -263,6 +264,66 @@ export const respondToNegotiation = async (userId: string, negotiationId: string
       where: { negotiationId: negotiationId },
       data: { unitPriceUsdCents: acceptedPrice }
     });
+
+    // ── Auto-création de commande à partir de la négo acceptée ──
+    try {
+      const cartItem = await prisma.cartItem.findFirst({
+        where: { negotiationId: negotiationId },
+        include: {
+          cart: true,
+          listing: { select: { id: true, title: true, type: true, category: true, city: true, ownerUserId: true, businessId: true } },
+        },
+      });
+
+      if (cartItem) {
+        const validationCode = randomBytes(3).toString("hex").toUpperCase();
+        const lineTotalUsdCents = acceptedPrice * negotiation.quantity;
+        const order = await prisma.order.create({
+          data: {
+            buyerUserId: negotiation.buyerUserId,
+            sellerUserId: cartItem.listing.ownerUserId,
+            sellerBusinessId: cartItem.listing.businessId,
+            status: OrderStatus.PENDING,
+            totalUsdCents: lineTotalUsdCents,
+            validationCode,
+            notes: `Commande auto — marchandage #${negotiationId.slice(-6)} accepté`,
+            items: {
+              create: {
+                listingId: cartItem.listing.id,
+                listingType: cartItem.listing.type,
+                title: cartItem.listing.title,
+                category: cartItem.listing.category,
+                city: cartItem.listing.city ?? "Kinshasa",
+                quantity: negotiation.quantity,
+                unitPriceUsdCents: acceptedPrice,
+                lineTotalUsdCents,
+              },
+            },
+          },
+        });
+
+        // Retirer l'article du panier (il est maintenant commandé)
+        await prisma.cartItem.delete({ where: { id: cartItem.id } });
+
+        // Push notification à l'acheteur
+        void sendPushToUser(negotiation.buyerUserId, {
+          title: "✅ Marchandage accepté !",
+          body: `Votre offre pour "${cartItem.listing.title}" a été acceptée. Commande #${order.id.slice(-6)} créée.`,
+          tag: `nego-accepted-${negotiationId}`,
+          data: { type: "order", orderId: order.id, negotiationId },
+        });
+
+        // Push notification au vendeur (confirmation)
+        void sendPushToUser(cartItem.listing.ownerUserId, {
+          title: "🛒 Commande créée automatiquement",
+          body: `Commande #${order.id.slice(-6)} créée suite au marchandage accepté.`,
+          tag: `order-${order.id}`,
+          data: { type: "order", orderId: order.id },
+        });
+      }
+    } catch {
+      // Silently continue — the negotiation is still accepted even if auto-order fails
+    }
 
     return mapNegotiation(updated);
   }

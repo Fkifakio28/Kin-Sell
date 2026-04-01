@@ -56,6 +56,8 @@ export type ExplorerArticlePreview = {
   media: ExplorerArticleMedia[];
   ownerId?: string;
   isNegotiable?: boolean;
+  latitude?: number;
+  longitude?: number;
 };
 
 // Statistiques réelles — calculées depuis l'API (valeurs initiales à 0)

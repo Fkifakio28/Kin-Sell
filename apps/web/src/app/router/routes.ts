@@ -11,11 +11,13 @@ export const routes = {
   servicesOnly: "/services?type=services",
   plans: "/forfaits",
   cart: "/cart",
+  messaging: "/messaging",
   account: "/account",
   businessDashboard: "/business/dashboard",
   adminDashboard: "/admin/dashboard",
   userPublic: (username: string) => `/user/${username}`,
   businessPublic: (slug: string) => `/business/${slug}`,
   listingDetails: (id: string) => `/listing/${id}`,
-  soKin: "/sokin"
+  soKin: "/sokin",
+  soKinLive: "/sokin/live"
 };

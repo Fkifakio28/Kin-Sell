@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../app/providers/AuthProvider';
 import { getDashboardPath } from '../../utils/role-routing';
 import { useLocaleCurrency } from '../../app/providers/LocaleCurrencyProvider';
@@ -128,7 +128,15 @@ export function AdminDashboard() {
   const { t } = useLocaleCurrency();
 
   const [adminMe, setAdminMe] = useState<AdminMe | null>(null);
-  const [activeSection, setActiveSection] = useState<AdminSection>('dashboard');
+  const [activeSection, setActiveSection] = useState<AdminSection>(() => {
+    const stored = sessionStorage.getItem('ud-section');
+    if (stored) {
+      sessionStorage.removeItem('ud-section');
+      if (stored === 'messages') return 'messaging';
+      return stored as AdminSection;
+    }
+    return 'dashboard';
+  });
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
@@ -2643,6 +2651,19 @@ export function AdminDashboard() {
 
   return (
     <div className={`ad-shell ${sidebarCollapsed ? 'ad-sidebar-collapsed' : ''}`}>
+      {/* ── Mobile Header ── */}
+      <header className="dash-mobile-header">
+        <button className="dash-mob-hamburger" onClick={() => setMobileSidebarOpen(o => !o)} aria-label="Menu">☰</button>
+        <Link to="/" className="dash-mob-logo">
+          <img src="/assets/kin-sell/logo.png" alt="Kin-Sell" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+          <span>Kin-Sell</span>
+        </Link>
+        <button className="dash-mob-search" aria-label="Rechercher">🔍</button>
+      </header>
+
+      {/* ── Overlay mobile ── */}
+      {mobileSidebarOpen && <div className="dash-mob-overlay" onClick={() => setMobileSidebarOpen(false)} />}
+
       {/* ── Sidebar ── */}
       <aside className={`ad-sidebar ${mobileSidebarOpen ? 'ad-sidebar-open' : ''}`}>
         <button className="ad-collapse-btn" onClick={() => setSidebarCollapsed(!sidebarCollapsed)}>
@@ -2681,20 +2702,18 @@ export function AdminDashboard() {
           ))}
         </nav>
 
-        {!sidebarCollapsed && (
-          <div style={{ padding: '12px 16px', marginTop: 'auto' }}>
-            <button className="ad-btn ad-btn--danger" style={{ width: '100%', justifyContent: 'center' }} onClick={() => { logout(); navigate('/login'); }}>
-              🚪 Déconnexion
-            </button>
-          </div>
-        )}
+        {/* Drawer logout — always visible in mobile drawer */}
+        <div className="ud-drawer-logout" style={{ padding: '12px 16px', marginTop: 'auto' }}>
+          <button className="ud-drawer-logout-btn" onClick={() => { logout(); navigate('/login'); }}>
+            🚪 Déconnexion
+          </button>
+        </div>
       </aside>
 
       {/* ── Main ── */}
       <main className="ad-main">
         <div className="ad-topbar">
           <div>
-            <button className="ad-btn ad-btn--sm" style={{ display: 'none' }} onClick={() => setMobileSidebarOpen(!mobileSidebarOpen)}>☰</button>
             <h1>{sectionTitle}</h1>
             <p className="ad-topbar-sub">Espace administration Kin-Sell</p>
           </div>

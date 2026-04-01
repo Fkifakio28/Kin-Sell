@@ -6,6 +6,7 @@ import { asyncHandler } from "../../shared/utils/async-handler.js";
 import { rateLimit, RateLimits } from "../../shared/middleware/rate-limit.middleware.js";
 import { requireNoRestriction } from "../../shared/middleware/trust-guard.middleware.js";
 import * as listingsService from "./listings.service.js";
+import { getOrCreateDMConversation, sendMessage } from "../messaging/messaging.service.js";
 
 const listingTypeSchema = z.enum(["PRODUIT", "SERVICE"]);
 const listingStatusSchema = z.enum(["ACTIVE", "INACTIVE", "ARCHIVED", "DELETED"]);
@@ -245,5 +246,43 @@ router.get("/locked-categories", asyncHandler(async (_req, res) => {
   });
   res.json(rules.map((r: { category: string }) => r.category));
 }));
+
+/* ── Contact vendeur depuis un listing (crée un DM + message initial) ── */
+router.post(
+  "/:id/contact",
+  requireAuth,
+  asyncHandler(async (request: AuthenticatedRequest, response) => {
+    const { prisma } = await import("../../shared/db/prisma.js");
+    const listing = await prisma.listing.findUnique({
+      where: { id: request.params.id },
+      select: { id: true, title: true, ownerUserId: true, priceUsdCents: true },
+    });
+    if (!listing) {
+      response.status(404).json({ error: "Annonce introuvable" });
+      return;
+    }
+    if (listing.ownerUserId === request.auth!.userId) {
+      response.status(400).json({ error: "Vous ne pouvez pas vous contacter vous-même" });
+      return;
+    }
+
+    // Créer ou récupérer la conversation DM
+    const conversation = await getOrCreateDMConversation(request.auth!.userId, listing.ownerUserId);
+
+    // Envoyer un message initial automatique avec le contexte du listing
+    const initialMessage = `📦 Bonjour ! Je suis intéressé(e) par votre annonce "${listing.title}" (${(listing.priceUsdCents / 100).toFixed(2)} $).`;
+    await sendMessage(conversation.id, request.auth!.userId, {
+      content: initialMessage,
+      type: "TEXT" as any,
+    });
+
+    response.json({
+      conversationId: conversation.id,
+      listingId: listing.id,
+      sellerUserId: listing.ownerUserId,
+      message: "Conversation créée. Vous pouvez discuter avec le vendeur.",
+    });
+  })
+);
 
 export default router;

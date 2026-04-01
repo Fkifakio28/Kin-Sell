@@ -1,4 +1,5 @@
 import { CartStatus, NegotiationStatus, OrderStatus, Prisma } from "@prisma/client";
+import { randomBytes } from "crypto";
 import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
 
@@ -260,7 +261,7 @@ export const getBuyerCart = async (userId: string) => {
 export const addCartItem = async (userId: string, payload: CartItemPayload) => {
   const listing = await prisma.listing.findUnique({
     where: { id: payload.listingId },
-    select: { id: true, ownerUserId: true, isPublished: true }
+    select: { id: true, ownerUserId: true, isPublished: true, priceUsdCents: true }
   });
 
   if (!listing || !listing.isPublished) {
@@ -273,6 +274,7 @@ export const addCartItem = async (userId: string, payload: CartItemPayload) => {
 
   const cartId = await getOpenCartId(userId);
   const quantity = Math.max(1, payload.quantity);
+  const unitPrice = payload.unitPriceUsdCents ?? listing.priceUsdCents;
 
   const existing = await prisma.cartItem.findUnique({
     where: {
@@ -298,7 +300,7 @@ export const addCartItem = async (userId: string, payload: CartItemPayload) => {
         cartId,
         listingId: payload.listingId,
         quantity,
-        unitPriceUsdCents: Math.max(0, payload.unitPriceUsdCents ?? 0)
+        unitPriceUsdCents: Math.max(0, unitPrice)
       }
     });
   }
@@ -634,7 +636,8 @@ const ALLOWED_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   [OrderStatus.PENDING]: [OrderStatus.CONFIRMED, OrderStatus.CANCELED],
   [OrderStatus.CONFIRMED]: [OrderStatus.PROCESSING, OrderStatus.CANCELED],
   [OrderStatus.PROCESSING]: [OrderStatus.SHIPPED, OrderStatus.CANCELED],
-  [OrderStatus.SHIPPED]: [OrderStatus.DELIVERED],
+  // Delivery is finalized only by buyer confirmation (code/QR), not by seller status update.
+  [OrderStatus.SHIPPED]: [],
   [OrderStatus.DELIVERED]: [],
   [OrderStatus.CANCELED]: []
 };
@@ -650,18 +653,41 @@ export const getValidationCode = async (userId: string, orderId: string) => {
         ...(businessIds.length > 0 ? [{ sellerBusinessId: { in: businessIds } }] : [])
       ]
     },
-    select: { id: true, validationCode: true }
+    select: { id: true, status: true, validationCode: true }
   });
 
   if (!order) {
     throw new HttpError(404, "Commande introuvable");
   }
 
-  if (!order.validationCode) {
-    throw new HttpError(404, "Code de validation non disponible");
+  if (order.status !== OrderStatus.PROCESSING && order.status !== OrderStatus.SHIPPED) {
+    throw new HttpError(400, "Le code de validation est disponible uniquement pendant la livraison");
   }
 
-  return { validationCode: order.validationCode };
+  // Rotate code at each seller reveal to reduce reuse/exfiltration risk.
+  const rotatedCode = randomBytes(3).toString("hex").toUpperCase();
+  await prisma.order.update({
+    where: { id: order.id },
+    data: { validationCode: rotatedCode }
+  });
+
+  // Audit trail: who revealed/regenerated a validation code and for which order.
+  await prisma.auditLog.create({
+    data: {
+      actorUserId: userId,
+      action: "ORDER_VALIDATION_CODE_REGENERATED",
+      entityType: "ORDER",
+      entityId: order.id,
+      metadata: {
+        orderStatus: order.status,
+        source: "seller",
+        previousCodeHint: order.validationCode ? order.validationCode.slice(-2) : null,
+        newCodeHint: rotatedCode.slice(-2)
+      }
+    }
+  });
+
+  return { validationCode: rotatedCode };
 };
 
 export const buyerConfirmDelivery = async (userId: string, orderId: string, code: string) => {
@@ -693,10 +719,29 @@ export const buyerConfirmDelivery = async (userId: string, orderId: string, code
     }
   });
 
+  await prisma.auditLog.create({
+    data: {
+      actorUserId: userId,
+      action: "ORDER_DELIVERY_CONFIRMED_BY_BUYER",
+      entityType: "ORDER",
+      entityId: order.id,
+      metadata: {
+        source: "buyer",
+        method: "validation_code_or_qr",
+        previousStatus: order.status,
+        nextStatus: OrderStatus.DELIVERED
+      }
+    }
+  });
+
   return mapOrder(updated);
 };
 
 export const updateSellerOrderStatus = async (userId: string, orderId: string, nextStatus: OrderStatus) => {
+  if (nextStatus === OrderStatus.DELIVERED) {
+    throw new HttpError(400, "La livraison doit etre confirmee par l'acheteur via code ou QR");
+  }
+
   const businessIds = await resolveSellerBusinessIds(userId);
 
   const order = await prisma.order.findFirst({
@@ -727,7 +772,6 @@ export const updateSellerOrderStatus = async (userId: string, orderId: string, n
     data: {
       status: nextStatus,
       confirmedAt: nextStatus === OrderStatus.CONFIRMED ? new Date() : undefined,
-      deliveredAt: nextStatus === OrderStatus.DELIVERED ? new Date() : undefined,
       canceledAt: nextStatus === OrderStatus.CANCELED ? new Date() : undefined
     },
     include: {

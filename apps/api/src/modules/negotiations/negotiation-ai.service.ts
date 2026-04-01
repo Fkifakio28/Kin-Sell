@@ -14,6 +14,7 @@
 
 import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
+import { getMarketDemand } from "../../shared/market/market-shared.js";
 
 // ─────────────────────────────────────────────
 // Types
@@ -594,8 +595,9 @@ export async function getCategoryMarketIntelligence(category: string): Promise<M
   const competitionLevel: MarketIntelligence["competitionLevel"] =
     sellers.length >= 20 ? "HIGH" : sellers.length >= 8 ? "MEDIUM" : "LOW";
 
-  const demandSignal: MarketIntelligence["demandSignal"] =
-    totalNegos > activeListings * 2 ? "HIGH" : totalNegos > activeListings * 0.5 ? "MEDIUM" : "LOW";
+  // DemandSignal unifié via market-shared (ratio négociations/listings)
+  const demandData = await getMarketDemand(category);
+  const demandSignal = demandData.demandLevel;
 
   const recommendedFloor = demandSignal === "HIGH" ? 85 : demandSignal === "MEDIUM" ? 75 : 65;
 

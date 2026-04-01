@@ -1,0 +1,35 @@
+# ── Production Dockerfile for Kin-Sell API ──
+# Build: docker build -t kinsell-api -f deploy/Dockerfile.api .
+# Run:   docker run -p 4000:4000 --env-file .env kinsell-api
+
+FROM node:20-alpine AS base
+RUN apk add --no-cache openssl
+WORKDIR /app
+
+# ── Install dependencies ──
+FROM base AS deps
+COPY package.json package-lock.json ./
+COPY apps/api/package.json apps/api/
+COPY packages/db/package.json packages/db/
+RUN npm ci --omit=dev --workspace=apps/api --workspace=packages/db
+
+# ── Generate Prisma client ──
+FROM deps AS prisma
+COPY packages/db/prisma ./packages/db/prisma
+RUN npx prisma generate --schema=packages/db/prisma/schema.prisma
+
+# ── Production image ──
+FROM base AS runner
+ENV NODE_ENV=production
+
+COPY --from=prisma /app/node_modules ./node_modules
+COPY --from=prisma /app/packages/db ./packages/db
+COPY apps/api ./apps/api
+
+WORKDIR /app/apps/api
+
+EXPOSE 4000
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+  CMD wget -qO- http://localhost:4000/health || exit 1
+
+CMD ["node", "--import", "tsx", "src/index.ts"]

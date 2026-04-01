@@ -7,7 +7,7 @@ import {
   SERVICE_CATEGORIES,
 } from './explorer-data';
 import type { ExplorerArticlePreview } from './explorer-data';
-import { explorer as explorerApi, orders as ordersApi, type ExplorerShopApi, type ExplorerProfileApi } from '../../lib/api-client';
+import { explorer as explorerApi, orders as ordersApi, listings as listingsApi, type ExplorerShopApi, type ExplorerProfileApi } from '../../lib/api-client';
 import { useHoverPopup, ArticleHoverPopup, ProfileHoverPopup, type ArticleHoverData, type ProfileHoverData } from '../../components/HoverPopup';
 import { useScrollRestore } from '../../utils/useScrollRestore';
 import { useAuth } from '../../app/providers/AuthProvider';
@@ -15,6 +15,7 @@ import { useLocaleCurrency } from '../../app/providers/LocaleCurrencyProvider';
 import { NegotiatePopup } from '../negotiations/NegotiatePopup';
 import { useLockedCategories, isCategoryLocked } from '../../hooks/useLockedCategories';
 import { AdBanner } from '../../components/AdBanner';
+import MapView from '../../components/MapView';
 
 const PREVIEW_PAGE_SIZE = 4;
 const MODAL_PAGE_SIZE = 8;
@@ -110,6 +111,7 @@ export function ExplorerPage() {
   const [exCardBusy, setExCardBusy] = useState<string | null>(null);
   const [exCardFb, setExCardFb] = useState<{ id: string; msg: string } | null>(null);
   const [exCardQty, setExCardQty] = useState<Record<string, number>>({});
+  const [isMapView, setIsMapView] = useState(false);
   const getExQty = (id: string) => exCardQty[id] ?? 1;
   const changeExQty = (id: string, delta: number, e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); setExCardQty((prev) => ({ ...prev, [id]: Math.max(1, (prev[id] ?? 1) + delta) })); };
   useScrollRestore();
@@ -186,6 +188,19 @@ export function ExplorerPage() {
     if (!isLoggedIn) { nav('/login'); return; }
     if (isAdmin) { setExCardFb({ id: article.id, msg: '🔒 Les administrateurs ne peuvent pas négocier.' }); setTimeout(() => setExCardFb(null), 3000); return; }
     setNegotiateArticle(article);
+  };
+
+  const handleExCardContact = async (article: ExplorerArticlePreview, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isLoggedIn) { nav('/login'); return; }
+    if (article.ownerId && user && article.ownerId === user.id) return;
+    try {
+      const result = await listingsApi.contactSeller(article.id);
+      nav(`/messaging/${result.conversationId}`);
+    } catch {
+      nav(`/messaging`);
+    }
   };
 
   const handleSwitchToggle = () => {
@@ -375,6 +390,8 @@ export function ExplorerPage() {
           imageUrl: string | null;
           priceUsdCents: number;
           isNegotiable?: boolean;
+          latitude?: number;
+          longitude?: number;
           createdAt: string;
           owner: { userId: string; displayName: string; username: string | null; avatarUrl: string | null };
         };
@@ -394,6 +411,8 @@ export function ExplorerPage() {
           media: [],
           ownerId: item.owner.userId,
           isNegotiable: item.isNegotiable !== false,
+          latitude: item.latitude ?? undefined,
+          longitude: item.longitude ?? undefined,
         });
 
         const products: ExplorerArticlePreview[] = prodRes.ok
@@ -546,7 +565,26 @@ export function ExplorerPage() {
         <div className="explorer-shops-section">
           <div className="explorer-section-header">
             <h3 className="explorer-section-title">🧩 Articles disponibles</h3>
+            <button type="button" className="explorer-show-all-btn" style={{ marginLeft: 'auto', marginRight: 8 }} onClick={() => setIsMapView(v => !v)}>
+              {isMapView ? '📋 Liste' : '🗺️ Carte'}
+            </button>
           </div>
+
+          {isMapView ? (
+            <div style={{ marginBottom: 'var(--space-lg)' }}>
+              <MapView
+                center={{ lat: -4.325, lng: 15.322 }}
+                markers={filteredArticles.map(a => ({
+                  lat: a.latitude ?? -4.325,
+                  lng: a.longitude ?? 15.322,
+                  title: a.title,
+                  info: `${a.title} — ${a.priceLabel}`,
+                }))}
+                zoom={12}
+                height="450px"
+              />
+            </div>
+          ) : null}
 
           <div className="explorer-articles-box">
             {isLoadingArticles ? (
@@ -584,6 +622,7 @@ export function ExplorerPage() {
                     <p className="explorer-article-publisher">{article.publisherName}</p>
                     <div className="explorer-article-actions-row">
                       <button type="button" className="explorer-article-action-btn" onClick={() => nav(article.targetPath)}>Voir plus</button>
+                      <button type="button" className="explorer-article-action-btn" title="Contacter" onClick={(e) => void handleExCardContact(article, e)}>💬</button>
                       <button type="button" className="explorer-article-action-btn" title={t("common.addToCart")} disabled={exCardBusy === article.id} onClick={(e) => void handleExCardCart(article.id, e)}>🛒</button>
                       {article.isNegotiable !== false && !isCategoryLocked(lockedCats, article.category) && <button type="button" className="explorer-article-action-btn" title={t("common.negotiate")} onClick={(e) => handleExCardNegotiate(article, e)}>🤝</button>}
                     </div>
@@ -715,6 +754,7 @@ export function ExplorerPage() {
                     <p className="explorer-article-publisher">{article.publisherName}</p>
                     <div className="explorer-article-actions-row">
                       <button type="button" className="explorer-article-action-btn" onClick={() => nav(article.targetPath)}>Voir plus</button>
+                      <button type="button" className="explorer-article-action-btn" title="Contacter" onClick={(e) => void handleExCardContact(article, e)}>💬</button>
                       <span className="explorer-qty-selector">
                         <button type="button" className="explorer-qty-btn" onClick={(e) => changeExQty(article.id, -1, e)} disabled={getExQty(article.id) <= 1}>−</button>
                         <span className="explorer-qty-value">{getExQty(article.id)}</span>

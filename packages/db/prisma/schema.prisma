@@ -99,6 +99,18 @@ enum AddonStatus {
 
 enum PaymentMethod {
   BANK_TRANSFER_NICKEL
+  ORANGE_MONEY
+  MPESA
+  PAYPAL
+}
+
+enum MomoStatus {
+  INITIATED
+  PENDING
+  SUCCESS
+  FAILED
+  EXPIRED
+  CANCELED
 }
 
 enum PaymentOrderStatus {
@@ -139,63 +151,78 @@ enum NegotiationType {
 }
 
 model User {
-  id            String           @id @default(cuid())
-  email         String?          @unique
-  emailVerified Boolean          @default(false)
-  phone         String?
-  phoneVerified Boolean          @default(false)
-  phoneHidden   Boolean          @default(true)
-  passwordHash  String?
-  totpSecret    String?
-  totpEnabled   Boolean          @default(false)
-  role          Role             @default(USER)
-  preferredAccountType AccountType @default(USER)
-  profileCompleted Boolean       @default(false)
-  accountStatus AccountStatus    @default(ACTIVE)
-  suspensionReason    String?
-  deletionRequestedAt DateTime?
-  deletionReason      String?
-  trustScore    Int              @default(50)
-  trustLevel    TrustLevel       @default(NEW)
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
+  id                   String        @id @default(cuid())
+  email                String?       @unique
+  emailVerified        Boolean       @default(false)
+  phone                String?
+  phoneVerified        Boolean       @default(false)
+  phoneHidden          Boolean       @default(true)
+  passwordHash         String?
+  totpSecret           String?
+  totpEnabled          Boolean       @default(false)
+  role                 Role          @default(USER)
+  preferredAccountType AccountType   @default(USER)
+  profileCompleted     Boolean       @default(false)
+  accountStatus        AccountStatus @default(ACTIVE)
+  suspensionReason     String?
+  deletionRequestedAt  DateTime?
+  deletionReason       String?
+  trustScore           Int           @default(50)
+  trustLevel           TrustLevel    @default(NEW)
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
 
-  profile       UserProfile?
-  identities    UserIdentity[]
-  sessions      UserSession[]
-  preferences   UserPreference?
-  verificationCodes VerificationCode[]
-  businesses    BusinessAccount[]
-  listings      Listing[]
-  subscriptions Subscription[]
-  paymentOrders  PaymentOrder[]
-  buyerCarts    Cart[]
-  buyerOrders   Order[]          @relation("BuyerOrders")
-  sellerOrders  Order[]          @relation("SellerOrders")
-  auditLogs     AuditLog[]       @relation("AuditActor")
+  profile                  UserProfile?
+  identities               UserIdentity[]
+  sessions                 UserSession[]
+  preferences              UserPreference?
+  verificationCodes        VerificationCode[]
+  businesses               BusinessAccount[]
+  listings                 Listing[]
+  subscriptions            Subscription[]
+  paymentOrders            PaymentOrder[]
+  buyerCarts               Cart[]
+  buyerOrders              Order[]                   @relation("BuyerOrders")
+  sellerOrders             Order[]                   @relation("SellerOrders")
+  auditLogs                AuditLog[]                @relation("AuditActor")
   conversationParticipants ConversationParticipant[]
-  sentMessages  Message[]        @relation("SentMessages")
-  readReceipts  MessageReadReceipt[]
-  buyerNegotiations  Negotiation[] @relation("BuyerNegotiations")
-  sellerNegotiations Negotiation[] @relation("SellerNegotiations")
-  negotiationOffers  NegotiationOffer[]
-  pushSubscriptions  PushSubscription[]
-  callerCallLogs     CallLog[]          @relation("CallerCallLogs")
-  receiverCallLogs   CallLog[]          @relation("ReceiverCallLogs")
-  adminProfile       AdminProfile?
-  reportsFiled       Report[]           @relation("ReporterReports")
-  reportsReceived    Report[]           @relation("ReportedReports")
-  blogPosts          BlogPost[]         @relation("BlogPosts")
-  trustScoreHistory  TrustScoreEvent[]  @relation("TrustScoreUser")
-  securityEvents     SecurityEvent[]    @relation("SecurityUser")
-  restrictions       UserRestriction[]  @relation("RestrictedUser")
-  fraudSignals       FraudSignal[]      @relation("FraudSignalUser")
-  bundlesCreated     NegotiationBundle[] @relation("BundleCreator")
-  bundlesAsSeller    NegotiationBundle[] @relation("BundleSeller")
-  messageGuardLogs   MessageGuardLog[]   @relation("MessageGuardUser")
-  sokinPosts         SoKinPost[]         @relation("SoKinPosts")
-  adDonations        AdDonation[]        @relation("UserDonations")
-  advertisements     Advertisement[]     @relation("UserAds")
+  sentMessages             Message[]                 @relation("SentMessages")
+  readReceipts             MessageReadReceipt[]
+  buyerNegotiations        Negotiation[]             @relation("BuyerNegotiations")
+  sellerNegotiations       Negotiation[]             @relation("SellerNegotiations")
+  negotiationOffers        NegotiationOffer[]
+  pushSubscriptions        PushSubscription[]
+  callerCallLogs           CallLog[]                 @relation("CallerCallLogs")
+  receiverCallLogs         CallLog[]                 @relation("ReceiverCallLogs")
+  adminProfile             AdminProfile?
+  reportsFiled             Report[]                  @relation("ReporterReports")
+  reportsReceived          Report[]                  @relation("ReportedReports")
+  blogPosts                BlogPost[]                @relation("BlogPosts")
+  trustScoreHistory        TrustScoreEvent[]         @relation("TrustScoreUser")
+  securityEvents           SecurityEvent[]           @relation("SecurityUser")
+  restrictions             UserRestriction[]         @relation("RestrictedUser")
+  fraudSignals             FraudSignal[]             @relation("FraudSignalUser")
+  bundlesCreated           NegotiationBundle[]       @relation("BundleCreator")
+  bundlesAsSeller          NegotiationBundle[]       @relation("BundleSeller")
+  messageGuardLogs         MessageGuardLog[]         @relation("MessageGuardUser")
+  sokinPosts               SoKinPost[]               @relation("SoKinPosts")
+  adDonations              AdDonation[]              @relation("UserDonations")
+  advertisements           Advertisement[]           @relation("UserAds")
+  importedContacts         UserContact[]             @relation("ImportedContacts")
+  matchedContacts          UserContact[]             @relation("MatchedContacts")
+  suggestionsFor           SoKinSuggestion[]         @relation("SuggestionTarget")
+  suggestedAs              SoKinSuggestion[]         @relation("SuggestedUser")
+  connectionsSent          SoKinConnection[]         @relation("ConnectionRequester")
+  connectionsReceived      SoKinConnection[]         @relation("ConnectionReceiver")
+  mobileMoneyPayments      MobileMoneyPayment[]
+  aiMemorySnapshots        AiMemorySnapshot[]        @relation("AiMemoryUser")
+  aiAutonomyLogs           AiAutonomyLog[]           @relation("AiAutonomyUser")
+  categoryRulesUpdated     CategoryNegotiationRule[] @relation("CategoryRuleUpdater")
+  hostedLives              SoKinLive[]               @relation("SoKinLiveHost")
+  liveParticipations       SoKinLiveParticipant[]    @relation("SoKinLiveParticipants")
+  liveChatMessages         SoKinLiveChat[]           @relation("SoKinLiveChatMessages")
+  reviewsGiven             UserReview[]               @relation("ReviewsGiven")
+  reviewsReceived          UserReview[]               @relation("ReviewsReceived")
 
   @@index([role])
   @@index([accountStatus])
@@ -237,12 +264,12 @@ model BusinessAccount {
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
 
-  owner User           @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
-  shop  BusinessShop?
-  listings Listing[]
-  subscriptions Subscription[]
+  owner          User            @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  shop           BusinessShop?
+  listings       Listing[]
+  subscriptions  Subscription[]
   paymentOrders  PaymentOrder[]
-  sellerOrders  Order[]
+  sellerOrders   Order[]
   advertisements Advertisement[] @relation("BusinessAds")
 
   @@index([ownerUserId])
@@ -287,17 +314,17 @@ model UserSession {
 }
 
 model VerificationCode {
-  id             String              @id @default(cuid())
-  userId         String?
-  destination    String
-  provider       AuthProvider
-  purpose        VerificationPurpose
-  codeHash       String
-  attempts       Int                 @default(0)
-  maxAttempts    Int                 @default(5)
-  expiresAt      DateTime
-  consumedAt     DateTime?
-  createdAt      DateTime            @default(now())
+  id          String              @id @default(cuid())
+  userId      String?
+  destination String
+  provider    AuthProvider
+  purpose     VerificationPurpose
+  codeHash    String
+  attempts    Int                 @default(0)
+  maxAttempts Int                 @default(5)
+  expiresAt   DateTime
+  consumedAt  DateTime?
+  createdAt   DateTime            @default(now())
 
   user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 
@@ -306,39 +333,42 @@ model VerificationCode {
 }
 
 model UserPreference {
-  id              String   @id @default(cuid())
-  userId          String   @unique
-  locale          String   @default("fr")
-  currency        String   @default("CDF")
-  theme           String   @default("dark")
-  marketingEmails Boolean  @default(false)
-  marketingSms    Boolean  @default(false)
-  pushEnabled     Boolean  @default(true)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  locale            String   @default("fr")
+  currency          String   @default("CDF")
+  theme             String   @default("dark")
+  marketingEmails   Boolean  @default(false)
+  marketingSms      Boolean  @default(false)
+  pushEnabled       Boolean  @default(true)
+  aiAdviceEnabled   Boolean  @default(true)
+  aiAutoNegoEnabled Boolean  @default(false)
+  aiCommandeEnabled Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Subscription {
-  id                String             @id @default(cuid())
-  userId            String?
-  businessId        String?
-  scope             SubscriptionScope
-  planCode          String
-  status            SubscriptionStatus @default(ACTIVE)
-  billingCycle      BillingCycle       @default(MONTHLY)
-  priceUsdCents     Int                @default(0)
-  startsAt          DateTime           @default(now())
-  endsAt            DateTime?
-  autoRenew         Boolean            @default(true)
-  metadata          Json?
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
+  id            String             @id @default(cuid())
+  userId        String?
+  businessId    String?
+  scope         SubscriptionScope
+  planCode      String
+  status        SubscriptionStatus @default(ACTIVE)
+  billingCycle  BillingCycle       @default(MONTHLY)
+  priceUsdCents Int                @default(0)
+  startsAt      DateTime           @default(now())
+  endsAt        DateTime?
+  autoRenew     Boolean            @default(true)
+  metadata      Json?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
 
-  user              User?              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  business          BusinessAccount?   @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  addons            SubscriptionAddon[]
+  user     User?               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  business BusinessAccount?    @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  addons   SubscriptionAddon[]
 
   @@index([scope, status])
   @@index([userId, status])
@@ -346,53 +376,84 @@ model Subscription {
 }
 
 model SubscriptionAddon {
-  id                String       @id @default(cuid())
-  subscriptionId    String
-  addonCode         AddonCode
-  status            AddonStatus  @default(ACTIVE)
-  priceUsdCents     Int          @default(0)
-  quantity          Int          @default(1)
-  startsAt          DateTime     @default(now())
-  endsAt            DateTime?
-  metadata          Json?
-  createdAt         DateTime     @default(now())
-  updatedAt         DateTime     @updatedAt
+  id             String      @id @default(cuid())
+  subscriptionId String
+  addonCode      AddonCode
+  status         AddonStatus @default(ACTIVE)
+  priceUsdCents  Int         @default(0)
+  quantity       Int         @default(1)
+  startsAt       DateTime    @default(now())
+  endsAt         DateTime?
+  metadata       Json?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
 
-  subscription      Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
 
   @@index([subscriptionId, status])
   @@index([addonCode, status])
 }
 
 model PaymentOrder {
-  id                 String            @id @default(cuid())
-  userId             String?
-  businessId         String?
-  targetScope        SubscriptionScope
-  planCode           String
-  amountUsdCents     Int
-  currency           String            @default("USD")
-  method             PaymentMethod     @default(BANK_TRANSFER_NICKEL)
-  status             PaymentOrderStatus @default(PENDING)
-  transferReference  String            @unique
-  beneficiaryIban    String
-  beneficiaryBic     String
-  beneficiaryRib     String?
-  depositorNote      String?
-  proofUrl           String?
-  expiresAt          DateTime
-  validatedAt        DateTime?
-  canceledAt         DateTime?
-  createdAt          DateTime          @default(now())
-  updatedAt          DateTime          @updatedAt
+  id                String             @id @default(cuid())
+  userId            String?
+  businessId        String?
+  targetScope       SubscriptionScope
+  planCode          String
+  amountUsdCents    Int
+  currency          String             @default("USD")
+  method            PaymentMethod      @default(BANK_TRANSFER_NICKEL)
+  status            PaymentOrderStatus @default(PENDING)
+  transferReference String             @unique
+  beneficiaryIban   String
+  beneficiaryBic    String
+  beneficiaryRib    String?
+  depositorNote     String?
+  proofUrl          String?
+  expiresAt         DateTime
+  validatedAt       DateTime?
+  canceledAt        DateTime?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
 
-  user               User?             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  business           BusinessAccount?  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  user     User?            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  business BusinessAccount? @relation(fields: [businessId], references: [id], onDelete: Cascade)
 
   @@index([userId, status])
   @@index([businessId, status])
   @@index([targetScope, status])
   @@index([expiresAt])
+}
+
+// ─── Mobile Money ───
+
+model MobileMoneyPayment {
+  id                    String        @id @default(cuid())
+  userId                String
+  provider              PaymentMethod // ORANGE_MONEY | MPESA
+  phoneNumber           String // numéro client (243...)
+  amountCents           Int
+  currency              String        @default("CDF") // Franc congolais
+  amountLocalUnits      Int           @default(0) // montant en unités locales (CDF)
+  status                MomoStatus    @default(INITIATED)
+  providerRef           String?       @unique // réf provider (payToken Orange, conversationID M-Pesa)
+  providerTransactionId String? // ID transaction côté provider
+  callbackPayload       Json? // payload brut du callback
+  purpose               String // "ORDER" | "SUBSCRIPTION" | "AD_PAYMENT"
+  targetId              String? // orderId ou paymentOrderId ou adId
+  errorMessage          String?
+  initiatedAt           DateTime      @default(now())
+  completedAt           DateTime?
+  expiresAt             DateTime
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([providerRef])
+  @@index([purpose, targetId])
+  @@index([status, expiresAt])
 }
 
 model Listing {
@@ -418,10 +479,10 @@ model Listing {
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
 
-  ownerUser User             @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
-  business  BusinessAccount? @relation(fields: [businessId], references: [id], onDelete: SetNull)
-  cartItems CartItem[]
-  orderItems OrderItem[]
+  ownerUser    User                    @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  business     BusinessAccount?        @relation(fields: [businessId], references: [id], onDelete: SetNull)
+  cartItems    CartItem[]
+  orderItems   OrderItem[]
   negotiations Negotiation[]
   bundleItems  NegotiationBundleItem[]
 
@@ -442,27 +503,27 @@ model Cart {
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
-  buyer        User       @relation(fields: [buyerUserId], references: [id], onDelete: Cascade)
-  items        CartItem[]
-  orders       Order[]
+  buyer  User       @relation(fields: [buyerUserId], references: [id], onDelete: Cascade)
+  items  CartItem[]
+  orders Order[]
 
   @@index([buyerUserId, status])
   @@index([createdAt])
 }
 
 model CartItem {
-  id               String   @id @default(cuid())
-  cartId           String
-  listingId        String
-  quantity         Int      @default(1)
-  unitPriceUsdCents Int     @default(0)
-  negotiationId    String?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id                String   @id @default(cuid())
+  cartId            String
+  listingId         String
+  quantity          Int      @default(1)
+  unitPriceUsdCents Int      @default(0)
+  negotiationId     String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
-  cart             Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
-  listing          Listing  @relation(fields: [listingId], references: [id], onDelete: Restrict)
-  negotiation      Negotiation? @relation(fields: [negotiationId], references: [id], onDelete: SetNull)
+  cart        Cart         @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  listing     Listing      @relation(fields: [listingId], references: [id], onDelete: Restrict)
+  negotiation Negotiation? @relation(fields: [negotiationId], references: [id], onDelete: SetNull)
 
   @@unique([cartId, listingId])
   @@index([cartId])
@@ -471,27 +532,27 @@ model CartItem {
 }
 
 model Order {
-  id                String      @id @default(cuid())
-  buyerUserId       String
-  sellerUserId      String
-  sellerBusinessId  String?
-  cartId            String?
-  status            OrderStatus @default(PENDING)
-  currency          String      @default("USD")
-  totalUsdCents     Int
-  notes             String?
-  validationCode    String?
-  confirmedAt       DateTime?
-  deliveredAt       DateTime?
-  canceledAt        DateTime?
-  createdAt         DateTime    @default(now())
-  updatedAt         DateTime    @updatedAt
+  id               String      @id @default(cuid())
+  buyerUserId      String
+  sellerUserId     String
+  sellerBusinessId String?
+  cartId           String?
+  status           OrderStatus @default(PENDING)
+  currency         String      @default("USD")
+  totalUsdCents    Int
+  notes            String?
+  validationCode   String?
+  confirmedAt      DateTime?
+  deliveredAt      DateTime?
+  canceledAt       DateTime?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
 
-  buyer             User            @relation("BuyerOrders", fields: [buyerUserId], references: [id], onDelete: Cascade)
-  seller            User            @relation("SellerOrders", fields: [sellerUserId], references: [id], onDelete: Cascade)
-  sellerBusiness    BusinessAccount? @relation(fields: [sellerBusinessId], references: [id], onDelete: SetNull)
-  cart              Cart?           @relation(fields: [cartId], references: [id], onDelete: SetNull)
-  items             OrderItem[]
+  buyer          User             @relation("BuyerOrders", fields: [buyerUserId], references: [id], onDelete: Cascade)
+  seller         User             @relation("SellerOrders", fields: [sellerUserId], references: [id], onDelete: Cascade)
+  sellerBusiness BusinessAccount? @relation(fields: [sellerBusinessId], references: [id], onDelete: SetNull)
+  cart           Cart?            @relation(fields: [cartId], references: [id], onDelete: SetNull)
+  items          OrderItem[]
 
   @@index([buyerUserId, status, createdAt])
   @@index([sellerUserId, status, createdAt])
@@ -512,8 +573,8 @@ model OrderItem {
   lineTotalUsdCents Int
   createdAt         DateTime    @default(now())
 
-  order             Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  listing           Listing?    @relation(fields: [listingId], references: [id], onDelete: SetNull)
+  order   Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  listing Listing? @relation(fields: [listingId], references: [id], onDelete: SetNull)
 
   @@index([orderId])
   @@index([listingId])
@@ -539,15 +600,15 @@ model BusinessShop {
 // ═══════════════════════════════════════
 
 model NegotiationBundle {
-  id          String   @id @default(cuid())
-  creatorUserId String
-  sellerUserId  String
+  id                    String   @id @default(cuid())
+  creatorUserId         String
+  sellerUserId          String
   totalOriginalUsdCents Int
-  createdAt   DateTime @default(now())
+  createdAt             DateTime @default(now())
 
-  creator     User     @relation("BundleCreator", fields: [creatorUserId], references: [id], onDelete: Cascade)
-  seller      User     @relation("BundleSeller", fields: [sellerUserId], references: [id], onDelete: Cascade)
-  items       NegotiationBundleItem[]
+  creator      User                    @relation("BundleCreator", fields: [creatorUserId], references: [id], onDelete: Cascade)
+  seller       User                    @relation("BundleSeller", fields: [sellerUserId], references: [id], onDelete: Cascade)
+  items        NegotiationBundleItem[]
   negotiations Negotiation[]
 
   @@index([creatorUserId])
@@ -555,42 +616,42 @@ model NegotiationBundle {
 }
 
 model NegotiationBundleItem {
-  id          String @id @default(cuid())
-  bundleId    String
-  listingId   String
-  quantity    Int    @default(1)
+  id        String @id @default(cuid())
+  bundleId  String
+  listingId String
+  quantity  Int    @default(1)
 
-  bundle      NegotiationBundle @relation(fields: [bundleId], references: [id], onDelete: Cascade)
-  listing     Listing           @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  bundle  NegotiationBundle @relation(fields: [bundleId], references: [id], onDelete: Cascade)
+  listing Listing           @relation(fields: [listingId], references: [id], onDelete: Cascade)
 
   @@unique([bundleId, listingId])
   @@index([listingId])
 }
 
 model Negotiation {
-  id             String            @id @default(cuid())
-  buyerUserId    String
-  sellerUserId   String
-  listingId      String
-  bundleId       String?
-  type           NegotiationType   @default(SIMPLE)
-  status         NegotiationStatus @default(PENDING)
+  id                    String            @id @default(cuid())
+  buyerUserId           String
+  sellerUserId          String
+  listingId             String
+  bundleId              String?
+  type                  NegotiationType   @default(SIMPLE)
+  status                NegotiationStatus @default(PENDING)
   originalPriceUsdCents Int
   finalPriceUsdCents    Int?
-  quantity       Int               @default(1)
-  groupId        String?
-  minBuyers      Int?
-  expiresAt      DateTime
-  resolvedAt     DateTime?
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime          @updatedAt
+  quantity              Int               @default(1)
+  groupId               String?
+  minBuyers             Int?
+  expiresAt             DateTime
+  resolvedAt            DateTime?
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
 
-  buyer          User              @relation("BuyerNegotiations", fields: [buyerUserId], references: [id], onDelete: Cascade)
-  seller         User              @relation("SellerNegotiations", fields: [sellerUserId], references: [id], onDelete: Cascade)
-  listing        Listing           @relation(fields: [listingId], references: [id], onDelete: Cascade)
-  bundle         NegotiationBundle? @relation(fields: [bundleId], references: [id], onDelete: SetNull)
-  offers         NegotiationOffer[]
-  cartItems      CartItem[]
+  buyer     User               @relation("BuyerNegotiations", fields: [buyerUserId], references: [id], onDelete: Cascade)
+  seller    User               @relation("SellerNegotiations", fields: [sellerUserId], references: [id], onDelete: Cascade)
+  listing   Listing            @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  bundle    NegotiationBundle? @relation(fields: [bundleId], references: [id], onDelete: SetNull)
+  offers    NegotiationOffer[]
+  cartItems CartItem[]
 
   @@index([buyerUserId, status])
   @@index([sellerUserId, status])
@@ -601,29 +662,29 @@ model Negotiation {
 }
 
 model NegotiationOffer {
-  id              String   @id @default(cuid())
-  negotiationId   String
-  fromUserId      String
-  priceUsdCents   Int
-  quantity        Int      @default(1)
-  message         String?
-  createdAt       DateTime @default(now())
+  id            String   @id @default(cuid())
+  negotiationId String
+  fromUserId    String
+  priceUsdCents Int
+  quantity      Int      @default(1)
+  message       String?
+  createdAt     DateTime @default(now())
 
-  negotiation     Negotiation @relation(fields: [negotiationId], references: [id], onDelete: Cascade)
-  fromUser        User        @relation(fields: [fromUserId], references: [id], onDelete: Cascade)
+  negotiation Negotiation @relation(fields: [negotiationId], references: [id], onDelete: Cascade)
+  fromUser    User        @relation(fields: [fromUserId], references: [id], onDelete: Cascade)
 
   @@index([negotiationId, createdAt])
   @@index([fromUserId])
 }
 
 model AuditLog {
-  id         String   @id @default(cuid())
+  id          String   @id @default(cuid())
   actorUserId String?
-  action     String
-  entityType String
-  entityId   String?
-  metadata   Json?
-  createdAt  DateTime @default(now())
+  action      String
+  entityType  String
+  entityId    String?
+  metadata    Json?
+  createdAt   DateTime @default(now())
 
   actor User? @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
 
@@ -645,12 +706,12 @@ enum MessageType {
 }
 
 model Conversation {
-  id          String    @id @default(cuid())
-  isGroup     Boolean   @default(false)
+  id          String   @id @default(cuid())
+  isGroup     Boolean  @default(false)
   groupName   String?
   groupAvatar String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   participants ConversationParticipant[]
   messages     Message[]
@@ -660,13 +721,13 @@ model Conversation {
 }
 
 model ConversationParticipant {
-  id             String    @id @default(cuid())
+  id             String   @id @default(cuid())
   conversationId String
   userId         String
-  joinedAt       DateTime  @default(now())
-  lastReadAt     DateTime  @default(now())
-  isAdmin        Boolean   @default(false)
-  muted          Boolean   @default(false)
+  joinedAt       DateTime @default(now())
+  lastReadAt     DateTime @default(now())
+  isAdmin        Boolean  @default(false)
+  muted          Boolean  @default(false)
 
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -690,10 +751,10 @@ model Message {
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
 
-  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  sender       User         @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
-  replyTo      Message?     @relation("MessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
-  replies      Message[]    @relation("MessageReplies")
+  conversation Conversation         @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User                 @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  replyTo      Message?             @relation("MessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies      Message[]            @relation("MessageReplies")
   readReceipts MessageReadReceipt[]
 
   @@index([conversationId, createdAt])
@@ -806,16 +867,16 @@ enum AdminPermission {
 }
 
 model AdminProfile {
-  id             String           @id @default(cuid())
-  userId         String           @unique
-  level          AdminLevel       @default(LEVEL_5)
-  permissions    AdminPermission[]
-  promotedBy     String?
-  promotedAt     DateTime         @default(now())
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
+  id          String            @id @default(cuid())
+  userId      String            @unique
+  level       AdminLevel        @default(LEVEL_5)
+  permissions AdminPermission[]
+  promotedBy  String?
+  promotedAt  DateTime          @default(now())
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
 
-  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([level])
 }
@@ -827,20 +888,20 @@ enum ReportStatus {
 }
 
 model Report {
-  id              String       @id @default(cuid())
-  reporterUserId  String
-  reportedUserId  String
-  reason          String
-  message         String?
-  status          ReportStatus @default(PENDING)
-  resolvedBy      String?
-  resolvedAt      DateTime?
-  resolution      String?
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
+  id             String       @id @default(cuid())
+  reporterUserId String
+  reportedUserId String
+  reason         String
+  message        String?
+  status         ReportStatus @default(PENDING)
+  resolvedBy     String?
+  resolvedAt     DateTime?
+  resolution     String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
-  reporter        User         @relation("ReporterReports", fields: [reporterUserId], references: [id], onDelete: Cascade)
-  reported        User         @relation("ReportedReports", fields: [reportedUserId], references: [id], onDelete: Cascade)
+  reporter User @relation("ReporterReports", fields: [reporterUserId], references: [id], onDelete: Cascade)
+  reported User @relation("ReportedReports", fields: [reportedUserId], references: [id], onDelete: Cascade)
 
   @@index([reporterUserId])
   @@index([reportedUserId])
@@ -867,7 +928,7 @@ model BlogPost {
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
 
-  author      User           @relation("BlogPosts", fields: [authorId], references: [id], onDelete: Cascade)
+  author User @relation("BlogPosts", fields: [authorId], references: [id], onDelete: Cascade)
 
   @@index([authorId])
   @@index([status])
@@ -881,23 +942,23 @@ enum AdOfferStatus {
 }
 
 model AdOffer {
-  id          String        @id @default(cuid())
-  name        String
-  description String?
+  id            String        @id @default(cuid())
+  name          String
+  description   String?
   priceUsdCents Int
   durationDays  Int
-  features    String[]      @default([])
-  status      AdOfferStatus @default(ACTIVE)
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  features      String[]      @default([])
+  status        AdOfferStatus @default(ACTIVE)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
 
-  donations   AdDonation[]  @relation("AdOfferDonations")
+  donations AdDonation[] @relation("AdOfferDonations")
 
   @@index([status])
 }
 
 model CurrencyRate {
-  id          String   @id @default(cuid())
+  id           String   @id @default(cuid())
   fromCurrency String
   toCurrency   String
   rate         Float
@@ -924,9 +985,9 @@ model AiAgent {
 }
 
 model SiteSetting {
-  id    String @id @default(cuid())
-  key   String @unique
-  value String
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
   updatedAt DateTime @updatedAt
 }
 
@@ -935,10 +996,10 @@ model SiteSetting {
 // ══════════════════════════════════════════════
 
 enum TrustLevel {
-  NEW          // 0-39  — Très restreint
-  STANDARD     // 40-59 — Usage normal
-  VERIFIED     // 60-79 — Fiable
-  PREMIUM      // 80+   — Badge confiance
+  NEW // 0-39  — Très restreint
+  STANDARD // 40-59 — Usage normal
+  VERIFIED // 60-79 — Fiable
+  PREMIUM // 80+   — Badge confiance
 }
 
 enum SanctionLevel {
@@ -960,7 +1021,7 @@ enum RestrictionType {
 }
 
 model TrustScoreEvent {
-  id        String   @id @default(cuid())
+  id        String     @id @default(cuid())
   userId    String
   delta     Int
   reason    String
@@ -968,7 +1029,7 @@ model TrustScoreEvent {
   newScore  Int
   newLevel  TrustLevel
   metadata  Json?
-  createdAt DateTime @default(now())
+  createdAt DateTime   @default(now())
 
   user User @relation("TrustScoreUser", fields: [userId], references: [id], onDelete: Cascade)
 
@@ -976,15 +1037,15 @@ model TrustScoreEvent {
 }
 
 model SecurityEvent {
-  id         String   @id @default(cuid())
-  userId     String?
-  eventType  String
-  ipAddress  String?
-  userAgent  String?
-  deviceId   String?
-  metadata   Json?
-  riskLevel  Int      @default(0)
-  createdAt  DateTime @default(now())
+  id        String   @id @default(cuid())
+  userId    String?
+  eventType String
+  ipAddress String?
+  userAgent String?
+  deviceId  String?
+  metadata  Json?
+  riskLevel Int      @default(0)
+  createdAt DateTime @default(now())
 
   user User? @relation("SecurityUser", fields: [userId], references: [id], onDelete: SetNull)
 
@@ -1014,16 +1075,16 @@ model UserRestriction {
 }
 
 model FraudSignal {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   userId      String
   signalType  String
-  severity    Int      @default(1)
+  severity    Int       @default(1)
   description String?
   metadata    Json?
-  resolved    Boolean  @default(false)
+  resolved    Boolean   @default(false)
   resolvedBy  String?
   resolvedAt  DateTime?
-  createdAt   DateTime @default(now())
+  createdAt   DateTime  @default(now())
 
   user User @relation("FraudSignalUser", fields: [userId], references: [id], onDelete: Cascade)
 
@@ -1033,11 +1094,11 @@ model FraudSignal {
 }
 
 model RateLimitEntry {
-  id        String   @id @default(cuid())
-  key       String
-  count     Int      @default(1)
+  id          String   @id @default(cuid())
+  key         String
+  count       Int      @default(1)
   windowStart DateTime @default(now())
-  expiresAt DateTime
+  expiresAt   DateTime
 
   @@unique([key])
   @@index([expiresAt])
@@ -1067,17 +1128,17 @@ enum MessageGuardCategory {
 }
 
 model MessageGuardLog {
-  id               String               @id @default(cuid())
-  userId           String
-  conversationId   String
-  messageContent   String?
-  verdict          MessageGuardVerdict
-  riskScore        Int                  @default(0)
-  categories       MessageGuardCategory[]
-  detections       Json?
-  engineResults    Json?
-  warningShown     String?
-  createdAt        DateTime             @default(now())
+  id             String                 @id @default(cuid())
+  userId         String
+  conversationId String
+  messageContent String?
+  verdict        MessageGuardVerdict
+  riskScore      Int                    @default(0)
+  categories     MessageGuardCategory[]
+  detections     Json?
+  engineResults  Json?
+  warningShown   String?
+  createdAt      DateTime               @default(now())
 
   user User @relation("MessageGuardUser", fields: [userId], references: [id], onDelete: Cascade)
 
@@ -1088,25 +1149,25 @@ model MessageGuardLog {
 }
 
 model MessageGuardFragment {
-  id               String   @id @default(cuid())
-  userId           String
-  conversationId   String
-  content          String
+  id                String   @id @default(cuid())
+  userId            String
+  conversationId    String
+  content           String
   normalizedContent String
-  createdAt        DateTime @default(now())
-  expiresAt        DateTime
+  createdAt         DateTime @default(now())
+  expiresAt         DateTime
 
   @@index([userId, conversationId, createdAt])
   @@index([expiresAt])
 }
 
 model MessageGuardConfig {
-  id              String   @id @default(cuid())
-  key             String   @unique
-  value           Json
-  updatedBy       String?
-  updatedAt       DateTime @updatedAt
-  createdAt       DateTime @default(now())
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     Json
+  updatedBy String?
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
 }
 
 // ══════════════════════════════════════════
@@ -1121,31 +1182,110 @@ enum SoKinPostStatus {
 }
 
 model SoKinPost {
-  id             String          @id @default(cuid())
-  authorId       String
-  text           String
-  visibility     String          @default("PUBLIC")
-  mediaUrls      String[]        @default([])
-  hashtags       String[]        @default([])
-  tags           String[]        @default([])
-  location       String?
+  id              String          @id @default(cuid())
+  authorId        String
+  text            String
+  visibility      String          @default("PUBLIC")
+  mediaUrls       String[]        @default([])
+  hashtags        String[]        @default([])
+  tags            String[]        @default([])
+  location        String?
   linkedListingId String?
-  likes          Int             @default(0)
-  comments       Int             @default(0)
-  shares         Int             @default(0)
-  sponsored      Boolean         @default(false)
-  status         SoKinPostStatus @default(ACTIVE)
-  moderatedBy    String?
-  moderatedAt    DateTime?
-  moderationNote String?
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
+  likes           Int             @default(0)
+  comments        Int             @default(0)
+  shares          Int             @default(0)
+  sponsored       Boolean         @default(false)
+  status          SoKinPostStatus @default(ACTIVE)
+  moderatedBy     String?
+  moderatedAt     DateTime?
+  moderationNote  String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
 
   author User @relation("SoKinPosts", fields: [authorId], references: [id], onDelete: Cascade)
 
   @@index([authorId])
   @@index([status])
   @@index([createdAt])
+}
+
+// ══════════════════════════════════════════
+// SO-KIN LIVE — Système de lives
+// ══════════════════════════════════════════
+
+enum SoKinLiveStatus {
+  WAITING    // Salle d'attente avant démarrage
+  LIVE       // En cours de diffusion
+  ENDED      // Terminé
+  CANCELED   // Annulé
+}
+
+enum SoKinLiveAspect {
+  LANDSCAPE  // 16:9
+  PORTRAIT   // 9:16
+}
+
+model SoKinLive {
+  id            String            @id @default(cuid())
+  hostId        String
+  title         String
+  description   String?
+  thumbnailUrl  String?
+  aspect        SoKinLiveAspect   @default(PORTRAIT)
+  status        SoKinLiveStatus   @default(WAITING)
+  viewerCount   Int               @default(0)
+  peakViewers   Int               @default(0)
+  likesCount    Int               @default(0)
+  giftsCount    Int               @default(0)
+  replayUrl     String?
+  startedAt     DateTime?
+  endedAt       DateTime?
+  tags          String[]          @default([])
+  city          String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  host         User              @relation("SoKinLiveHost", fields: [hostId], references: [id], onDelete: Cascade)
+  participants SoKinLiveParticipant[]
+  chatMessages SoKinLiveChat[]
+
+  @@index([hostId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([status, viewerCount])
+}
+
+model SoKinLiveParticipant {
+  id        String   @id @default(cuid())
+  liveId    String
+  userId    String
+  role      String   @default("VIEWER") // VIEWER, GUEST (invité sur le live), MODERATOR
+  joinedAt  DateTime @default(now())
+  leftAt    DateTime?
+
+  live SoKinLive @relation(fields: [liveId], references: [id], onDelete: Cascade)
+  user User      @relation("SoKinLiveParticipants", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([liveId, userId])
+  @@index([liveId])
+  @@index([userId])
+}
+
+model SoKinLiveChat {
+  id        String   @id @default(cuid())
+  liveId    String
+  userId    String
+  text      String
+  isGift    Boolean  @default(false)
+  giftType  String?
+  isPinned  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  live SoKinLive @relation(fields: [liveId], references: [id], onDelete: Cascade)
+  user User      @relation("SoKinLiveChatMessages", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([liveId, createdAt])
+  @@index([userId])
 }
 
 // ══════════════════════════════════════════
@@ -1166,17 +1306,17 @@ enum DonationStatus {
 }
 
 model AdDonation {
-  id              String         @id @default(cuid())
-  userId          String
-  type            DonationType
-  amountUsdCents  Int
-  description     String?
-  adOfferId       String?
-  status          DonationStatus @default(PENDING)
-  processedBy     String?
-  processedAt     DateTime?
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  id             String         @id @default(cuid())
+  userId         String
+  type           DonationType
+  amountUsdCents Int
+  description    String?
+  adOfferId      String?
+  status         DonationStatus @default(PENDING)
+  processedBy    String?
+  processedAt    DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
 
   user    User     @relation("UserDonations", fields: [userId], references: [id], onDelete: Cascade)
   adOffer AdOffer? @relation("AdOfferDonations", fields: [adOfferId], references: [id])
@@ -1243,16 +1383,39 @@ model Advertisement {
 }
 
 // ══════════════════════════════════════════════
+// USER REVIEWS — Avis publics sur les profils
+// ══════════════════════════════════════════════
+
+model UserReview {
+  id         String   @id @default(cuid())
+  authorId   String
+  targetId   String
+  rating     Int      // 1–5
+  text       String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  author User @relation("ReviewsGiven", fields: [authorId], references: [id], onDelete: Cascade)
+  target User @relation("ReviewsReceived", fields: [targetId], references: [id], onDelete: Cascade)
+
+  @@unique([authorId, targetId])
+  @@index([targetId, createdAt])
+  @@index([authorId])
+}
+
+// ══════════════════════════════════════════════
 // CATEGORY NEGOTIATION RULES — Verrouillage négociation par catégorie (Admin)
 // ══════════════════════════════════════════════
 
 model CategoryNegotiationRule {
   id                String   @id @default(cuid())
-  category          String   @unique          // Nom exact de la catégorie (lowercase-trimmed)
-  negotiationLocked Boolean  @default(false)  // true = négociation interdite pour cette catégorie
-  updatedByUserId   String?                   // Admin qui a modifié
+  category          String   @unique // Nom exact de la catégorie (lowercase-trimmed)
+  negotiationLocked Boolean  @default(false) // true = négociation interdite pour cette catégorie
+  updatedByUserId   String? // Admin qui a modifié
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
+
+  updatedBy User? @relation("CategoryRuleUpdater", fields: [updatedByUserId], references: [id], onDelete: SetNull)
 
   @@index([category])
 }
@@ -1265,11 +1428,13 @@ model AiMemorySnapshot {
   id           String   @id @default(cuid())
   userId       String
   agentName    String
-  snapshotType String   // WEEKLY, MONTHLY, ANOMALY, TREND
+  snapshotType String // WEEKLY, MONTHLY, ANOMALY, TREND
   data         Json
   periodStart  DateTime
   periodEnd    DateTime
   createdAt    DateTime @default(now())
+
+  user User @relation("AiMemoryUser", fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, agentName, createdAt])
   @@index([agentName, snapshotType])
@@ -1278,7 +1443,7 @@ model AiMemorySnapshot {
 model AiAutonomyLog {
   id           String   @id @default(cuid())
   agentName    String
-  actionType   String   // AUTO_NEGOTIATE, AUTO_RECOVER_CART, AUTO_AD_OPTIMIZE, etc.
+  actionType   String // AUTO_NEGOTIATE, AUTO_RECOVER_CART, AUTO_AD_OPTIMIZE, etc.
   targetId     String?
   targetUserId String?
   decision     String
@@ -1287,7 +1452,177 @@ model AiAutonomyLog {
   metadata     Json?
   createdAt    DateTime @default(now())
 
+  targetUser User? @relation("AiAutonomyUser", fields: [targetUserId], references: [id], onDelete: SetNull)
+
   @@index([agentName, createdAt])
   @@index([targetUserId, createdAt])
   @@index([actionType])
+}
+
+// ══════════════════════════════════════════════
+// MARKET INTELLIGENCE — Données marché par ville/pays
+// ══════════════════════════════════════════════
+
+model MarketCity {
+  id          String   @id @default(cuid())
+  city        String
+  country     String
+  countryCode String   @default("CD")
+  currency    String   @default("CDF")
+  timezone    String   @default("Africa/Kinshasa")
+  isActive    Boolean  @default(true)
+  metadata    Json? // Population, infos économiques, etc.
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  stats MarketStats[]
+
+  @@unique([city, country])
+  @@index([countryCode])
+  @@index([isActive])
+}
+
+model MarketStats {
+  id                  String   @id @default(cuid())
+  marketCityId        String
+  category            String // ex: "Nourriture", "Téléphone", "Vêtements"
+  subcategory         String?
+  avgPriceUsdCents    Int      @default(0)
+  minPriceUsdCents    Int      @default(0)
+  maxPriceUsdCents    Int      @default(0)
+  medianPriceUsdCents Int      @default(0)
+  sampleSize          Int      @default(0)
+  demandScore         Int      @default(50) // 0-100 : indice de demande
+  supplyScore         Int      @default(50) // 0-100 : indice d'offre
+  trendDirection      String   @default("STABLE") // UP, DOWN, STABLE
+  seasonalNotes       String?
+  dataSource          String   @default("PLATFORM") // PLATFORM, MANUAL, API_EXTERNAL
+  periodStart         DateTime
+  periodEnd           DateTime
+  metadata            Json?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  marketCity MarketCity @relation(fields: [marketCityId], references: [id], onDelete: Cascade)
+
+  @@unique([marketCityId, category, periodStart])
+  @@index([marketCityId, category])
+  @@index([category, trendDirection])
+  @@index([demandScore])
+  @@index([periodStart, periodEnd])
+}
+
+// ══════════════════════════════════════════════
+// SO-KIN TRENDS — Tendances, suggestions, IA sociale
+// ══════════════════════════════════════════════
+
+enum SoKinTrendType {
+  HASHTAG
+  TOPIC
+  CATEGORY
+  PRODUCT
+  PROFILE
+}
+
+model SoKinTrend {
+  id             String         @id @default(cuid())
+  type           SoKinTrendType
+  title          String
+  description    String?
+  score          Int            @default(0) // Score de popularité (0-1000)
+  city           String?
+  country        String?
+  hashtags       String[]       @default([])
+  relatedPostIds String[]       @default([])
+  isActive       Boolean        @default(true)
+  periodStart    DateTime
+  periodEnd      DateTime
+  metadata       Json?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@index([type, score])
+  @@index([city])
+  @@index([isActive, score])
+  @@index([periodStart, periodEnd])
+}
+
+model SoKinSuggestion {
+  id              String   @id @default(cuid())
+  userId          String
+  suggestedUserId String
+  reason          String // MUTUAL_CONTACTS, SAME_CITY, SIMILAR_INTERESTS, FACEBOOK_FRIEND, PHONE_CONTACT
+  score           Int      @default(0) // Score de pertinence (0-100)
+  dismissed       Boolean  @default(false)
+  connected       Boolean  @default(false)
+  metadata        Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user          User @relation("SuggestionTarget", fields: [userId], references: [id], onDelete: Cascade)
+  suggestedUser User @relation("SuggestedUser", fields: [suggestedUserId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, suggestedUserId])
+  @@index([userId, dismissed, score])
+  @@index([suggestedUserId])
+}
+
+// ══════════════════════════════════════════════
+// USER CONTACTS — Import contacts (Facebook, Téléphone)
+// ══════════════════════════════════════════════
+
+enum ContactSource {
+  PHONE
+  FACEBOOK
+  GOOGLE
+  MANUAL
+}
+
+model UserContact {
+  id            String        @id @default(cuid())
+  userId        String
+  source        ContactSource
+  contactName   String?
+  contactPhone  String?
+  contactEmail  String?
+  contactFbId   String?
+  matchedUserId String? // Si ce contact correspond à un utilisateur Kin-Sell
+  importedAt    DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  user        User  @relation("ImportedContacts", fields: [userId], references: [id], onDelete: Cascade)
+  matchedUser User? @relation("MatchedContacts", fields: [matchedUserId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, source, contactPhone])
+  @@unique([userId, source, contactFbId])
+  @@index([userId, source])
+  @@index([matchedUserId])
+  @@index([contactPhone])
+  @@index([contactEmail])
+}
+
+// ══════════════════════════════════════════════
+// SO-KIN CONNECTIONS — Relations entre utilisateurs
+// ══════════════════════════════════════════════
+
+enum ConnectionStatus {
+  PENDING
+  ACCEPTED
+  BLOCKED
+}
+
+model SoKinConnection {
+  id          String           @id @default(cuid())
+  requesterId String
+  receiverId  String
+  status      ConnectionStatus @default(PENDING)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  requester User @relation("ConnectionRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  receiver  User @relation("ConnectionReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@unique([requesterId, receiverId])
+  @@index([requesterId, status])
+  @@index([receiverId, status])
 }

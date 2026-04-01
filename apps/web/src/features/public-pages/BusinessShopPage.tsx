@@ -46,13 +46,7 @@ const fmtUsd = (cents: number): string => {
   return `$${val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
 
-const DEFAULT_QUALITIES: Quality[] = [
-  { id: 'q1', icon: '⭐', name: 'Expérience premium', description: 'Présentation soignée et suivi sérieux sur toute la relation client.' },
-  { id: 'q2', icon: '🔒', name: 'Fiabilité', description: 'Transactions rassurantes grâce à une présence stable sur la plateforme.' },
-  { id: 'q3', icon: '📈', name: 'Visibilité forte', description: 'Boutique bien exposée pour capter l\'attention des acheteurs actifs.' },
-];
-
-const FALLBACK_HERO = '/assets/kin-sell/blackfriday-celebration-marketing.jpg';
+const FALLBACK_HERO = '';
 
 const REPORT_REASONS = [
   'Contenu inapproprié',
@@ -103,7 +97,7 @@ export function BusinessShopPage({ slug }: BusinessShopPageProps) {
 
   // ─── Images pour le carousel ─────────────────────────────
   const heroImages = useMemo(() => {
-    if (!business) return [FALLBACK_HERO];
+    if (!business) return [];
     const imgs: string[] = [];
     if (business.shop?.coverImage) imgs.push(business.shop.coverImage);
     for (const l of business.listings) {
@@ -113,7 +107,7 @@ export function BusinessShopPage({ slug }: BusinessShopPageProps) {
       }
       if (imgs.length >= 5) break;
     }
-    return imgs.length > 0 ? imgs : [FALLBACK_HERO];
+    return imgs;
   }, [business]);
 
   // ─── Auto-avance carousel ─────────────────────────────────
@@ -123,14 +117,14 @@ export function BusinessShopPage({ slug }: BusinessShopPageProps) {
     return () => clearInterval(timer);
   }, [heroImages.length]);
 
-  // ─── Charger points forts & photos boutique depuis localStorage ──
+  // ─── Charger points forts depuis localStorage (vide si rien mis) ──
   const qualities: Quality[] = useMemo(() => {
-    if (!business) return DEFAULT_QUALITIES;
+    if (!business) return [];
     try {
       const stored = localStorage.getItem(`ks-qualities-${business.id}`);
       if (stored) { const parsed = JSON.parse(stored); if (Array.isArray(parsed) && parsed.length > 0) return parsed; }
     } catch { /* ignore */ }
-    return DEFAULT_QUALITIES;
+    return [];
   }, [business]);
 
   const shopPhotos: string[] = useMemo(() => {
@@ -175,7 +169,7 @@ export function BusinessShopPage({ slug }: BusinessShopPageProps) {
     setTimeout(() => { setShowReviewPopup(false); setReviewMsg(''); }, 1500);
   }, [business, reviewDraft, reviews]);
 
-  const handleSubmitReport = useCallback(() => {
+  const handleSubmitReport = useCallback(async () => {
     if (!business || !reportDraft.author.trim() || !reportDraft.detail.trim()) return;
     const newReport: Report = {
       id: `rp-${Date.now()}`,
@@ -185,10 +179,13 @@ export function BusinessShopPage({ slug }: BusinessShopPageProps) {
       date: new Date().toISOString(),
     };
     try {
-      const stored = localStorage.getItem(`ks-reports-${business.id}`);
-      const existing: Report[] = stored ? JSON.parse(stored) : [];
-      existing.push(newReport);
-      localStorage.setItem(`ks-reports-${business.id}`, JSON.stringify(existing));
+      const apiBaseUrl = (import.meta.env as Record<string, string | undefined>).VITE_API_URL ?? '/api';
+      const token = localStorage.getItem('ks-auth-token');
+      await fetch(`${apiBaseUrl}/users/report`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ reportedUserId: business.id, reason: newReport.reason, message: newReport.detail }),
+      });
     } catch { /* ignore */ }
     setReportDraft({ author: '', reason: REPORT_REASONS[0], detail: '' });
     setReportMsg('✓ Signalement envoyé, merci.');
@@ -243,14 +240,18 @@ export function BusinessShopPage({ slug }: BusinessShopPageProps) {
       {/* ═══ HERO + CAROUSEL ═════════════════════════════════ */}
       <header className="business-lux-hero">
         <div className="business-lux-hero-media">
-          {heroImages.map((src, i) => (
+          {heroImages.length > 0 ? heroImages.map((src, i) => (
             <img
               key={src + i}
               src={src}
               alt={business.publicName}
               className={`biz-hero-slide${i === heroIndex ? ' biz-hero-slide--active' : ''}`}
             />
-          ))}
+          )) : (
+            <div className="biz-hero-slide biz-hero-slide--active" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--glass-bg)', color: 'var(--color-text-secondary)', fontSize: '3rem' }}>
+              {business.publicName.slice(0, 2).toUpperCase()}
+            </div>
+          )}
           {heroImages.length > 1 && (
             <div className="biz-carousel-dots">
               {heroImages.map((_, i) => (
@@ -281,13 +282,13 @@ export function BusinessShopPage({ slug }: BusinessShopPageProps) {
               <h1 className="public-title">{business.publicName}</h1>
               <span className="business-lux-verified">{tierLabel}</span>
             </div>
-            <p className="business-lux-domain">{publicDesc || 'Vitrine digitale premium'}</p>
+            <p className="business-lux-domain">{publicDesc || ''}</p>
             <div className="business-lux-meta-row">
               <span>📍 {city}</span>
               <span>|</span>
               <span>⭐ {reviews.length > 0 ? avgScore.toFixed(1) : '—'}</span>
               <span>|</span>
-              <span>{showcaseCount > 0 ? `${showcaseCount} articles` : 'Boutique active'}</span>
+              <span>{showcaseCount > 0 ? `${showcaseCount} articles` : 'Aucun article'}</span>
             </div>
             <div className="business-lux-meta-row strong">
               <span>{productListings.length} produits</span>

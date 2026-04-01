@@ -1,20 +1,36 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocaleCurrency } from "../../app/providers/LocaleCurrencyProvider";
-import { negotiations, type NegotiationSummary, ApiError } from "../../lib/api-client";
+import { negotiations, negotiationAi, type NegotiationSummary, type SellerNegotiationAdvice, ApiError } from "../../lib/api-client";
 import "./negotiate-popup.css";
 
 type NegotiationRespondPopupProps = {
   negotiation: NegotiationSummary;
   onClose: () => void;
   onUpdated: (updated: NegotiationSummary) => void;
+  showAi?: boolean; // gated by plan
 };
 
-export function NegotiationRespondPopup({ negotiation, onClose, onUpdated }: NegotiationRespondPopupProps) {
+export function NegotiationRespondPopup({ negotiation, onClose, onUpdated, showAi = false }: NegotiationRespondPopupProps) {
   const { t, formatMoneyFromUsdCents } = useLocaleCurrency();
   const [counterPrice, setCounterPrice] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // ── IA Marchand — Seller Advice ──
+  const [aiAdvice, setAiAdvice] = useState<SellerNegotiationAdvice | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+
+  useEffect(() => {
+    if (!showAi) return;
+    let cancelled = false;
+    setAiLoading(true);
+    negotiationAi.sellerAdvice(negotiation.id)
+      .then((data) => { if (!cancelled) setAiAdvice(data); })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setAiLoading(false); });
+    return () => { cancelled = true; };
+  }, [negotiation.id, showAi]);
 
   const lastOffer = negotiation.offers[negotiation.offers.length - 1];
 
@@ -132,6 +148,36 @@ export function NegotiationRespondPopup({ negotiation, onClose, onUpdated }: Neg
         </div>
 
         <div className="neg-actions-row">
+          {/* ── IA Marchand — Conseil vendeur ── */}
+          {showAi && (
+            <div className="neg-ai-panel">
+              <div className="neg-ai-header">
+                <span className="neg-ai-icon">🤖</span>
+                <strong className="neg-ai-title">IA Marchand</strong>
+              </div>
+              {aiLoading ? (
+                <p className="neg-ai-loading">Analyse en cours…</p>
+              ) : aiAdvice ? (
+                <div className="neg-ai-body">
+                  <div className={`neg-ai-reco neg-ai-reco--${aiAdvice.recommendation.toLowerCase()}`}>
+                    <span className="neg-ai-reco-badge">
+                      {aiAdvice.recommendation === "ACCEPT" ? "✅ Accepter" : aiAdvice.recommendation === "COUNTER" ? "🔄 Contre-offre" : "❌ Refuser"}
+                    </span>
+                    <span className="neg-ai-reco-prob">{Math.round(aiAdvice.conversionProbability * 100)}% chances de conversion</span>
+                  </div>
+                  {aiAdvice.counterPrice != null && (
+                    <p className="neg-ai-counter">Prix suggéré : <strong>{formatMoneyFromUsdCents(aiAdvice.counterPrice)}</strong></p>
+                  )}
+                  <p className="neg-ai-margin">Impact marge : {aiAdvice.marginImpact}</p>
+                  <p className="neg-ai-reason">{aiAdvice.reasoning}</p>
+                  <div className="neg-ai-buyer">
+                    <span>Acheteur : Confiance {aiAdvice.buyerProfile.trustLevel}</span>
+                    <span>{aiAdvice.buyerProfile.totalOrders} commande(s)</span>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          )}
           <button
             type="button"
             className="neg-action-btn neg-action-btn--accept"

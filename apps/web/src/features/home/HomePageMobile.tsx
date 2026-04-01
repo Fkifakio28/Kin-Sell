@@ -27,9 +27,33 @@ import {
   type SoKinApiFeedPost,
 } from "../../lib/api-client";
 import { NegotiatePopup } from "../negotiations/NegotiatePopup";
+import { AdBanner } from "../../components/AdBanner";
 import { useLockedCategories, isCategoryLocked } from "../../hooks/useLockedCategories";
 import { usePwaInstall } from "../../hooks/usePwaInstall";
 import "./home-mobile.css";
+
+// ─────────────────────────────────────────────────────────────
+// Swipe helper — detect horizontal swipe on an element
+// ─────────────────────────────────────────────────────────────
+function useSwipe(ref: React.RefObject<HTMLElement | null>, onSwipeLeft?: () => void) {
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    let startX = 0;
+    let startY = 0;
+    const onTouchStart = (e: TouchEvent) => { startX = e.touches[0].clientX; startY = e.touches[0].clientY; };
+    const onTouchEnd = (e: TouchEvent) => {
+      const dx = e.changedTouches[0].clientX - startX;
+      const dy = e.changedTouches[0].clientY - startY;
+      if (Math.abs(dx) > 80 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+        if (dx < 0 && onSwipeLeft) onSwipeLeft();
+      }
+    };
+    el.addEventListener("touchstart", onTouchStart, { passive: true });
+    el.addEventListener("touchend", onTouchEnd, { passive: true });
+    return () => { el.removeEventListener("touchstart", onTouchStart); el.removeEventListener("touchend", onTouchEnd); };
+  }, [ref, onSwipeLeft]);
+}
 
 // ─────────────────────────────────────────────────────────────
 // Static data
@@ -375,7 +399,7 @@ function SuggestionsRow({
           : items.map((item) => (
               <Link
                 key={item.id}
-                to={`/listing/${item.id}`}
+                to={item.owner.username ? `/user/${item.owner.username}#listing-${item.id}` : `/explorer`}
                 className="ksm-suggestion-card"
                 aria-label={item.title}
               >
@@ -413,7 +437,7 @@ function SoKinFeedSection() {
     let cancelled = false;
     const load = async () => {
       try {
-        const res = await sokinApi.publicFeed(6);
+        const res = await sokinApi.publicFeed(12);
         if (!cancelled) setPosts(res.posts);
       } catch { if (!cancelled) setPosts([]); }
       finally { if (!cancelled) setLoading(false); }
@@ -421,6 +445,61 @@ function SoKinFeedSection() {
     void load();
     return () => { cancelled = true; };
   }, []);
+
+  // Insert ad slots every 4 posts
+  const renderPostsWithAds = (items: SoKinApiFeedPost[]) => {
+    const elements: React.ReactNode[] = [];
+    items.forEach((post, idx) => {
+      const profile = post.author?.profile;
+      const name = profile?.displayName ?? "Utilisateur";
+      const city = profile?.city;
+      const initial = name.charAt(0).toUpperCase();
+
+      elements.push(
+        <article key={post.id} className="ksm-feed-post">
+          <div className="ksm-feed-post-header">
+            <div className="ksm-feed-avatar">
+              {profile?.avatarUrl ? (
+                <img src={profile.avatarUrl} alt={name} className="ksm-feed-avatar-img" />
+              ) : (
+                <span className="ksm-feed-avatar-initial">{initial}</span>
+              )}
+            </div>
+            <div className="ksm-feed-post-meta">
+              <p className="ksm-feed-post-author">{name}</p>
+              {city && <p className="ksm-feed-post-city">📍 {city}</p>}
+            </div>
+          </div>
+
+          {post.text && (
+            <p className="ksm-feed-post-text">{post.text}</p>
+          )}
+
+          {post.mediaUrls && post.mediaUrls.length > 0 && (
+            <div className="ksm-feed-post-media">
+              {post.mediaUrls.slice(0, 3).map((url, i) => (
+                <img key={i} src={url} alt={`Media ${i + 1}`} className="ksm-feed-media-img" loading="lazy" />
+              ))}
+            </div>
+          )}
+
+          <div className="ksm-feed-post-stats">
+            <span>❤️ {post.likes}</span>
+            <span>💬 {post.comments}</span>
+            <span>↗️ {post.shares}</span>
+          </div>
+        </article>
+      );
+
+      // Ad slot every 4 posts (after 4th, 8th, etc.)
+      if ((idx + 1) % 4 === 0) {
+        elements.push(
+          <AdBanner key={`ad-${idx}`} page="home" variant="slim" hideWhenEmpty />
+        );
+      }
+    });
+    return elements;
+  };
 
   return (
     <section className="ksm-sokin-feed" aria-label="SoKin — Fil d'actualité">
@@ -458,54 +537,7 @@ function SoKinFeedSection() {
             </Link>
           </article>
         ) : (
-          posts.map((post) => {
-              const profile = post.author?.profile;
-              const name = profile?.displayName ?? "Utilisateur";
-              const city = profile?.city;
-              const initial = name.charAt(0).toUpperCase();
-
-              return (
-                <article key={post.id} className="ksm-feed-post">
-                  <div className="ksm-feed-post-header">
-                    <div className="ksm-feed-avatar">
-                      {profile?.avatarUrl ? (
-                        <img src={profile.avatarUrl} alt={name} className="ksm-feed-avatar-img" />
-                      ) : (
-                        <span className="ksm-feed-avatar-initial">{initial}</span>
-                      )}
-                    </div>
-                    <div className="ksm-feed-post-meta">
-                      <p className="ksm-feed-post-author">{name}</p>
-                      {city && <p className="ksm-feed-post-city">📍 {city}</p>}
-                    </div>
-                  </div>
-
-                  {post.text && (
-                    <p className="ksm-feed-post-text">{post.text}</p>
-                  )}
-
-                  {post.mediaUrls && post.mediaUrls.length > 0 && (
-                    <div className="ksm-feed-post-media">
-                      {post.mediaUrls.slice(0, 3).map((url, idx) => (
-                        <img
-                          key={idx}
-                          src={url}
-                          alt={`Media ${idx + 1}`}
-                          className="ksm-feed-media-img"
-                          loading="lazy"
-                        />
-                      ))}
-                    </div>
-                  )}
-
-                  <div className="ksm-feed-post-stats">
-                    <span>❤️ {post.likes}</span>
-                    <span>💬 {post.comments}</span>
-                    <span>↗️ {post.shares}</span>
-                  </div>
-                </article>
-              );
-            })
+          renderPostsWithAds(posts)
         )}
       </div>
 
@@ -537,7 +569,7 @@ function MobileListingCard({
   const isNeg = listing.isNegotiable;
 
   return (
-    <Link to={`/listing/${listing.id}`} className="ksm-card" aria-label={listing.title}>
+    <Link to={listing.owner.username ? `/user/${listing.owner.username}#listing-${listing.id}` : `/explorer`} className="ksm-card" aria-label={listing.title}>
       <div className="ksm-card-img-wrap">
         {listing.imageUrl ? (
           <img src={listing.imageUrl} alt={listing.title} className="ksm-card-img" loading="lazy" />
@@ -858,8 +890,12 @@ export function HomePageMobile() {
   // iOS install hint
   const showIosHint = platform === "ios";
 
+  // Swipe left → SoKin Live
+  const rootRef = useRef<HTMLDivElement>(null);
+  useSwipe(rootRef, () => void navigate("/sokin/live"));
+
   return (
-    <div className="ksm-root-v2">
+    <div className="ksm-root-v2" ref={rootRef}>
 
       {/* ── SIDE DRAWER ── */}
       <SideDrawer
@@ -932,7 +968,7 @@ export function HomePageMobile() {
         ) : listings.length === 0 ? (
           <p className="ksm-listings-empty">{t("common.noResults")}</p>
         ) : (
-          <div className="ksm-listings-grid">
+          <div className="ksm-listings-scroll">
             {listings.map((l) => (
               <MobileListingCard
                 key={l.id}
@@ -950,16 +986,6 @@ export function HomePageMobile() {
 
       {/* ── SOKIN FEED ── */}
       <SoKinFeedSection />
-
-      {/* ── CTA PREMIUM ── */}
-      <section className="ksm-cta-section" aria-label="Plans premium">
-        <div className="ksm-cta-card glass-card">
-          <p className="ksm-cta-emoji" aria-hidden="true">💎</p>
-          <p className="ksm-cta-title">{t("home.premiumTitle") || "Vendez plus avec Kin-Sell Premium"}</p>
-          <p className="ksm-cta-sub">{t("home.premiumSub") || "Boostez vos annonces, accédez à l'IA et gérez votre boutique"}</p>
-          <Link to="/forfaits" className="ksm-cta-btn">{t("nav.plans")}</Link>
-        </div>
-      </section>
 
       {/* Spacer bottom nav */}
       <div className="ksm-bottom-spacer" aria-hidden="true" />

@@ -26,9 +26,14 @@ export const getExplorerAds = async (_city?: string, _country?: string) => {
 
 export const getFeaturedShops = async (limit = 4) => {
   const shops = await prisma.businessShop.findMany({
-    where: { active: true },
+    where: {
+      active: true,
+      business: {
+        listings: { some: { isPublished: true, status: "ACTIVE" } },
+      },
+    },
     take: limit,
-    orderBy: { createdAt: "desc" },
+    orderBy: { business: { listings: { _count: "desc" } } },
     include: {
       business: {
         select: {
@@ -36,6 +41,7 @@ export const getFeaturedShops = async (limit = 4) => {
           publicName: true,
           slug: true,
           verificationStatus: true,
+          _count: { select: { listings: { where: { isPublished: true, status: "ACTIVE" } } } },
         },
       },
     },
@@ -61,13 +67,13 @@ export const getFeaturedProfiles = async (limit = 4) => {
       username: { not: null },
       user: {
         accountStatus: "ACTIVE",
-        // Exclure les admins et les comptes business des profils publics
         role: { notIn: ["ADMIN", "SUPER_ADMIN", "BUSINESS"] },
+        listings: { some: { isPublished: true, status: "ACTIVE" } },
       },
     },
     take: limit,
     orderBy: {
-      user: { sellerOrders: { _count: "desc" } },
+      user: { listings: { _count: "desc" } },
     },
     select: {
       id: true,

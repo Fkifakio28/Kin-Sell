@@ -6,6 +6,7 @@ import { asyncHandler } from "../../shared/utils/async-handler.js";
 import { Role } from "../../types/roles.js";
 import * as ordersService from "./orders.service.js";
 import { sendPushToUser } from "../notifications/push.service.js";
+import * as momoService from "../mobile-money/mobile-money.service.js";
 
 const pagingSchema = z.object({
   page: z.coerce.number().min(1).default(1),
@@ -29,6 +30,13 @@ const updateCartItemSchema = z.object({
 
 const checkoutSchema = z.object({
   notes: z.string().min(2).max(400).optional()
+});
+
+const momoCheckoutSchema = z.object({
+  notes: z.string().min(2).max(400).optional(),
+  provider: z.enum(["ORANGE_MONEY", "MPESA"]),
+  phoneNumber: z.string().regex(/^243\d{9}$/, "Format: 243XXXXXXXXX"),
+  amountCDF: z.number().int().min(100, "Montant minimum: 100 CDF")
 });
 
 const updateStatusSchema = z.object({
@@ -96,6 +104,43 @@ router.post(
       }
     }
     response.status(201).json(data);
+  })
+);
+
+router.post(
+  "/buyer/checkout/mobile-money",
+  requireAuth,
+  requireRoles(Role.USER, Role.BUSINESS),
+  asyncHandler(async (request: AuthenticatedRequest, response) => {
+    const payload = momoCheckoutSchema.parse(request.body);
+
+    // Checkout classique → crée les commandes
+    const data = await ordersService.checkoutBuyerCart(request.auth!.userId, payload.notes);
+
+    // Initier le paiement Mobile Money pour chaque commande créée
+    const momoPayments = [];
+    for (const order of data.orders ?? []) {
+      const momoResult = await momoService.initiatePayment(request.auth!.userId, {
+        provider: payload.provider,
+        phoneNumber: payload.phoneNumber,
+        amountCDF: payload.amountCDF,
+        purpose: "ORDER",
+        targetId: order.id,
+      });
+      momoPayments.push(momoResult);
+
+      // Push notify sellers
+      if (order.seller?.userId && order.seller.userId !== request.auth!.userId) {
+        void sendPushToUser(order.seller.userId, {
+          title: "🛒 Nouvelle commande !",
+          body: `Vous avez reçu une nouvelle commande de ${order.itemsCount ?? 1} article(s)`,
+          tag: `order-${order.id}`,
+          data: { type: "order", orderId: order.id },
+        });
+      }
+    }
+
+    response.status(201).json({ ...data, mobileMoneyPayments: momoPayments });
   })
 );
 

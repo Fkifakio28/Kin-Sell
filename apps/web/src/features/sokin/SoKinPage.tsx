@@ -428,6 +428,7 @@ export function SoKinPage() {
         ) : null}
         <button type="button" className="sokin-nav-item" onClick={() => navigate('/sokin/profiles')}>{t('sokin.profiles')}</button>
         <button type="button" className="sokin-nav-item" onClick={() => navigate('/sokin/market')}>{t('sokin.market')}</button>
+        <button type="button" className="sokin-nav-item sokin-nav-live" onClick={() => navigate('/sokin/live')}>🔴 Live</button>
         <button type="button" className="sokin-nav-item" onClick={() => navigate('/explorer')}>{t('sokin.goExplorer')}</button>
 
         <section className="sokin-left-ad" aria-label="Publicité navigation So-Kin" style={{ display: 'none' }} />
@@ -1035,19 +1036,14 @@ export function SoKinPage() {
               <span>Accueil</span>
             </button>
 
-            <button className="sokin-mobile-nav-item" type="button" onClick={() => navigate('/cart')}>
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" />
-                <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
-              </svg>
-              {cartItemsCount > 0 ? <span className="sokin-mobile-badge">{cartItemsCount}</span> : null}
-              <span>Panier</span>
+            <button className="sokin-mobile-nav-item" type="button" onClick={() => navigate('/sokin/live')}>
+              <span style={{ fontSize: '18px' }}>🔴</span>
+              <span>Live</span>
             </button>
 
             <button className="sokin-mobile-nav-fab" type="button" onClick={() => {
-              const composer = document.querySelector('.sokin-composer');
-              if (composer) composer.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }} aria-label="Créer">
+              navigate(isLoggedIn ? '/sokin/live?create=1' : '/login');
+            }} aria-label="Lancer un live">
               <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
                 <line x1="12" y1="5" x2="12" y2="19" />
                 <line x1="5" y1="12" x2="19" y2="12" />

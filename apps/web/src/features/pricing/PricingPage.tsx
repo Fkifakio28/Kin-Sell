@@ -6,6 +6,7 @@ import { billing, type BillingPlanSummary, ApiError } from "../../lib/api-client
 import "./pricing.css";
 
 type PricingTab = "users" | "business" | "addons";
+type PayMethod = "paypal" | "bank" | "orange" | "mpesa";
 
 type Plan = {
   code: string;
@@ -31,18 +32,15 @@ type PaymentOrder = {
   proofUrl?: string | null;
 };
 
-type CheckoutInstruction = {
+type CheckoutResult = {
   orderId: string;
   status: string;
   planCode: string;
   amountUsdCents: number;
   currency: string;
   transferReference: string;
-  beneficiary: {
-    iban: string;
-    bic: string;
-    rib?: string | null;
-  };
+  paymentUrl?: string;
+  beneficiary?: { iban: string; bic: string; rib?: string | null };
   expiresAt: string;
   instructions: string[];
 };
@@ -166,7 +164,7 @@ function PlanCard({
         <span className="pricing-current">Plan actif</span>
       ) : canChange ? (
         <button className="pricing-cta pricing-cta-btn" type="button" onClick={() => onChoose(plan.code)} disabled={loading}>
-          {loading ? "Création ordre..." : "Payer via PayPal"}
+          {loading ? "Traitement..." : "Choisir ce forfait"}
         </button>
       ) : (
         <Link className="pricing-cta" to="/register">Créer un compte</Link>
@@ -174,6 +172,13 @@ function PlanCard({
     </article>
   );
 }
+
+const PAY_LABELS: Record<PayMethod, string> = {
+  paypal: "💳 PayPal",
+  bank: "🏦 Virement bancaire (Nickel)",
+  orange: "🟠 Orange Money",
+  mpesa: "📱 M-Pesa",
+};
 
 export function PricingPage() {
   const { user, isLoggedIn } = useAuth();
@@ -183,9 +188,15 @@ export function PricingPage() {
   const [busyAddonCode, setBusyAddonCode] = useState<string | null>(null);
   const [busyOrderAction, setBusyOrderAction] = useState<string | null>(null);
   const [paymentOrders, setPaymentOrders] = useState<PaymentOrder[]>([]);
-  const [latestCheckout, setLatestCheckout] = useState<CheckoutInstruction | null>(null);
+  const [latestCheckout, setLatestCheckout] = useState<CheckoutResult | null>(null);
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Payment method + mobile money fields
+  const [payMethod, setPayMethod] = useState<PayMethod>("paypal");
+  const [momoPhone, setMomoPhone] = useState("");
+  const [momoAmountCDF, setMomoAmountCDF] = useState(0);
+  const [pendingPlanCode, setPendingPlanCode] = useState<string | null>(null);
 
   const role = user?.role === "BUSINESS" ? "BUSINESS" : user?.role === "USER" ? "USER" : "VISITOR";
 
@@ -227,22 +238,113 @@ export function PricingPage() {
     };
   }, [isLoggedIn]);
 
-  const handleChoosePlan = async (planCode: string) => {
+  // Auto-capture PayPal payment when user returns from PayPal approval
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    const params = new URLSearchParams(window.location.search);
+    const orderId = params.get("orderId");
+    const paid = params.get("paid");
+    if (paid !== "1" || !orderId) return;
+
+    // Clean URL params immediately
+    window.history.replaceState({}, "", window.location.pathname);
+
+    let cancelled = false;
+    const capture = async () => {
+      setInfoMessage("Finalisation du paiement PayPal en cours…");
+      try {
+        const result = await billing.capturePaypalCheckout({ orderId });
+        if (!cancelled) {
+          setInfoMessage(result.message || "Paiement PayPal confirmé ! Votre forfait est activé.");
+          // Reload billing data
+          const [planData, ordersData] = await Promise.all([billing.myPlan(), billing.paymentOrders()]);
+          if (!cancelled) {
+            setCurrentPlan(planData);
+            setPaymentOrders(ordersData.orders);
+          }
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setErrorMessage(err instanceof ApiError ? err.message : "Erreur lors de la capture du paiement PayPal.");
+        }
+      }
+    };
+    void capture();
+    return () => { cancelled = true; };
+  }, [isLoggedIn]);
+
+  const handleChoosePlan = (planCode: string) => {
     if (!isLoggedIn) {
       setInfoMessage("Connectez-vous pour activer un forfait.");
       return;
     }
-
+    setPendingPlanCode(planCode);
+    setLatestCheckout(null);
     setErrorMessage(null);
     setInfoMessage(null);
-    setBusyPlanCode(planCode);
+  };
+
+  const handlePay = async () => {
+    if (!pendingPlanCode) return;
+    setErrorMessage(null);
+    setInfoMessage(null);
+    setBusyPlanCode(pendingPlanCode);
 
     try {
-      const checkout = await billing.createBankTransferCheckout({ planCode, billingCycle: "MONTHLY" });
-      setLatestCheckout(checkout);
+      if (payMethod === "paypal") {
+        const result = await billing.createPaypalCheckout({ planCode: pendingPlanCode, billingCycle: "MONTHLY" });
+        setLatestCheckout(result);
+        // Redirect to PayPal
+        if (result.paymentUrl) {
+          window.open(result.paymentUrl, "_blank", "noopener,noreferrer");
+        }
+        setInfoMessage(`Ordre créé. Payez sur PayPal puis votre forfait sera activé automatiquement.`);
+      } else if (payMethod === "bank") {
+        const result = await billing.createBankTransferCheckout({ planCode: pendingPlanCode, billingCycle: "MONTHLY" });
+        setLatestCheckout(result);
+        setInfoMessage(`Ordre créé. Effectuez le virement puis confirmez.`);
+      } else if (payMethod === "orange" || payMethod === "mpesa") {
+        if (!momoPhone.match(/^243\d{9}$/)) {
+          setErrorMessage("Numéro invalide. Format: 243XXXXXXXXX");
+          setBusyPlanCode(null);
+          return;
+        }
+        if (momoAmountCDF < 100) {
+          setErrorMessage("Montant CDF minimum: 100");
+          setBusyPlanCode(null);
+          return;
+        }
+        const result = await billing.createMobileMoneyCheckout({
+          planCode: pendingPlanCode,
+          billingCycle: "MONTHLY",
+          provider: payMethod === "orange" ? "ORANGE_MONEY" : "MPESA",
+          phoneNumber: momoPhone,
+          amountCDF: momoAmountCDF,
+        });
+        setLatestCheckout({
+          orderId: result.paymentOrder.orderId,
+          status: "PENDING",
+          planCode: result.paymentOrder.planCode,
+          amountUsdCents: result.paymentOrder.amountUsdCents,
+          currency: "USD",
+          transferReference: "",
+          expiresAt: "",
+          instructions: payMethod === "orange"
+            ? ["Vous allez être redirigé vers Orange Money.", "Validez le paiement sur votre téléphone."]
+            : ["Un push USSD a été envoyé sur votre téléphone.", "Validez le paiement M-Pesa."],
+        });
+        if (result.mobileMoney.redirectUrl) {
+          window.open(result.mobileMoney.redirectUrl, "_blank", "noopener,noreferrer");
+        }
+        setInfoMessage(payMethod === "orange"
+          ? "Paiement Orange Money initié. Validez sur votre téléphone."
+          : "Paiement M-Pesa initié. Validez le push USSD sur votre téléphone."
+        );
+      }
+
       const orders = await billing.paymentOrders();
       setPaymentOrders(orders.orders);
-      setInfoMessage(`Ordre de paiement créé pour ${planCode}. Effectuez le paiement via PayPal puis confirmez.`);
+      setPendingPlanCode(null);
     } catch (error) {
       if (error instanceof ApiError && error.data && typeof error.data === "object" && "error" in error.data) {
         const message = (error.data as { error?: string }).error;
@@ -429,23 +531,112 @@ export function PricingPage() {
         </section>
       ) : null}
 
+      {pendingPlanCode ? (
+        <section className="pricing-footer-note glass-container">
+          <h2>Choisir votre méthode de paiement — {pendingPlanCode}</h2>
+          <div className="pricing-role-switch" style={{ flexWrap: "wrap", gap: "8px" }}>
+            {(["paypal", "bank", "orange", "mpesa"] as PayMethod[]).map((m) => (
+              <button
+                key={m}
+                type="button"
+                className={`pricing-switch-btn${payMethod === m ? " active" : ""}`}
+                style={payMethod === m ? { background: "rgba(111,88,255,0.35)", borderColor: "rgba(185,166,255,0.8)" } : {}}
+                onClick={() => setPayMethod(m)}
+              >
+                {PAY_LABELS[m]}
+              </button>
+            ))}
+          </div>
+
+          {(payMethod === "orange" || payMethod === "mpesa") ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginTop: "8px" }}>
+              <label style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>
+                Numéro de téléphone (format: 243XXXXXXXXX)
+              </label>
+              <input
+                type="tel"
+                placeholder="243970000000"
+                value={momoPhone}
+                onChange={(e) => setMomoPhone(e.target.value.replace(/\D/g, "").slice(0, 12))}
+                style={{
+                  padding: "10px 12px",
+                  borderRadius: "12px",
+                  border: "1px solid var(--glass-border)",
+                  background: "rgba(111,88,255,0.08)",
+                  color: "var(--color-text-primary)",
+                  fontFamily: "inherit",
+                  fontSize: "14px",
+                }}
+              />
+              <label style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>
+                Montant en CDF (Francs Congolais)
+              </label>
+              <input
+                type="number"
+                placeholder="5000"
+                value={momoAmountCDF || ""}
+                onChange={(e) => setMomoAmountCDF(Number(e.target.value))}
+                style={{
+                  padding: "10px 12px",
+                  borderRadius: "12px",
+                  border: "1px solid var(--glass-border)",
+                  background: "rgba(111,88,255,0.08)",
+                  color: "var(--color-text-primary)",
+                  fontFamily: "inherit",
+                  fontSize: "14px",
+                }}
+              />
+            </div>
+          ) : null}
+
+          <button
+            type="button"
+            className="pricing-cta pricing-cta-btn"
+            style={{ marginTop: "12px", fontSize: "15px", padding: "12px 20px" }}
+            disabled={busyPlanCode !== null}
+            onClick={() => void handlePay()}
+          >
+            {busyPlanCode ? "Traitement..." : `Payer avec ${PAY_LABELS[payMethod]}`}
+          </button>
+          <button
+            type="button"
+            className="pricing-switch-btn"
+            style={{ alignSelf: "flex-start", fontSize: "12px" }}
+            onClick={() => setPendingPlanCode(null)}
+          >
+            ✕ Annuler
+          </button>
+        </section>
+      ) : null}
+
       {latestCheckout ? (
         <section className="pricing-footer-note glass-container">
-          <h2>Paiement PayPal</h2>
+          <h2>Détails du paiement</h2>
           <p>Ordre {latestCheckout.orderId} · {(latestCheckout.amountUsdCents / 100).toFixed(2)} {latestCheckout.currency}</p>
-          <p>Référence: <strong>{latestCheckout.transferReference}</strong></p>
-          <p>Expire le: {new Date(latestCheckout.expiresAt).toLocaleString("fr-FR")}</p>
-          <p style={{ margin: '12px 0' }}>Cliquez sur le bouton ci-dessous pour effectuer le paiement via PayPal :</p>
-          <a
-            href={`https://www.paypal.com/cgi-bin/webscr?cmd=_xclick&business=${import.meta.env.VITE_PAYPAL_MERCHANT_ID ?? import.meta.env.VITE_PAYPAL_MERCHANT_EMAIL ?? 'filikifakio@gmail.com'}&amount=${(latestCheckout.amountUsdCents / 100).toFixed(2)}&currency_code=USD&item_name=Kin-Sell+${encodeURIComponent(latestCheckout.planCode)}&custom=${latestCheckout.orderId}&return=${encodeURIComponent(window.location.origin + '/forfaits?paid=1')}&cancel_return=${encodeURIComponent(window.location.origin + '/forfaits?cancelled=1')}&notify_url=${encodeURIComponent((import.meta.env.VITE_API_URL ?? 'http://localhost:4000') + '/billing/paypal/ipn')}`}
-            className="pricing-cta pricing-cta-btn"
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{ display: 'inline-block', textAlign: 'center', textDecoration: 'none' }}
-          >
-            💳 Payer {(latestCheckout.amountUsdCents / 100).toFixed(2)}$ via PayPal
-          </a>
-          <ul className="pricing-list" style={{ marginTop: 16 }}>
+          {latestCheckout.transferReference ? <p>Référence: <strong>{latestCheckout.transferReference}</strong></p> : null}
+          {latestCheckout.expiresAt ? <p>Expire le: {new Date(latestCheckout.expiresAt).toLocaleString("fr-FR")}</p> : null}
+
+          {latestCheckout.paymentUrl ? (
+            <a
+              href={latestCheckout.paymentUrl}
+              className="pricing-cta pricing-cta-btn"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ display: "inline-block", textAlign: "center", textDecoration: "none", marginTop: "8px" }}
+            >
+              💳 Ouvrir PayPal — {(latestCheckout.amountUsdCents / 100).toFixed(2)}$
+            </a>
+          ) : null}
+
+          {latestCheckout.beneficiary ? (
+            <div style={{ marginTop: "8px" }}>
+              <p>IBAN: <strong>{latestCheckout.beneficiary.iban}</strong></p>
+              <p>BIC: <strong>{latestCheckout.beneficiary.bic}</strong></p>
+              {latestCheckout.beneficiary.rib ? <p>RIB: {latestCheckout.beneficiary.rib}</p> : null}
+            </div>
+          ) : null}
+
+          <ul className="pricing-list" style={{ marginTop: 12 }}>
             {latestCheckout.instructions.map((instruction) => (
               <li key={instruction}>{instruction}</li>
             ))}
@@ -466,22 +657,29 @@ export function PricingPage() {
                   <p>Référence: {order.transferReference}</p>
                   <p>Statut: {order.status}</p>
                   <div className="pricing-role-switch">
-                    <button
-                      type="button"
-                      className="pricing-switch-btn"
-                      disabled={busyOrderAction !== null || order.status !== "PENDING"}
-                      onClick={() => void handleConfirmDeposit(order.id)}
-                    >
-                      {busyOrderAction === order.id ? "En cours..." : "J'ai payé via PayPal"}
-                    </button>
-                    <button
-                      type="button"
-                      className="pricing-switch-btn"
-                      disabled={busyOrderAction !== null || order.status !== "USER_CONFIRMED"}
-                      onClick={() => void handleActivateOrder(order.id)}
-                    >
-                      {busyOrderAction === order.id ? "En cours..." : "Activer mon forfait"}
-                    </button>
+                    {order.status === "PENDING" ? (
+                      <button
+                        type="button"
+                        className="pricing-switch-btn"
+                        disabled={busyOrderAction !== null}
+                        onClick={() => void handleConfirmDeposit(order.id)}
+                      >
+                        {busyOrderAction === order.id ? "En cours..." : "J'ai payé"}
+                      </button>
+                    ) : null}
+                    {order.status === "USER_CONFIRMED" ? (
+                      <button
+                        type="button"
+                        className="pricing-switch-btn"
+                        disabled={busyOrderAction !== null}
+                        onClick={() => void handleActivateOrder(order.id)}
+                      >
+                        {busyOrderAction === order.id ? "En cours..." : "Activer mon forfait"}
+                      </button>
+                    ) : null}
+                    {order.status === "VALIDATED" ? (
+                      <span className="pricing-current">✅ Forfait activé</span>
+                    ) : null}
                   </div>
                 </article>
               ))}
@@ -491,9 +689,9 @@ export function PricingPage() {
       ) : null}
 
       <section className="pricing-footer-note glass-container">
-        <h2>Architecture abonnement + paiement</h2>
+        <h2>Méthodes de paiement acceptées</h2>
         <p>
-          Paiement sécurisé via PayPal avec référence unique, suivi des ordres et activation du forfait après validation du paiement.
+          💳 PayPal · 🏦 Virement bancaire (Nickel) · 🟠 Orange Money · 📱 M-Pesa — Paiement sécurisé avec confirmation automatique.
         </p>
         {!isLoggedIn ? <Link to="/register" className="pricing-cta">Créer un compte Kin-Sell</Link> : null}
       </section>

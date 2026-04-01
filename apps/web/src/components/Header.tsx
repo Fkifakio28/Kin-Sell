@@ -54,10 +54,15 @@ export function Header() {
 
   useEffect(() => {
     const handleOutside = (event: MouseEvent) => {
-      if (accountRef.current && !accountRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      // Le popup compte est rendu via createPortal dans body — vérifier aussi si le clic est dedans
+      const accountPopup = document.querySelector('.ks-account-popup');
+      if (accountRef.current && !accountRef.current.contains(target) && (!accountPopup || !accountPopup.contains(target))) {
         setAccountOpen(false);
       }
-      if (notifRef.current && !notifRef.current.contains(event.target as Node)) {
+      // Idem pour notif dropdown (rendu via portal)
+      const notifDropdown = document.querySelector('.ks-notif-dropdown');
+      if (notifRef.current && !notifRef.current.contains(target) && (!notifDropdown || !notifDropdown.contains(target))) {
         setNotifOpen(false);
       }
     };
@@ -193,24 +198,24 @@ export function Header() {
                       {notifications.length > 0 ? (
                         <div className="ks-notif-dropdown-list">
                           {notifications.map((n) => (
-                            <Link key={n.id} to={n.href} className="ks-notif-dropdown-item" role="menuitem"
-                              onClick={() => {
-                                setNotifOpen(false);
-                                if (n.id.startsWith('buy-')) sessionStorage.setItem('ud-section', 'purchases');
-                                if (n.id.startsWith('sell-')) sessionStorage.setItem('ud-section', 'sales');
-                              }}>
+                            <div key={n.id} className="ks-notif-dropdown-item" role="menuitem">
                               <span className="ks-notif-dropdown-icon">{n.icon}</span>
                               <div className="ks-notif-dropdown-text">
                                 <span className="ks-notif-dropdown-label">{n.label}</span>
                                 <span className="ks-notif-dropdown-detail">{n.detail}</span>
                               </div>
                               <span className="ks-notif-dropdown-time">{n.time}</span>
-                            </Link>
+                            </div>
                           ))}
                         </div>
                       ) : (
                         <p className="ks-notif-dropdown-empty">{t('nav.noNotif')}</p>
                       )}
+                      <div className="ks-notif-dropdown-footer">
+                        <Link to={getDashboardPath(user?.role)} className="ks-notif-dropdown-footer-link" onClick={() => { setNotifOpen(false); sessionStorage.setItem('ud-section', 'purchases'); }}>
+                          {t('nav.viewAllOrders')}
+                        </Link>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -298,16 +303,20 @@ export function Header() {
         ) : null}
       </header>
 
-      {accountOpen && (() => {
-        const rect = accountRef.current?.getBoundingClientRect();
-        const popupStyle: React.CSSProperties = rect
-          ? { top: rect.bottom + 8, right: Math.max(8, window.innerWidth - rect.right) }
-          : { top: 72, right: 16 };
-        return createPortal(
-          <>
-            <div className="ks-account-overlay" onClick={() => setAccountOpen(false)} />
-            <div className="ks-account-popup glass-container" style={popupStyle} onClick={(e) => e.stopPropagation()}>
-              <div className="ks-account-popup-head">
+      {accountOpen && createPortal(
+        <>
+          <div className="ks-account-overlay" onClick={() => setAccountOpen(false)} />
+          <div
+            className="ks-account-popup glass-container"
+            style={(() => {
+              const rect = accountRef.current?.getBoundingClientRect();
+              return rect
+                ? { top: rect.bottom + 8, right: Math.max(8, window.innerWidth - rect.right) }
+                : { top: 72, right: 16 };
+            })()}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="ks-account-popup-head">
               <strong>{t('nav.account')}</strong>
               <p>{isLoading ? t('nav.loading') : accountLabel}</p>
               <button type="button" className="ks-account-popup-close" onClick={() => setAccountOpen(false)}>✕</button>
@@ -357,14 +366,13 @@ export function Header() {
                 </>
               )}
             </nav>
-            </div>
-          </>,
-          document.body
-        );
-      })()}
+          </div>
+        </>,
+        document.body
+      )}
 
       {notifOpen ? createPortal(
-        <button className="ks-notif-overlay" aria-label={t('nav.closeNotif')} onClick={() => setNotifOpen(false)} type="button" />,
+        <div className="ks-notif-overlay" aria-label={t('nav.closeNotif')} onClick={() => setNotifOpen(false)} role="button" tabIndex={-1} />,
         document.body
       ) : null}
 

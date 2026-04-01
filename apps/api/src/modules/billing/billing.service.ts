@@ -3,6 +3,7 @@ import { env } from "../../config/env.js";
 import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
 import { ADDON_CATALOG, getPlanOrThrow, PLAN_CATALOG } from "./billing.catalog.js";
+import * as paypal from "../../shared/payment/paypal.provider.js";
 
 type RoleScope = "USER" | "BUSINESS";
 
@@ -453,5 +454,168 @@ export const activatePlanFromValidatedOrder = async (userId: string, payload: { 
   return {
     plan: serializePlan(scope, refreshed),
     message: "Forfait activé après validation du virement"
+  };
+};
+
+/**
+ * Create a PayPal REST API checkout — creates PaymentOrder + PayPal Order + returns approval URL.
+ */
+export const createPaypalCheckout = async (
+  userId: string,
+  payload: { planCode: string; billingCycle: "MONTHLY" | "ONE_TIME" }
+) => {
+  const { scope, businessId } = await resolveContext(userId);
+  const targetPlan = getPlanOrThrow(payload.planCode, scope);
+
+  const expiresAt = new Date(Date.now() + env.BILLING_TRANSFER_ORDER_TTL_HOURS * 60 * 60 * 1000);
+
+  const order = await prisma.paymentOrder.create({
+    data: {
+      userId: scope === "USER" ? userId : null,
+      businessId: scope === "BUSINESS" ? businessId : null,
+      targetScope: scope as SubscriptionScope,
+      planCode: targetPlan.code,
+      amountUsdCents: targetPlan.monthlyPriceUsdCents,
+      currency: "USD",
+      method: PaymentMethod.PAYPAL,
+      status: PaymentOrderStatus.PENDING,
+      transferReference: createTransferReference(),
+      beneficiaryIban: "",
+      beneficiaryBic: "",
+      expiresAt,
+    }
+  });
+
+  const amountUsd = targetPlan.monthlyPriceUsdCents / 100;
+  const returnUrl = `${env.CORS_ORIGIN}/forfaits?paid=1&orderId=${order.id}`;
+  const cancelUrl = `${env.CORS_ORIGIN}/forfaits?cancelled=1`;
+
+  const { paypalOrderId, approvalUrl } = await paypal.createOrder({
+    internalOrderId: order.id,
+    planCode: targetPlan.code,
+    amountUsd,
+    returnUrl,
+    cancelUrl,
+  });
+
+  // Store the PayPal order ID in depositorNote for later capture
+  await prisma.paymentOrder.update({
+    where: { id: order.id },
+    data: { depositorNote: `paypal_order:${paypalOrderId}` },
+  });
+
+  return {
+    orderId: order.id,
+    status: order.status,
+    planCode: order.planCode,
+    amountUsdCents: order.amountUsdCents,
+    currency: order.currency,
+    transferReference: order.transferReference,
+    paymentUrl: approvalUrl,
+    paypalOrderId,
+    expiresAt: order.expiresAt.toISOString(),
+    instructions: [
+      "Cliquez sur le lien PayPal pour effectuer le paiement.",
+      "Après paiement, revenez sur Kin-Sell.",
+      "Votre forfait sera activé automatiquement."
+    ]
+  };
+};
+
+/**
+ * Capture PayPal payment after user returns from PayPal.
+ * Called from frontend with the orderId after PayPal approval.
+ */
+export const capturePaypalPayment = async (userId: string, payload: { orderId: string }) => {
+  const { scope, businessId } = await resolveContext(userId);
+
+  const order = await prisma.paymentOrder.findUnique({ where: { id: payload.orderId } });
+  if (!order) throw new HttpError(404, "Ordre de paiement introuvable");
+
+  const canAccess =
+    (scope === "USER" && order.userId === userId) ||
+    (scope === "BUSINESS" && order.businessId === businessId);
+  if (!canAccess) throw new HttpError(403, "Accès refusé");
+
+  if (order.method !== PaymentMethod.PAYPAL) throw new HttpError(400, "Cet ordre n'est pas un paiement PayPal");
+  if (order.status === "VALIDATED") {
+    const refreshed = await findActiveSubscription(userId, scope, businessId);
+    return { plan: serializePlan(scope, refreshed), message: "Forfait déjà activé" };
+  }
+  if (["CANCELED", "EXPIRED"].includes(order.status)) throw new HttpError(400, "Ordre expiré ou annulé");
+
+  // Extract PayPal order ID
+  const paypalOrderId = order.depositorNote?.replace("paypal_order:", "");
+  if (!paypalOrderId) throw new HttpError(400, "PayPal order ID introuvable");
+
+  // Capture the payment
+  const capture = await paypal.captureOrder(paypalOrderId);
+
+  if (!capture.captured) {
+    throw new HttpError(400, `Paiement PayPal non finalisé. Statut: ${capture.status}`);
+  }
+
+  // Payment successful — activate subscription
+  const targetPlan = getPlanOrThrow(order.planCode, scope);
+
+  await prisma.$transaction(async (tx) => {
+    const current = await tx.subscription.findFirst({
+      where: {
+        scope: scope as SubscriptionScope,
+        status: SubscriptionStatus.ACTIVE,
+        userId: scope === "USER" ? userId : null,
+        businessId: scope === "BUSINESS" ? businessId : null,
+      },
+    });
+
+    if (current) {
+      await tx.subscription.update({
+        where: { id: current.id },
+        data: { status: SubscriptionStatus.CANCELED, endsAt: new Date(), autoRenew: false },
+      });
+    }
+
+    await tx.subscription.create({
+      data: {
+        scope: scope as SubscriptionScope,
+        userId: scope === "USER" ? userId : null,
+        businessId: scope === "BUSINESS" ? businessId : null,
+        planCode: targetPlan.code,
+        status: SubscriptionStatus.ACTIVE,
+        billingCycle: BillingCycle.MONTHLY,
+        priceUsdCents: targetPlan.monthlyPriceUsdCents,
+        startsAt: new Date(),
+        autoRenew: true,
+        metadata: {
+          source: "PAYPAL_REST",
+          orderId: order.id,
+          paypalOrderId,
+          transactionId: capture.transactionId,
+          payerEmail: capture.payerEmail,
+        } as Prisma.JsonObject,
+      },
+    });
+
+    await tx.paymentOrder.update({
+      where: { id: order.id },
+      data: {
+        status: PaymentOrderStatus.VALIDATED,
+        validatedAt: new Date(),
+        depositorNote: `paypal_txn:${capture.transactionId}`,
+      },
+    });
+
+    if (scope === "BUSINESS" && businessId) {
+      await tx.businessAccount.update({
+        where: { id: businessId },
+        data: { subscriptionStatus: targetPlan.code },
+      });
+    }
+  });
+
+  const refreshed = await findActiveSubscription(userId, scope, businessId);
+  return {
+    plan: serializePlan(scope, refreshed),
+    message: "Forfait activé via PayPal"
   };
 };

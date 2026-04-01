@@ -12,6 +12,7 @@
 
 import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
+import { getTrendingCategories } from "../../shared/market/market-shared.js";
 
 // ─────────────────────────────────────────────
 // Types
@@ -127,16 +128,8 @@ export async function getAdTargetingAdvice(
     }
   }
 
-  // ── Trending categories (derniers 7 jours) ──
-  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-  const trendingData = await prisma.listing.groupBy({
-    by: ["category"],
-    where: { status: "ACTIVE", createdAt: { gte: sevenDaysAgo } },
-    _count: { category: true },
-    orderBy: { _count: { category: "desc" } },
-    take: 5,
-  });
-  const trendingCategories = trendingData.map((t) => t.category);
+  // ── Trending categories (source unique — market-shared) ──
+  const trendingCategories = await getTrendingCategories(5);
 
   // Merge trending avec suggested
   for (const cat of trendingCategories) {

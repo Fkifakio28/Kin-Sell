@@ -12,7 +12,10 @@ import {
   messaging,
   negotiations as negotiationsApi,
   orders,
+  analyticsAi,
   type BillingPlanSummary,
+  type BasicInsights,
+  type DeepInsights,
   type BundleItemSummary,
   type CartSummary,
   type ListingStatus,
@@ -27,6 +30,9 @@ import {
 import { NegotiationRespondPopup } from '../negotiations/NegotiationRespondPopup';
 import { compressAndEncodeMedia } from '../../utils/media-compress';
 import { AdBanner } from '../../components/AdBanner';
+import { OrderValidationQrModal } from '../../components/OrderValidationQrModal';
+import LocationPicker from '../../components/LocationPicker';
+import { extractValidationCodeFromQrPayload } from '../../utils/order-validation';
 import './dashboard.css';
 
 /* ── Catégories par type ── */
@@ -59,6 +65,7 @@ type HubSection =
   | 'sokin'
   | 'my-profile-page'
   | 'public-profile'
+  | 'analytics'
   | 'settings';
 
 type PublicListing = {
@@ -109,6 +116,7 @@ const SECTION_DEFS: Array<{ key: HubSection; labelKey: string; icon: string }> =
   { key: 'sokin', labelKey: 'sokin.home', icon: '✦' },
   { key: 'my-profile-page', labelKey: 'user.myProfile', icon: '🪪' },
   { key: 'public-profile', labelKey: 'user.publicProfile', icon: '👤' },
+  { key: 'analytics', labelKey: 'user.analytics', icon: '📊' },
   { key: 'settings', labelKey: 'user.settings', icon: '⚙' },
 ];
 
@@ -169,8 +177,6 @@ function nextSellerStatuses(status: OrderStatus): OrderStatus[] {
       return ['PROCESSING', 'CANCELED'];
     case 'PROCESSING':
       return ['SHIPPED', 'CANCELED'];
-    case 'SHIPPED':
-      return ['DELIVERED'];
     default:
       return [];
   }
@@ -196,6 +202,7 @@ export function UserDashboard() {
     return 'overview';
   });
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [sessionsCount, setSessionsCount] = useState<number | null>(null);
   const [loadingSessions, setLoadingSessions] = useState(false);
 
@@ -212,6 +219,13 @@ export function UserDashboard() {
   const [loadingPublicProfile, setLoadingPublicProfile] = useState(false);
   const [activePlan, setActivePlan] = useState<BillingPlanSummary | null>(null);
   const [loadingPlan, setLoadingPlan] = useState(false);
+  const [basicInsights, setBasicInsights] = useState<BasicInsights | null>(null);
+  const [deepInsights, setDeepInsights] = useState<DeepInsights | null>(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  // ── AI preferences (localStorage-persisted) ──
+  const [aiAdviceEnabled, setAiAdviceEnabled] = useState(() => localStorage.getItem('ks-ai-advice') !== 'off');
+  const [aiAutoNegoEnabled, setAiAutoNegoEnabled] = useState(() => localStorage.getItem('ks-ai-auto-nego') === 'on');
+  const [aiCommandeEnabled, setAiCommandeEnabled] = useState(() => localStorage.getItem('ks-ai-commande') !== 'off');
   const [savingSettings, setSavingSettings] = useState(false);
   const [logoutBusy, setLogoutBusy] = useState(false);
   // Suppression de compte
@@ -231,11 +245,14 @@ export function UserDashboard() {
     additionalNote: ''
   });
   const [orderStatusBusyId, setOrderStatusBusyId] = useState<string | null>(null);
-  const [validationCodeMap, setValidationCodeMap] = useState<Record<string, string>>({});
   const [validationCodeBusyId, setValidationCodeBusyId] = useState<string | null>(null);
+  const [sellerValidationQr, setSellerValidationQr] = useState<{ orderId: string; code: string } | null>(null);
   const [buyerConfirmOrderId, setBuyerConfirmOrderId] = useState<string | null>(null);
   const [buyerConfirmCode, setBuyerConfirmCode] = useState('');
   const [buyerConfirmBusy, setBuyerConfirmBusy] = useState(false);
+  const [buyerConfirmMode, setBuyerConfirmMode] = useState<'manual' | 'scan'>('manual');
+  const [buyerConfirmScanMessage, setBuyerConfirmScanMessage] = useState<string | null>(null);
+  const [buyerConfirmScanError, setBuyerConfirmScanError] = useState<string | null>(null);
   const [sellerHistoryPage, setSellerHistoryPage] = useState(1);
   const [buyerHistoryPage, setBuyerHistoryPage] = useState(1);
   const [sellerHistoryTotalPages, setSellerHistoryTotalPages] = useState(1);
@@ -417,6 +434,57 @@ export function UserDashboard() {
       cancelled = true;
     };
   }, [isLoggedIn, user]);
+
+  /* ── Kin-Sell Analytique: fetch insights when analytics tab is opened ── */
+  const hasAnalytics = useMemo(() => {
+    if (!activePlan) return false;
+    return activePlan.analyticsTier !== 'NONE';
+  }, [activePlan]);
+
+  const hasPremiumAnalytics = useMemo(() => {
+    return activePlan?.analyticsTier === 'PREMIUM';
+  }, [activePlan]);
+
+  /* ── AI plan gating ── */
+  const hasIaMarchandPlan = useMemo(() => {
+    if (!activePlan) return false;
+    const planIncludes = ['AUTO', 'PRO_VENDOR', 'SCALE', 'BUSINESS'].includes(activePlan.planCode);
+    const addonActive = activePlan.addOns?.some((a) => a.code === 'IA_MERCHANT' && a.status === 'ACTIVE');
+    return planIncludes || addonActive;
+  }, [activePlan]);
+
+  const hasIaOrderPlan = useMemo(() => {
+    if (!activePlan) return false;
+    const planIncludes = ['AUTO', 'PRO_VENDOR', 'SCALE'].includes(activePlan.planCode);
+    const addonActive = activePlan.addOns?.some((a) => a.code === 'IA_ORDER' && a.status === 'ACTIVE');
+    return planIncludes || addonActive;
+  }, [activePlan]);
+
+  /* showAi for NegotiationRespondPopup: free hints always, paid advice when toggled on */
+  const showNegAi = aiAdviceEnabled;
+  /* auto-negotiate only when plan allows + user toggled on */
+  const autoNegoActive = hasIaMarchandPlan && aiAutoNegoEnabled;
+
+  useEffect(() => {
+    if (activeSection !== 'analytics' || !hasAnalytics || basicInsights) return;
+    let cancelled = false;
+    setAnalyticsLoading(true);
+
+    const load = async () => {
+      try {
+        const basic = await analyticsAi.basic();
+        if (!cancelled) setBasicInsights(basic);
+        if (hasPremiumAnalytics) {
+          const deep = await analyticsAi.deep();
+          if (!cancelled) setDeepInsights(deep);
+        }
+      } catch { /* silent */ }
+      finally { if (!cancelled) setAnalyticsLoading(false); }
+    };
+
+    void load();
+    return () => { cancelled = true; };
+  }, [activeSection, hasAnalytics, hasPremiumAnalytics, basicInsights]);
 
   useEffect(() => {
     if (!isLoggedIn || !user?.profile.username) {
@@ -1185,7 +1253,7 @@ export function UserDashboard() {
     setErrorMessage(null);
     try {
       const data = await orders.getValidationCode(orderId);
-      setValidationCodeMap((prev) => ({ ...prev, [orderId]: data.validationCode }));
+      setSellerValidationQr({ orderId, code: data.validationCode });
     } catch {
       setErrorMessage(t('user.validationCodeError'));
     } finally {
@@ -1203,6 +1271,9 @@ export function UserDashboard() {
       setSuccessMessage(t('success.deliveryConfirmed'));
       setBuyerConfirmOrderId(null);
       setBuyerConfirmCode('');
+      setBuyerConfirmMode('manual');
+      setBuyerConfirmScanMessage(null);
+      setBuyerConfirmScanError(null);
       await loadCommerce(sellerHistoryPage, buyerHistoryPage);
     } catch (error) {
       if (error instanceof ApiError && error.data && typeof error.data === 'object' && 'error' in error.data) {
@@ -1215,6 +1286,65 @@ export function UserDashboard() {
       setBuyerConfirmBusy(false);
     }
   };
+
+  useEffect(() => {
+    if (!buyerConfirmOrderId || buyerConfirmMode !== 'scan') {
+      return;
+    }
+
+    let scanner: any = null;
+    let cancelled = false;
+
+    setBuyerConfirmScanError(null);
+    setBuyerConfirmScanMessage(null);
+
+    const startScanner = async () => {
+      try {
+        const { Html5Qrcode } = await import('html5-qrcode');
+        if (cancelled) {
+          return;
+        }
+
+        scanner = new Html5Qrcode('ks-order-validation-reader', { verbose: false });
+        await scanner.start(
+          { facingMode: 'environment' },
+          { fps: 10, qrbox: { width: 220, height: 220 }, aspectRatio: 1 },
+          (decodedText: string) => {
+            const scannedCode = extractValidationCodeFromQrPayload(decodedText, buyerConfirmOrderId);
+            if (!scannedCode) {
+              setBuyerConfirmScanError(t('user.validationQrInvalid'));
+              return;
+            }
+
+            setBuyerConfirmCode(scannedCode);
+            setBuyerConfirmMode('manual');
+            setBuyerConfirmScanMessage(t('user.validationScanDetected'));
+            setBuyerConfirmScanError(null);
+          },
+          () => {}
+        );
+
+        if (!cancelled) {
+          setBuyerConfirmScanMessage(t('user.validationScanReady'));
+        }
+      } catch {
+        if (!cancelled) {
+          setBuyerConfirmScanError(t('user.validationScanError'));
+        }
+      }
+    };
+
+    void startScanner();
+
+    return () => {
+      cancelled = true;
+      if (scanner) {
+        void scanner.stop().catch(() => {}).finally(() => {
+          scanner?.clear();
+        });
+      }
+    };
+  }, [buyerConfirmMode, buyerConfirmOrderId, t]);
 
   /* ── Computed: all seller / buyer orders + filtered ── */
   const allSellerOrders = [...sellerInProgress, ...sellerRecent, ...sellerHistory]
@@ -1247,7 +1377,20 @@ export function UserDashboard() {
 
   return (
     <div className={`ud-shell${sidebarCollapsed ? ' ud-sidebar-collapsed' : ''}`}>
-      <aside className="ud-sidebar">
+      {/* ── Mobile Header ── */}
+      <header className="dash-mobile-header">
+        <button className="dash-mob-hamburger" onClick={() => setMobileSidebarOpen(o => !o)} aria-label="Menu">☰</button>
+        <Link to="/" className="dash-mob-logo">
+          <img src="/assets/kin-sell/logo.png" alt="Kin-Sell" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+          <span>Kin-Sell</span>
+        </Link>
+        <button className="dash-mob-search" aria-label="Rechercher">🔍</button>
+      </header>
+
+      {/* ── Overlay mobile ── */}
+      {mobileSidebarOpen && <div className="dash-mob-overlay" onClick={() => setMobileSidebarOpen(false)} />}
+
+      <aside className={`ud-sidebar${mobileSidebarOpen ? ' ud-sidebar-open' : ''}`}>
         <button
           type="button"
           className="ud-collapse-btn"
@@ -1276,12 +1419,13 @@ export function UserDashboard() {
         </div>
 
         <nav className="ud-nav" aria-label="Menu utilisateur privé">
-          {SECTION_DEFS.map((section) => (
+          {SECTION_DEFS.filter((s) => s.key !== 'analytics' || hasAnalytics).map((section) => (
             section.key === 'my-profile-page' ? (
               <Link
                 key={section.key}
                 to={user?.profile.username ? `/user/${user.profile.username}` : '/account'}
                 className="ud-nav-item"
+                onClick={() => setMobileSidebarOpen(false)}
               >
                 <span className="ud-nav-icon">{section.icon}</span>
                 {!sidebarCollapsed && <span className="ud-nav-label">{t(section.labelKey)}</span>}
@@ -1291,7 +1435,7 @@ export function UserDashboard() {
                 key={section.key}
                 type="button"
                 className={`ud-nav-item${activeSection === section.key ? ' ud-nav-item--active' : ''}`}
-                onClick={() => setActiveSection(section.key)}
+                onClick={() => { setActiveSection(section.key); setMobileSidebarOpen(false); }}
               >
                 <span className="ud-nav-icon">{section.icon}</span>
                 {!sidebarCollapsed && <span className="ud-nav-label">{t(section.labelKey)}</span>}
@@ -1307,6 +1451,12 @@ export function UserDashboard() {
             <span className="ud-premium-btn">{t('user.viewPlans')}</span>
           </Link>
         )}
+
+        <div className="ud-drawer-logout">
+          <button type="button" className="ud-drawer-logout-btn" onClick={() => void handleLogout()}>
+            {logoutBusy ? '⏳' : '🚪'} {t('common.logout')}
+          </button>
+        </div>
       </aside>
 
       <main className="ud-main" id="ud-main-content">
@@ -1891,21 +2041,15 @@ export function UserDashboard() {
                           </button>
                         ))}
                         {(order.status === 'PROCESSING' || order.status === 'SHIPPED') && (
-                          validationCodeMap[order.id] ? (
-                            <span className="ud-ord-vcode" title={t('user.validationCodeLabel')}>
-                              🔑 {validationCodeMap[order.id]}
-                            </span>
-                          ) : (
-                            <button
-                              type="button"
-                              className="ud-ord-action ud-ord-action--code"
-                              title={t('user.showValidationCode')}
-                              disabled={validationCodeBusyId === order.id}
-                              onClick={() => void handleRevealCode(order.id)}
-                            >
-                              {validationCodeBusyId === order.id ? '...' : '🔑 Code'}
-                            </button>
-                          )
+                          <button
+                            type="button"
+                            className="ud-ord-action ud-ord-action--code"
+                            title={t('user.showValidationQr')}
+                            disabled={validationCodeBusyId === order.id}
+                            onClick={() => void handleRevealCode(order.id)}
+                          >
+                            {validationCodeBusyId === order.id ? '...' : '🔑 QR / Code'}
+                          </button>
                         )}
                       </div>
                     </article>
@@ -2215,7 +2359,13 @@ export function UserDashboard() {
                             type="button"
                             className="ud-ord-action ud-ord-action--confirm"
                             title={t('user.confirmReceptionTooltip')}
-                            onClick={() => { setBuyerConfirmOrderId(order.id); setBuyerConfirmCode(''); }}
+                            onClick={() => {
+                              setBuyerConfirmOrderId(order.id);
+                              setBuyerConfirmCode('');
+                              setBuyerConfirmMode('manual');
+                              setBuyerConfirmScanMessage(null);
+                              setBuyerConfirmScanError(null);
+                            }}
                           >
                             📬 {t('user.confirmReceptionShort')}
                           </button>
@@ -2276,6 +2426,7 @@ export function UserDashboard() {
           <NegotiationRespondPopup
             negotiation={respondNeg}
             onClose={() => setRespondNeg(null)}
+            showAi={showNegAi}
             onUpdated={async () => {
               setRespondNeg(null);
               const role = activeSection === 'sales' ? 'seller' : 'buyer';
@@ -2287,12 +2438,60 @@ export function UserDashboard() {
           />
         )}
 
+        {sellerValidationQr && (
+          <OrderValidationQrModal
+            orderId={sellerValidationQr.orderId}
+            code={sellerValidationQr.code}
+            title={t('user.validationQrTitle')}
+            helpText={t('user.validationQrHelp')}
+            closeLabel={t('common.close')}
+            onClose={() => setSellerValidationQr(null)}
+          />
+        )}
+
         {/* ── Buyer confirm delivery popup ── */}
         {buyerConfirmOrderId && (
-          <div className="ud-checkout-modal-overlay" onClick={() => { setBuyerConfirmOrderId(null); setBuyerConfirmCode(''); }}>
+          <div className="ud-checkout-modal-overlay" onClick={() => {
+            setBuyerConfirmOrderId(null);
+            setBuyerConfirmCode('');
+            setBuyerConfirmMode('manual');
+            setBuyerConfirmScanMessage(null);
+            setBuyerConfirmScanError(null);
+          }}>
             <div className="ud-checkout-modal" onClick={(e) => e.stopPropagation()}>
               <h3>📬 {t('user.buyerConfirmTitle')}</h3>
               <p className="ud-checkout-modal-help">{t('user.buyerConfirmHelp2')}</p>
+              <div className="ud-validation-mode-switch">
+                <button
+                  type="button"
+                  className={`ud-validation-mode-btn${buyerConfirmMode === 'manual' ? ' ud-validation-mode-btn--active' : ''}`}
+                  onClick={() => {
+                    setBuyerConfirmMode('manual');
+                    setBuyerConfirmScanError(null);
+                  }}
+                >
+                  {t('user.validationManualTab')}
+                </button>
+                <button
+                  type="button"
+                  className={`ud-validation-mode-btn${buyerConfirmMode === 'scan' ? ' ud-validation-mode-btn--active' : ''}`}
+                  onClick={() => {
+                    setBuyerConfirmMode('scan');
+                    setBuyerConfirmScanMessage(null);
+                    setBuyerConfirmScanError(null);
+                  }}
+                >
+                  {t('user.validationScanTab')}
+                </button>
+              </div>
+              {buyerConfirmMode === 'scan' && (
+                <div className="ud-validation-scan-panel">
+                  <p className="ud-checkout-modal-help">{t('user.validationQrScanHint')}</p>
+                  <div id="ks-order-validation-reader" className="ud-validation-scanner" />
+                  {buyerConfirmScanMessage && <p className="ud-validation-scan-message">{buyerConfirmScanMessage}</p>}
+                  {buyerConfirmScanError && <p className="ud-validation-scan-error">{buyerConfirmScanError}</p>}
+                </div>
+              )}
               <label className="ud-checkout-modal-field">
                 <span>{t('user.validationCodeLabel')}</span>
                 <input
@@ -2305,8 +2504,20 @@ export function UserDashboard() {
                   style={{ fontFamily: 'monospace', fontSize: '1.2rem', letterSpacing: '0.15em', textAlign: 'center' }}
                 />
               </label>
+              {buyerConfirmScanMessage && buyerConfirmMode === 'manual' && (
+                <p className="ud-validation-scan-message">{buyerConfirmScanMessage}</p>
+              )}
+              {buyerConfirmScanError && buyerConfirmMode === 'manual' && (
+                <p className="ud-validation-scan-error">{buyerConfirmScanError}</p>
+              )}
               <div className="ud-checkout-modal-actions">
-                <button type="button" onClick={() => { setBuyerConfirmOrderId(null); setBuyerConfirmCode(''); }}>{t('common.cancel')}</button>
+                <button type="button" onClick={() => {
+                  setBuyerConfirmOrderId(null);
+                  setBuyerConfirmCode('');
+                  setBuyerConfirmMode('manual');
+                  setBuyerConfirmScanMessage(null);
+                  setBuyerConfirmScanError(null);
+                }}>{t('common.cancel')}</button>
                 <button
                   type="button"
                   className="ud-art-publish-btn"
@@ -3211,6 +3422,98 @@ export function UserDashboard() {
               )}
             </section>
 
+            {/* ── Section: Gestion IA ── */}
+            <section className="ud-glass-panel ud-settings-section">
+              <div className="ud-settings-section-head">
+                <span className="ud-settings-section-icon">🤖</span>
+                <h3 className="ud-settings-section-title">{t('user.settingsAiTitle')}</h3>
+              </div>
+              <p className="ud-placeholder-text" style={{ margin: '0 0 12px', fontSize: '0.82rem' }}>
+                {t('user.settingsAiDesc')}
+              </p>
+
+              <div className="ud-ai-toggles">
+                {/* ── Conseils IA (gratuit : suggestions de prix) ── */}
+                <div className="ud-ai-toggle-row">
+                  <div className="ud-ai-toggle-info">
+                    <strong>💡 {t('user.aiAdviceLabel')}</strong>
+                    <span className="ud-ai-toggle-hint">{t('user.aiAdviceHint')}</span>
+                  </div>
+                  <button
+                    type="button"
+                    className={`ud-ai-switch${aiAdviceEnabled ? ' ud-ai-switch--on' : ''}`}
+                    onClick={() => {
+                      const next = !aiAdviceEnabled;
+                      setAiAdviceEnabled(next);
+                      localStorage.setItem('ks-ai-advice', next ? 'on' : 'off');
+                    }}
+                    aria-pressed={aiAdviceEnabled}
+                  >
+                    <span className="ud-ai-switch-thumb" />
+                  </button>
+                </div>
+
+                {/* ── Marchandage automatique (payant) ── */}
+                <div className={`ud-ai-toggle-row${!hasIaMarchandPlan ? ' ud-ai-toggle-row--locked' : ''}`}>
+                  <div className="ud-ai-toggle-info">
+                    <strong>🤝 {t('user.aiAutoNegoLabel')}</strong>
+                    <span className="ud-ai-toggle-hint">
+                      {hasIaMarchandPlan ? t('user.aiAutoNegoHint') : t('user.aiAutoNegoLocked')}
+                    </span>
+                  </div>
+                  {hasIaMarchandPlan ? (
+                    <button
+                      type="button"
+                      className={`ud-ai-switch${aiAutoNegoEnabled ? ' ud-ai-switch--on' : ''}`}
+                      onClick={() => {
+                        const next = !aiAutoNegoEnabled;
+                        setAiAutoNegoEnabled(next);
+                        localStorage.setItem('ks-ai-auto-nego', next ? 'on' : 'off');
+                      }}
+                      aria-pressed={aiAutoNegoEnabled}
+                    >
+                      <span className="ud-ai-switch-thumb" />
+                    </button>
+                  ) : (
+                    <Link to="/forfaits" className="ud-ai-upgrade-link">★ {t('user.aiUpgrade')}</Link>
+                  )}
+                </div>
+
+                {/* ── IA Commande (payant) ── */}
+                <div className={`ud-ai-toggle-row${!hasIaOrderPlan ? ' ud-ai-toggle-row--locked' : ''}`}>
+                  <div className="ud-ai-toggle-info">
+                    <strong>📦 {t('user.aiCommandeLabel')}</strong>
+                    <span className="ud-ai-toggle-hint">
+                      {hasIaOrderPlan ? t('user.aiCommandeHint') : t('user.aiCommandeLocked')}
+                    </span>
+                  </div>
+                  {hasIaOrderPlan ? (
+                    <button
+                      type="button"
+                      className={`ud-ai-switch${aiCommandeEnabled ? ' ud-ai-switch--on' : ''}`}
+                      onClick={() => {
+                        const next = !aiCommandeEnabled;
+                        setAiCommandeEnabled(next);
+                        localStorage.setItem('ks-ai-commande', next ? 'on' : 'off');
+                      }}
+                      aria-pressed={aiCommandeEnabled}
+                    >
+                      <span className="ud-ai-switch-thumb" />
+                    </button>
+                  ) : (
+                    <Link to="/forfaits" className="ud-ai-upgrade-link">★ {t('user.aiUpgrade')}</Link>
+                  )}
+                </div>
+              </div>
+
+              {autoNegoActive && (
+                <div className="ud-ai-auto-status">
+                  <span className="ud-ai-auto-dot" />
+                  <span>{t('user.aiAutoNegoActive')}</span>
+                </div>
+              )}
+            </section>
+
             {missing.length > 0 ? (
               <section className="ud-glass-panel ud-settings-section">
                 <div className="ud-settings-section-head">
@@ -3224,6 +3527,165 @@ export function UserDashboard() {
                 </div>
               </section>
             ) : null}
+          </div>
+        )}
+
+        {/* ═══════════════  KIN-SELL ANALYTIQUE  ═══════════════ */}
+        {activeSection === 'analytics' && hasAnalytics && (
+          <div className="ud-section animate-fade-in">
+            <section className="ud-glass-panel">
+              <div className="ud-panel-head">
+                <h2 className="ud-panel-title">📊 {t('user.analyticsTitle')}</h2>
+                {analyticsLoading && <span className="ud-analytics-loading">Analyse…</span>}
+              </div>
+
+              {!analyticsLoading && !basicInsights && (
+                <p className="ud-placeholder-text" style={{ margin: '12px 0' }}>Aucune donnée analytique disponible pour le moment.</p>
+              )}
+
+              {basicInsights && (
+                <div className="ud-analytics-grid">
+                  {/* ── Résumé d'activité ── */}
+                  <div className="ud-analytics-card glass-container">
+                    <h3 className="ud-analytics-card-title">{t('user.analyticsSummary')}</h3>
+                    <div className="ud-analytics-stats">
+                      <div className="ud-analytics-stat">
+                        <span className="ud-analytics-stat-value">{basicInsights.activitySummary.listings}</span>
+                        <span className="ud-analytics-stat-label">Articles</span>
+                      </div>
+                      <div className="ud-analytics-stat">
+                        <span className="ud-analytics-stat-value">{basicInsights.activitySummary.negotiations}</span>
+                        <span className="ud-analytics-stat-label">Négociations</span>
+                      </div>
+                      <div className="ud-analytics-stat">
+                        <span className="ud-analytics-stat-value">{basicInsights.activitySummary.orders}</span>
+                        <span className="ud-analytics-stat-label">Commandes</span>
+                      </div>
+                      <div className="ud-analytics-stat">
+                        <span className="ud-analytics-stat-value">{formatMoneyFromUsdCents(basicInsights.activitySummary.revenueCents)}</span>
+                        <span className="ud-analytics-stat-label">Revenus</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ── Position sur le marché ── */}
+                  <div className="ud-analytics-card glass-container">
+                    <h3 className="ud-analytics-card-title">{t('user.analyticsMarket')}</h3>
+                    <div className="ud-analytics-market">
+                      <span className={`ud-analytics-market-badge ud-analytics-market-badge--${basicInsights.marketPosition.position.toLowerCase().replace('_', '-')}`}>
+                        {basicInsights.marketPosition.position === 'BELOW_MARKET' ? '📉 Sous le marché' :
+                         basicInsights.marketPosition.position === 'ON_MARKET' ? '📊 Au marché' : '📈 Au-dessus du marché'}
+                      </span>
+                      <p>Prix moyen : {formatMoneyFromUsdCents(basicInsights.marketPosition.avgPriceCents)}</p>
+                      <p>Médiane : {formatMoneyFromUsdCents(basicInsights.marketPosition.medianCents)}</p>
+                    </div>
+                  </div>
+
+                  {/* ── Catégories tendances ── */}
+                  {basicInsights.trendingCategories.length > 0 && (
+                    <div className="ud-analytics-card glass-container">
+                      <h3 className="ud-analytics-card-title">{t('user.analyticsTrending')}</h3>
+                      <div className="ud-analytics-trending">
+                        {basicInsights.trendingCategories.map((cat, i) => (
+                          <div key={i} className="ud-analytics-trending-item">
+                            <span>{cat.category}</span>
+                            <span className="ud-analytics-trending-count">{cat.count}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Recommandations IA ── */}
+                  {basicInsights.recommendations.length > 0 && (
+                    <div className="ud-analytics-card ud-analytics-card--wide glass-container">
+                      <h3 className="ud-analytics-card-title">🤖 {t('user.analyticsRecommendations')}</h3>
+                      <ul className="ud-analytics-reco-list">
+                        {basicInsights.recommendations.map((r, i) => <li key={i}>{r}</li>)}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* ── PREMIUM: Entonnoir de conversion ── */}
+                  {deepInsights && (
+                    <>
+                      <div className="ud-analytics-card glass-container">
+                        <h3 className="ud-analytics-card-title">{t('user.analyticsFunnel')}</h3>
+                        <div className="ud-analytics-funnel">
+                          <div className="ud-analytics-funnel-step">
+                            <span className="ud-analytics-funnel-label">Vues</span>
+                            <span className="ud-analytics-funnel-value">{deepInsights.funnel.views}</span>
+                          </div>
+                          <span className="ud-analytics-funnel-arrow">→</span>
+                          <div className="ud-analytics-funnel-step">
+                            <span className="ud-analytics-funnel-label">Négociations</span>
+                            <span className="ud-analytics-funnel-value">{deepInsights.funnel.negotiations}</span>
+                          </div>
+                          <span className="ud-analytics-funnel-arrow">→</span>
+                          <div className="ud-analytics-funnel-step">
+                            <span className="ud-analytics-funnel-label">Commandes</span>
+                            <span className="ud-analytics-funnel-value">{deepInsights.funnel.orders}</span>
+                          </div>
+                          <span className="ud-analytics-funnel-rate">{(deepInsights.funnel.conversionRate * 100).toFixed(1)}% conversion</span>
+                        </div>
+                      </div>
+
+                      {/* ── Segments d'audience ── */}
+                      {deepInsights.audienceSegments.length > 0 && (
+                        <div className="ud-analytics-card glass-container">
+                          <h3 className="ud-analytics-card-title">{t('user.analyticsAudience')}</h3>
+                          <div className="ud-analytics-audience">
+                            {deepInsights.audienceSegments.map((seg, i) => (
+                              <div key={i} className="ud-analytics-audience-seg">
+                                <span>{seg.label}</span>
+                                <div className="ud-analytics-audience-bar">
+                                  <div className="ud-analytics-audience-fill" style={{ width: `${seg.percent}%` }} />
+                                </div>
+                                <span className="ud-analytics-audience-pct">{seg.percent}%</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* ── Vitesse de vente ── */}
+                      <div className="ud-analytics-card glass-container">
+                        <h3 className="ud-analytics-card-title">{t('user.analyticsVelocity')}</h3>
+                        <p>Jours moyens pour vendre : <strong>{deepInsights.velocityMetrics.avgDaysToSell}</strong></p>
+                        {deepInsights.velocityMetrics.fastestCategory && (
+                          <p>Catégorie la plus rapide : <strong>{deepInsights.velocityMetrics.fastestCategory}</strong></p>
+                        )}
+                      </div>
+
+                      {/* ── Prédictions ── */}
+                      <div className="ud-analytics-card glass-container">
+                        <h3 className="ud-analytics-card-title">{t('user.analyticsPredictions')}</h3>
+                        <div className="ud-analytics-predictions">
+                          <div className="ud-analytics-pred-item">
+                            <span>Risque de churn</span>
+                            <span className={`ud-analytics-pred-score ud-analytics-pred-score--${deepInsights.predictiveScores.churnRisk > 0.6 ? 'high' : deepInsights.predictiveScores.churnRisk > 0.3 ? 'medium' : 'low'}`}>
+                              {(deepInsights.predictiveScores.churnRisk * 100).toFixed(0)}%
+                            </span>
+                          </div>
+                          <div className="ud-analytics-pred-item">
+                            <span>Potentiel de croissance</span>
+                            <span className="ud-analytics-pred-score ud-analytics-pred-score--growth">
+                              {(deepInsights.predictiveScores.growthPotential * 100).toFixed(0)}%
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {hasPremiumAnalytics && !deepInsights && !analyticsLoading && (
+                    <div className="ud-analytics-card ud-analytics-card--wide glass-container">
+                      <p className="ud-placeholder-text" style={{ margin: 0 }}>Insights avancés en cours de calcul…</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </section>
           </div>
         )}
       </main>
@@ -3411,12 +3873,17 @@ export function UserDashboard() {
                   <div className="ud-publish-row">
                     <label className="ud-publish-field">
                       <span className="ud-publish-field-label">{t('publish.city')} *</span>
-                      <input
-                        className="ud-input"
-                        required
+                      <LocationPicker
+                        value={{ lat: Number(articleForm.latitude), lng: Number(articleForm.longitude), address: articleForm.city }}
+                        onChange={({ address, city, lat, lng }) => {
+                          setArticleForm(p => ({
+                            ...p,
+                            city: city || address,
+                            latitude: String(lat),
+                            longitude: String(lng),
+                          }));
+                        }}
                         placeholder="Ex: Kinshasa, Gombe"
-                        value={articleForm.city}
-                        onChange={(e) => setArticleForm(p => ({ ...p, city: e.target.value }))}
                       />
                       {settingsForm.city && articleForm.city !== settingsForm.city && (
                         <button

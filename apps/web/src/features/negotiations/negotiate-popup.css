@@ -619,6 +619,78 @@
   transition: opacity 0.2s, background 0.2s;
 }
 
+/* ── IA Marchand — Conseil Panel ── */
+.neg-ai-panel {
+  width: 100%;
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md, 12px);
+  background: rgba(111, 88, 255, 0.08);
+  border: 1px solid rgba(111, 88, 255, 0.22);
+}
+
+.neg-ai-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.neg-ai-icon { font-size: 1.2rem; }
+
+.neg-ai-title {
+  font-size: 0.82rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--color-primary), #a78bfa);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.neg-ai-loading {
+  font-size: 0.78rem;
+  color: var(--color-text-secondary, #9b97b0);
+  margin: 0;
+  animation: neg-ai-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes neg-ai-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.neg-ai-body { display: flex; flex-direction: column; gap: 6px; }
+
+.neg-ai-reco {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm, 8px);
+}
+
+.neg-ai-reco--accept { background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.25); }
+.neg-ai-reco--counter { background: rgba(251, 191, 36, 0.1); border: 1px solid rgba(251, 191, 36, 0.25); }
+.neg-ai-reco--refuse { background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.25); }
+
+.neg-ai-reco-badge { font-size: 0.8rem; font-weight: 700; }
+.neg-ai-reco-prob { font-size: 0.72rem; color: var(--color-text-secondary, #9b97b0); }
+
+.neg-ai-counter { font-size: 0.78rem; margin: 0; color: var(--color-text, #e0dff1); }
+.neg-ai-margin { font-size: 0.72rem; margin: 0; color: var(--color-text-secondary, #9b97b0); }
+.neg-ai-reason { font-size: 0.72rem; margin: 0; color: var(--color-text-secondary, #9b97b0); font-style: italic; }
+
+.neg-ai-buyer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.7rem;
+  color: var(--color-text-secondary, #9b97b0);
+  padding-top: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
 .neg-bundle-item--disabled {
   opacity: 0.45;
   background: transparent;
