@@ -9,6 +9,7 @@ import * as authService from "./auth.service.js";
 import { getGoogleAuthUrl, handleGoogleCallback } from "./google-oauth.service.js";
 import { verifyTurnstile } from "../../shared/utils/turnstile.js";
 import { env } from "../../config/env.js";
+import { logger } from "../../shared/logger.js";
 
 const registerSchema = z.object({
   email: z.string().email(),
@@ -144,7 +145,9 @@ router.get("/google/callback", asyncHandler(async (req, res) => {
     });
     res.redirect(`${env.FRONTEND_URL}/auth/callback?${params.toString()}`);
   } catch (error) {
-    res.redirect(`${env.FRONTEND_URL}/login?error=google_failed`);
+    logger.error({ err: error }, "[Google OAuth] Callback failed");
+    const errMsg = error instanceof Error ? error.message : "unknown";
+    res.redirect(`${env.FRONTEND_URL}/login?error=google_failed&detail=${encodeURIComponent(errMsg)}`);
   }
 }));
 
