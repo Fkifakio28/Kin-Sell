@@ -1375,6 +1375,18 @@ export function UserDashboard() {
   const hasProductItems = buyerCart?.items.some((item) => item.listing.type === 'PRODUIT') ?? false;
   const hasServiceItems = buyerCart?.items.some((item) => item.listing.type === 'SERVICE') ?? false;
 
+  const handleToggleFullscreen = async () => {
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+        return;
+      }
+      await document.documentElement.requestFullscreen();
+    } catch {
+      setErrorMessage("Impossible d'activer le plein ecran sur cet appareil.");
+    }
+  };
+
   return (
     <div className={`ud-shell${sidebarCollapsed ? ' ud-sidebar-collapsed' : ''}`}>
       {/* ── Mobile Header ── */}
@@ -1384,7 +1396,7 @@ export function UserDashboard() {
           <img src="/assets/kin-sell/logo.png" alt="Kin-Sell" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
           <span>Kin-Sell</span>
         </Link>
-        <button className="dash-mob-search" aria-label="Rechercher">🔍</button>
+        <button className="dash-mob-search" onClick={() => void handleToggleFullscreen()} aria-label="Plein ecran">⛶</button>
       </header>
 
       {/* ── Overlay mobile ── */}
