@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { AuthShell } from "./AuthShell";
 import { useAuth } from "../../app/providers/AuthProvider";
 import { useLocaleCurrency } from "../../app/providers/LocaleCurrencyProvider";
 import { ApiError, auth as authApi } from "../../lib/api-client";
+import { TurnstileWidget } from "../../components/TurnstileWidget";
 
 type ProfileType = "user" | "business";
 type LoginTab = "identifiant" | "telephone";
@@ -62,6 +63,9 @@ export function LoginPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [socialMessage, setSocialMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [cfToken, setCfToken] = useState("");
+
+  const handleTurnstileToken = useCallback((token: string) => setCfToken(token), []);
 
   const totpInputRef = useRef<HTMLInputElement>(null);
 
@@ -96,15 +100,14 @@ export function LoginPage() {
       : t("auth.helperUser");
   }, [profileType, t]);
 
-  const handleSocialClick = (provider: "google" | "facebook" | "apple") => {
+  const handleSocialClick = (provider: "google" | "facebook") => {
     setErrorMessage(null);
     if (provider === "google") {
       const apiBase = import.meta.env.VITE_API_URL ?? "/api";
       window.location.href = `${apiBase}/auth/google`;
       return;
     }
-    const labels = { facebook: "Facebook", apple: "Apple / iCloud" } as const;
-    setSocialMessage(t("auth.socialReady").replace("{provider}", labels[provider]));
+    setSocialMessage(t("auth.socialReady").replace("{provider}", "Facebook"));
   };
 
   // �"?�"? Connexion email/identifiant �"?�"?
@@ -121,7 +124,7 @@ export function LoginPage() {
 
     setIsSubmitting(true);
     try {
-      const nextUser = await login(normalizedIdentifier.toLowerCase(), password);
+      const nextUser = await login(normalizedIdentifier.toLowerCase(), password, cfToken);
       if (rememberMe) {
         localStorage.setItem(rememberedIdentifierKey, normalizedIdentifier);
       } else {
@@ -355,6 +358,8 @@ export function LoginPage() {
           </div>
 
           {errorMessage ? <div className="auth-error">{errorMessage}</div> : null}
+
+          <TurnstileWidget onToken={handleTurnstileToken} />
 
           <button type="submit" className="auth-submit-button" disabled={isSubmitting || isLoading}>
             {isSubmitting ? t("auth.loggingIn") : t("auth.loginBtn")}

@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { AuthShell } from "./AuthShell";
 import { useAuth } from "../../app/providers/AuthProvider";
 import { useLocaleCurrency } from "../../app/providers/LocaleCurrencyProvider";
 import { ApiError } from "../../lib/api-client";
+import { TurnstileWidget } from "../../components/TurnstileWidget";
 
 type ProfileType = "user" | "business";
 
@@ -41,6 +42,9 @@ export function RegisterPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [socialMessage, setSocialMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [cfToken, setCfToken] = useState("");
+
+  const handleTurnstileToken = useCallback((token: string) => setCfToken(token), []);
 
   useEffect(() => {
     if (!isLoading && isLoggedIn && user) {
@@ -54,18 +58,14 @@ export function RegisterPage() {
       : t("auth.registerHelperUser");
   }, [profileType, t]);
 
-  const handleSocialClick = (provider: "google" | "facebook" | "apple") => {
+  const handleSocialClick = (provider: "google" | "facebook") => {
     setErrorMessage(null);
     if (provider === "google") {
       const apiBase = import.meta.env.VITE_API_URL ?? "/api";
       window.location.href = `${apiBase}/auth/google`;
       return;
     }
-    const labels = {
-      facebook: "Facebook",
-      apple: "Apple / iCloud",
-    } as const;
-    setSocialMessage(t("auth.socialRegisterReady").replace("{provider}", labels[provider]));
+    setSocialMessage(t("auth.socialRegisterReady").replace("{provider}", "Facebook"));
   };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -86,7 +86,7 @@ export function RegisterPage() {
     setIsSubmitting(true);
 
     try {
-      const nextUser = await register(email.trim().toLowerCase(), password, displayName.trim(), profileType === "business" ? "BUSINESS" : "USER");
+      const nextUser = await register(email.trim().toLowerCase(), password, displayName.trim(), profileType === "business" ? "BUSINESS" : "USER", cfToken);
       localStorage.setItem(rememberedRoleKey, profileType);
       navigate(getRedirectPath(nextUser.role), { replace: true });
     } catch (error) {
@@ -168,6 +168,8 @@ export function RegisterPage() {
         </div>
 
         {errorMessage ? <div className="auth-error">{errorMessage}</div> : null}
+
+        <TurnstileWidget onToken={handleTurnstileToken} />
 
         <button type="submit" className="auth-submit-button" disabled={isSubmitting || isLoading}>
           {isSubmitting ? t("auth.creating") : t("auth.createAccount")}

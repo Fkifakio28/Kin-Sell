@@ -235,7 +235,7 @@ function persistAuth(data: AccountAuthResponse): AuthResponse {
 }
 
 export const auth = {
-  register: async (body: { email: string; password: string; displayName: string; role?: string }) => {
+  register: async (body: { email: string; password: string; displayName: string; role?: string; cfTurnstileToken?: string }) => {
     const data = await request<AccountAuthResponse>("/account/entry", {
       method: "POST",
       body: {
@@ -243,19 +243,21 @@ export const auth = {
         email: body.email,
         password: body.password,
         displayName: body.displayName,
-        accountType: body.role === "BUSINESS" ? "BUSINESS" : "USER"
+        accountType: body.role === "BUSINESS" ? "BUSINESS" : "USER",
+        cfTurnstileToken: body.cfTurnstileToken,
       }
     });
     return persistAuth(data);
   },
 
-  login: async (body: { email: string; password: string }) => {
+  login: async (body: { email: string; password: string; cfTurnstileToken?: string }) => {
     const raw = await request<AccountAuthResponse | { totpRequired: true; challengeToken: string }>("/account/entry", {
       method: "POST",
       body: {
         method: "email",
         email: body.email,
         password: body.password,
+        cfTurnstileToken: body.cfTurnstileToken,
       }
     });
     // Si TOTP challengé → on ne persiste pas de session, on renvoie le challenge

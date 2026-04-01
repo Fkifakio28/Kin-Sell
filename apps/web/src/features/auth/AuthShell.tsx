@@ -10,7 +10,7 @@ type AuthShellProps = {
   role: "user" | "business";
   onRoleChange: (role: "user" | "business") => void;
   socialMessage: string | null;
-  onSocialClick: (provider: "google" | "facebook" | "apple") => void;
+  onSocialClick: (provider: "google" | "facebook") => void;
   children: ReactNode;
 };
 
@@ -27,12 +27,6 @@ const FacebookIcon = () => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
     <path d="M24 12.073C24 5.405 18.627 0 12 0S0 5.405 0 12.073c0 6.026 4.388 11.022 10.125 11.927v-8.437H7.078v-3.49h3.047V9.412c0-3.029 1.792-4.702 4.533-4.702 1.313 0 2.686.236 2.686.236v2.973H15.83c-1.491 0-1.956.931-1.956 1.887v2.267h3.328l-.532 3.49h-2.796V24C19.612 23.095 24 18.099 24 12.073Z" fill="#1877F2" />
     <path d="M16.671 15.563l.532-3.49h-3.328V9.806c0-.956.465-1.887 1.956-1.887h1.513V4.946s-1.373-.236-2.686-.236c-2.74 0-4.533 1.673-4.533 4.702v2.661H7.078v3.49h3.047V24a12.2 12.2 0 0 0 3.75 0v-8.437h2.796Z" fill="#fff" />
-  </svg>
-);
-
-const AppleIcon = () => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-    <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11Z"/>
   </svg>
 );
 
@@ -119,10 +113,6 @@ export function AuthShell({
             <button type="button" className="auth-social-button auth-social-button--facebook" onClick={() => onSocialClick("facebook")}>
               <FacebookIcon />
               <span>{t("auth.socialFacebook")}</span>
-            </button>
-            <button type="button" className="auth-social-button auth-social-button--apple" onClick={() => onSocialClick("apple")}>
-              <AppleIcon />
-              <span>{t("auth.socialApple")}</span>
             </button>
           </div>
 

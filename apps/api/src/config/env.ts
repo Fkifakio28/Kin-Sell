@@ -64,6 +64,9 @@ const schema = z.object({
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   GOOGLE_CALLBACK_URL: z.string().default("https://api.kin-sell.com/auth/google/callback"),
   FRONTEND_URL: z.string().default("https://kin-sell.com"),
+
+  // ── Cloudflare Turnstile ──
+  TURNSTILE_SECRET_KEY: z.string().optional(),
 });
 
 export const env = schema.parse(process.env);

@@ -4,6 +4,8 @@ import { z } from "zod";
 import { requireAuth, type AuthenticatedRequest } from "../../shared/auth/auth-middleware.js";
 import { HttpError } from "../../shared/errors/http-error.js";
 import { asyncHandler } from "../../shared/utils/async-handler.js";
+import { verifyTurnstile } from "../../shared/utils/turnstile.js";
+import { env } from "../../config/env.js";
 import * as accountService from "./account.service.js";
 
 const accountTypeSchema = z.nativeEnum(AccountType).optional();
@@ -80,6 +82,20 @@ const router = Router();
 router.post(
   "/entry",
   asyncHandler(async (request, response) => {
+    // Turnstile CAPTCHA verification
+    const cfToken = request.body?.cfTurnstileToken;
+    if (env.TURNSTILE_SECRET_KEY && !cfToken) {
+      response.status(400).json({ error: "Vérification CAPTCHA requise" });
+      return;
+    }
+    if (cfToken) {
+      const valid = await verifyTurnstile(cfToken, request.ip);
+      if (!valid) {
+        response.status(403).json({ error: "Échec de la vérification CAPTCHA" });
+        return;
+      }
+    }
+
     const payload = entrySchema.parse(request.body);
 
     const result = await accountService.authEntry({

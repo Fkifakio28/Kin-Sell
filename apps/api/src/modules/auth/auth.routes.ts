@@ -7,6 +7,7 @@ import { rateLimit, RateLimits } from "../../shared/middleware/rate-limit.middle
 import { logSecurityEvent, checkMultiAccount, createFraudSignal } from "../security/security.service.js";
 import * as authService from "./auth.service.js";
 import { getGoogleAuthUrl, handleGoogleCallback } from "./google-oauth.service.js";
+import { verifyTurnstile } from "../../shared/utils/turnstile.js";
 import { env } from "../../config/env.js";
 
 const registerSchema = z.object({
@@ -28,6 +29,20 @@ const refreshSchema = z.object({
 const router = Router();
 
 router.post("/register", rateLimit(RateLimits.REGISTER), asyncHandler(async (request, response) => {
+  // Turnstile CAPTCHA verification
+  const cfToken = request.body?.cfTurnstileToken;
+  if (env.TURNSTILE_SECRET_KEY && !cfToken) {
+    response.status(400).json({ error: "Vérification CAPTCHA requise" });
+    return;
+  }
+  if (cfToken) {
+    const valid = await verifyTurnstile(cfToken, request.ip);
+    if (!valid) {
+      response.status(403).json({ error: "Échec de la vérification CAPTCHA" });
+      return;
+    }
+  }
+
   const payload = registerSchema.parse(request.body);
   const result = await authService.register(payload);
 
@@ -55,6 +70,20 @@ router.post("/register", rateLimit(RateLimits.REGISTER), asyncHandler(async (req
 }));
 
 router.post("/login", rateLimit(RateLimits.LOGIN), asyncHandler(async (request, response) => {
+  // Turnstile CAPTCHA verification
+  const cfToken = request.body?.cfTurnstileToken;
+  if (env.TURNSTILE_SECRET_KEY && !cfToken) {
+    response.status(400).json({ error: "Vérification CAPTCHA requise" });
+    return;
+  }
+  if (cfToken) {
+    const valid = await verifyTurnstile(cfToken, request.ip);
+    if (!valid) {
+      response.status(403).json({ error: "Échec de la vérification CAPTCHA" });
+      return;
+    }
+  }
+
   const payload = loginSchema.parse(request.body);
   const result = await authService.login(payload);
 

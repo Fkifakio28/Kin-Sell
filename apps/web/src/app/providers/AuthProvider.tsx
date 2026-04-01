@@ -8,8 +8,8 @@ type AuthContextValue = {
   user: AccountUser | null;
   isLoading: boolean;
   isLoggedIn: boolean;
-  login: (email: string, password: string) => Promise<AccountUser>;
-  register: (email: string, password: string, displayName: string, role?: string) => Promise<AccountUser>;
+  login: (email: string, password: string, cfTurnstileToken?: string) => Promise<AccountUser>;
+  register: (email: string, password: string, displayName: string, role?: string, cfTurnstileToken?: string) => Promise<AccountUser>;
   refreshUser: () => Promise<AccountUser | null>;
   logout: () => Promise<void>;
 };
@@ -59,8 +59,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void bootstrap();
   }, [refreshUser]);
 
-  const login = useCallback(async (email: string, password: string) => {
-    const result = await authApi.login({ email, password });
+  const login = useCallback(async (email: string, password: string, cfTurnstileToken?: string) => {
+    const result = await authApi.login({ email, password, cfTurnstileToken });
     // Si TOTP requis, on ne peut pas persister la session — lancer une erreur spéciale
     if ("totpRequired" in result && result.totpRequired) {
       throw Object.assign(new Error("TOTP_REQUIRED"), { challengeToken: result.challengeToken });
@@ -70,8 +70,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return u;
   }, []);
 
-  const register = useCallback(async (email: string, password: string, displayName: string, role?: string) => {
-    const { user: u } = await authApi.register({ email, password, displayName, role });
+  const register = useCallback(async (email: string, password: string, displayName: string, role?: string, cfTurnstileToken?: string) => {
+    const { user: u } = await authApi.register({ email, password, displayName, role, cfTurnstileToken });
     setUser(u);
     return u;
   }, []);
