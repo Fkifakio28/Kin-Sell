@@ -179,11 +179,12 @@ export function MobilePageShell() {
   const [createOpen, setCreateOpen] = useState(false);
   const { pathname } = useLocation();
   const isDashboard = DASHBOARD_PATHS.some((p) => pathname.startsWith(p));
+  const isMessaging = pathname.startsWith('/messaging');
 
   return (
     <>
       {!isDashboard && <MobileTopBar />}
-      <div className="msh-content">
+      <div className={`msh-content${isMessaging ? ' msh-content--messaging' : ''}`}>
         <Suspense fallback={<div className="ks-page-loader">Chargement…</div>}>
           <Outlet />
         </Suspense>

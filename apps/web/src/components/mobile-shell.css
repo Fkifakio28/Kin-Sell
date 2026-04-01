@@ -77,6 +77,16 @@
   overscroll-behavior-y: contain;
 }
 
+/* Messaging needs a strict viewport box between top bar and bottom nav */
+.msh-content--messaging {
+  position: fixed;
+  top: calc(54px + env(safe-area-inset-top, 0px));
+  right: 0;
+  bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+  left: 0;
+  overflow: hidden;
+}
+
 /* ── SPACER (pour le bottom nav fixe) ────────────────────── */
 .msh-bottom-spacer {
   height: 76px;
