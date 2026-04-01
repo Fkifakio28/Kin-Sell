@@ -89,16 +89,10 @@ export default defineConfig({
               cacheableResponse: { statuses: [0, 200] },
             },
           },
-          {
-            // JS/CSS chunks — Stale-while-revalidate (cache immédiat + refresh en fond)
-            urlPattern: /\.(?:js|css)$/i,
-            handler: "StaleWhileRevalidate",
-            options: {
-              cacheName: "static-assets-cache",
-              expiration: { maxEntries: 100, maxAgeSeconds: 60 * 60 * 24 * 7 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
+          // JS/CSS chunks : PAS de runtime caching ici.
+          // Le précache Workbox (globPatterns ci-dessous) gère déjà les assets
+          // hashés avec versioning correct. Un StaleWhileRevalidate ici
+          // causerait des 404 → ErrorBoundary après chaque rebuild.
           {
             // Woff2 / polices locales — CacheFirst (immuables après build)
             urlPattern: /\.(?:woff|woff2|ttf|eot)$/i,
@@ -111,8 +105,11 @@ export default defineConfig({
           },
         ],
 
-        // Précache tous les chunks build
-        globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
+        // Précache tous les chunks build (PAS html : servi sans cache par le serveur)
+        globPatterns: ["**/*.{js,css,ico,svg,woff2}"],
+
+        // Nettoyer les anciens caches lors d'une mise à jour du SW
+        cleanupOutdatedCaches: true,
 
         // Évite de mettre en cache les gros fichiers vidéo background
         globIgnores: [
