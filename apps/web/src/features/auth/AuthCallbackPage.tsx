@@ -1,15 +1,14 @@
 import { useEffect, useRef } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { setToken, setRefreshToken, setSessionId } from "../../lib/api-client";
 
 /**
  * Page de callback OAuth.
  * L'API redirige ici avec les tokens en query params après authentification Google/Facebook/Apple.
- * On persiste les tokens puis on redirige — le bootstrap AuthProvider chargera le profil.
+ * On persiste les tokens puis on force un rechargement complet pour que AuthProvider bootstrap avec les tokens.
  */
 export function AuthCallbackPage() {
   const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
   const processed = useRef(false);
 
   useEffect(() => {
@@ -23,12 +22,12 @@ export function AuthCallbackPage() {
     const error = searchParams.get("error");
 
     if (error) {
-      navigate("/login", { replace: true });
+      window.location.replace("/login");
       return;
     }
 
     if (!token || !refreshToken || !sessionId) {
-      navigate("/login", { replace: true });
+      window.location.replace("/login");
       return;
     }
 
@@ -37,15 +36,15 @@ export function AuthCallbackPage() {
     setRefreshToken(refreshToken);
     setSessionId(sessionId);
 
-    // Rediriger immédiatement — AuthProvider bootstrap chargera le profil
+    // Full page reload pour que AuthProvider bootstrap avec les tokens
     if (role === "ADMIN" || role === "SUPER_ADMIN") {
-      navigate("/admin/dashboard", { replace: true });
+      window.location.replace("/admin/dashboard");
     } else if (role === "BUSINESS") {
-      navigate("/business/dashboard", { replace: true });
+      window.location.replace("/business/dashboard");
     } else {
-      navigate("/account", { replace: true });
+      window.location.replace("/account");
     }
-  }, [searchParams, navigate]);
+  }, [searchParams]);
 
   return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh" }}>
