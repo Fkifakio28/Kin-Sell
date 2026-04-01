@@ -327,8 +327,49 @@
 
 @media (max-width: 500px) {
   .neg-popup {
-    width: 96%;
-    padding: 20px 16px;
+    width: 98%;
+    padding: 18px 14px;
+    border-radius: 16px;
+  }
+  .neg-popup--bundle {
+    max-width: 98%;
+  }
+  .neg-listing-preview {
+    gap: 10px;
+    padding: 10px;
+  }
+  .neg-listing-img,
+  .neg-listing-placeholder {
+    width: 50px;
+    height: 50px;
+  }
+  .neg-listing-title {
+    font-size: 13px;
+  }
+  .neg-actions-row {
+    flex-wrap: wrap;
+  }
+  .neg-action-btn {
+    min-width: 0;
+    padding: 10px 4px;
+    font-size: 12px;
+  }
+  .neg-submit {
+    font-size: 14px;
+    padding: 11px;
+  }
+  .neg-summary {
+    padding: 10px;
+  }
+  .neg-mode-tabs {
+    gap: 4px;
+  }
+  .neg-mode-tab {
+    padding: 6px 4px;
+    font-size: 11px;
+  }
+  .neg-mode-tab-icon {
+    font-size: 16px;
   }
 }
 

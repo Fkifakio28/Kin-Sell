@@ -1178,7 +1178,7 @@ export function MessagingPage() {
             {!isAdminDM && recordingAudio && (
               <div className="msg-waveform-bar">
                 <span className="msg-waveform-timer">{formatAudioTime(recordingTime)}</span>
-                <canvas ref={waveformCanvasRef} className="msg-waveform-canvas" width={400} height={36} />
+                <canvas ref={waveformCanvasRef} className="msg-waveform-canvas" height={36} />
                 <button className="msg-waveform-cancel" title="Annuler" type="button" onClick={cancelRecordingAudio}>✕</button>
                 <button className="msg-waveform-stop" title="Envoyer" type="button" onClick={stopRecordingAudio}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>

@@ -173,6 +173,8 @@ export function CartPage() {
         paymentMethod: "MPESA",
         additionalNote: ""
       });
+      // Redirect to purchases tab after 2s
+      setTimeout(() => navigate("/account?tab=purchases"), 2000);
     } catch (err) {
       setError(err instanceof ApiError ? ((err.data as { error?: string })?.error ?? "Erreur validation.") : "Erreur validation.");
     } finally {

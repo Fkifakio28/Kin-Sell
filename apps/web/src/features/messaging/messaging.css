@@ -857,6 +857,8 @@
   padding: 10px 16px;
   background: rgba(239 68 68 / .08);
   border-top: 1px solid rgba(239 68 68 / .2);
+  overflow: hidden;
+  min-width: 0;
 }
 .msg-waveform-timer {
   font-size: 0.84rem;
@@ -864,10 +866,13 @@
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   min-width: 40px;
+  flex-shrink: 0;
 }
 .msg-waveform-canvas {
   flex: 1;
   height: 36px;
+  min-width: 0;
+  max-width: 100%;
 }
 .msg-waveform-stop {
   width: 36px;
@@ -881,6 +886,7 @@
   align-items: center;
   justify-content: center;
   transition: transform .15s;
+  flex-shrink: 0;
 }
 .msg-waveform-stop:hover {
   transform: scale(1.1);
@@ -896,6 +902,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
 }
 .msg-waveform-cancel:hover {
   background: rgba(255 255 255 / .14);

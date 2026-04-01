@@ -1020,6 +1020,8 @@
   inset: 0;
   z-index: 250;
   background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1029,16 +1031,32 @@
 .sokin-story-modal-card,
 .sokin-story-viewer {
   width: min(420px, 96vw);
-  border-radius: 16px;
-  border: 1px solid var(--glass-border);
-  background: rgba(15, 10, 33, 0.96);
-  padding: 12px;
+  border-radius: 20px;
+  border: 1px solid var(--color-glass-border, rgba(185, 166, 255, 0.18));
+  background: rgba(18, 11, 43, 0.82);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(185, 166, 255, 0.1);
+  padding: 16px;
 }
 
 .sokin-story-modal-card textarea {
   width: 100%;
   min-height: 84px;
   margin-bottom: 8px;
+  border-radius: 12px;
+  border: 1px solid var(--color-glass-border, rgba(185, 166, 255, 0.18));
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--color-text-primary, #e0dff1);
+  padding: 10px;
+  font-family: inherit;
+  font-size: 13px;
+  resize: vertical;
+}
+
+.sokin-story-modal-card textarea:focus {
+  outline: none;
+  border-color: rgba(185, 166, 255, 0.5);
 }
 
 .sokin-story-modal-actions {
@@ -1048,18 +1066,67 @@
   margin-top: 10px;
 }
 
+.sokin-story-modal-actions button {
+  padding: 8px 18px;
+  border-radius: 999px;
+  border: 1px solid var(--color-glass-border, rgba(185, 166, 255, 0.18));
+  background: rgba(111, 88, 255, 0.15);
+  color: var(--color-text-primary, #e0dff1);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.sokin-story-modal-actions button:last-child {
+  background: linear-gradient(135deg, rgba(111, 88, 255, 0.3), rgba(111, 88, 255, 0.15));
+  border-color: rgba(185, 166, 255, 0.4);
+}
+
+.sokin-story-modal-actions button:hover {
+  background: rgba(111, 88, 255, 0.3);
+}
+
 .sokin-story-viewer img,
 .sokin-story-viewer video {
   width: 100%;
   max-height: 62vh;
   object-fit: contain;
-  border-radius: 12px;
+  border-radius: 14px;
+}
+
+.sokin-story-viewer p {
+  color: var(--color-text-primary, #e0dff1);
+  font-size: 14px;
+  margin: 10px 0 4px;
+  line-height: 1.5;
 }
 
 .sokin-story-nav {
-  margin-top: 8px;
+  margin-top: 10px;
   display: flex;
   justify-content: space-between;
+}
+
+.sokin-story-nav button {
+  padding: 8px 18px;
+  border-radius: 999px;
+  border: 1px solid var(--color-glass-border, rgba(185, 166, 255, 0.18));
+  background: rgba(111, 88, 255, 0.15);
+  color: var(--color-text-primary, #e0dff1);
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.sokin-story-nav button:hover:not(:disabled) {
+  background: rgba(111, 88, 255, 0.3);
+}
+
+.sokin-story-nav button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 
 .sokin-thread {
