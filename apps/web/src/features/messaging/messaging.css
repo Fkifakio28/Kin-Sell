@@ -1161,7 +1161,9 @@
 /* ═══ Responsive ═══ */
 @media (max-width: 768px) {
   .msg-shell {
-    height: 100%;
+    /* 54px = mobile topbar, 64px = bottom nav */
+    height: calc(100vh - 54px - 64px);
+    height: calc(100dvh - 54px - 64px);
   }
 
   .msg-sidebar {
