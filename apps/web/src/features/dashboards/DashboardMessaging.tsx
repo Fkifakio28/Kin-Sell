@@ -176,6 +176,7 @@ export function DashboardMessaging() {
   const remoteStreamRef = useRef<MediaStream | null>(null);
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  const remoteAudioRef = useRef<HTMLAudioElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -276,7 +277,17 @@ export function DashboardMessaging() {
   const createPeerConnection = useCallback((remoteUserId: string) => {
     const pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun1.l.google.com:19302" }, { urls: "turn:openrelay.metered.ca:80", username: "openrelayproject", credential: "openrelayproject" }, { urls: "turn:openrelay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" }, { urls: "turn:openrelay.metered.ca:443?transport=tcp", username: "openrelayproject", credential: "openrelayproject" }] });
     pc.onicecandidate = (e) => { if (e.candidate) emit("webrtc:ice-candidate", { targetUserId: remoteUserId, candidate: e.candidate.toJSON() }); };
-    pc.ontrack = (e) => { remoteStreamRef.current = e.streams[0]; if (remoteVideoRef.current) remoteVideoRef.current.srcObject = e.streams[0]; };
+    pc.ontrack = (e) => {
+      remoteStreamRef.current = e.streams[0];
+      if (remoteVideoRef.current) {
+        remoteVideoRef.current.srcObject = e.streams[0];
+        void remoteVideoRef.current.play().catch(() => {});
+      }
+      if (remoteAudioRef.current) {
+        remoteAudioRef.current.srcObject = e.streams[0];
+        void remoteAudioRef.current.play().catch(() => {});
+      }
+    };
     peerConnectionRef.current = pc;
     return pc;
   }, [emit]);
@@ -478,6 +489,7 @@ export function DashboardMessaging() {
       {callState && (callState.status === "connected" || (callState.status === "ringing" && callState.direction === "outgoing")) && (
         <div className="dm-call-overlay">
           <div className="dm-call-dialog">
+            <audio ref={remoteAudioRef} autoPlay playsInline />
             {callState.status === "ringing" && <div className="dm-ringtone-pulse"><span className="dm-ringtone-dot" /><span className="dm-ringtone-dot" /><span className="dm-ringtone-dot" /></div>}
             {callState.type === "video" && <div className="dm-call-videos"><video ref={remoteVideoRef} autoPlay playsInline className="dm-call-video-remote" /><video ref={localVideoRef} autoPlay playsInline muted className="dm-call-video-local" /></div>}
             <p className="dm-call-label">{callState.status === "ringing" ? "Appel en cours..." : `Appel ${callState.type} connecté`}</p>

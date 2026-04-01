@@ -199,6 +199,7 @@ export function MessagingPage() {
   const remoteStreamRef = useRef<MediaStream | null>(null);
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  const remoteAudioRef = useRef<HTMLAudioElement>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -476,12 +477,18 @@ export function MessagingPage() {
       remoteStreamRef.current = event.streams[0];
       if (remoteVideoRef.current) {
         remoteVideoRef.current.srcObject = event.streams[0];
+        void remoteVideoRef.current.play().catch(() => {});
+      }
+      if (remoteAudioRef.current) {
+        remoteAudioRef.current.srcObject = event.streams[0];
+        remoteAudioRef.current.muted = !isSpeakerOn;
+        void remoteAudioRef.current.play().catch(() => {});
       }
     };
 
     peerConnectionRef.current = pc;
     return pc;
-  }, [emit]);
+  }, [emit, isSpeakerOn]);
 
   const cleanupCall = useCallback(() => {
     peerConnectionRef.current?.close();
@@ -489,6 +496,9 @@ export function MessagingPage() {
     localStreamRef.current?.getTracks().forEach((t) => t.stop());
     localStreamRef.current = null;
     remoteStreamRef.current = null;
+    if (remoteAudioRef.current) {
+      remoteAudioRef.current.srcObject = null;
+    }
     setIsMuted(false);
     setIsCameraOff(false);
     setIsSpeakerOn(true);
@@ -511,15 +521,12 @@ export function MessagingPage() {
   }, []);
 
   const toggleSpeaker = useCallback(() => {
-    if (remoteVideoRef.current) {
-      const el = remoteVideoRef.current as any;
-      if (el.setSinkId) {
-        // Toggle between default and speaker
-        setIsSpeakerOn((prev) => !prev);
-      }
-    }
-    // For audio-only calls, toggle the remote stream volume
-    setIsSpeakerOn((prev) => !prev);
+    setIsSpeakerOn((prev) => {
+      const next = !prev;
+      if (remoteAudioRef.current) remoteAudioRef.current.muted = !next;
+      if (remoteVideoRef.current) remoteVideoRef.current.muted = !next;
+      return next;
+    });
   }, []);
 
   const startCall = useCallback(async (callType: "audio" | "video") => {
@@ -788,9 +795,15 @@ export function MessagingPage() {
       content: content ?? `↪ Transféré: [${forwardMsg.type}]`,
       type: "TEXT",
       ...(forwardMsg.mediaUrl ? { mediaUrl: forwardMsg.mediaUrl, type: forwardMsg.type, fileName: forwardMsg.fileName } : {}),
+    }, (res: any) => {
+      if (res && !res.ok) {
+        showGuardAlert("block", res.error || "Transfert impossible.");
+        return;
+      }
+      showGuardAlert("warn", "Message transféré.");
+      setForwardMsg(null);
     });
-    setForwardMsg(null);
-  }, [forwardMsg, emit]);
+  }, [forwardMsg, emit, showGuardAlert]);
 
   /* ── Multi-select actions ── */
   const toggleSelectMsg = useCallback((msgId: string) => {
@@ -932,6 +945,7 @@ export function MessagingPage() {
       {callState && (callState.status === "connected" || (callState.status === "ringing" && callState.direction === "outgoing")) && (
         <div className="msg-call-overlay msg-call-overlay--active">
           <div className="msg-call-dialog msg-call-dialog--active">
+            <audio ref={remoteAudioRef} autoPlay playsInline />
             {/* Remote caller info */}
             <div className="msg-call-caller-avatar">
               {(() => {
@@ -1204,6 +1218,16 @@ export function MessagingPage() {
                 </span>
               </div>
               <div className="msg-chat-header-actions">
+                <button
+                  className={`msg-icon-btn${selectMode ? " msg-icon-btn--active" : ""}`}
+                  title={selectMode ? "Quitter la sélection" : "Sélectionner plusieurs messages"}
+                  onClick={() => {
+                    setSelectMode((prev) => !prev);
+                    if (selectMode) setSelectedMsgIds(new Set());
+                  }}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                </button>
                 {!activeConv.isGroup && (
                   <>
                     <button className="msg-icon-btn" title="Appel audio" onClick={() => void startCall("audio")}>

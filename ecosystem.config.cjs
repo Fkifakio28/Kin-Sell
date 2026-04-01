@@ -8,7 +8,9 @@ module.exports = {
       name: "kinsell-api",
       script: "dist/index.js",
       cwd: "./apps/api",
-      instances: 2, // Start with 2 — scale with: pm2 scale kinsell-api +1
+      // Keep a single instance until Socket.IO adapter (Redis) is added.
+      // In cluster mode without shared adapter, call signaling can fail across workers.
+      instances: 1,
       exec_mode: "cluster",
       max_memory_restart: "512M",
       env: {

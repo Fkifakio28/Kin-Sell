@@ -88,6 +88,7 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
   const remoteStreamRef = useRef<MediaStream | null>(null);
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  const remoteAudioRef = useRef<HTMLAudioElement>(null);
   const ringtoneIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   /* ── Message toasts ── */
@@ -217,7 +218,14 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
       };
       pc.ontrack = (e) => {
         remoteStreamRef.current = e.streams[0];
-        if (remoteVideoRef.current) remoteVideoRef.current.srcObject = e.streams[0];
+        if (remoteVideoRef.current) {
+          remoteVideoRef.current.srcObject = e.streams[0];
+          void remoteVideoRef.current.play().catch(() => {});
+        }
+        if (remoteAudioRef.current) {
+          remoteAudioRef.current.srcObject = e.streams[0];
+          void remoteAudioRef.current.play().catch(() => {});
+        }
       };
       peerConnectionRef.current = pc;
       return pc;
@@ -410,6 +418,7 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
             {(callState.status === "connected" ||
               (callState.status === "ringing" && callState.direction === "outgoing")) && (
               <div className="gn-call-dialog">
+                <audio ref={remoteAudioRef} autoPlay playsInline />
                 {callState.status === "ringing" && (
                   <div className="gn-ringtone-pulse">
                     <span className="gn-ringtone-dot" />
