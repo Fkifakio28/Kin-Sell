@@ -1175,6 +1175,12 @@
     z-index: 100;
     width: 100%;
     min-width: auto;
+    padding-top: calc(54px + env(safe-area-inset-top, 0px));
+    box-sizing: border-box;
+  }
+  .msg-chat {
+    padding-top: calc(54px + env(safe-area-inset-top, 0px));
+    box-sizing: border-box;
   }
   .msg-sidebar--hidden {
     display: none;
