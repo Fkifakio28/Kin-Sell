@@ -4,8 +4,21 @@ export function ErrorBoundaryPage() {
   const error = useRouteError();
   const navigate = useNavigate();
 
+  // Log temporaire pour diagnostic
+  console.error("[KS ErrorBoundary] error:", error);
+
   let title = "Erreur inattendue";
   let message = "Quelque chose s'est mal passé. Veuillez réessayer.";
+
+  // Extraire le message réel pour affichage debug
+  let debugInfo: string | null = null;
+  if (error instanceof Error) {
+    debugInfo = `${error.name}: ${error.message}`;
+  } else if (typeof error === "string") {
+    debugInfo = error;
+  } else if (error && typeof error === "object" && "message" in error) {
+    debugInfo = String((error as { message: unknown }).message);
+  }
 
   if (isRouteErrorResponse(error)) {
     if (error.status === 404) {
@@ -23,6 +36,11 @@ export function ErrorBoundaryPage() {
       <p style={{ fontSize: "1.15rem", color: "var(--color-text-secondary, #b0a8d0)", marginTop: "0.5rem" }}>
         {message}
       </p>
+      {debugInfo && (
+        <pre style={{ marginTop: "1rem", padding: "0.75rem 1rem", background: "rgba(255,0,0,0.1)", borderRadius: "8px", fontSize: "0.75rem", color: "#ff8080", maxWidth: "90vw", overflowX: "auto", textAlign: "left", whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
+          {debugInfo}
+        </pre>
+      )}
       <div style={{ display: "flex", gap: "1rem", marginTop: "1.5rem" }}>
         <button
           type="button"
