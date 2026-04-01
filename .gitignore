@@ -10,6 +10,7 @@ build/
 .env
 .env.*
 !.env.example
+!apps/web/.env.production
 
 # VS Code
 .vscode/
