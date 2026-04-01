@@ -6,6 +6,7 @@ import { createSessionTokens, revokeSession, rotateSessionTokens } from "../../s
 import { normalizeEmail, slugifyUsername } from "../../shared/utils/identity-normalizers.js";
 import { Role } from "../../types/roles.js";
 import { logSecurityEvent, checkMultiAccount } from "../security/security.service.js";
+import { sendWelcomeEmail } from "../../shared/email/mailer.js";
 
 type RegisterInput = {
   email: string;
@@ -105,6 +106,8 @@ export const register = async (input: RegisterInput) => {
       entityId: user.id
     }
   });
+
+  sendWelcomeEmail(user.email ?? normalizedEmail, user.profile?.displayName ?? input.displayName).catch(() => {});
 
   const session = await createSessionTokens({
     userId: user.id,

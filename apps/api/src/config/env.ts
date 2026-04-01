@@ -51,6 +51,13 @@ const schema = z.object({
 
   // ── Google Maps ──
   GOOGLE_MAPS_API_KEY: z.string().optional(),
+
+  // ── SMTP (Email) ──
+  SMTP_HOST: z.string().default("smtp.hostinger.com"),
+  SMTP_PORT: z.coerce.number().default(465),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
+  SMTP_FROM: z.string().default("Kin-Sell <contact@kin-sell.com>"),
 });
 
 export const env = schema.parse(process.env);

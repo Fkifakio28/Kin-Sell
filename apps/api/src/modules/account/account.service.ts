@@ -13,6 +13,7 @@ import { hashPassword, verifyPassword } from "../../shared/auth/password.js";
 import { createSessionTokens, revokeOtherSessions, revokeSession, rotateSessionTokens } from "../../shared/auth/session.js";
 import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
+import { sendOtpEmail } from "../../shared/email/mailer.js";
 import { normalizeEmail, normalizePhone, slugifyUsername } from "../../shared/utils/identity-normalizers.js";
 
 type EntryEmailInput = {
@@ -837,6 +838,8 @@ export const requestEmailVerification = async (userId: string, email: string) =>
       expiresAt
     }
   });
+
+  await sendOtpEmail(normalizedEmail, code);
 
   return {
     verificationId: verification.id,
