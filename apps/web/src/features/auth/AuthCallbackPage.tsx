@@ -1,16 +1,15 @@
 import { useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { setToken, setRefreshToken, setSessionId } from "../../lib/api-client";
-import { useAuth } from "../../app/providers/AuthProvider";
 
 /**
  * Page de callback OAuth.
  * L'API redirige ici avec les tokens en query params après authentification Google/Facebook/Apple.
+ * On persiste les tokens puis on redirige — le bootstrap AuthProvider chargera le profil.
  */
 export function AuthCallbackPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { refreshUser } = useAuth();
   const processed = useRef(false);
 
   useEffect(() => {
@@ -38,19 +37,15 @@ export function AuthCallbackPage() {
     setRefreshToken(refreshToken);
     setSessionId(sessionId);
 
-    // Charger le profil utilisateur puis rediriger
-    refreshUser().then(() => {
-      if (role === "ADMIN" || role === "SUPER_ADMIN") {
-        navigate("/admin/dashboard", { replace: true });
-      } else if (role === "BUSINESS") {
-        navigate("/business/dashboard", { replace: true });
-      } else {
-        navigate("/account", { replace: true });
-      }
-    }).catch(() => {
-      navigate("/login", { replace: true });
-    });
-  }, [searchParams, navigate, refreshUser]);
+    // Rediriger immédiatement — AuthProvider bootstrap chargera le profil
+    if (role === "ADMIN" || role === "SUPER_ADMIN") {
+      navigate("/admin/dashboard", { replace: true });
+    } else if (role === "BUSINESS") {
+      navigate("/business/dashboard", { replace: true });
+    } else {
+      navigate("/account", { replace: true });
+    }
+  }, [searchParams, navigate]);
 
   return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh" }}>

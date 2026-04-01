@@ -191,16 +191,16 @@ export const handleGoogleCallback = async (code: string) => {
     sendWelcomeEmail(googleUser.email, googleUser.name).catch(() => {});
   }
 
-  // Create session
-  const session = await createSessionTokens({
-    userId,
-    role: Role.USER,
-    deviceId: "google-oauth",
-  });
-
+  // Create session — fetch user first to get actual role
   const user = await prisma.user.findUniqueOrThrow({
     where: { id: userId },
     include: { profile: true },
+  });
+
+  const session = await createSessionTokens({
+    userId,
+    role: user.role,
+    deviceId: "google-oauth",
   });
 
   return {
