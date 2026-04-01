@@ -5,6 +5,7 @@
 /* ── Shell / Layout ── */
 .msg-shell {
   display: flex;
+  position: relative;
   height: calc(100vh - 72px);
   min-height: 0;
   background: var(--color-bg-primary, #0d0820);
