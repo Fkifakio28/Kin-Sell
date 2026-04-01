@@ -146,8 +146,7 @@ router.get("/google/callback", asyncHandler(async (req, res) => {
     res.redirect(`${env.FRONTEND_URL}/auth/callback?${params.toString()}`);
   } catch (error) {
     logger.error({ err: error }, "[Google OAuth] Callback failed");
-    const errMsg = error instanceof Error ? error.message : "unknown";
-    res.redirect(`${env.FRONTEND_URL}/login?error=google_failed&detail=${encodeURIComponent(errMsg)}`);
+    res.redirect(`${env.FRONTEND_URL}/login?error=google_failed`);
   }
 }));
 
