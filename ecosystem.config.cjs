@@ -6,8 +6,7 @@ module.exports = {
   apps: [
     {
       name: "kinsell-api",
-      script: "node_modules/.bin/tsx",
-      args: "src/index.ts",
+      script: "dist/index.js",
       cwd: "./apps/api",
       instances: 2, // Start with 2 — scale with: pm2 scale kinsell-api +1
       exec_mode: "cluster",
