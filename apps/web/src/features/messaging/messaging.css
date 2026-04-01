@@ -1163,7 +1163,7 @@
   .msg-shell {
     /* Force containment between mobile topbar and bottom nav */
     position: fixed;
-    top: 54px;
+    top: calc(54px + env(safe-area-inset-top, 0px));
     right: 0;
     bottom: calc(64px + env(safe-area-inset-bottom, 0px));
     left: 0;
