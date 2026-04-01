@@ -2608,7 +2608,7 @@ export function UserDashboard() {
 
         {activeSection === 'messages' && (
           <div className="ud-section animate-fade-in">
-            <div style={{ height: 'calc(100vh - 100px)', borderRadius: 'var(--ud-radius)', overflow: 'hidden' }}>
+            <div className="ud-messaging-stage">
               <DashboardMessaging />
             </div>
           </div>

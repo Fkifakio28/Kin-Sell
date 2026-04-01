@@ -1201,12 +1201,17 @@
 
 /* ── Responsive ── */
 @media (max-width: 768px) {
+  .dm-shell {
+    height: 100%;
+    min-height: 0;
+  }
   .dm-sidebar {
-    position: absolute;
-    inset: 0;
+    position: relative;
+    inset: auto;
     z-index: 100;
     width: 100%;
     min-width: auto;
+    height: 100%;
   }
   .dm-sidebar--hidden { display: none; }
   .dm-back-btn { display: flex; }

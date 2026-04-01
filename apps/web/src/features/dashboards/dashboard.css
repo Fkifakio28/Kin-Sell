@@ -307,6 +307,12 @@
   flex: 1;
 }
 
+.ud-messaging-stage {
+  height: calc(100vh - 100px);
+  border-radius: var(--ud-radius);
+  overflow: hidden;
+}
+
 /* ── STATS ROW ──────────────────────────────────────────── */
 .ud-stats-row {
   display: grid;
@@ -873,6 +879,12 @@
   .ud-page-header { flex-direction: column; }
   .bz-setup-panel { padding: 20px 16px; }
   .bz-setup-grid { grid-template-columns: 1fr; }
+
+  .ud-messaging-stage {
+    height: calc(100dvh - 72px);
+    min-height: calc(100dvh - 72px);
+    border-radius: 12px;
+  }
 }
 
 /* ══════════════════════════════════════════════════════════
