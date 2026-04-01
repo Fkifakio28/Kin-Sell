@@ -1060,7 +1060,7 @@ export const negotiations = {
     request<BundleDetailSummary>(`/negotiations/bundle/${encodeURIComponent(bundleId)}`),
 };
 
-export { getToken, setToken, clearToken, getRefreshToken, clearAuthSession, ApiError };
+export { getToken, setToken, clearToken, getRefreshToken, setRefreshToken, setSessionId, clearAuthSession, ApiError };
 
 // ══════════════════════════════════════════════
 // SECURITY ADMIN TYPES

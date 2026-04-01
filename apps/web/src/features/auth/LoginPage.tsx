@@ -97,8 +97,13 @@ export function LoginPage() {
   }, [profileType, t]);
 
   const handleSocialClick = (provider: "google" | "facebook" | "apple") => {
-    const labels = { google: "Google", facebook: "Facebook", apple: "Apple / iCloud" } as const;
     setErrorMessage(null);
+    if (provider === "google") {
+      const apiBase = import.meta.env.VITE_API_URL ?? "/api";
+      window.location.href = `${apiBase}/auth/google`;
+      return;
+    }
+    const labels = { facebook: "Facebook", apple: "Apple / iCloud" } as const;
     setSocialMessage(t("auth.socialReady").replace("{provider}", labels[provider]));
   };
 

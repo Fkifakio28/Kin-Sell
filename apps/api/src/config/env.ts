@@ -58,6 +58,12 @@ const schema = z.object({
   SMTP_USER: z.string().optional(),
   SMTP_PASS: z.string().optional(),
   SMTP_FROM: z.string().default("Kin-Sell <contact@kin-sell.com>"),
+
+  // ── Google OAuth ──
+  GOOGLE_CLIENT_ID: z.string().optional(),
+  GOOGLE_CLIENT_SECRET: z.string().optional(),
+  GOOGLE_CALLBACK_URL: z.string().default("https://api.kin-sell.com/auth/google/callback"),
+  FRONTEND_URL: z.string().default("https://kin-sell.com"),
 });
 
 export const env = schema.parse(process.env);

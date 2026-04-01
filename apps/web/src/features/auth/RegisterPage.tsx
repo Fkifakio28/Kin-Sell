@@ -55,13 +55,16 @@ export function RegisterPage() {
   }, [profileType, t]);
 
   const handleSocialClick = (provider: "google" | "facebook" | "apple") => {
+    setErrorMessage(null);
+    if (provider === "google") {
+      const apiBase = import.meta.env.VITE_API_URL ?? "/api";
+      window.location.href = `${apiBase}/auth/google`;
+      return;
+    }
     const labels = {
-      google: "Google",
       facebook: "Facebook",
       apple: "Apple / iCloud",
     } as const;
-
-    setErrorMessage(null);
     setSocialMessage(t("auth.socialRegisterReady").replace("{provider}", labels[provider]));
   };
 

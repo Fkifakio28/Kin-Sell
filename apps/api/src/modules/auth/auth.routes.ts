@@ -6,6 +6,8 @@ import { asyncHandler } from "../../shared/utils/async-handler.js";
 import { rateLimit, RateLimits } from "../../shared/middleware/rate-limit.middleware.js";
 import { logSecurityEvent, checkMultiAccount, createFraudSignal } from "../security/security.service.js";
 import * as authService from "./auth.service.js";
+import { getGoogleAuthUrl, handleGoogleCallback } from "./google-oauth.service.js";
+import { env } from "../../config/env.js";
 
 const registerSchema = z.object({
   email: z.string().email(),
@@ -82,6 +84,39 @@ router.post("/logout", requireAuth, asyncHandler(async (request: AuthenticatedRe
 router.get("/me", requireAuth, asyncHandler(async (request: AuthenticatedRequest, response) => {
   const result = await authService.me(request.auth!.userId);
   response.json(result);
+}));
+
+// ── Google OAuth ──
+router.get("/google", (req, res) => {
+  if (!env.GOOGLE_CLIENT_ID) {
+    res.status(501).json({ error: "Google OAuth non configuré" });
+    return;
+  }
+  res.redirect(getGoogleAuthUrl());
+});
+
+router.get("/google/callback", asyncHandler(async (req, res) => {
+  const code = req.query.code as string;
+  if (!code) {
+    res.redirect(`${env.FRONTEND_URL}/login?error=google_no_code`);
+    return;
+  }
+
+  try {
+    const result = await handleGoogleCallback(code);
+    const params = new URLSearchParams({
+      token: result.accessToken,
+      refreshToken: result.refreshToken,
+      sessionId: result.sessionId,
+      userId: result.user.id,
+      displayName: result.user.displayName ?? "",
+      role: result.user.role,
+      isNew: result.isNewUser ? "1" : "0",
+    });
+    res.redirect(`${env.FRONTEND_URL}/auth/callback?${params.toString()}`);
+  } catch (error) {
+    res.redirect(`${env.FRONTEND_URL}/login?error=google_failed`);
+  }
 }));
 
 export default router;
