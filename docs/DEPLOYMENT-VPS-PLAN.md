@@ -684,3 +684,77 @@ crontab -e
 - [ ] Tests complets effectués
 - [ ] Backup DB automatique configuré
 - [ ] Monitoring PM2 en place
+
+---
+
+## Déploiement immédiat (commit `d5b65e0`)
+
+Cette section est la séquence la plus rapide pour déployer la version déjà poussée sur GitHub.
+
+```bash
+# 0) SSH
+ssh kinsell@IP_DU_VPS
+
+# 1) Mettre à jour le code
+cd /var/www/kin-sell
+git fetch origin
+git checkout main
+git pull origin main
+
+# 2) Installer/mettre à jour les dépendances
+pnpm install
+
+# 3) Prisma (schéma + migration + client)
+npx prisma migrate deploy --schema packages/db/prisma/schema.prisma
+npx prisma generate --schema packages/db/prisma/schema.prisma
+
+# 4) Build frontend + backend
+cd apps/web
+VITE_API_URL="https://api.kin-sell.com" pnpm run build
+SITE_URL="https://kin-sell.com" pnpm run notify:sitemaps
+cd ../api
+pnpm run build
+cd ../..
+
+# 5) Redémarrer l'API
+pm2 restart kin-sell-api
+pm2 status
+pm2 logs kin-sell-api --lines 40
+
+# 6) Sanity checks
+curl -s https://api.kin-sell.com/health
+curl -s https://api.kin-sell.com/sokin/lives | head
+curl -s https://kin-sell.com/robots.txt
+curl -s https://kin-sell.com/sitemap.xml
+```
+
+### Vérifications post-déploiement (obligatoires)
+
+1. So-Kin Stories 24h:
+    - Ouvrir So-Kin, publier une story texte puis une story image.
+    - Ouvrir une story depuis un autre compte et vérifier le compteur de vues.
+
+2. So-Kin Live (produit épinglé):
+    - Démarrer un live avec un compte vendeur.
+    - Cliquer "Épingler un produit" dans le viewer host.
+    - Vérifier côté spectateur la carte produit + CTA "Acheter".
+
+3. Messagerie WhatsApp-like:
+    - Vérifier `✓` / `✓✓` et le statut "vu il y a ...".
+
+4. SEO:
+    - Vérifier que `https://kin-sell.com/sitemap.xml` et `robots.txt` répondent en 200.
+    - Soumettre le sitemap dans Google Search Console.
+
+### Rollback rapide (si besoin)
+
+```bash
+cd /var/www/kin-sell
+git log --oneline -n 5
+git checkout <commit_precedent_stable>
+pnpm install
+npx prisma generate --schema packages/db/prisma/schema.prisma
+cd apps/web && VITE_API_URL="https://api.kin-sell.com" pnpm run build && cd ../..
+cd apps/api && pnpm run build && cd ../..
+pm2 restart kin-sell-api
+```
