@@ -208,6 +208,12 @@ export function UserDashboard() {
   const [sessionsCount, setSessionsCount] = useState<number | null>(null);
   const [loadingSessions, setLoadingSessions] = useState(false);
 
+  useEffect(() => {
+    if (activeSection === 'messages') {
+      navigate('/messaging', { replace: true });
+    }
+  }, [activeSection, navigate]);
+
   // ── TOTP 2FA state ──
   const [totpEnabled, setTotpEnabled] = useState(false);
   const [totpSetupUri, setTotpSetupUri] = useState<string | null>(null);
@@ -1452,7 +1458,14 @@ export function UserDashboard() {
                 key={section.key}
                 type="button"
                 className={`ud-nav-item${activeSection === section.key ? ' ud-nav-item--active' : ''}`}
-                onClick={() => { setActiveSection(section.key); setMobileSidebarOpen(false); }}
+                onClick={() => {
+                  if (section.key === 'messages') {
+                    navigate('/messaging');
+                    return;
+                  }
+                  setActiveSection(section.key);
+                  setMobileSidebarOpen(false);
+                }}
               >
                 <span className="ud-nav-icon">{section.icon}</span>
                 {!sidebarCollapsed && <span className="ud-nav-label">{t(section.labelKey)}</span>}
@@ -1489,7 +1502,7 @@ export function UserDashboard() {
 
           <div className="ud-page-header-actions">
             <button type="button" className="ud-quick-btn ud-quick-btn--icon" title={t('user.refresh')} onClick={() => void handleRefresh()}>🔄</button>
-            <button type="button" className="ud-quick-btn ud-quick-btn--icon" title={t('user.messaging')} onClick={() => setActiveSection('messages')}>💬</button>
+            <button type="button" className="ud-quick-btn ud-quick-btn--icon" title={t('user.messaging')} onClick={() => navigate('/messaging')}>💬</button>
             <button type="button" className="ud-quick-btn ud-quick-btn--icon ud-quick-btn--danger" title={t('common.logout')} onClick={() => void handleLogout()}>
               {logoutBusy ? '⏳' : '🚪'}
             </button>
@@ -1694,7 +1707,7 @@ export function UserDashboard() {
                     <span className="ud-ov-quick-icon">📝</span>
                     <span>{t('user.publish')}</span>
                   </button>
-                  <button type="button" className="ud-ov-quick-tile" onClick={() => setActiveSection('messages')}>
+                  <button type="button" className="ud-ov-quick-tile" onClick={() => navigate('/messaging')}>
                     <span className="ud-ov-quick-icon">💬</span>
                     <span>{t('user.messaging')}</span>
                   </button>
@@ -2662,7 +2675,7 @@ export function UserDashboard() {
                   <button type="button" className="ud-quick-btn ud-quick-btn--primary" onClick={() => { setContactSearchOpen(true); setContactSearchQuery(''); setContactSearchResults([]); }}>
                     ➕ {t('user.contactAddBtn')}
                   </button>
-                  <button type="button" className="ud-quick-btn" onClick={() => setActiveSection('messages')}>
+                  <button type="button" className="ud-quick-btn" onClick={() => navigate('/messaging')}>
                     💬 {t('user.messagerie')}
                   </button>
                 </div>
@@ -2737,7 +2750,7 @@ export function UserDashboard() {
                         <button
                           type="button"
                           className="ud-quick-btn ud-quick-btn--primary"
-                          onClick={() => setActiveSection('messages')}
+                          onClick={() => navigate('/messaging')}
                         >
                           💬 {t('user.contactBtnMsg')}
                         </button>

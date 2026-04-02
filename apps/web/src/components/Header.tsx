@@ -220,7 +220,7 @@ export function Header() {
                   )}
                 </div>
 
-                <Link to={getDashboardPath(user?.role)} className="ks-icon-btn" aria-label={t('nav.msgAria')} title={t('nav.msgAria')} onClick={() => sessionStorage.setItem('ud-section', 'messages')}>
+                <Link to="/messaging" className="ks-icon-btn" aria-label={t('nav.msgAria')} title={t('nav.msgAria')}>
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
                   </svg>
@@ -267,7 +267,7 @@ export function Header() {
             {isLoggedIn ? (
               <>
                 <Link to={getDashboardPath(user?.role)} className="ks-mobile-link" onClick={() => setMobileOpen(false)}>{t('common.myAccount')}</Link>
-                <Link to={getDashboardPath(user?.role)} className="ks-mobile-link" onClick={() => { setMobileOpen(false); sessionStorage.setItem('ud-section', 'messages'); }}>{t('common.messages')}</Link>
+                <Link to="/messaging" className="ks-mobile-link" onClick={() => { setMobileOpen(false); }}>{t('common.messages')}</Link>
                 <Link to="/cart" className="ks-mobile-link" onClick={() => setMobileOpen(false)}>{t('nav.cartAria')}</Link>
                 <div className="ks-mobile-locale-row">
                   <select
@@ -326,7 +326,7 @@ export function Header() {
                 <>
                   <Link to="/forfaits" className="ks-account-popup-link" onClick={() => setAccountOpen(false)}>💎 {t('nav.plans')}</Link>
                   <Link to={getDashboardPath(user?.role)} className="ks-account-popup-link" onClick={() => setAccountOpen(false)}>👤 {t('common.myAccount')}</Link>
-                  <Link to={getDashboardPath(user?.role)} className="ks-account-popup-link" onClick={() => { setAccountOpen(false); sessionStorage.setItem('ud-section', 'messages'); }}>💬 {t('common.messages')}</Link>
+                  <Link to="/messaging" className="ks-account-popup-link" onClick={() => { setAccountOpen(false); }}>💬 {t('common.messages')}</Link>
                   <Link to="/cart" className="ks-account-popup-link" onClick={() => setAccountOpen(false)}>🛒 {t('nav.cartAria')}</Link>
                   <div className="ks-account-popup-locale">
                     <span className="ks-account-popup-locale-label">🌐</span>

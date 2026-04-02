@@ -83,6 +83,12 @@ export function BusinessDashboard() {
   const [submitBusy, setSubmitBusy] = useState(false);
   const [form, setForm] = useState(INITIAL_BUSINESS_FORM);
 
+  useEffect(() => {
+    if (activeSection === 'messages') {
+      navigate('/messaging', { replace: true });
+    }
+  }, [activeSection, navigate]);
+
   // ─── Données réelles ─────────────────────────────────────
   const [sellerOrders, setSellerOrders] = useState<OrderSummary[]>([]);
   const [myListings, setMyListings] = useState<MyListing[]>([]);
@@ -558,7 +564,7 @@ export function BusinessDashboard() {
       setContactSearchOpen(false);
       setContactSearchQuery('');
       setContactSearchResults([]);
-      setActiveSection('messages');
+      navigate('/messaging');
     } catch { /* ignore */ }
   };
 
@@ -748,7 +754,14 @@ export function BusinessDashboard() {
               key={item.key}
               type="button"
               className={`ud-nav-item${activeSection === item.key ? ' ud-nav-item--active' : ''}`}
-              onClick={() => { setActiveSection(item.key); setMobileSidebarOpen(false); }}
+              onClick={() => {
+                if (item.key === 'messages') {
+                  navigate('/messaging');
+                  return;
+                }
+                setActiveSection(item.key);
+                setMobileSidebarOpen(false);
+              }}
             >
               <span className="ud-nav-icon">{item.icon}</span>
               {!sidebarCollapsed && <span className="ud-nav-label">{t(item.labelKey)}</span>}
@@ -1393,7 +1406,7 @@ export function BusinessDashboard() {
                       <span className="ud-page-sub">{c.commandes} {t('biz.orders')} · {fmtK(c.totalCdf)}</span>
                     </div>
                     <div className="bz-contact-actions">
-                      <button type="button" className="ud-quick-btn" onClick={() => setActiveSection('messages')} title={t('biz.sendMessage')}>💬</button>
+                      <button type="button" className="ud-quick-btn" onClick={() => navigate('/messaging')} title={t('biz.sendMessage')}>💬</button>
                     </div>
                   </article>
                 ))}
@@ -1409,7 +1422,7 @@ export function BusinessDashboard() {
                   <button type="button" className="ud-quick-btn ud-quick-btn--primary bz-cta-gold" onClick={() => { setContactSearchOpen(true); setContactSearchQuery(''); setContactSearchResults([]); }}>
                     ➕ {t('biz.addContact')}
                   </button>
-                  <button type="button" className="ud-quick-btn" onClick={() => setActiveSection('messages')}>💬 {t('biz.messaging')}</button>
+                  <button type="button" className="ud-quick-btn" onClick={() => navigate('/messaging')}>💬 {t('biz.messaging')}</button>
                 </div>
               </section>
             )}
@@ -1507,7 +1520,7 @@ export function BusinessDashboard() {
                 <button
                   type="button"
                   className="ud-quick-btn ud-quick-btn--primary bz-cta-gold"
-                  onClick={() => setActiveSection('messages')}
+                  onClick={() => navigate('/messaging')}
                 >
                   💬 {t('biz.contactClients')}
                 </button>

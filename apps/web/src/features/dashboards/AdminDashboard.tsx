@@ -140,6 +140,12 @@ export function AdminDashboard() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
+  useEffect(() => {
+    if (activeSection === 'messaging') {
+      navigate('/messaging', { replace: true });
+    }
+  }, [activeSection, navigate]);
+
   // Dashboard
   const [stats, setStats] = useState<AdminStats | null>(null);
 
@@ -628,7 +634,7 @@ export function AdminDashboard() {
       await admin.sendAdminMessage(modalUserId, messageText.trim());
       setModal(null);
       setMessageText('');
-      setActiveSection('messaging');
+      navigate('/messaging');
       setSuccess('Message envoyé. La conversation est disponible dans l’onglet Messagerie.');
     } catch (e: any) { setError(e?.message); } finally { setBusy(false); }
   };
@@ -2691,7 +2697,14 @@ export function AdminDashboard() {
                 <button
                   key={s.key}
                   className={`ad-nav-item ${activeSection === s.key ? 'ad-nav-item--active' : ''}`}
-                  onClick={() => { setActiveSection(s.key); setMobileSidebarOpen(false); }}
+                  onClick={() => {
+                    if (s.key === 'messaging') {
+                      navigate('/messaging');
+                      return;
+                    }
+                    setActiveSection(s.key);
+                    setMobileSidebarOpen(false);
+                  }}
                   title={s.label}
                 >
                   <span className="ad-nav-icon">{s.icon}</span>
