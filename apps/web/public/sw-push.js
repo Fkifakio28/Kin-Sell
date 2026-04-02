@@ -16,27 +16,36 @@ self.addEventListener("push", (event) => {
   catch { payload = { title: "Kin-Sell", body: event.data.text() }; }
 
   const { title = "Kin-Sell", body = "", icon, badge, tag, data, actions } = payload;
+  const payloadData = data || {};
+  const payloadType = payloadData.type || "system";
 
   const notificationOptions = {
     body,
     icon: icon || "/assets/kin-sell/pwa-192.png",
     badge: badge || "/assets/kin-sell/badge-72.png",
-    tag: tag || "kin-sell-notification",
-    data: data || {},
+    tag: tag || `kin-sell-${payloadType}`,
+    data: payloadData,
     actions: actions || [],
-    vibrate: [200, 100, 200],
-    requireInteraction: tag === "call",
+    vibrate: payloadType === "call" ? [320, 120, 320, 120, 320] : [200, 100, 200],
+    requireInteraction: payloadType === "call",
+    renotify: payloadType === "call",
     silent: false,
   };
 
-  event.waitUntil(Promise.all([
-    self.registration.showNotification(title, notificationOptions),
-    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
-      for (const client of clients) {
-        client.postMessage({ type: "PUSH_RECEIVED", payload: { title, body, data: data || {} } });
-      }
-    }),
-  ]));
+  event.waitUntil((async () => {
+    const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    const visibleClients = clients.filter((client) => client.visibilityState === "visible");
+
+    for (const client of visibleClients) {
+      client.postMessage({ type: "PUSH_RECEIVED", payload: { title, body, data: payloadData } });
+    }
+
+    if (visibleClients.length > 0) {
+      return;
+    }
+
+    await self.registration.showNotification(title, notificationOptions);
+  })());
 });
 
 /* ── Notification click ── */

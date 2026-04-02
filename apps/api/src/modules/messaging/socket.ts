@@ -197,9 +197,9 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
         const senderProfile = await prisma.userProfile.findUnique({ where: { userId }, select: { displayName: true } });
         const senderName = senderProfile?.displayName ?? "Quelqu'un";
         void sendPushToUser(data.targetUserId, {
-          title: `📞 Appel ${data.callType === "video" ? "vidéo" : "audio"}`,
-          body: `${senderName} vous appelle`,
-          tag: "call",
+            title: senderName,
+            body: `Appel ${data.callType === "video" ? "vidéo" : "audio"} entrant sur Kin-Sell`,
+            tag: `call-${data.conversationId}`,
           data: { type: "call", conversationId: data.conversationId, callerId: userId, callType: data.callType },
           actions: [
             { action: "accept", title: "Accepter" },

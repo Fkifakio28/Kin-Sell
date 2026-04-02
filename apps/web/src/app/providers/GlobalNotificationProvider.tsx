@@ -228,6 +228,33 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
     };
   }, [isLoggedIn, pushEnabled]);
 
+  const presentIncomingCall = useCallback((data: { conversationId: string; callerId: string; callType: "audio" | "video" }) => {
+    if (incomingCallTimerRef.current) clearTimeout(incomingCallTimerRef.current);
+
+    const showIncomingCall = (callerName: string) => {
+      setIncomingCall((prev) => {
+        if (prev?.conversationId === data.conversationId && prev?.callerId === data.callerId) {
+          return prev;
+        }
+        return { ...data, callerName };
+      });
+      if (!window.location.pathname.startsWith("/messaging")) {
+        navigateInApp(`/messaging?incomingConvId=${data.conversationId}&incomingCallerId=${data.callerId}&incomingCallType=${data.callType}`);
+      }
+    };
+
+    void fetch(`${API_BASE}/users/${data.callerId}/public`)
+      .then((r) => r.json())
+      .then((u: { displayName?: string }) => {
+        showIncomingCall(u?.displayName ?? "Quelqu'un");
+      })
+      .catch(() => showIncomingCall("Quelqu'un"));
+
+    if ("vibrate" in navigator) navigator.vibrate([400, 200, 400, 200, 400]);
+
+    incomingCallTimerRef.current = setTimeout(() => setIncomingCall(null), 45_000);
+  }, [navigateInApp]);
+
   /* ── Listen for SW messages (notification clicks) ── */
   useEffect(() => {
     if (!isLoggedIn) return;
@@ -241,7 +268,18 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
         setIncomingCall((prev) => (prev?.conversationId === swMsg.data?.conversationId ? null : prev));
         return;
       }
-      if (swMsg.type === "PUSH_RECEIVED" && swMsg.payload?.data?.type && swMsg.payload.data.type !== "call") {
+      if (swMsg.type === "PUSH_RECEIVED" && swMsg.payload?.data?.type) {
+        if (swMsg.payload.data.type === "message") {
+          return;
+        }
+        if (swMsg.payload.data.type === "call" && swMsg.payload.data.conversationId && swMsg.payload.data.callerId) {
+          presentIncomingCall({
+            conversationId: swMsg.payload.data.conversationId,
+            callerId: swMsg.payload.data.callerId,
+            callType: swMsg.payload.data.callType === "video" ? "video" : "audio",
+          });
+          return;
+        }
         const kind = resolveNotificationKind(swMsg.payload.data);
         const toast: MessageToast = {
           id: `${swMsg.payload.data.type}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -256,7 +294,7 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
         setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== toast.id)), 6000);
       }
     });
-  }, [isLoggedIn, navigateInApp]);
+  }, [isLoggedIn, navigateInApp, presentIncomingCall]);
 
   const requestPushPermission = useCallback(async () => {
     const ok = await subscribeToPush();
@@ -332,6 +370,7 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
         type: string;
       };
     }) => {
+      if (messagingActiveRef.current) return;
       const msg = data.message;
       if (msg.senderId === user?.id) return;
 
@@ -360,25 +399,7 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
     };
 
     const handleIncomingCall = (data: { conversationId: string; callerId: string; callType: "audio" | "video" }) => {
-      if (incomingCallTimerRef.current) clearTimeout(incomingCallTimerRef.current);
-
-      const showIncomingCall = (callerName: string) => {
-        setIncomingCall({ ...data, callerName });
-        if (!window.location.pathname.startsWith("/messaging")) {
-          navigateInApp(`/messaging?incomingConvId=${data.conversationId}&incomingCallerId=${data.callerId}&incomingCallType=${data.callType}`);
-        }
-      };
-
-      void fetch(`${API_BASE}/users/${data.callerId}/public`)
-        .then((r) => r.json())
-        .then((u: { displayName?: string }) => {
-          showIncomingCall(u?.displayName ?? "Quelqu'un");
-        })
-        .catch(() => showIncomingCall("Quelqu'un"));
-
-      if ("vibrate" in navigator) navigator.vibrate([400, 200, 400, 200, 400]);
-
-      incomingCallTimerRef.current = setTimeout(() => setIncomingCall(null), 45_000);
+      presentIncomingCall(data);
     };
 
     socket.on("message:new", handleNewMessage);
@@ -388,7 +409,7 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
       socket.off("message:new", handleNewMessage);
       socket.off("call:incoming", handleIncomingCall);
     };
-  }, [isLoggedIn, user?.id, playMessageSound, navigateInApp]);
+  }, [isLoggedIn, user?.id, playMessageSound, presentIncomingCall]);
 
   useEffect(() => {
     return () => {
