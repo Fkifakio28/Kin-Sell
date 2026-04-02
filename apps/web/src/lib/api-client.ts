@@ -1492,6 +1492,9 @@ export type SoKinApiPost = {
   authorId: string;
   text: string;
   mediaUrls: string[];
+  location: string | null;
+  tags: string[];
+  hashtags: string[];
   likes: number;
   comments: number;
   shares: number;
