@@ -7,6 +7,16 @@ function toAbsoluteUrl(path) {
   return new URL(path || "/", self.location.origin).href;
 }
 
+function samePath(a, b) {
+  try {
+    const left = new URL(a, self.location.origin);
+    const right = new URL(b, self.location.origin);
+    return `${left.pathname}${left.search}` === `${right.pathname}${right.search}`;
+  } catch {
+    return a === b;
+  }
+}
+
 function resolveTargetPath(data) {
   switch (data?.type) {
     case "message":
@@ -84,32 +94,46 @@ self.addEventListener("notificationclick", (event) => {
 
   const absoluteTargetUrl = toAbsoluteUrl(targetUrl);
 
-  event.waitUntil(
-    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(async (clients) => {
-      const sameOrigin = clients.filter((client) => client.url && client.url.startsWith(self.location.origin));
-      const orderedClients = [
-        ...sameOrigin.filter((client) => client.visibilityState === "visible"),
-        ...sameOrigin.filter((client) => client.visibilityState !== "visible"),
-      ];
+  event.waitUntil((async () => {
+    const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    const sameOrigin = clients.filter((client) => client.url && client.url.startsWith(self.location.origin));
+    const orderedClients = [
+      ...sameOrigin.filter((client) => client.visibilityState === "visible"),
+      ...sameOrigin.filter((client) => client.visibilityState !== "visible"),
+    ];
 
-      for (const client of orderedClients) {
-        if (client.url && client.url.startsWith(self.location.origin)) {
-          if ("navigate" in client) {
-            await client.navigate(absoluteTargetUrl);
-          }
-          await client.focus();
-          client.postMessage({ type: "NOTIFICATION_CLICK", data, targetUrl: absoluteTargetUrl });
-          return undefined;
+    for (const client of orderedClients) {
+      try {
+        if (!client.url || !client.url.startsWith(self.location.origin)) continue;
+
+        const focused = await client.focus();
+        if (focused && "navigate" in focused && !samePath(focused.url, absoluteTargetUrl)) {
+          await focused.navigate(absoluteTargetUrl);
         }
-      }
 
+        focused?.postMessage({ type: "NOTIFICATION_CLICK", data, targetUrl: absoluteTargetUrl });
+        return;
+      } catch {
+        // Keep iterating other clients and fallback to openWindow if needed.
+      }
+    }
+
+    try {
       const opened = await self.clients.openWindow(absoluteTargetUrl);
       if (opened) {
         await opened.focus();
+        opened.postMessage({ type: "NOTIFICATION_CLICK", data, targetUrl: absoluteTargetUrl });
       }
-      return opened;
-    })
-  );
+      return;
+    } catch {
+      // Final fallback: open app root if direct deep-link opening is rejected.
+      const openedRoot = await self.clients.openWindow(toAbsoluteUrl("/"));
+      if (openedRoot) {
+        await openedRoot.focus();
+        openedRoot.postMessage({ type: "NOTIFICATION_CLICK", data, targetUrl: absoluteTargetUrl });
+      }
+    }
+  })());
 });
 
 /* ── Notification close ── */
