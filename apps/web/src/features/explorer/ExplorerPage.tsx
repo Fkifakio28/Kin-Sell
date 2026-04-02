@@ -12,6 +12,7 @@ import { useHoverPopup, ArticleHoverPopup, ProfileHoverPopup, type ArticleHoverD
 import { useScrollRestore } from '../../utils/useScrollRestore';
 import { useAuth } from '../../app/providers/AuthProvider';
 import { useLocaleCurrency } from '../../app/providers/LocaleCurrencyProvider';
+import { useMarketPreference } from '../../app/providers/MarketPreferenceProvider';
 import { NegotiatePopup } from '../negotiations/NegotiatePopup';
 import { useLockedCategories, isCategoryLocked } from '../../hooks/useLockedCategories';
 import { AdBanner } from '../../components/AdBanner';
@@ -73,7 +74,9 @@ const CATEGORY_URL_MAP: Record<string, { type: 'product' | 'service'; id: string
 
 export function ExplorerPage() {
   const { t, formatPriceLabelFromUsdCents } = useLocaleCurrency();
+  const { effectiveCountry, getCountryConfig } = useMarketPreference();
   const lockedCats = useLockedCategories();
+  const defaultCity = getCountryConfig(effectiveCountry).defaultCity;
   const [searchParams, setSearchParams] = useSearchParams();
   const urlType = searchParams.get('type');
   const urlCategory = searchParams.get('category');
@@ -89,6 +92,7 @@ export function ExplorerPage() {
     return null;
   });
   const [searchQuery, setSearchQuery] = useState(urlQuery ?? '');
+  const [debouncedQuery, setDebouncedQuery] = useState(searchQuery);
   const [previewPage, setPreviewPage] = useState(0);
   const [modalPage, setModalPage] = useState(0);
   const [isAllArticlesOpen, setIsAllArticlesOpen] = useState(false);
@@ -346,7 +350,7 @@ export function ExplorerPage() {
 
     const loadShops = async () => {
       try {
-        const data = await explorerApi.shops(4);
+        const data = await explorerApi.shops({ limit: 4, city: defaultCity, country: effectiveCountry });
         setShops(data);
       } catch {
         // silencieux
@@ -355,7 +359,7 @@ export function ExplorerPage() {
 
     const loadProfiles = async () => {
       try {
-        const data = await explorerApi.profiles(4);
+        const data = await explorerApi.profiles({ limit: 4, city: defaultCity, country: effectiveCountry });
         setProfiles(data);
       } catch {
         // silencieux
@@ -369,35 +373,41 @@ export function ExplorerPage() {
     return () => {
       controller.abort();
     };
-  }, []);
+  }, [defaultCity, effectiveCountry]);
 
   useEffect(() => {
-    const controller = new AbortController();
-    const apiBaseUrl = import.meta.env.VITE_API_URL ?? '/api';
+    const timer = setTimeout(() => {
+      setDebouncedQuery(searchQuery);
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    let cancelled = false;
 
     const loadArticles = async () => {
+      setIsLoadingArticles(true);
       try {
-        const [prodRes, svcRes] = await Promise.all([
-          fetch(`${apiBaseUrl}/listings/latest?type=PRODUIT&limit=12`, { signal: controller.signal }),
-          fetch(`${apiBaseUrl}/listings/latest?type=SERVICE&limit=12`, { signal: controller.signal }),
+        const normalizedQuery = debouncedQuery.trim();
+        const [productsRes, servicesRes] = await Promise.all([
+          listingsApi.search({
+            type: 'PRODUIT',
+            q: normalizedQuery || undefined,
+            city: defaultCity,
+            country: effectiveCountry,
+            limit: 24,
+          }),
+          listingsApi.search({
+            type: 'SERVICE',
+            q: normalizedQuery || undefined,
+            city: defaultCity,
+            country: effectiveCountry,
+            limit: 24,
+          }),
         ]);
 
-        type ApiListing = {
-          id: string;
-          type: 'PRODUIT' | 'SERVICE';
-          title: string;
-          category: string;
-          city: string | null;
-          imageUrl: string | null;
-          priceUsdCents: number;
-          isNegotiable?: boolean;
-          latitude?: number;
-          longitude?: number;
-          createdAt: string;
-          owner: { userId: string; displayName: string; username: string | null; avatarUrl: string | null };
-        };
-
-        const mapToPreview = (item: ApiListing): ExplorerArticlePreview => ({
+        const mapToPreview = (item: (typeof productsRes.results)[number]): ExplorerArticlePreview => ({
           id: item.id,
           title: item.title,
           priceLabel: formatPriceLabelFromUsdCents(item.priceUsdCents),
@@ -416,26 +426,23 @@ export function ExplorerPage() {
           longitude: item.longitude ?? undefined,
         });
 
-        const products: ExplorerArticlePreview[] = prodRes.ok
-          ? ((await prodRes.json()) as ApiListing[]).map(mapToPreview)
-          : [];
-        const services: ExplorerArticlePreview[] = svcRes.ok
-          ? ((await svcRes.json()) as ApiListing[]).map(mapToPreview)
-          : [];
+        const products: ExplorerArticlePreview[] = productsRes.results.map(mapToPreview);
+        const services: ExplorerArticlePreview[] = servicesRes.results.map(mapToPreview);
 
         const combined = [...products, ...services];
-        setLiveArticles(combined);
+        if (!cancelled) setLiveArticles(combined);
       } catch {
         // API indisponible — afficher état vide
+        if (!cancelled) setLiveArticles([]);
       } finally {
-        setIsLoadingArticles(false);
+        if (!cancelled) setIsLoadingArticles(false);
       }
     };
 
-    loadArticles();
+    void loadArticles();
 
-    return () => controller.abort();
-  }, []);
+    return () => { cancelled = true; };
+  }, [defaultCity, effectiveCountry, formatPriceLabelFromUsdCents, debouncedQuery]);
 
   return (
     <div className="explorer-shell">

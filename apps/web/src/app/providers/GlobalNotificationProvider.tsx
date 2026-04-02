@@ -238,9 +238,6 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
         }
         return { ...data, callerName };
       });
-      if (!window.location.pathname.startsWith("/messaging")) {
-        navigateInApp(`/messaging?incomingConvId=${data.conversationId}&incomingCallerId=${data.callerId}&incomingCallType=${data.callType}`);
-      }
     };
 
     void fetch(`${API_BASE}/users/${data.callerId}/public`)
@@ -253,7 +250,7 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
     if ("vibrate" in navigator) navigator.vibrate([400, 200, 400, 200, 400]);
 
     incomingCallTimerRef.current = setTimeout(() => setIncomingCall(null), 45_000);
-  }, [navigateInApp]);
+  }, []);
 
   /* ── Listen for SW messages (notification clicks) ── */
   useEffect(() => {
@@ -333,16 +330,17 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
     setToasts((p) => p.filter((t) => t.id !== id));
   }, []);
 
-  const acceptGlobalCall = useCallback(() => {
+  const acceptGlobalCall = useCallback((preferredCallType?: "audio" | "video") => {
     if (!incomingCall) return;
     if (incomingCallTimerRef.current) clearTimeout(incomingCallTimerRef.current);
     const { conversationId, callerId, callType } = incomingCall;
+    const resolvedCallType = preferredCallType ?? callType;
     setIncomingCall(null);
     if (window.location.pathname.startsWith("/messaging")) {
-      window.dispatchEvent(new CustomEvent("ks:incoming-call-accept", { detail: incomingCall }));
+      window.dispatchEvent(new CustomEvent("ks:incoming-call-accept", { detail: { ...incomingCall, callType: resolvedCallType } }));
       return;
     }
-    navigateInApp(`/messaging?callAction=accept&convId=${conversationId}&callerId=${callerId}&callType=${callType}`);
+    navigateInApp(`/messaging?callAction=accept&convId=${conversationId}&callerId=${callerId}&callType=${resolvedCallType}`);
   }, [incomingCall, navigateInApp]);
 
   const rejectGlobalCall = useCallback(() => {
@@ -463,28 +461,44 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
           document.body,
         )}
 
-      {/* ── Incoming call overlay (single centered popup, all pages) ── */}
+      {/* ── Incoming call full-screen, mobile-first ── */}
       {incomingCall &&
         createPortal(
           <div className="gn-call-overlay">
-            <div className="gn-call-dialog">
-              <div className="gn-ringtone-pulse">
+            <div className="gn-call-screen">
+              <div className="gn-call-screen-top">
+                <p className="gn-toast-kind">Appel entrant</p>
+                <p className="gn-call-label">
+                  {incomingCall.callType === "video" ? "📹 Appel vidéo" : "📞 Appel audio"}
+                </p>
+              </div>
+
+              <div className="gn-ringtone-pulse" aria-hidden="true">
                 <div className="gn-ringtone-dot" />
                 <div className="gn-ringtone-dot" />
                 <div className="gn-ringtone-dot" />
               </div>
-              <p className="gn-toast-kind">Appel Kin-Sell</p>
-              <p className="gn-call-label">
-                {incomingCall.callType === "video" ? "📹 " : "📞 "}
-                <strong>{incomingCall.callerName}</strong> vous appelle
-              </p>
+
+              <div className="gn-call-caller-block">
+                <div className="gn-call-caller-avatar">{incomingCall.callerName.slice(0, 1).toUpperCase()}</div>
+                <strong className="gn-call-caller-name">{incomingCall.callerName}</strong>
+                <span className="gn-call-caller-subtitle">Kin-Sell</span>
+              </div>
+
               <div className="gn-call-actions">
-                <button className="gn-call-btn gn-call-btn--accept" onClick={acceptGlobalCall}>
-                  Répondre
-                </button>
                 <button className="gn-call-btn gn-call-btn--reject" onClick={rejectGlobalCall}>
                   Refuser
                 </button>
+
+                <button className="gn-call-btn gn-call-btn--accept" onClick={() => acceptGlobalCall(incomingCall.callType)}>
+                  Répondre
+                </button>
+
+                {incomingCall.callType === "video" ? (
+                  <button className="gn-call-btn gn-call-btn--audio" onClick={() => acceptGlobalCall("audio")}>
+                    Audio seulement
+                  </button>
+                ) : null}
               </div>
             </div>
           </div>,

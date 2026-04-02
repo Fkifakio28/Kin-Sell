@@ -2,11 +2,13 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { auth as authApi } from "../../lib/api-client";
 import { useAuth } from "../../app/providers/AuthProvider";
+import { useLocaleCurrency } from "../../app/providers/LocaleCurrencyProvider";
 
 type Step = "info" | "appeal" | "appeal-sent";
 
 export function SuspendedPage() {
   const { user, logout } = useAuth();
+  const { t } = useLocaleCurrency();
   const navigate = useNavigate();
   const [step, setStep] = useState<Step>("info");
   const [message, setMessage] = useState("");
@@ -15,7 +17,7 @@ export function SuspendedPage() {
 
   const handleSubmitAppeal = async () => {
     if (message.trim().length < 10) {
-      setError("Merci d'expliquer votre situation (minimum 10 caractères).");
+      setError(t('auth.appealMinChars'));
       return;
     }
     setBusy(true);
@@ -24,7 +26,7 @@ export function SuspendedPage() {
       await authApi.submitAppeal(message.trim());
       setStep("appeal-sent");
     } catch {
-      setError("Une erreur est survenue. Réessayez dans quelques instants.");
+      setError(t('auth.appealError'));
     } finally {
       setBusy(false);
     }
@@ -42,34 +44,29 @@ export function SuspendedPage() {
 
         {step === "info" && (
           <>
-            <h1 className="ks-suspended-title">Compte suspendu</h1>
-            <p className="ks-suspended-body">
-              Votre compte Kin-Sell a été suspendu et vous ne pouvez plus accéder aux services.
-            </p>
+            <h1 className="ks-suspended-title">{t('auth.suspendedTitle')}</h1>
+            <p className="ks-suspended-body">{t('auth.suspendedBody')}</p>
             {user?.suspensionReason && (
               <div className="ks-suspended-reason">
-                <span className="ks-suspended-reason-label">Motif de suspension :</span>
+                <span className="ks-suspended-reason-label">{t('auth.suspensionReason')}</span>
                 <span className="ks-suspended-reason-text">{user.suspensionReason}</span>
               </div>
             )}
-            <p className="ks-suspended-help">
-              Si vous estimez que cette suspension est injustifiée, vous pouvez soumettre un appel.
-              Notre équipe examinera votre demande dans les meilleurs délais.
-            </p>
+            <p className="ks-suspended-help">{t('auth.suspendedHelp')}</p>
             <div className="ks-suspended-actions">
               <button
                 type="button"
                 className="ks-btn ks-btn--primary"
                 onClick={() => setStep("appeal")}
               >
-                ✉️ Faire appel
+                ✉️ {t('auth.submitAppeal')}
               </button>
               <button
                 type="button"
                 className="ks-btn ks-btn--ghost"
                 onClick={handleLogout}
               >
-                ← Retour à la connexion
+                {t('auth.backToLogin')}
               </button>
             </div>
           </>
@@ -77,14 +74,11 @@ export function SuspendedPage() {
 
         {step === "appeal" && (
           <>
-            <h1 className="ks-suspended-title">Soumettre un appel</h1>
-            <p className="ks-suspended-body">
-              Expliquez pourquoi vous pensez que votre compte a été suspendu par erreur.
-              Soyez précis et factuel.
-            </p>
+            <h1 className="ks-suspended-title">{t('auth.appealTitle')}</h1>
+            <p className="ks-suspended-body">{t('auth.appealBody')}</p>
             <textarea
               className="ks-suspended-textarea"
-              placeholder="Décrivez votre situation en détail…"
+              placeholder={t('auth.appealPlaceholder')}
               value={message}
               onChange={e => setMessage(e.target.value)}
               rows={6}
@@ -99,7 +93,7 @@ export function SuspendedPage() {
                 onClick={handleSubmitAppeal}
                 disabled={busy}
               >
-                {busy ? "Envoi…" : "Envoyer l'appel"}
+                {busy ? t('auth.appealSending') : t('auth.appealSend')}
               </button>
               <button
                 type="button"
@@ -107,7 +101,7 @@ export function SuspendedPage() {
                 onClick={() => setStep("info")}
                 disabled={busy}
               >
-                ← Retour
+                ← {t('common.back')}
               </button>
             </div>
           </>
@@ -116,18 +110,15 @@ export function SuspendedPage() {
         {step === "appeal-sent" && (
           <>
             <div className="ks-suspended-icon" style={{ fontSize: 48 }}>✅</div>
-            <h1 className="ks-suspended-title">Appel soumis</h1>
-            <p className="ks-suspended-body">
-              Votre appel a bien été transmis à notre équipe de modération.
-              Vous serez notifié dès qu'une décision sera prise.
-            </p>
+            <h1 className="ks-suspended-title">{t('auth.appealSentTitle')}</h1>
+            <p className="ks-suspended-body">{t('auth.appealSentBody')}</p>
             <div className="ks-suspended-actions">
               <button
                 type="button"
                 className="ks-btn ks-btn--ghost"
                 onClick={handleLogout}
               >
-                ← Retour à la connexion
+                {t('auth.backToLogin')}
               </button>
             </div>
           </>

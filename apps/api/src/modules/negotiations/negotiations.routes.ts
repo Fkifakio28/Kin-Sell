@@ -8,6 +8,23 @@ import { requireNoRestriction } from "../../shared/middleware/trust-guard.middle
 import { Role } from "../../types/roles.js";
 import * as negotiationsService from "./negotiations.service.js";
 import { sendPushToUser } from "../notifications/push.service.js";
+import { emitToUsers } from "../messaging/socket.js";
+
+const emitNegotiationUpdated = (
+  data: { id: string; buyerUserId: string; sellerUserId: string; updatedAt: string },
+  action: "CREATED" | "RESPONDED" | "CANCELED" | "JOINED" | "BUNDLE_CREATED",
+  sourceUserId: string
+) => {
+  emitToUsers([data.buyerUserId, data.sellerUserId], "negotiation:updated", {
+    type: "NEGOTIATION_UPDATED",
+    action,
+    negotiationId: data.id,
+    buyerUserId: data.buyerUserId,
+    sellerUserId: data.sellerUserId,
+    sourceUserId,
+    updatedAt: data.updatedAt,
+  });
+};
 
 const createSchema = z.object({
   listingId: z.string().min(8),
@@ -51,6 +68,7 @@ router.post(
         data: { type: "negotiation", negotiationId: data.id },
       });
     }
+    emitNegotiationUpdated(data, "CREATED", request.auth!.userId);
     response.status(201).json(data);
   })
 );
@@ -104,6 +122,7 @@ router.post(
         data: { type: "negotiation", negotiationId: data.id },
       });
     }
+    emitNegotiationUpdated(data, "BUNDLE_CREATED", request.auth!.userId);
     response.status(201).json(data);
   })
 );
@@ -166,6 +185,7 @@ router.post(
         data: { type: "negotiation", negotiationId: data.id },
       });
     }
+    emitNegotiationUpdated(data, "JOINED", request.auth!.userId);
     response.status(201).json(data);
   })
 );
@@ -198,6 +218,7 @@ router.post(
         data: { type: "negotiation", negotiationId: data.id },
       });
     }
+    emitNegotiationUpdated(data, "RESPONDED", request.auth!.userId);
     response.json(data);
   })
 );
@@ -208,6 +229,7 @@ router.delete(
   requireAuth,
   asyncHandler(async (request: AuthenticatedRequest, response) => {
     const data = await negotiationsService.cancelNegotiation(request.auth!.userId, request.params.negotiationId);
+    emitNegotiationUpdated(data, "CANCELED", request.auth!.userId);
     response.json(data);
   })
 );

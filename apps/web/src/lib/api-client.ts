@@ -405,7 +405,7 @@ export const businesses = {
 
 // ── Listings ──
 export type SearchParams = {
-  q?: string; type?: string; city?: string;
+  q?: string; type?: string; city?: string; country?: string;
   latitude?: number; longitude?: number; radiusKm?: number; limit?: number;
 };
 
@@ -467,12 +467,43 @@ export type PublicListing = {
   };
 };
 
+export type ListingSearchResponse = {
+  location: {
+    latitude?: number;
+    longitude?: number;
+    radiusKm: number;
+  } | null;
+  total: number;
+  results: Array<{
+    id: string;
+    type: string;
+    title: string;
+    description: string | null;
+    category: string;
+    city: string;
+    latitude: number;
+    longitude: number;
+    imageUrl: string | null;
+    priceUsdCents: number;
+    isNegotiable: boolean;
+    createdAt: string;
+    distanceKm: number | null;
+    owner: {
+      userId: string;
+      displayName: string;
+      username: string | null;
+      avatarUrl: string | null;
+      businessPublicName?: string | null;
+    };
+  }>;
+};
+
 export const listings = {
   search: (params: SearchParams) =>
-    request<unknown>("/listings/search", { params: params as Record<string, string | number | undefined> }),
+    request<ListingSearchResponse>("/listings/search", { params: params as Record<string, string | number | undefined> }),
   create: (body: Record<string, unknown>) =>
     request<MyListing>("/listings", { method: "POST", body }),
-  latest: (params?: { type?: string; limit?: number }) =>
+  latest: (params?: { type?: string; city?: string; country?: string; limit?: number }) =>
     request<PublicListing[]>("/listings/latest", { params: params as Record<string, string | number | undefined> }),
   mine: (params?: { status?: ListingStatus; type?: string; page?: number; limit?: number }) =>
     request<MyListingsResponse>("/listings/mine", { params: params as Record<string, string | number | undefined> }),
@@ -546,8 +577,22 @@ export const explorer = {
   stats: () => request<{ categories: number; publicProfiles: number; onlineShops: number }>("/explorer/stats"),
   ads: (params?: { city?: string; country?: string }) =>
     request<unknown>("/explorer/ads", { params }),
-  shops: (limit = 4) => request<ExplorerShopApi[]>(`/explorer/shops?limit=${limit}`),
-  profiles: (limit = 4) => request<ExplorerProfileApi[]>(`/explorer/profiles?limit=${limit}`),
+  shops: (params?: { limit?: number; city?: string; country?: string }) =>
+    request<ExplorerShopApi[]>("/explorer/shops", {
+      params: {
+        limit: params?.limit ?? 4,
+        city: params?.city,
+        country: params?.country,
+      },
+    }),
+  profiles: (params?: { limit?: number; city?: string; country?: string }) =>
+    request<ExplorerProfileApi[]>("/explorer/profiles", {
+      params: {
+        limit: params?.limit ?? 4,
+        city: params?.city,
+        country: params?.country,
+      },
+    }),
 };
 
 export type OrderStatus = "PENDING" | "CONFIRMED" | "PROCESSING" | "SHIPPED" | "DELIVERED" | "CANCELED";
@@ -1560,11 +1605,17 @@ export const sokin = {
     request<SoKinApiPost>(`/sokin/posts/${encodeURIComponent(id)}/archive`, { method: 'PATCH' }),
   deletePost: (id: string) =>
     request<{ success: boolean }>(`/sokin/posts/${encodeURIComponent(id)}`, { method: 'DELETE' }),
-  publicFeed: (limit?: number) =>
+  publicFeed: (params?: { limit?: number; city?: string; country?: string }) =>
     request<{ posts: SoKinApiFeedPost[] }>('/sokin/posts', {
-      params: limit ? { limit } : undefined,
+      params: {
+        limit: params?.limit,
+        city: params?.city,
+        country: params?.country,
+      },
     }),
-  publicUsers: (params?: { city?: string; search?: string }) =>
+  publicPost: (id: string) =>
+    request<{ post: SoKinApiFeedPost }>(`/sokin/posts/${encodeURIComponent(id)}`),
+  publicUsers: (params?: { city?: string; search?: string; country?: string }) =>
     request<{ users: SoKinPublicUser[] }>('/sokin/users', {
       params: params as Record<string, string | undefined>,
     }),
@@ -1572,6 +1623,8 @@ export const sokin = {
     request<{ ok: boolean; type: string }>(`/sokin/posts/${encodeURIComponent(id)}/react`, { method: 'POST', body: { type } }),
   unreactToPost: (id: string) =>
     request<{ ok: boolean }>(`/sokin/posts/${encodeURIComponent(id)}/react`, { method: 'DELETE' }),
+  sharePost: (id: string) =>
+    request<{ ok: boolean; shares: number }>(`/sokin/posts/${encodeURIComponent(id)}/share`, { method: 'POST' }),
   stories: () =>
     request<{ stories: SoKinStory[] }>('/sokin/stories'),
   createStory: (body: { mediaUrl?: string; mediaType?: 'IMAGE' | 'VIDEO' | 'TEXT'; caption?: string; bgColor?: string }) =>

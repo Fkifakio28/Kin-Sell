@@ -96,15 +96,6 @@ const SECTION_DEFS: Array<{
   { key: 'messaging',     label: 'Messagerie',         icon: '💬', permission: 'MESSAGING',     group: 'Système' },
 ];
 
-function money(usdCents: number) {
-  return `${(usdCents / 100).toFixed(2)} $`;
-}
-function moneyCdf(usdCents: number) {
-  return `${Math.round((usdCents / 100) * 2850).toLocaleString()} CDF`;
-}
-function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' });
-}
 function roleBadgeClass(role: string) {
   if (role === 'SUPER_ADMIN') return 'ad-badge ad-badge--super-admin';
   if (role === 'ADMIN') return 'ad-badge ad-badge--admin';
@@ -125,7 +116,10 @@ function initials(name: string) {
 export function AdminDashboard() {
   const navigate = useNavigate();
   const { user, isLoading, isLoggedIn, logout } = useAuth();
-  const { t } = useLocaleCurrency();
+  const { t, formatMoneyFromUsdCents, formatDate } = useLocaleCurrency();
+  const money = useCallback((usdCents: number) => formatMoneyFromUsdCents(usdCents), [formatMoneyFromUsdCents]);
+  const moneyCdf = useCallback((usdCents: number) => formatMoneyFromUsdCents(usdCents), [formatMoneyFromUsdCents]);
+  const fmtDate = useCallback((iso: string) => formatDate(iso), [formatDate]);
 
   const [adminMe, setAdminMe] = useState<AdminMe | null>(null);
   const [activeSection, setActiveSection] = useState<AdminSection>(() => {
@@ -1924,7 +1918,7 @@ export function AdminDashboard() {
                     {adv.advertiserEmail && <div style={{ opacity: 0.7 }}>{adv.advertiserEmail}</div>}
                   </td>
                   <td style={{ fontSize: 12 }}>
-                    {adv.paymentRef ? <div>{adv.amountPaidCents / 100}$</div> : <span style={{ opacity: 0.4 }}>—</span>}
+                    {adv.paymentRef ? <div>{money(adv.amountPaidCents)}</div> : <span style={{ opacity: 0.4 }}>—</span>}
                   </td>
                   <td style={{ fontSize: 11 }}>
                     {adv.startDate && <div>Début: {fmtDate(adv.startDate)}</div>}
@@ -2133,7 +2127,7 @@ export function AdminDashboard() {
                       {r.negotiationLocked ? t('admin.locked') : t('admin.unlocked')}
                     </span>
                   </td>
-                  <td>{r.updatedAt ? new Date(r.updatedAt).toLocaleDateString('fr-FR') : '—'}</td>
+                  <td>{r.updatedAt ? fmtDate(r.updatedAt) : '—'}</td>
                   <td>
                     <button
                       type="button"

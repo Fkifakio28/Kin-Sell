@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../app/providers/AuthProvider";
 import { useLocaleCurrency } from "../../app/providers/LocaleCurrencyProvider";
 import { orders, negotiations, billing, orderAi, type CartSummary, type NegotiationSummary, type BillingPlanSummary, type CheckoutAdvice, ApiError } from "../../lib/api-client";
+import { useSocket } from "../../hooks/useSocket";
 import { NegotiationRespondPopup } from "../negotiations/NegotiationRespondPopup";
 import { NegotiatePopup } from "../negotiations/NegotiatePopup";
 import { BundleNegotiatePopup, type BundleListingItem } from "../negotiations/BundleNegotiatePopup";
@@ -10,10 +11,11 @@ import { useLockedCategories, isCategoryLocked } from "../../hooks/useLockedCate
 import "./cart.css";
 
 export function CartPage() {
-  const { isLoggedIn, isLoading: authLoading } = useAuth();
+  const { isLoggedIn, isLoading: authLoading, user } = useAuth();
   const { t, formatMoneyFromUsdCents } = useLocaleCurrency();
   const lockedCats = useLockedCategories();
   const navigate = useNavigate();
+  const { on, off } = useSocket();
 
   const [cart, setCart] = useState<CartSummary | null>(null);
   const [loading, setLoading] = useState(true);
@@ -40,6 +42,15 @@ export function CartPage() {
     paymentMethod: "MPESA" as "CARD" | "PAYPAL" | "MPESA" | "ORANGE_MONEY" | "CASH_ON_DELIVERY",
     additionalNote: ""
   });
+
+  const reloadCart = useCallback(async () => {
+    try {
+      const data = await orders.buyerCart();
+      setCart(data);
+    } catch {
+      setCart(null);
+    }
+  }, []);
 
   /* ── Show negotiate popup if redirected from public profile ── */
   useEffect(() => {
@@ -73,6 +84,31 @@ export function CartPage() {
     void load();
     return () => { cancelled = true; };
   }, [isLoggedIn, authLoading]);
+
+  useEffect(() => {
+    if (!isLoggedIn || !user) return;
+
+    const handleNegotiationUpdated = (payload: {
+      type: 'NEGOTIATION_UPDATED';
+      action: 'CREATED' | 'RESPONDED' | 'CANCELED' | 'JOINED' | 'BUNDLE_CREATED';
+      negotiationId: string;
+      buyerUserId: string;
+      sellerUserId: string;
+      sourceUserId: string;
+      updatedAt: string;
+    }) => {
+      if (payload.buyerUserId !== user.id) return;
+      if (respondNeg?.id === payload.negotiationId && payload.sourceUserId !== user.id) {
+        setRespondNeg(null);
+      }
+      void reloadCart();
+    };
+
+    on('negotiation:updated', handleNegotiationUpdated);
+    return () => {
+      off('negotiation:updated', handleNegotiationUpdated);
+    };
+  }, [isLoggedIn, user, on, off, reloadCart, respondNeg?.id]);
 
   /* ── Fetch billing plan ── */
   useEffect(() => {
@@ -116,7 +152,7 @@ export function CartPage() {
         setCart(updated);
       }
     } catch (err) {
-      setError(err instanceof ApiError ? ((err.data as { error?: string })?.error ?? "Erreur quantité.") : "Erreur quantité.");
+      setError(err instanceof ApiError ? ((err.data as { error?: string })?.error ?? t('cart.qtyError')) : t('cart.qtyError'));
     } finally {
       setBusy(false);
     }
@@ -162,7 +198,7 @@ export function CartPage() {
     try {
       const payloadNotes = [notes, checkoutNotes.trim()].filter(Boolean).join(" | ");
       const result = await orders.checkoutBuyerCart(payloadNotes ? { notes: payloadNotes } : undefined);
-      setSuccess(result.message || "Commande validée !");
+      setSuccess(result.message || t('cart.orderSuccess'));
       setCart(null);
       setCheckoutNotes("");
       setCheckoutModalOpen(false);
@@ -176,7 +212,7 @@ export function CartPage() {
       // Redirect to purchases tab after 2s
       setTimeout(() => navigate("/account?tab=purchases"), 2000);
     } catch (err) {
-      setError(err instanceof ApiError ? ((err.data as { error?: string })?.error ?? "Erreur validation.") : "Erreur validation.");
+      setError(err instanceof ApiError ? ((err.data as { error?: string })?.error ?? t('cart.checkoutError')) : t('cart.checkoutError'));
     } finally {
       setCheckoutBusy(false);
     }
@@ -186,7 +222,7 @@ export function CartPage() {
     if (!cart || cart.items.length === 0) return;
     const ready = cart.items.filter((item) => item.itemState !== "MARCHANDAGE");
     if (ready.length === 0) {
-      setError("Tous les articles sont en marchandage. Attendez la résolution ou annulez les négociations.");
+      setError(t('cart.allInNegotiation'));
       return;
     }
     setCheckoutModalOpen(true);
@@ -228,7 +264,7 @@ export function CartPage() {
       const neg = await negotiations.detail(negotiationId);
       setRespondNeg(neg);
     } catch {
-      setError("Impossible de charger la négociation.");
+      setError(t('cart.loadNegError'));
     }
   }, []);
 
@@ -238,11 +274,9 @@ export function CartPage() {
     setError(null);
     try {
       await negotiations.cancel(negotiationId);
-      // Refresh cart
-      const data = await orders.buyerCart();
-      setCart(data);
+      await reloadCart();
     } catch (err) {
-      setError(err instanceof ApiError ? ((err.data as { error?: string })?.error ?? "Erreur annulation.") : "Erreur annulation.");
+      setError(err instanceof ApiError ? ((err.data as { error?: string })?.error ?? t('cart.cancelError')) : t('cart.cancelError'));
     } finally {
       setCancellingNeg(null);
     }
@@ -250,30 +284,20 @@ export function CartPage() {
 
   const handleNegotiationUpdated = useCallback(async (_updated: NegotiationSummary) => {
     setRespondNeg(null);
-    // Refresh cart to reflect updated negotiation state
-    try {
-      const data = await orders.buyerCart();
-      setCart(data);
-    } catch { /* ignore */ }
-  }, []);
+    await reloadCart();
+  }, [reloadCart]);
 
   const handleBundleSuccess = useCallback(async () => {
     setBundleTarget(null);
-    try {
-      const data = await orders.buyerCart();
-      setCart(data);
-      setNegotiatePopup(true);
-    } catch { /* ignore */ }
-  }, []);
+    await reloadCart();
+    setNegotiatePopup(true);
+  }, [reloadCart]);
 
   const handleSingleNegSuccess = useCallback(async () => {
     setNegotiateItem(null);
-    try {
-      const data = await orders.buyerCart();
-      setCart(data);
-      setNegotiatePopup(true);
-    } catch { /* ignore */ }
-  }, []);
+    await reloadCart();
+    setNegotiatePopup(true);
+  }, [reloadCart]);
 
   // Check items breakdown: COMMANDE vs MARCHANDAGE
   const hasNegotiatingItems = cart?.items.some((item) => item.itemState === "MARCHANDAGE") ?? false;
@@ -309,12 +333,12 @@ export function CartPage() {
     return (
       <section className="cart-shell animate-fade-in">
         <header className="cart-hero glass-container">
-          <p className="cart-eyebrow">Kin-Sell Panier</p>
-          <h1>🛒 Mon panier</h1>
-          <p>Connectez-vous pour accéder à votre panier.</p>
+          <p className="cart-eyebrow">{t('cart.eyebrow')}</p>
+          <h1>🛒 {t('cart.title')}</h1>
+          <p>{t('common.loginRequired')}</p>
           <div className="cart-actions-row">
-            <Link to="/login" className="cart-btn cart-btn--primary">Connexion</Link>
-            <Link to="/register" className="cart-btn cart-btn--secondary">Créer un compte</Link>
+            <Link to="/login" className="cart-btn cart-btn--primary">{t('auth.login')}</Link>
+            <Link to="/register" className="cart-btn cart-btn--secondary">{t('auth.register')}</Link>
           </div>
         </header>
       </section>
@@ -331,7 +355,7 @@ export function CartPage() {
         </header>
         <div className="cart-loading glass-container">
           <span className="cart-spinner" />
-          <span>Chargement du panier...</span>
+          <span>{t('cart.loadingCart')}</span>
         </div>
       </section>
     );

@@ -16,6 +16,7 @@ const activeCallLogs = new Map<string, string>();
 /** userId → pending offline timeout (grace period for mobile/background transitions) */
 const pendingOfflineTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const OFFLINE_GRACE_MS = 120_000;
+let ioInstance: SocketIOServer | null = null;
 
 export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
   const io = new SocketIOServer(httpServer, {
@@ -23,6 +24,7 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
     path: "/ws",
     transports: ["websocket", "polling"],
   });
+  ioInstance = io;
 
   /* ── Auth middleware ── */
   io.use((socket, next) => {
@@ -342,4 +344,21 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
 
 export function getOnlineUserIds(): string[] {
   return Array.from(onlineUsers.keys()).filter((id) => onlineVisibility.get(id) ?? true);
+}
+
+export function emitToUsers<TPayload>(userIds: string[], event: string, payload: TPayload) {
+  if (!ioInstance) return;
+  const uniqueUserIds = Array.from(new Set(userIds.filter(Boolean)));
+  for (const uid of uniqueUserIds) {
+    const sockets = onlineUsers.get(uid);
+    if (!sockets) continue;
+    for (const sid of sockets) {
+      ioInstance.to(sid).emit(event, payload);
+    }
+  }
+}
+
+export function emitToAll<TPayload>(event: string, payload: TPayload) {
+  if (!ioInstance) return;
+  ioInstance.emit(event, payload);
 }

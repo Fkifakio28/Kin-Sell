@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import { setToken, setRefreshToken, setSessionId } from "../../lib/api-client";
+import { useLocaleCurrency } from "../../app/providers/LocaleCurrencyProvider";
 
 /**
  * Page de callback OAuth.
@@ -10,6 +11,7 @@ import { setToken, setRefreshToken, setSessionId } from "../../lib/api-client";
 export function AuthCallbackPage() {
   const [searchParams] = useSearchParams();
   const processed = useRef(false);
+  const { t } = useLocaleCurrency();
 
   useEffect(() => {
     if (processed.current) return;
@@ -48,7 +50,7 @@ export function AuthCallbackPage() {
 
   return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh" }}>
-      <p style={{ color: "var(--color-text-secondary)", fontSize: "1.1rem" }}>Connexion en cours…</p>
+      <p style={{ color: "var(--color-text-secondary)", fontSize: "1.1rem" }}>{t('auth.callbackLoading')}</p>
     </div>
   );
 }

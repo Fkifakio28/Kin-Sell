@@ -1,4 +1,4 @@
-import React, { FormEvent, useEffect, useRef, useState } from "react";
+import React, { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../app/providers/AuthProvider";
 import { useLocaleCurrency } from "../../app/providers/LocaleCurrencyProvider";
@@ -6,6 +6,8 @@ import { getDashboardPath } from "../../utils/role-routing";
 import { listings as listingsApi, orders as ordersApi, explorer as explorerApi, sokin as sokinApi, blog as blogApi, type PublicListing, type CartSummary, type OrderSummary, type ExplorerShopApi, type ExplorerProfileApi, type SoKinApiFeedPost, type PublicBlogPost } from "../../lib/api-client";
 import { useHoverPopup, ArticleHoverPopup, type ArticleHoverData } from "../../components/HoverPopup";
 import { useScrollRestore } from "../../utils/useScrollRestore";
+import { useSocket } from "../../hooks/useSocket";
+import { useMarketPreference } from "../../app/providers/MarketPreferenceProvider";
 import { NegotiatePopup } from "../negotiations/NegotiatePopup";
 import { useLockedCategories, isCategoryLocked } from "../../hooks/useLockedCategories";
 import { AdBanner } from "../../components/AdBanner";
@@ -126,6 +128,9 @@ export function HomePage() {
   const sokinTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   void sokinTimer; // kept for compatibility
   const { isLoggedIn, user, logout } = useAuth();
+  const { effectiveCountry, getCountryConfig } = useMarketPreference();
+  const defaultCity = getCountryConfig(effectiveCountry).defaultCity;
+  const { on, off } = useSocket();
   const navigate = useNavigate();
   const articleHover = useHoverPopup<ArticleHoverData>();
   const [negotiateListing, setNegotiateListing] = useState<PublicListing | null>(null);
@@ -135,6 +140,56 @@ export function HomePage() {
   const getQty = (id: string) => cardQty[id] ?? 1;
   const changeQty = (id: string, delta: number, e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); setCardQty((prev) => ({ ...prev, [id]: Math.max(1, (prev[id] ?? 1) + delta) })); };
   useScrollRestore();
+
+  const reloadSokinFeed = useCallback(async () => {
+    try {
+      const feedData = await sokinApi.publicFeed({ limit: 4, city: defaultCity, country: effectiveCountry });
+      setSokinFeed(feedData.posts);
+      setSokinIndex(0);
+    } catch {
+      // ignore
+    }
+  }, [defaultCity, effectiveCountry]);
+
+  const reloadDashOverview = useCallback(async () => {
+    if (!isLoggedIn) return;
+    try {
+      const [cart, sellerData, buyerData, buyerNotifs, sellerNotifs] = await Promise.all([
+        ordersApi.buyerCart().catch(() => null),
+        ordersApi.sellerOrders({ limit: 50 }).catch(() => null),
+        ordersApi.buyerOrders({ limit: 1 }).catch(() => null),
+        ordersApi.buyerOrders({ limit: 5, inProgressOnly: true }).catch(() => null),
+        ordersApi.sellerOrders({ limit: 5, inProgressOnly: true }).catch(() => null),
+      ]);
+      if (cart) setBuyerCart(cart);
+      const items: typeof notifItems = [];
+      if (buyerNotifs) {
+        for (const o of buyerNotifs.orders) {
+          const sl = o.status === 'SHIPPED' ? 'Expédié' : o.status === 'CONFIRMED' ? 'Confirmé' : 'En cours';
+          items.push({ id: `buy-${o.id}`, label: `Commande ${sl}`, detail: `#${o.id.slice(0, 8).toUpperCase()} — ${o.itemsCount} article${o.itemsCount > 1 ? 's' : ''}`, icon: '📦', section: 'purchases' });
+        }
+      }
+      if (sellerNotifs) {
+        for (const o of sellerNotifs.orders) {
+          items.push({ id: `sell-${o.id}`, label: 'Nouvelle commande reçue', detail: `#${o.id.slice(0, 8).toUpperCase()} de ${o.buyer.displayName}`, icon: '🛒', section: 'sales' });
+        }
+      }
+      setNotifItems(items);
+      setNotificationsCount(items.length);
+      if (sellerData) {
+        const all = sellerData.orders;
+        setSellerStats({
+          total: sellerData.total,
+          delivered: all.filter((o) => o.status === 'DELIVERED').length,
+          inProgress: all.filter((o) => ['PENDING', 'CONFIRMED', 'PROCESSING', 'SHIPPED'].includes(o.status)).length,
+          revenue: all.filter((o) => o.status === 'DELIVERED').reduce((s, o) => s + o.totalUsdCents, 0),
+        });
+      }
+      if (buyerData && buyerData.orders.length > 0) setLastBuyerOrder(buyerData.orders[0]);
+    } catch {
+      // ignore
+    }
+  }, [isLoggedIn, notifItems]);
 
   // ── Fullscreen toggle ──
   useEffect(() => {
@@ -157,8 +212,8 @@ export function HomePage() {
       setIsLoadingArticles(true);
       try {
         const [products, services] = await Promise.all([
-          listingsApi.latest({ type: 'PRODUIT', limit: 8 }),
-          listingsApi.latest({ type: 'SERVICE', limit: 8 }),
+          listingsApi.latest({ type: 'PRODUIT', city: defaultCity, country: effectiveCountry, limit: 8 }),
+          listingsApi.latest({ type: 'SERVICE', city: defaultCity, country: effectiveCountry, limit: 8 }),
         ]);
         if (!cancelled) {
           setLiveProducts(products);
@@ -169,7 +224,7 @@ export function HomePage() {
     };
     void load();
     return () => { cancelled = true; };
-  }, []);
+  }, [defaultCity, effectiveCountry]);
 
   // Load sidebar data: trending shops, profiles, So-Kin feed
   useEffect(() => {
@@ -177,9 +232,9 @@ export function HomePage() {
     const load = async () => {
       try {
         const [shopsData, profilesData, feedData, blogData] = await Promise.all([
-          explorerApi.shops(3),
-          explorerApi.profiles(3),
-          sokinApi.publicFeed(4),
+          explorerApi.shops({ limit: 3, city: defaultCity, country: effectiveCountry }),
+          explorerApi.profiles({ limit: 3, city: defaultCity, country: effectiveCountry }),
+          sokinApi.publicFeed({ limit: 4, city: defaultCity, country: effectiveCountry }),
           blogApi.publicPosts({ limit: 3 }),
         ]);
         if (!cancelled) {
@@ -193,7 +248,7 @@ export function HomePage() {
     };
     void load();
     return () => { cancelled = true; };
-  }, []);
+  }, [defaultCity, effectiveCountry]);
 
   // Load cart, seller stats, last buyer order
   useEffect(() => {
@@ -247,6 +302,66 @@ export function HomePage() {
     void loadDash();
     return () => { cancelled = true; };
   }, [isLoggedIn]);
+
+  useEffect(() => {
+    const handlePostCreated = (_payload: {
+      type: 'SOKIN_POST_CREATED';
+      postId: string;
+      authorId: string;
+      createdAt: string;
+      sourceUserId: string;
+    }) => {
+      void reloadSokinFeed();
+    };
+
+    const handlePostShared = (payload: {
+      type: 'SOKIN_POST_SHARED';
+      postId: string;
+      shares: number;
+      sourceUserId: string;
+      updatedAt: string;
+    }) => {
+      setSokinFeed((prev) => prev.map((post) => (post.id === payload.postId ? { ...post, shares: payload.shares } : post)));
+    };
+
+    const handleOrderChanged = (_payload: {
+      type: 'ORDER_STATUS_UPDATED' | 'ORDER_CONFIRMATION_COMPLETED';
+      orderId: string;
+      status: string;
+      buyerUserId: string;
+      sellerUserId: string;
+      sourceUserId: string;
+      updatedAt: string;
+    }) => {
+      void reloadDashOverview();
+    };
+
+    const handleNegotiationChanged = (_payload: {
+      type: 'NEGOTIATION_UPDATED';
+      action: 'CREATED' | 'RESPONDED' | 'CANCELED' | 'JOINED' | 'BUNDLE_CREATED';
+      negotiationId: string;
+      buyerUserId: string;
+      sellerUserId: string;
+      sourceUserId: string;
+      updatedAt: string;
+    }) => {
+      void reloadDashOverview();
+    };
+
+    on('sokin:post-created', handlePostCreated);
+    on('sokin:post-shared', handlePostShared);
+    on('order:status-updated', handleOrderChanged);
+    on('order:delivery-confirmed', handleOrderChanged);
+    on('negotiation:updated', handleNegotiationChanged);
+
+    return () => {
+      off('sokin:post-created', handlePostCreated);
+      off('sokin:post-shared', handlePostShared);
+      off('order:status-updated', handleOrderChanged);
+      off('order:delivery-confirmed', handleOrderChanged);
+      off('negotiation:updated', handleNegotiationChanged);
+    };
+  }, [on, off, reloadSokinFeed, reloadDashOverview]);
 
   const money = (cents: number) => formatMoneyFromUsdCents(cents);
 
@@ -369,6 +484,10 @@ export function HomePage() {
   };
 
   const currentTip = t(TIPS_KEYS[tipIndex]);
+  const fullscreenLabel = t(isFullscreen ? 'home.fullscreenExit' : 'home.fullscreenEnter');
+  const heroTitle = isLoggedIn
+    ? t('home.heroWelcome').replace('{name}', userName)
+    : t('home.heroGuestTitle');
 
   // Safe indices pour les widgets rotatifs de la sidebar
   const safeShopIdx = trendingShops.length > 0 ? shopIndex % trendingShops.length : 0;
@@ -379,8 +498,8 @@ export function HomePage() {
   return (
     <div className="h-shell">
       <SeoMeta
-        title="Kin-Sell — La marketplace de Kinshasa"
-        description="Achetez, vendez et découvrez les meilleures offres à Kinshasa. Boutiques locales, services, So-Kin feed et lives en direct."
+        title={t('home.metaTitle')}
+        description={t('home.metaDescription')}
         canonical="https://kin-sell.com/"
       />
       {/* ═══════ TOP BAR ═══════ */}
@@ -407,7 +526,7 @@ export function HomePage() {
             placeholder={t('home.searchPlaceholder')}
             className="h-search-input"
           />
-          <button type="button" className="h-action-btn h-fullscreen-btn" onClick={toggleFullscreen} aria-label={isFullscreen ? "Quitter le plein écran" : "Plein écran"} title={isFullscreen ? "Quitter le plein écran" : "Plein écran"}>
+          <button type="button" className="h-action-btn h-fullscreen-btn" onClick={toggleFullscreen} aria-label={fullscreenLabel} title={fullscreenLabel}>
             {isFullscreen ? (
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
             ) : (
@@ -432,7 +551,7 @@ export function HomePage() {
                 {notifDropdownOpen && (
                   <div className="h-notif-dropdown glass-container">
                     <div className="h-notif-dropdown-head">
-                      <strong>Notifications</strong>
+                      <strong>{t('home.notifications')}</strong>
                       <span className="h-notif-dropdown-count">{notifItems.length}</span>
                     </div>
                     {notifItems.length > 0 ? (
@@ -448,7 +567,7 @@ export function HomePage() {
                         ))}
                       </div>
                     ) : (
-                      <p className="h-notif-dropdown-empty">Aucune notification</p>
+                      <p className="h-notif-dropdown-empty">{t('nav.noNotif')}</p>
                     )}
                   </div>
                 )}
@@ -481,8 +600,8 @@ export function HomePage() {
               <button
                 type="button"
                 className="h-action-btn"
-                aria-label="Connexion"
-                title="Connexion"
+                aria-label={t('common.login')}
+                title={t('common.login')}
                 onClick={() => navigate('/login')}
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
@@ -510,9 +629,9 @@ export function HomePage() {
         <div className="h-hero-glow" aria-hidden="true" />
         <div className="h-hero-content">
           <h1 className="h-hero-title">
-            {isLoggedIn ? `Bienvenue, ${userName}` : 'Kin-Sell — Le marché de Kinshasa'}
+            {heroTitle}
           </h1>
-          <p className="h-hero-sub">Achetez, vendez et découvrez les meilleures affaires</p>
+          <p className="h-hero-sub">{t('home.heroSubtitle')}</p>
           <div className="h-hero-cats">
             {PRODUCT_CATEGORIES.slice(heroCatIndex * HERO_CATS_PER_SLIDE, heroCatIndex * HERO_CATS_PER_SLIDE + HERO_CATS_PER_SLIDE).map((c) => (
               <button key={c.code + c.nameKey} type="button" className="h-hero-chip" onClick={() => navigate(c.href)}>
@@ -523,7 +642,7 @@ export function HomePage() {
           {heroCatSlides > 1 && (
             <div className="h-sokin-dots" style={{ justifyContent: 'center', marginTop: '0.4rem' }}>
               {Array.from({ length: heroCatSlides }).map((_, i) => (
-                <button key={i} type="button" className={`h-sokin-dot${i === heroCatIndex ? " active" : ""}`} onClick={() => setHeroCatIndex(i)} aria-label={`Catégories page ${i + 1}`} />
+                <button key={i} type="button" className={`h-sokin-dot${i === heroCatIndex ? " active" : ""}`} onClick={() => setHeroCatIndex(i)} aria-label={t('home.categoryPageAria').replace('{page}', String(i + 1))} />
               ))}
             </div>
           )}

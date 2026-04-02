@@ -1467,24 +1467,76 @@ model AiAutonomyLog {
 }
 
 // ══════════════════════════════════════════════
+// GEOGRAPHIC CONFIGURATION — Support multi-pays
+// ══════════════════════════════════════════════
+
+enum CountryCode {
+  CD // Rép. Démocratique du Congo (Kinshasa)
+  GA // Gabon
+  CG // Congo-Brazzaville
+  AO // Angola
+  CI // Côte d'Ivoire
+  GQ // Guinée Équatoriale
+  SN // Sénégal
+  MA // Maroc
+}
+
+enum Language {
+  FR // Français
+  EN // English
+  LN // Lingala
+}
+
+model MarketCountry {
+  id              String        @id @default(cuid())
+  code            CountryCode   @unique
+  nameEnglish     String
+  nameFrench      String
+  nameLocal       String?
+  currency        String        // EUR, USD, etc.
+  currencyCode    String        @default("CDF") // ISO 4217
+  currencySymbol  String        @default("FC")
+  timezone        String
+  dialCode        String        // +243, +241, etc.
+  nativeLanguage  Language      @default(FR)
+  supportedLanguages Language[]  @default([FR, EN])
+  taxRate         Float         @default(0.0) // TVA/VAT percentage
+  region          String        // Exemple: "Central Africa", "West Africa"
+  isActive        Boolean       @default(true)
+  population      Int?
+  gdpPerCapita    Float?
+  metadata        Json? // Config additionnelle pays
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  cities      MarketCity[]
+
+  @@index([code])
+  @@index([isActive])
+}
+
+// ══════════════════════════════════════════════
 // MARKET INTELLIGENCE — Données marché par ville/pays
 // ══════════════════════════════════════════════
 
 model MarketCity {
-  id          String   @id @default(cuid())
-  city        String
-  country     String
-  countryCode String   @default("CD")
-  currency    String   @default("CDF")
-  timezone    String   @default("Africa/Kinshasa")
-  isActive    Boolean  @default(true)
-  metadata    Json? // Population, infos économiques, etc.
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id             String         @id @default(cuid())
+  marketCountryId String
+  city           String
+  country        String
+  countryCode    CountryCode    @default(CD)
+  currency       String         @default("CDF")
+  timezone       String         @default("Africa/Kinshasa")
+  isActive       Boolean        @default(true)
+  metadata       Json? // Population, infos économiques, etc.
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
 
-  stats MarketStats[]
+  marketCountry MarketCountry @relation(fields: [marketCountryId], references: [id], onDelete: Cascade)
+  stats          MarketStats[]
 
-  @@unique([city, country])
+  @@unique([city, countryCode])
+  @@index([marketCountryId])
   @@index([countryCode])
   @@index([isActive])
 }

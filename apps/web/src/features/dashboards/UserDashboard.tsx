@@ -34,6 +34,7 @@ import { AdBanner } from '../../components/AdBanner';
 import { OrderValidationQrModal } from '../../components/OrderValidationQrModal';
 import LocationPicker from '../../components/LocationPicker';
 import { extractValidationCodeFromQrPayload } from '../../utils/order-validation';
+import { useSocket } from '../../hooks/useSocket';
 import './dashboard.css';
 
 /* ── Catégories par type ── */
@@ -188,6 +189,7 @@ export function UserDashboard() {
   const navigate = useNavigate();
   const { t, formatMoneyFromUsdCents, formatPriceLabelFromUsdCents } = useLocaleCurrency();
   const { user, isLoading, isLoggedIn, logout, refreshUser } = useAuth();
+  const { on, off } = useSocket();
   const money = (usdCents: number) => formatMoneyFromUsdCents(usdCents);
   const statusLabel = (status: string) => t(STATUS_LABEL_KEY[status] ?? status);
   const missing = user ? MISSING_FIELD_KEYS.filter(f => f.check(user)).map(f => t(f.key)) : [];
@@ -626,6 +628,82 @@ export function UserDashboard() {
     void loadCommerce(sellerHistoryPage, buyerHistoryPage);
   }, [isLoggedIn, user, sellerHistoryPage, buyerHistoryPage]);
 
+  useEffect(() => {
+    if (!isLoggedIn || !user) return;
+
+    const handleOrderEvent = (payload: {
+      type: 'ORDER_STATUS_UPDATED' | 'ORDER_CONFIRMATION_COMPLETED';
+      orderId: string;
+      status: string;
+      buyerUserId: string;
+      sellerUserId: string;
+      sourceUserId: string;
+      updatedAt: string;
+    }) => {
+      if (payload.buyerUserId !== user.id && payload.sellerUserId !== user.id) return;
+
+      if (payload.status === 'DELIVERED' && sellerValidationQr?.orderId === payload.orderId) {
+        setSellerValidationQr(null);
+      }
+
+      if (payload.status === 'DELIVERED' && buyerConfirmOrderId === payload.orderId) {
+        setBuyerConfirmOrderId(null);
+        setBuyerConfirmCode('');
+        setBuyerConfirmMode('manual');
+        setBuyerConfirmScanMessage(null);
+        setBuyerConfirmScanError(null);
+        if (payload.sourceUserId !== user.id) {
+          setSuccessMessage(t('success.deliveryConfirmed'));
+        }
+      }
+
+      void loadCommerce(sellerHistoryPage, buyerHistoryPage);
+
+      if (selectedOrder?.id === payload.orderId) {
+        void orders.detail(payload.orderId).then((detail) => setSelectedOrder(detail)).catch(() => {});
+      }
+    };
+
+    const handleOrderStatusUpdated = (payload: {
+      type: 'ORDER_STATUS_UPDATED';
+      orderId: string;
+      status: string;
+      buyerUserId: string;
+      sellerUserId: string;
+      sourceUserId: string;
+      updatedAt: string;
+    }) => handleOrderEvent(payload);
+
+    const handleDeliveryConfirmed = (payload: {
+      type: 'ORDER_CONFIRMATION_COMPLETED';
+      orderId: string;
+      status: string;
+      buyerUserId: string;
+      sellerUserId: string;
+      sourceUserId: string;
+      updatedAt: string;
+    }) => handleOrderEvent(payload);
+
+    on('order:status-updated', handleOrderStatusUpdated);
+    on('order:delivery-confirmed', handleDeliveryConfirmed);
+
+    return () => {
+      off('order:status-updated', handleOrderStatusUpdated);
+      off('order:delivery-confirmed', handleDeliveryConfirmed);
+    };
+  }, [
+    isLoggedIn,
+    user,
+    on,
+    off,
+    sellerValidationQr?.orderId,
+    buyerConfirmOrderId,
+    selectedOrder?.id,
+    sellerHistoryPage,
+    buyerHistoryPage,
+    t,
+  ]);
+
   /* ── Negotiations loader ── */
   const loadNegotiations = useCallback(async (page: number, role: 'buyer' | 'seller', status: NegotiationStatus | '') => {
     setNegLoading(true);
@@ -669,6 +747,49 @@ export function UserDashboard() {
       void loadNegotiations(negPage, 'buyer', negFilter);
     }
   }, [activeSection, negPage, negFilter, isLoggedIn, loadNegotiations]);
+
+  useEffect(() => {
+    if (!isLoggedIn || !user) return;
+
+    const handleNegotiationUpdated = (payload: {
+      type: 'NEGOTIATION_UPDATED';
+      action: 'CREATED' | 'RESPONDED' | 'CANCELED' | 'JOINED' | 'BUNDLE_CREATED';
+      negotiationId: string;
+      buyerUserId: string;
+      sellerUserId: string;
+      sourceUserId: string;
+      updatedAt: string;
+    }) => {
+      if (payload.buyerUserId !== user.id && payload.sellerUserId !== user.id) return;
+
+      if (respondNeg?.id === payload.negotiationId && payload.sourceUserId !== user.id) {
+        setRespondNeg(null);
+      }
+
+      const role: 'buyer' | 'seller' = activeSection === 'sales' ? 'seller' : 'buyer';
+      void Promise.all([
+        loadNegotiations(negPage, role, negFilter),
+        loadCommerce(sellerHistoryPage, buyerHistoryPage),
+      ]);
+    };
+
+    on('negotiation:updated', handleNegotiationUpdated);
+    return () => {
+      off('negotiation:updated', handleNegotiationUpdated);
+    };
+  }, [
+    isLoggedIn,
+    user,
+    on,
+    off,
+    activeSection,
+    negPage,
+    negFilter,
+    sellerHistoryPage,
+    buyerHistoryPage,
+    respondNeg?.id,
+    loadNegotiations,
+  ]);
 
   const handleCancelNegotiation = async (negotiationId: string) => {
     if (cancelNegBusyId) {

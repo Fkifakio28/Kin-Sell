@@ -8,6 +8,7 @@ import {
   type MessageUser,
 } from "../../lib/api-client";
 import { useSocket } from "../../hooks/useSocket";
+import { useLocaleCurrency } from "../../app/providers/LocaleCurrencyProvider";
 import { createOptimizedAudioRecorder, createUploadFile, prepareMediaUrl } from "../../utils/media-upload";
 import { useGlobalNotification } from "../../app/providers/GlobalNotificationProvider";
 import "./messaging.css";
@@ -24,27 +25,27 @@ const EMOJI_CATEGORIES: { icon: string; emojis: string[] }[] = [
 ];
 
 /* ── Helpers ── */
-function timeLabel(dateStr: string) {
+function timeLabel(dateStr: string, t: (k: string) => string, locale: string) {
   const d = new Date(dateStr);
   const now = new Date();
   const diff = now.getTime() - d.getTime();
-  if (diff < 60_000) return "À l'instant";
+  if (diff < 60_000) return t("msg.justNow");
   if (diff < 3_600_000) return `${Math.floor(diff / 60_000)} min`;
-  if (d.toDateString() === now.toDateString()) return d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+  if (d.toDateString() === now.toDateString()) return d.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" });
   const yesterday = new Date(now);
   yesterday.setDate(yesterday.getDate() - 1);
-  if (d.toDateString() === yesterday.toDateString()) return "Hier";
-  return d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" });
+  if (d.toDateString() === yesterday.toDateString()) return t("msg.yesterday");
+  return d.toLocaleDateString(locale, { day: "2-digit", month: "2-digit" });
 }
 
-function fullTime(dateStr: string) {
-  return new Date(dateStr).toLocaleString("fr-FR", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit", year: "numeric" });
+function fullTime(dateStr: string, locale: string) {
+  return new Date(dateStr).toLocaleString(locale, { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
-function getConversationName(conv: ConversationSummary, myId: string) {
-  if (conv.isGroup) return conv.groupName ?? "Groupe";
+function getConversationName(conv: ConversationSummary, myId: string, t: (k: string) => string) {
+  if (conv.isGroup) return conv.groupName ?? t("msg.group");
   const other = conv.participants.find((p) => p.userId !== myId);
-  return other?.user.profile.displayName ?? "Utilisateur";
+  return other?.user.profile.displayName ?? t("msg.user");
 }
 
 function getConversationAvatar(conv: ConversationSummary, myId: string) {
@@ -72,16 +73,16 @@ function formatAudioTime(seconds: number) {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-function formatLastSeen(iso: string): string {
+function formatLastSeen(iso: string, t: (k: string) => string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const mins = Math.floor(diff / 60_000);
-  if (mins < 1) return "vu à l'instant";
-  if (mins < 60) return `vu il y a ${mins} min`;
+  if (mins < 1) return t("msg.seenJustNow");
+  if (mins < 60) return t("msg.seenMinutes").replace("{count}", String(mins));
   const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `vu il y a ${hrs}h`;
+  if (hrs < 24) return t("msg.seenHours").replace("{count}", String(hrs));
   const days = Math.floor(hrs / 24);
-  if (days === 1) return "vu hier";
-  return `vu il y a ${days}j`;
+  if (days === 1) return t("msg.seenYesterday");
+  return t("msg.seenDays").replace("{count}", String(days));
 }
 
 /* ── Custom Audio Player Component ── */
@@ -142,8 +143,10 @@ function AudioPlayer({ src }: { src: string }) {
 /* ── Component ── */
 export function MessagingPage() {
   const { user, isLoading, isLoggedIn } = useAuth();
+  const { t, language } = useLocaleCurrency();
   const { emit, on, off, isConnected } = useSocket();
   const { setMessagingActive } = useGlobalNotification();
+  const locale = language === "en" ? "en-US" : language === "ln" ? "fr-CD" : "fr-FR";
 
   /* ── State ── */
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
@@ -864,11 +867,11 @@ export function MessagingPage() {
 
       localFacingModeRef.current = targetFacingMode;
     } catch {
-      alert("Impossible de changer de caméra sur cet appareil.");
+      alert(t("msg.cameraSwitchError"));
     } finally {
       setIsSwitchingCamera(false);
     }
-  }, [callState]);
+  }, [callState, t]);
 
   const startCall = useCallback(async (callType: "audio" | "video") => {
     if (!activeConv || activeConv.isGroup) return;
@@ -891,16 +894,17 @@ export function MessagingPage() {
       setCallState({ type: callType, conversationId: activeConv.id, remoteUserId, direction: "outgoing", status: "ringing" });
       emit("call:initiate", { conversationId: activeConv.id, targetUserId: remoteUserId, callType });
     } catch {
-      alert("Impossible d'accéder au micro/caméra.");
+      alert(t("msg.callMediaAccessError"));
     }
-  }, [activeConv, myId, createPeerConnection, emit, optimizePeerSenders, getCallMedia, startQualityMonitor, applyVideoProfile]);
+  }, [activeConv, myId, createPeerConnection, emit, optimizePeerSenders, getCallMedia, startQualityMonitor, applyVideoProfile, t]);
 
-  const acceptCall = useCallback(async () => {
+  const acceptCall = useCallback(async (preferredType?: "audio" | "video") => {
     if (!callState) return;
+    const acceptedType = preferredType ?? callState.type;
 
     try {
       localFacingModeRef.current = "user";
-      const stream = await getCallMedia(callState.type, "user");
+      const stream = await getCallMedia(acceptedType, "user");
 
       localStreamRef.current = stream;
       if (localVideoRef.current) localVideoRef.current.srcObject = stream;
@@ -912,11 +916,11 @@ export function MessagingPage() {
       startQualityMonitor(pc);
 
       emit("call:accept", { conversationId: callState.conversationId, callerId: callState.remoteUserId });
-      setCallState((prev) => prev ? { ...prev, status: "connected" } : null);
+      setCallState((prev) => prev ? { ...prev, type: acceptedType, status: "connected" } : null);
     } catch {
-      alert("Impossible d'accéder au micro/caméra.");
+      alert(t("msg.callMediaAccessError"));
     }
-  }, [callState, createPeerConnection, emit, optimizePeerSenders, getCallMedia, startQualityMonitor, applyVideoProfile]);
+  }, [callState, createPeerConnection, emit, optimizePeerSenders, getCallMedia, startQualityMonitor, applyVideoProfile, t]);
 
   const rejectCall = useCallback(() => {
     if (!callState) return;
@@ -934,10 +938,10 @@ export function MessagingPage() {
 
   useEffect(() => {
     const handleGlobalAccept = (event: Event) => {
-      const detail = (event as CustomEvent<{ conversationId?: string }>).detail;
+      const detail = (event as CustomEvent<{ conversationId?: string; callType?: "audio" | "video" }>).detail;
       if (!callState || callState.status !== "ringing" || callState.direction !== "incoming") return;
       if (detail?.conversationId && detail.conversationId !== callState.conversationId) return;
-      void acceptCall();
+      void acceptCall(detail?.callType);
     };
 
     const handleGlobalReject = (event: Event) => {
@@ -1124,9 +1128,9 @@ export function MessagingPage() {
       // Start waveform drawing after canvas is mounted
       setTimeout(() => drawWaveform(), 50);
     } catch {
-      alert("Impossible d'accéder au micro.");
+      alert(t("msg.micAccessError"));
     }
-  }, [activeConv, emit, drawWaveform]);
+  }, [activeConv, emit, drawWaveform, t]);
 
   const stopRecordingAudio = useCallback(() => {
     mediaRecorder?.stop();
@@ -1304,16 +1308,16 @@ export function MessagingPage() {
         },
         () => {},
       );
-      showGuardAlert("warn", `Invitation envoyée à ${displayName}.`);
+      showGuardAlert("warn", t("msg.inviteSent").replace("{name}", displayName));
       setShowAddPeople(false);
       setInviteQuery("");
     } catch {
-      showGuardAlert("block", "Impossible d'envoyer l'invitation.");
+      showGuardAlert("block", t("msg.inviteFailed"));
     }
-  }, [callState, user, emit, showGuardAlert]);
+  }, [callState, user, emit, showGuardAlert, t]);
 
   /* ── Guards ── */
-  if (isLoading) return <div className="msg-loading">Chargement...</div>;
+  if (isLoading) return <div className="msg-loading">{t('common.loading')}</div>;
   if (!isLoggedIn) return <Navigate to="/login" replace />;
 
   const typingInConv = activeConv ? typingUsers.get(activeConv.id) : undefined;
@@ -1334,26 +1338,26 @@ export function MessagingPage() {
       {/* ══ Active/outgoing call overlay ══ */}
       {callState && (callState.status === "connected" || (callState.status === "ringing" && callState.direction === "outgoing")) && (
         <div className={`msg-call-overlay msg-call-overlay--active${isEarMode ? " msg-call-overlay--ear-mode" : ""}`}>
-          <div className="msg-call-dialog msg-call-dialog--active">
+          <div className="msg-call-dialog msg-call-dialog--active msg-call-screen">
             <audio ref={remoteAudioRef} autoPlay playsInline />
             {/* Remote caller info */}
             <div className="msg-call-caller-avatar">
               {(() => {
                 const conv = conversations.find((c) => c.id === callState.conversationId);
                 const avatar = conv ? getConversationAvatar(conv, myId) : null;
-                const name = conv ? getConversationName(conv, myId) : "Appel";
+                const name = conv ? getConversationName(conv, myId, t) : "Appel";
                 return avatar ? <img src={avatar} alt="" /> : <span>{initials(name)}</span>;
               })()}
             </div>
             <p className="msg-call-caller-name">
               {(() => {
                 const conv = conversations.find((c) => c.id === callState.conversationId);
-                return conv ? getConversationName(conv, myId) : "Utilisateur";
+                return conv ? getConversationName(conv, myId, t) : t('msg.user');
               })()}
             </p>
 
             {callState.status === "ringing" && (
-              <p className="msg-call-status-text">Appel en cours...</p>
+              <p className="msg-call-status-text">{t('msg.callInProgress')}</p>
             )}
             {callState.status === "connected" && (
               <>
@@ -1373,7 +1377,7 @@ export function MessagingPage() {
               <div className="msg-call-videos">
                 <video ref={remoteVideoRef} autoPlay playsInline className="msg-call-video-remote" />
                 <video ref={localVideoRef} autoPlay playsInline muted className="msg-call-video-local" style={isCameraOff ? { display: "none" } : undefined} />
-                {isCameraOff && <div className="msg-call-camera-off-label">Caméra désactivée</div>}
+                {isCameraOff && <div className="msg-call-camera-off-label">{t('msg.cameraOff')}</div>}
               </div>
             )}
 
@@ -1457,17 +1461,17 @@ export function MessagingPage() {
       {/* ══ Sidebar ══ */}
       <aside className={`msg-sidebar${showSidebar ? "" : " msg-sidebar--hidden"}`}>
         <div className="msg-sidebar-header">
-          <h2>Messages</h2>
+          <h2>{t('msg.messages')}</h2>
           <div className="msg-sidebar-actions">
-            <button className={`msg-icon-btn${showArchived ? " msg-icon-btn--active" : ""}`} title={showArchived ? "Retour aux conversations" : "Archives"} onClick={() => setShowArchived(!showArchived)}>
+            <button className={`msg-icon-btn${showArchived ? " msg-icon-btn--active" : ""}`} title={t('msg.archives')} onClick={() => setShowArchived(!showArchived)}>
               {archivedConvIds.size > 0 && !showArchived && <span className="msg-archive-dot" />}
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
             </button>
-            <button className="msg-icon-btn" title="Nouvelle conversation" onClick={() => setShowSearch(!showSearch)}>
+            <button className="msg-icon-btn" title={t('msg.newConversation')} onClick={() => setShowSearch(!showSearch)}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             </button>
           </div>
-          {isConnected && <span className="msg-online-dot" title="Connecté" />}
+          {isConnected && <span className="msg-online-dot" title={t('msg.connected')} />}
         </div>
 
         {/* Search */}
@@ -1475,7 +1479,7 @@ export function MessagingPage() {
           <div className="msg-search-panel">
             <input
               className="msg-search-input"
-              placeholder="Rechercher un utilisateur..."
+              placeholder={t('msg.searchPlaceholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               autoFocus
@@ -1490,7 +1494,7 @@ export function MessagingPage() {
                   </div>
                 </button>
               ))}
-              {searchQuery.length >= 2 && searchResults.length === 0 && <p className="msg-empty-sm">Aucun résultat</p>}
+              {searchQuery.length >= 2 && searchResults.length === 0 && <p className="msg-empty-sm">{t('msg.noResults')}</p>}
             </div>
           </div>
         )}
@@ -1498,11 +1502,11 @@ export function MessagingPage() {
         {/* Conversation list */}
         <div className="msg-conv-list">
           {loadingConvs ? (
-            <div className="msg-loading-sm">Chargement...</div>
+            <div className="msg-loading-sm">{t('common.loading')}</div>
           ) : conversations.filter((c) => showArchived ? archivedConvIds.has(c.id) : !archivedConvIds.has(c.id)).length === 0 ? (
             <div className="msg-empty">
-              <p>{showArchived ? "Aucune conversation archivée" : "Aucune conversation"}</p>
-              <p>{showArchived ? "Les conversations archivées apparaîtront ici" : "Recherchez un utilisateur pour démarrer"}</p>
+              <p>{showArchived ? t('msg.noArchivedConversations') : t('msg.noConversation')}</p>
+              <p>{showArchived ? t('msg.archivedHint') : t('msg.startConversationHint')}</p>
             </div>
           ) : (
             conversations
@@ -1514,7 +1518,7 @@ export function MessagingPage() {
                 return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
               })
               .map((conv) => {
-              const name = getConversationName(conv, myId);
+              const name = getConversationName(conv, myId, t);
               const avatar = getConversationAvatar(conv, myId);
               const lastMsg = conv.messages?.[0];
               const otherUserId = getOtherUserId(conv, myId);
@@ -1536,22 +1540,22 @@ export function MessagingPage() {
                   <div className="msg-conv-info">
                     <div className="msg-conv-top">
                       <span className="msg-conv-name">
-                        {isPinned && <span className="msg-pin-icon" title="Épinglée">📌</span>}
+                        {isPinned && <span className="msg-pin-icon" title={t('msg.pin')}>📌</span>}
                         {name}
                       </span>
-                      {lastMsg && <span className="msg-conv-time">{timeLabel(lastMsg.createdAt)}</span>}
+                      {lastMsg && <span className="msg-conv-time">{timeLabel(lastMsg.createdAt, t, locale)}</span>}
                     </div>
                     <div className="msg-conv-bottom">
                       <span className="msg-conv-preview">
                         {isMuted && "🔇 "}
                         {lastMsg
-                          ? lastMsg.isDeleted ? "Message supprimé"
-                          : lastMsg.type === "IMAGE" ? "📷 Photo"
-                          : lastMsg.type === "AUDIO" ? "🎵 Audio"
-                          : lastMsg.type === "VIDEO" ? "🎬 Vidéo"
-                          : lastMsg.type === "FILE" ? "📎 Fichier"
-                          : (lastMsg.senderId === myId ? "Vous: " : "") + (lastMsg.content?.slice(0, 45) ?? "")
-                          : "Nouvelle conversation"}
+                          ? lastMsg.isDeleted ? t('msg.deletedMessage')
+                          : lastMsg.type === "IMAGE" ? `📷 ${t('msg.photo')}`
+                          : lastMsg.type === "AUDIO" ? `🎵 ${t('msg.audio')}`
+                          : lastMsg.type === "VIDEO" ? `🎬 ${t('msg.video')}`
+                          : lastMsg.type === "FILE" ? `📎 ${t('msg.file')}`
+                          : (lastMsg.senderId === myId ? `${t('msg.you')}: ` : "") + (lastMsg.content?.slice(0, 45) ?? "")
+                          : t('msg.newConversationLabel')}
                       </span>
                       {conv.unreadCount > 0 && !isMuted && <span className="msg-unread-badge">{conv.unreadCount}</span>}
                     </div>
@@ -1567,10 +1571,10 @@ export function MessagingPage() {
           <div className="msg-context-menu" style={{ top: convContextMenu.y, left: convContextMenu.x }}>
             <button onClick={() => {
               const id = convContextMenu.convId;
-              if (pinnedConvIds.size >= 5 && !pinnedConvIds.has(id)) { alert("Maximum 5 conversations épinglées."); }
+              if (pinnedConvIds.size >= 5 && !pinnedConvIds.has(id)) { alert(t('msg.pinMax')); }
               else { setPinnedConvIds((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; }); }
               setConvContextMenu(null);
-            }}>{pinnedConvIds.has(convContextMenu.convId) ? "📌 Désépingler" : "📌 Épingler"}</button>
+            }}>{pinnedConvIds.has(convContextMenu.convId) ? t('msg.unpin') : t('msg.pin')}</button>
             <button onClick={() => {
               setArchivedConvIds((prev) => { const n = new Set(prev); const id = convContextMenu.convId; if (n.has(id)) n.delete(id); else n.add(id); return n; });
               if (activeConv?.id === convContextMenu.convId) setActiveConv(null);
@@ -1591,7 +1595,7 @@ export function MessagingPage() {
                 if (activeConv?.id === convContextMenu.convId) setActiveConv(null);
               }
               setConvContextMenu(null);
-            }}>🗑 Supprimer</button>
+            }}>🗑 {t('common.delete')}</button>
           </div>
         )}
       </aside>
@@ -1601,8 +1605,8 @@ export function MessagingPage() {
         {!activeConv ? (
           <div className="msg-chat-placeholder">
             <span className="msg-chat-placeholder-icon">💬</span>
-            <h3>Kin-Sell Messagerie</h3>
-            <p>Sélectionnez une conversation ou recherchez un utilisateur</p>
+            <h3>{t('msg.placeholderTitle')}</h3>
+            <p>{t('msg.placeholderBody')}</p>
           </div>
         ) : (
           <>
@@ -1619,19 +1623,19 @@ export function MessagingPage() {
               }}>
                 {getConversationAvatar(activeConv, myId)
                   ? <img src={getConversationAvatar(activeConv, myId)!} alt="" />
-                  : initials(getConversationName(activeConv, myId))}
+                  : initials(getConversationName(activeConv, myId, t))}
                 {!activeConv.isGroup && getOtherUserId(activeConv, myId) && onlineUserIds.has(getOtherUserId(activeConv, myId)!) && <span className="msg-online-badge" />}
               </div>
               <div className="msg-chat-header-info">
-                <strong>{getConversationName(activeConv, myId)}</strong>
+                <strong>{getConversationName(activeConv, myId, t)}</strong>
                 <span>
                   {typingNames.length > 0
-                    ? `${typingNames.join(", ")} écrit${typingNames.length > 1 ? "ent" : ""}...`
+                    ? `${typingNames.join(", ")} ${t('msg.typing')}`
                     : !activeConv.isGroup && getOtherUserId(activeConv, myId) && onlineUserIds.has(getOtherUserId(activeConv, myId)!)
-                    ? "En ligne"
+                    ? t('msg.online')
                     : !activeConv.isGroup && (() => {
                         const otherId = getOtherUserId(activeConv, myId);
-                        return otherId && lastSeenMap.has(otherId) ? formatLastSeen(lastSeenMap.get(otherId)!) : "";
+                        return otherId && lastSeenMap.has(otherId) ? formatLastSeen(lastSeenMap.get(otherId)!, t) : "";
                       })()
                   }
                 </span>
@@ -1639,7 +1643,7 @@ export function MessagingPage() {
               <div className="msg-chat-header-actions">
                 <button
                   className={`msg-icon-btn${selectMode ? " msg-icon-btn--active" : ""}`}
-                  title={selectMode ? "Quitter la sélection" : "Sélectionner plusieurs messages"}
+                  title={selectMode ? t('msg.exitSelection') : t('msg.selectMessages')}
                   onClick={() => {
                     setSelectMode((prev) => !prev);
                     if (selectMode) setSelectedMsgIds(new Set());
@@ -1649,10 +1653,10 @@ export function MessagingPage() {
                 </button>
                 {!activeConv.isGroup && (
                   <>
-                    <button className="msg-icon-btn" title="Appel audio" onClick={() => void startCall("audio")}>
+                    <button className="msg-icon-btn" title={t('msg.audioCall')} onClick={() => void startCall("audio")}>
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
                     </button>
-                    <button className="msg-icon-btn" title="Appel vidéo" onClick={() => void startCall("video")}>
+                    <button className="msg-icon-btn" title={t('msg.videoCall')} onClick={() => void startCall("video")}>
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
                     </button>
                   </>
@@ -1663,11 +1667,11 @@ export function MessagingPage() {
             {/* Messages area */}
             <div className="msg-messages">
               {loadingMsgs ? (
-                <div className="msg-loading-sm">Chargement des messages...</div>
+                <div className="msg-loading-sm">{t('msg.loadingMessages')}</div>
               ) : messages.length === 0 ? (
                 <div className="msg-empty">
-                  <p>Aucun message</p>
-                  <p>Envoyez le premier message !</p>
+                  <p>{t('msg.noMessages')}</p>
+                  <p>{t('msg.sendFirstMessage')}</p>
                 </div>
               ) : (
                 messages.map((msg, idx) => {
@@ -1699,7 +1703,7 @@ export function MessagingPage() {
                         )}
 
                         {msg.isDeleted ? (
-                          <p className="msg-deleted-text">🚫 Message supprimé</p>
+                          <p className="msg-deleted-text">🚫 {t('msg.deletedMessage')}</p>
                         ) : msg.type === "IMAGE" && msg.mediaUrl ? (
                           <img src={msg.mediaUrl} alt="Image" className="msg-media-img" onClick={() => window.open(msg.mediaUrl!, "_blank")} />
                         ) : msg.type === "AUDIO" && msg.mediaUrl ? (
@@ -1708,19 +1712,19 @@ export function MessagingPage() {
                           <video controls src={msg.mediaUrl} className="msg-media-video" />
                         ) : msg.type === "FILE" && msg.mediaUrl ? (
                           <a href={msg.mediaUrl} download={msg.fileName ?? "file"} className="msg-file-link">
-                            📎 {msg.fileName ?? "Fichier"}
+                            📎 {msg.fileName ?? t('msg.file')}
                           </a>
                         ) : (
                           <p className="msg-text">{msg.content}</p>
                         )}
 
                         <div className="msg-meta">
-                          <span className="msg-time">{new Date(msg.createdAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</span>
-                          {msg.isEdited && <span className="msg-edited">modifié</span>}
+                          <span className="msg-time">{new Date(msg.createdAt).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })}</span>
+                          {msg.isEdited && <span className="msg-edited">{t('msg.edited')}</span>}
                           {isMine && (
                             <span
                               className={`msg-read-status${readByOthers.length > 0 ? " msg-read-status--read" : ""}`}
-                              title={readByOthers.length > 0 ? "Lu" : "Envoyé"}
+                              title={readByOthers.length > 0 ? t('msg.read') : t('msg.sent')}
                             >
                               {readByOthers.length > 0 ? "✓✓" : "✓"}
                             </span>
@@ -1731,8 +1735,8 @@ export function MessagingPage() {
                       {/* Quick actions on hover */}
                       {!msg.isDeleted && !selectMode && (
                         <div className="msg-bubble-actions">
-                          {!isAdminDM && <button className="msg-bubble-action" title="Répondre" onClick={() => setReplyTo(msg)}>↩</button>}
-                          <button className="msg-bubble-action" title="Transférer" onClick={() => setForwardMsg(msg)}>↗</button>
+                          {!isAdminDM && <button className="msg-bubble-action" title={t('msg.reply')} onClick={() => setReplyTo(msg)}>↩</button>}
+                          <button className="msg-bubble-action" title={t('msg.forward')} onClick={() => setForwardMsg(msg)}>↗</button>
                           {isMine && msg.type === "TEXT" && (
                             <button className="msg-bubble-action" title="Modifier" onClick={() => { setEditingMsg(msg); setDraft(msg.content ?? ""); }}>✏️</button>
                           )}
@@ -1751,20 +1755,20 @@ export function MessagingPage() {
             {/* Context menu (WhatsApp-style) */}
             {contextMenu && (
               <div className="msg-context-menu" style={{ top: contextMenu.y, left: contextMenu.x }}>
-                {!isAdminDM && <button onClick={() => { setReplyTo(contextMenu.message); setContextMenu(null); }}>↩️ Répondre</button>}
-                <button onClick={() => { setForwardMsg(contextMenu.message); setContextMenu(null); }}>↗️ Transférer</button>
+                {!isAdminDM && <button onClick={() => { setReplyTo(contextMenu.message); setContextMenu(null); }}>↩️ {t('msg.reply')}</button>}
+                <button onClick={() => { setForwardMsg(contextMenu.message); setContextMenu(null); }}>↗️ {t('msg.forward')}</button>
                 {contextMenu.message.content && (
                   <button onClick={() => { void navigator.clipboard.writeText(contextMenu.message.content ?? ""); setContextMenu(null); }}>📋 Copier le texte</button>
                 )}
                 {contextMenu.message.senderId === myId && contextMenu.message.type === "TEXT" && (
                   <button onClick={() => { setEditingMsg(contextMenu.message); setDraft(contextMenu.message.content ?? ""); setContextMenu(null); }}>✏️ Modifier</button>
                 )}
-                <button onClick={() => { setSelectMode(true); setSelectedMsgIds(new Set([contextMenu.message.id])); setContextMenu(null); }}>☑️ Sélectionner</button>
+                <button onClick={() => { setSelectMode(true); setSelectedMsgIds(new Set([contextMenu.message.id])); setContextMenu(null); }}>☑️ {t('msg.select')}</button>
                 <button onClick={() => {
-                  const info = `De: ${contextMenu.message.sender.profile.displayName}\nDate: ${fullTime(contextMenu.message.createdAt)}\nType: ${contextMenu.message.type}${contextMenu.message.isEdited ? "\n(modifié)" : ""}`;
+                  const info = `${t('msg.from')}: ${contextMenu.message.sender.profile.displayName}\n${t('msg.date')}: ${fullTime(contextMenu.message.createdAt, locale)}\n${t('msg.type')}: ${contextMenu.message.type}${contextMenu.message.isEdited ? `\n(${t('msg.edited')})` : ""}`;
                   alert(info);
                   setContextMenu(null);
-                }}>ℹ️ Infos du message</button>
+                }}>ℹ️ {t('msg.messageInfo')}</button>
                 <div className="msg-context-menu-divider" />
                 {contextMenu.message.senderId === myId && (
                   <button className="msg-ctx-danger" onClick={() => { emit("message:delete", { messageId: contextMenu.message.id, conversationId: activeConv.id }); setContextMenu(null); }}>🗑 Supprimer</button>
@@ -1903,7 +1907,7 @@ export function MessagingPage() {
         <div className="msg-forward-overlay" onClick={() => setForwardMsg(null)}>
           <div className="msg-forward-modal" onClick={(e) => e.stopPropagation()}>
             <div className="msg-forward-header">
-              <h3>Transférer à...</h3>
+              <h3>{t('msg.forwardTo')}</h3>
               <button className="msg-forward-close" onClick={() => setForwardMsg(null)}>✕</button>
             </div>
             <div className="msg-forward-preview">
@@ -1916,13 +1920,13 @@ export function MessagingPage() {
               {conversations.filter((c) => c.id !== activeConv?.id).map((conv) => (
                 <button key={conv.id} className="msg-forward-item" onClick={() => handleForward(conv.id)}>
                   <div className="msg-avatar msg-avatar--sm">
-                    {getConversationAvatar(conv, myId) ? <img src={getConversationAvatar(conv, myId)!} alt="" /> : initials(getConversationName(conv, myId))}
+                    {getConversationAvatar(conv, myId) ? <img src={getConversationAvatar(conv, myId)!} alt="" /> : initials(getConversationName(conv, myId, t))}
                   </div>
-                  <span>{getConversationName(conv, myId)}</span>
+                  <span>{getConversationName(conv, myId, t)}</span>
                 </button>
               ))}
               {conversations.filter((c) => c.id !== activeConv?.id).length === 0 && (
-                <p className="msg-empty-sm">Aucune autre conversation</p>
+                <p className="msg-empty-sm">{t('msg.noOtherConversation')}</p>
               )}
             </div>
           </div>
@@ -1934,17 +1938,17 @@ export function MessagingPage() {
         <div className="msg-forward-overlay" onClick={() => setShowAddPeople(false)}>
           <div className="msg-forward-modal" onClick={(e) => e.stopPropagation()}>
             <div className="msg-forward-header">
-              <h3>Ajouter des personnes</h3>
+              <h3>{t('msg.addPeople')}</h3>
               <button className="msg-forward-close" onClick={() => setShowAddPeople(false)}>✕</button>
             </div>
             <div className="msg-forward-preview">
-              <span className="msg-forward-preview-label">Type d'appel :</span>
-              <span className="msg-forward-preview-text">Appel {callState.type === "video" ? "vidéo" : "audio"} en cours</span>
+              <span className="msg-forward-preview-label">{t('msg.callType')}:</span>
+              <span className="msg-forward-preview-text">{t('msg.callInProgressType').replace('{type}', callState.type === 'video' ? t('msg.video') : t('msg.audio'))}</span>
             </div>
             <div className="msg-search-panel msg-search-panel--inline">
               <input
                 className="msg-search-input"
-                placeholder="Rechercher un contact..."
+                placeholder={t('msg.searchContact')}
                 value={inviteQuery}
                 onChange={(e) => setInviteQuery(e.target.value)}
               />
@@ -1962,7 +1966,7 @@ export function MessagingPage() {
                   <span>{candidate.displayName}</span>
                 </button>
               ))}
-              {inviteCandidates.length === 0 && <p className="msg-empty-sm">Aucun contact disponible</p>}
+              {inviteCandidates.length === 0 && <p className="msg-empty-sm">{t('msg.noAvailableContact')}</p>}
             </div>
           </div>
         </div>

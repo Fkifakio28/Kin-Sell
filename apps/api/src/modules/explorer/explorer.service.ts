@@ -1,5 +1,23 @@
 import { prisma } from "../../shared/db/prisma.js";
 
+const COUNTRY_ALIASES: Record<string, string[]> = {
+  CD: ["CD", "RDC", "RD Congo", "DRC", "Democratic Republic of the Congo"],
+  GA: ["GA", "Gabon"],
+  CG: ["CG", "Congo", "Congo-Brazzaville", "Republic of the Congo"],
+  AO: ["AO", "Angola"],
+  CI: ["CI", "Cote d'Ivoire", "Cote d Ivoire", "Ivory Coast"],
+  GQ: ["GQ", "Guinee equatoriale", "Equatorial Guinea"],
+  SN: ["SN", "Senegal"],
+  MA: ["MA", "Maroc", "Morocco"],
+};
+
+function resolveCountryTerms(country?: string): string[] {
+  if (!country) return [];
+  const normalized = country.trim().toUpperCase();
+  const aliases = COUNTRY_ALIASES[normalized] ?? [country.trim()];
+  return aliases.filter((term) => term.trim().length > 0);
+}
+
 export const getExplorerStats = async () => {
   const [distinctCategories, publicProfiles, onlineShops] = await Promise.all([
     prisma.listing.findMany({
@@ -24,13 +42,34 @@ export const getExplorerAds = async (_city?: string, _country?: string) => {
   return { campaigns: [] as Record<string, unknown>[] };
 };
 
-export const getFeaturedShops = async (limit = 4) => {
+export const getFeaturedShops = async (limit = 4, city?: string, country?: string) => {
+  const countryTerms = resolveCountryTerms(country);
   const shops = await prisma.businessShop.findMany({
     where: {
       active: true,
+      ...(city ? { city: { contains: city, mode: "insensitive" as const } } : {}),
       business: {
         listings: { some: { isPublished: true, status: "ACTIVE" } },
       },
+      ...(countryTerms.length > 0
+        ? {
+            AND: [
+              {
+                business: {
+                  owner: {
+                    profile: {
+                      is: {
+                        OR: countryTerms.map((term) => ({
+                          country: { contains: term, mode: "insensitive" as const },
+                        })),
+                      },
+                    },
+                  },
+                },
+              },
+            ],
+          }
+        : {}),
     },
     take: limit,
     orderBy: { business: { listings: { _count: "desc" } } },
@@ -61,10 +100,23 @@ export const getFeaturedShops = async (limit = 4) => {
   }));
 };
 
-export const getFeaturedProfiles = async (limit = 4) => {
+export const getFeaturedProfiles = async (limit = 4, city?: string, country?: string) => {
+  const countryTerms = resolveCountryTerms(country);
   const profiles = await prisma.userProfile.findMany({
     where: {
       username: { not: null },
+      ...(city ? { city: { contains: city, mode: "insensitive" as const } } : {}),
+      ...(countryTerms.length > 0
+        ? {
+            AND: [
+              {
+                OR: countryTerms.map((term) => ({
+                  country: { contains: term, mode: "insensitive" as const },
+                })),
+              },
+            ],
+          }
+        : {}),
       user: {
         accountStatus: "ACTIVE",
         role: { notIn: ["ADMIN", "SUPER_ADMIN", "BUSINESS"] },

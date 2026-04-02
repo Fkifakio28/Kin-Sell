@@ -48,6 +48,7 @@ const searchSchema = z.object({
   q: z.string().min(1).max(140).optional(),
   type: listingTypeSchema.optional(),
   city: z.string().min(2).max(80).optional(),
+  country: z.string().min(2).max(80).optional(),
   latitude: z.coerce.number().min(-90).max(90).optional(),
   longitude: z.coerce.number().min(-180).max(180).optional(),
   radiusKm: z.coerce.number().min(1).max(100).optional(),
@@ -79,6 +80,8 @@ router.get(
   asyncHandler(async (request, response) => {
     const payload = z.object({
       type: listingTypeSchema.optional(),
+      city: z.string().min(2).max(80).optional(),
+      country: z.string().min(2).max(80).optional(),
       limit: z.coerce.number().int().min(1).max(50).default(12),
     }).parse(request.query);
     const result = await listingsService.latestListings(payload);

@@ -26,7 +26,9 @@ router.get(
   "/shops",
   asyncHandler(async (request, response) => {
     const limit = typeof request.query.limit === "string" ? Math.min(Number(request.query.limit) || 4, 50) : 4;
-    const result = await explorerService.getFeaturedShops(limit);
+    const city = typeof request.query.city === "string" ? request.query.city : undefined;
+    const country = typeof request.query.country === "string" ? request.query.country : undefined;
+    const result = await explorerService.getFeaturedShops(limit, city, country);
     response.json(result);
   })
 );
@@ -35,7 +37,9 @@ router.get(
   "/profiles",
   asyncHandler(async (request, response) => {
     const limit = typeof request.query.limit === "string" ? Math.min(Number(request.query.limit) || 4, 50) : 4;
-    const result = await explorerService.getFeaturedProfiles(limit);
+    const city = typeof request.query.city === "string" ? request.query.city : undefined;
+    const country = typeof request.query.country === "string" ? request.query.country : undefined;
+    const result = await explorerService.getFeaturedProfiles(limit, city, country);
     response.json(result);
   })
 );

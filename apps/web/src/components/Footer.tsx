@@ -39,20 +39,23 @@ export function Footer() {
           <p className="ks-footer-title">{t("footer.social")}</p>
 
           <div className="ks-social-row">
-            <a href="https://www.facebook.com/profile.php?id=61575aborede" className="ks-social-btn" aria-label="Facebook" title="Facebook" target="_blank" rel="noopener noreferrer">
+            <a href="https://web.facebook.com/profile.php?id=61576537875599" className="ks-social-btn" aria-label="Facebook" title="Facebook" target="_blank" rel="noopener noreferrer">
               <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>
             </a>
-            <a href="https://www.instagram.com/kinsell_off/" className="ks-social-btn" aria-label="Instagram" title="Instagram" target="_blank" rel="noopener noreferrer">
+            <a href="https://www.instagram.com/kin.sell/" className="ks-social-btn" aria-label="Instagram" title="Instagram" target="_blank" rel="noopener noreferrer">
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg>
             </a>
-            <a href="https://x.com/KinSell_off" className="ks-social-btn" aria-label="X (Twitter)" title="X" target="_blank" rel="noopener noreferrer">
+            <a href="https://x.com/Kinsell_marketP" className="ks-social-btn" aria-label="X (Twitter)" title="X" target="_blank" rel="noopener noreferrer">
               <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
             </a>
-            <a href="https://www.linkedin.com/company/kin-sell/" className="ks-social-btn" aria-label="LinkedIn" title="LinkedIn" target="_blank" rel="noopener noreferrer">
+            <a href="https://www.linkedin.com/in/kin-sell-marketplace/" className="ks-social-btn" aria-label="LinkedIn" title="LinkedIn" target="_blank" rel="noopener noreferrer">
               <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/></svg>
             </a>
-            <a href="https://www.tiktok.com/@kinsell_off" className="ks-social-btn" aria-label="TikTok" title="TikTok" target="_blank" rel="noopener noreferrer">
+            <a href="https://www.tiktok.com/@kinsell1" className="ks-social-btn" aria-label="TikTok" title="TikTok" target="_blank" rel="noopener noreferrer">
               <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1V9.01a6.32 6.32 0 0 0-.79-.05 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.33-6.34V8.82a8.18 8.18 0 0 0 4.79 1.53V6.88a4.85 4.85 0 0 1-1.02-.19z"/></svg>
+            </a>
+            <a href="https://www.reddit.com/user/Kin-sell/" className="ks-social-btn" aria-label="Reddit" title="Reddit" target="_blank" rel="noopener noreferrer">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.385 4.859-7.181 4.859-3.796 0-7.182-2.165-7.182-4.859a3.5 3.5 0 0 1 .476-1.565c-.543-.375-.923-.998-.923-1.71 0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.53l.847-4.061c.057-.274.243-.485.513-.545l3.8-.822c.151.649.848 1.17 1.693 1.17.955 0 1.74-.75 1.74-1.682 0-.932-.75-1.682-1.74-1.682-.722 0-1.333.468-1.605 1.123l-3.776.837c-.751.042-1.45.379-1.98.999-.565-.143-1.14-.213-1.723-.213-2.773 0-5.141 1.56-5.141 3.501 0 1.634.858 3.034 2.147 3.85-.13.584-.204 1.194-.204 1.829 0 3.7 3.385 6.734 7.181 6.734 3.797 0 7.182-3.034 7.182-6.734 0-.646-.075-1.279-.211-1.881 1.331-.81 2.201-2.204 2.201-3.857 0-.968-.786-1.754-1.754-1.754-.279 0-.548.057-.802.156-.071-.106-.147-.203-.237-.284.074-.171.167-.341.273-.496a1.75 1.75 0 0 0 .12-1.671c-.194-.577-.651-.986-1.218-.986-.532 0-.99.29-1.23.743-.243.421-.37.981-.37 1.571 0 .947.316 1.831.899 2.546-1.348-1.006-3.106-1.625-5.036-1.625-1.932 0-3.69.622-5.037 1.625.582-.715.898-1.599.898-2.546 0-.59-.127-1.15-.37-1.571-.24-.453-.698-.743-1.23-.743-.567 0-1.024.409-1.218.986a1.75 1.75 0 0 0 .12 1.671c.106.155.199.325.273.496-.09.081-.166.178-.237.284-.254-.099-.523-.156-.802-.156z"/></svg>
             </a>
           </div>
 

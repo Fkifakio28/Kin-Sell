@@ -43,11 +43,30 @@ export type SearchListingsInput = {
   q?: string;
   type?: ListingType;
   city?: string;
+  country?: string;
   latitude?: number;
   longitude?: number;
   radiusKm?: number;
   limit: number;
 };
+
+const COUNTRY_ALIASES: Record<string, string[]> = {
+  CD: ["CD", "RDC", "RD Congo", "DRC", "Democratic Republic of the Congo"],
+  GA: ["GA", "Gabon"],
+  CG: ["CG", "Congo", "Congo-Brazzaville", "Republic of the Congo"],
+  AO: ["AO", "Angola"],
+  CI: ["CI", "Cote d'Ivoire", "Cote d Ivoire", "Ivory Coast"],
+  GQ: ["GQ", "Guinee equatoriale", "Equatorial Guinea"],
+  SN: ["SN", "Senegal"],
+  MA: ["MA", "Maroc", "Morocco"],
+};
+
+function resolveCountryTerms(country?: string): string[] {
+  if (!country) return [];
+  const normalized = country.trim().toUpperCase();
+  const aliases = COUNTRY_ALIASES[normalized] ?? [country.trim()];
+  return aliases.filter((term) => term.trim().length > 0);
+}
 
 type GeoPoint = {
   lat: number;
@@ -307,12 +326,29 @@ export const myListingsStats = async (userId: string) => {
 export const searchListings = async (input: SearchListingsInput) => {
   const byCoordinates = typeof input.latitude === "number" && typeof input.longitude === "number";
   const radiusKm = input.radiusKm ?? DEFAULT_RADIUS_KM;
+  const countryTerms = resolveCountryTerms(input.country);
+  const andClauses: Record<string, unknown>[] = [];
+
+  if (countryTerms.length > 0) {
+    andClauses.push({
+      OR: countryTerms.map((term) => ({
+        ownerUser: {
+          profile: {
+            is: {
+              country: { contains: term, mode: "insensitive" as const },
+            },
+          },
+        },
+      })),
+    });
+  }
 
   const rows = await prisma.listing.findMany({
     where: {
       isPublished: true,
       type: input.type,
       city: input.city,
+      ...(andClauses.length > 0 ? { AND: andClauses } : {}),
       OR: input.q
         ? [
             { title: { contains: input.q, mode: "insensitive" } },
@@ -385,12 +421,31 @@ export const searchListings = async (input: SearchListingsInput) => {
 };
 
 /* ── Latest published listings (public, no auth) ── */
-export const latestListings = async (input: { type?: ListingType; limit: number }) => {
+export const latestListings = async (input: { type?: ListingType; city?: string; country?: string; limit: number }) => {
+  const countryTerms = resolveCountryTerms(input.country);
+  const andClauses: Record<string, unknown>[] = [];
+
+  if (countryTerms.length > 0) {
+    andClauses.push({
+      OR: countryTerms.map((term) => ({
+        ownerUser: {
+          profile: {
+            is: {
+              country: { contains: term, mode: "insensitive" as const },
+            },
+          },
+        },
+      })),
+    });
+  }
+
   const rows = await prisma.listing.findMany({
     where: {
       isPublished: true,
       status: ListingStatus.ACTIVE,
       type: input.type,
+      city: input.city,
+      ...(andClauses.length > 0 ? { AND: andClauses } : {}),
     },
     include: {
       ownerUser: { include: { profile: true } },

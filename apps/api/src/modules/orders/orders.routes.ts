@@ -6,6 +6,7 @@ import { asyncHandler } from "../../shared/utils/async-handler.js";
 import { Role } from "../../types/roles.js";
 import * as ordersService from "./orders.service.js";
 import { sendPushToUser } from "../notifications/push.service.js";
+import { emitToUsers } from "../messaging/socket.js";
 import * as momoService from "../mobile-money/mobile-money.service.js";
 
 const pagingSchema = z.object({
@@ -190,6 +191,15 @@ router.patch(
         data: { type: "order", orderId: data.id },
       });
     }
+    emitToUsers([data.buyer.userId, data.seller.userId], "order:status-updated", {
+      type: "ORDER_STATUS_UPDATED",
+      orderId: data.id,
+      status: data.status,
+      buyerUserId: data.buyer.userId,
+      sellerUserId: data.seller.userId,
+      sourceUserId: request.auth!.userId,
+      updatedAt: new Date().toISOString(),
+    });
     response.json(data);
   })
 );
@@ -213,6 +223,23 @@ router.post(
   asyncHandler(async (request: AuthenticatedRequest, response) => {
     const payload = buyerConfirmSchema.parse(request.body);
     const data = await ordersService.buyerConfirmDelivery(request.auth!.userId, request.params.orderId, payload.code);
+    if (data.seller?.userId && data.seller.userId !== request.auth!.userId) {
+      void sendPushToUser(data.seller.userId, {
+        title: "✅ Livraison confirmée",
+        body: `La commande #${data.id.slice(-6)} a été validée par l'acheteur`,
+        tag: `order-${data.id}`,
+        data: { type: "order", orderId: data.id },
+      });
+    }
+    emitToUsers([data.buyer.userId, data.seller.userId], "order:delivery-confirmed", {
+      type: "ORDER_CONFIRMATION_COMPLETED",
+      orderId: data.id,
+      status: data.status,
+      buyerUserId: data.buyer.userId,
+      sellerUserId: data.seller.userId,
+      sourceUserId: request.auth!.userId,
+      updatedAt: new Date().toISOString(),
+    });
     response.json(data);
   })
 );

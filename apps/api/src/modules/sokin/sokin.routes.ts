@@ -11,12 +11,15 @@ import {
   toggleArchiveSoKinPost,
   deleteSoKinPost,
   getPublicFeed,
+  getPublicPostById,
   getPublicUsers,
   reactToPost,
   unreactToPost,
+  sharePost,
 } from "./sokin.service.js";
 import { sendPushToUser } from "../notifications/push.service.js";
 import { prisma } from "../../shared/db/prisma.js";
+import { emitToAll } from "../messaging/socket.js";
 
 const createPostSchema = z.object({
   text: z.string().min(1).max(500),
@@ -34,6 +37,8 @@ router.get(
   "/posts",
   asyncHandler(async (req, res) => {
     const raw = req.query.limit;
+    const city = typeof req.query.city === "string" ? req.query.city : undefined;
+    const country = typeof req.query.country === "string" ? req.query.country : undefined;
     const limit = Math.min(
       parseInt(typeof raw === "string" ? raw : "20", 10) || 20,
       50
@@ -48,21 +53,40 @@ router.get(
         viewerUserId = payload.sub;
       } catch { /* token invalide, on ignore */ }
     }
-    const posts = await getPublicFeed(limit, viewerUserId);
+    const posts = await getPublicFeed(limit, viewerUserId, city, country);
     res.json({ posts });
+  })
+);
+
+router.get(
+  "/posts/:id",
+  asyncHandler(async (req, res) => {
+    const token = req.headers.authorization?.replace("Bearer ", "");
+    let viewerUserId: string | undefined;
+    if (token) {
+      try {
+        const { verifyAccessToken } = await import("../../shared/auth/jwt.js");
+        const payload = verifyAccessToken(token);
+        viewerUserId = payload.sub;
+      } catch {
+        // token invalide, on ignore
+      }
+    }
+    const post = await getPublicPostById(req.params.id, viewerUserId);
+    res.json({ post });
   })
 );
 
 router.get(
   "/users",
   asyncHandler(async (req, res) => {
-    const { city, search } = req.query as Record<string, string | undefined>;
+    const { city, search, country } = req.query as Record<string, string | undefined>;
     const raw = req.query.limit;
     const limit = Math.min(
       parseInt(typeof raw === "string" ? raw : "50", 10) || 50,
       100
     );
-    const users = await getPublicUsers(city, search, limit);
+    const users = await getPublicUsers(city, search, limit, country);
     res.json({ users });
   })
 );
@@ -97,6 +121,13 @@ router.post(
     }
 
     const post = await createSoKinPost(req.auth!.userId, text, mediaUrls, location, tags, hashtags);
+    emitToAll("sokin:post-created", {
+      type: "SOKIN_POST_CREATED",
+      postId: post.id,
+      authorId: post.authorId,
+      createdAt: post.createdAt.toISOString(),
+      sourceUserId: req.auth!.userId,
+    });
 
     if (guard.verdict === "WARN") {
       res.status(201).json({ ...post, _contentWarning: guard.warningMessage });
@@ -158,6 +189,37 @@ router.delete(
   requireAuth,
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     const result = await unreactToPost(req.auth!.userId, req.params.id);
+    res.json(result);
+  })
+);
+
+router.post(
+  "/posts/:id/share",
+  requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const result = await sharePost(req.params.id);
+    emitToAll("sokin:post-shared", {
+      type: "SOKIN_POST_SHARED",
+      postId: req.params.id,
+      shares: result.shares,
+      sourceUserId: req.auth!.userId,
+      updatedAt: new Date().toISOString(),
+    });
+
+    if (result.authorId && result.authorId !== req.auth!.userId) {
+      const actor = await prisma.userProfile.findUnique({
+        where: { userId: req.auth!.userId },
+        select: { displayName: true },
+      });
+      const label = actor?.displayName ?? "Quelqu'un";
+      void sendPushToUser(result.authorId, {
+        title: "🔁 Nouveau partage So-Kin",
+        body: `${label} a partagé votre publication.`,
+        tag: `sokin-share-${req.params.id}`,
+        data: { type: "sokin", postId: req.params.id },
+      });
+    }
+
     res.json(result);
   })
 );

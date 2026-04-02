@@ -1,7 +1,8 @@
-import React, { createContext, useContext, useMemo, useState } from "react";
+﻿import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { useMarketPreference } from "./MarketPreferenceProvider";
 
 export type AppLanguage = "fr" | "en" | "ln";
-export type AppCurrency = "CDF" | "USD" | "EUR";
+export type AppCurrency = "CDF" | "USD" | "EUR" | "XAF" | "AOA" | "XOF" | "MAD";
 
 type LocaleCurrencyContextValue = {
   language: AppLanguage;
@@ -16,6 +17,10 @@ type LocaleCurrencyContextValue = {
 
 const USD_TO_CDF = 2850;
 const USD_TO_EUR = 0.92;
+const USD_TO_XAF = 605;
+const USD_TO_AOA = 905;
+const USD_TO_XOF = 605;
+const USD_TO_MAD = 9.9;
 
 const STORAGE_LANGUAGE = "ks-language";
 const STORAGE_CURRENCY = "ks-currency";
@@ -97,6 +102,7 @@ const DICT: Record<AppLanguage, Record<string, string>> = {
     "auth.forgotPassword": "Mot de passe oublié ?",
     "auth.forgotPasswordMsg": "La réinitialisation de mot de passe arrive à la prochaine étape backend.",
     "auth.loggingIn": "Connexion en cours...",
+    "auth.callbackLoading": "Connexion en cours...",
     "auth.loginBtn": "Se connecter",
     "auth.continueVisitor": "Continuer en visiteur",
     "auth.otpHelper": "Recevez un code par SMS pour vous connecter ou créer votre compte instantanément.",
@@ -148,6 +154,20 @@ const DICT: Record<AppLanguage, Record<string, string>> = {
     "auth.backToHome": "Retour à l'accueil Kin-Sell",
     "auth.registerGenericError": "Inscription impossible pour le moment.",
     "auth.socialRegisterReady": "Création de compte {provider} prête côté interface. Le branchement OAuth backend arrive à l'étape suivante.",
+    "auth.suspendedTitle": "Compte suspendu",
+    "auth.suspendedBody": "Votre compte Kin-Sell a été suspendu et vous ne pouvez plus accéder aux services.",
+    "auth.suspensionReason": "Motif de suspension :",
+    "auth.suspendedHelp": "Si vous estimez que cette suspension est injustifiée, vous pouvez soumettre un appel. Notre équipe examinera votre demande dans les meilleurs délais.",
+    "auth.submitAppeal": "Faire appel",
+    "auth.appealTitle": "Soumettre un appel",
+    "auth.appealBody": "Expliquez pourquoi vous pensez que votre compte a été suspendu par erreur. Soyez précis et factuel.",
+    "auth.appealPlaceholder": "Décrivez votre situation en détail…",
+    "auth.appealSending": "Envoi...",
+    "auth.appealSend": "Envoyer l'appel",
+    "auth.appealSentTitle": "Appel soumis",
+    "auth.appealSentBody": "Votre appel a bien été transmis à notre équipe de modération. Vous serez notifié dès qu'une décision sera prise.",
+    "auth.appealMinChars": "Merci d'expliquer votre situation (minimum 10 caractères).",
+    "auth.appealError": "Une erreur est survenue. Réessayez dans quelques instants.",
 
     "nav.home": "Accueil",
     "nav.explorer": "Explorer",
@@ -518,6 +538,11 @@ const DICT: Record<AppLanguage, Record<string, string>> = {
     "cart.article": "article",
     "cart.articles": "articles",
     "cart.allInNegotiation": "Tous les articles sont en marchandage. Attendez la résolution ou annulez les négociations.",
+    "cart.qtyError": "Erreur quantité.",
+    "cart.orderSuccess": "Commande validée !",
+    "cart.checkoutError": "Erreur validation.",
+    "cart.loadNegError": "Impossible de charger la négociation.",
+    "cart.cancelError": "Erreur annulation.",
     "cart.deliveryAddressRequired": "Adresse de livraison requise pour les produits.",
     "cart.maintenanceAddressRequired": "Adresse d'entretien requise pour les services.",
     "cart.executionAddressRequired": "Adresse de prestation requise pour les services.",
@@ -712,6 +737,98 @@ const DICT: Record<AppLanguage, Record<string, string>> = {
     "msg.stickerReactions": "Réactions",
     "msg.stickerCommerce": "Commerce",
     "msg.stickerKinshasa": "Kinshasa",
+    "msg.seenJustNow": "vu à l'instant",
+    "msg.seenMinutes": "vu il y a {count} min",
+    "msg.seenHours": "vu il y a {count} h",
+    "msg.seenYesterday": "vu hier",
+    "msg.seenDays": "vu il y a {count} j",
+    "msg.cameraSwitchError": "Impossible de changer de caméra sur cet appareil.",
+    "msg.callMediaAccessError": "Impossible d'accéder au micro/caméra.",
+    "msg.micAccessError": "Impossible d'accéder au micro.",
+    "msg.inviteSent": "Invitation envoyée à {name}.",
+    "msg.inviteFailed": "Impossible d'envoyer l'invitation.",
+    "msg.cameraOff": "Caméra désactivée",
+    "msg.noArchivedConversations": "Aucune conversation archivée",
+    "msg.noConversation": "Aucune conversation",
+    "msg.archivedHint": "Les conversations archivées apparaîtront ici",
+    "msg.startConversationHint": "Recherchez un utilisateur pour démarrer",
+    "msg.placeholderTitle": "Kin-Sell Messagerie",
+    "msg.placeholderBody": "Sélectionnez une conversation ou recherchez un utilisateur",
+    "msg.typing": "écrit...",
+    "msg.online": "En ligne",
+    "msg.exitSelection": "Quitter la sélection",
+    "msg.selectMessages": "Sélectionner plusieurs messages",
+    "msg.select": "Sélectionner",
+    "msg.audioCall": "Appel audio",
+    "msg.videoCall": "Appel vidéo",
+    "msg.loadingMessages": "Chargement des messages...",
+    "msg.noMessages": "Aucun message",
+    "msg.sendFirstMessage": "Envoyez le premier message !",
+    "msg.deletedMessage": "Message supprimé",
+    "msg.photo": "Photo",
+    "msg.audio": "Audio",
+    "msg.video": "Vidéo",
+    "msg.file": "Fichier",
+    "msg.you": "Vous",
+    "msg.newConversationLabel": "Nouvelle conversation",
+    "msg.edited": "modifié",
+    "msg.read": "Lu",
+    "msg.sent": "Envoyé",
+    "msg.reply": "Répondre",
+    "msg.forward": "Transférer",
+    "msg.forwardTo": "Transférer à...",
+    "msg.noOtherConversation": "Aucune autre conversation",
+    "msg.addPeople": "Ajouter des personnes",
+    "msg.searchContact": "Rechercher un contact...",
+    "msg.noAvailableContact": "Aucun contact disponible",
+    "msg.from": "De",
+    "msg.date": "Date",
+    "msg.type": "Type",
+    "msg.messageInfo": "Infos du message",
+    "msg.callType": "Type d'appel",
+    "msg.callInProgressType": "Appel {type} en cours",
+    "live.defaultCategory": "Général",
+    "live.dateUnavailable": "Date indisponible",
+    "live.mediaAccessError": "Autorisez la caméra et le micro pour démarrer un live.",
+    "live.mediaAccessPending": "Demande d'accès caméra en cours...",
+    "live.startLive": "Démarrer un Live",
+    "live.titleLabel": "Titre du live *",
+    "live.titlePlaceholder": "Ex: Vente flash téléphones !",
+    "live.descLabel": "Description (optionnelle)",
+    "live.descPlaceholder": "Décrivez votre live...",
+    "live.videoFormat": "Format vidéo",
+    "live.portrait": "Portrait",
+    "live.landscape": "Paysage",
+    "live.cityLabel": "Ville",
+    "live.cityPlaceholder": "Ex: Kinshasa",
+    "live.categoryLabel": "Catégorie",
+    "live.categoryPlaceholder": "Ex: Déstockage, Q&A, Démo",
+    "live.visibilityLabel": "Visibilité",
+    "live.visPublic": "Public",
+    "live.visFollowers": "Abonnés",
+    "live.visPrivate": "Privé",
+    "live.visClients": "Clients uniquement",
+    "live.pinnedProduct": "Produit à épingler",
+    "live.noProductSelected": "Aucun produit sélectionné",
+    "live.loadingProducts": "Chargement de vos produits actifs...",
+    "live.thumbFromProduct": "La miniature initiale est reprise depuis le produit {title}.",
+    "live.thumbFromCamera": "Sans produit choisi, le live démarre sur la caméra.",
+    "live.cameraPreview": "Aperçu caméra",
+    "live.launchLive": "Lancer le Live",
+    "live.waiting": "En attente",
+    "live.ended": "Terminé",
+    "live.canceled": "Annulé",
+    "live.archive": "Archive",
+    "live.typeService": "Service",
+    "live.typeProduct": "Produit",
+    "live.unknownUser": "Utilisateur",
+    "live.tapAudioHint": "Touchez Audio pour activer le son du live sur cet appareil.",
+    "live.streamReadError": "Impossible de lire ce flux live pour le moment.",
+    "live.browserUnsupportedStream": "Ce navigateur ne supporte pas ce flux live.",
+    "live.shareLinkCopied": "Lien du live copié.",
+    "live.shareError": "Impossible de partager ce live pour le moment.",
+    "live.pinListingError": "Impossible de mettre à jour le produit épinglé.",
+    "live.noLiveNow": "Aucun live en direct pour le moment.",
 
     "explorer.catalog": "Catalogue",
     "explorer.heroTitle": "Trouvez la bonne catégorie en quelques secondes.",
@@ -822,6 +939,7 @@ const DICT: Record<AppLanguage, Record<string, string>> = {
     "sokin.boostProfileCta": "Booster mon profil",
     "sokin.loadingProfiles": "Chargement des profils…",
     "sokin.noProfile": "Aucun profil",
+    "sokin.profileCount": "{count} profil(s)",
     "sokin.page": "Page",
     "sokin.loadingInProgress": "Chargement en cours…",
     "sokin.noPublicProfile": "Aucun profil public pour le moment. Configurez votre nom d'utilisateur dans votre compte pour apparaître ici.",
@@ -989,6 +1107,34 @@ const DICT: Record<AppLanguage, Record<string, string>> = {
     "home.visitor": "Visiteur",
     "home.homeAria": "Accueil Kin-Sell",
     "home.notifications": "Notifications",
+    "home.metaTitle": "Kin-Sell — Le marche africain",
+    "home.metaDescription": "Achetez, vendez et découvrez les meilleures offres à Kinshasa. Boutiques locales, services, So-Kin feed et lives en direct.",
+    "home.heroGuestTitle": "Kin-Sell — Le marche africain",
+    "home.heroWelcome": "Bienvenue, {name}",
+    "home.heroSubtitle": "Achetez, vendez et découvrez les meilleures affaires",
+    "home.fullscreenEnter": "Plein écran",
+    "home.fullscreenExit": "Quitter le plein écran",
+    "home.categoryPageAria": "Catégories page {page}",
+    "home.drawerExploreSection": "Explorer",
+    "home.drawerUserSection": "Espace utilisateur",
+    "home.drawerPublicSection": "Espace public",
+    "home.drawerInfoSection": "Liens utiles",
+    "home.drawerSellSpace": "Mon espace de vente",
+    "home.drawerBuySpace": "Mon espace d'achat",
+    "home.publishOnSokin": "Publier sur So-Kin",
+    "home.createMenuTitle": "Publier ou ajouter",
+    "home.createAction": "Créer",
+    "home.suggestedArticles": "Articles pour vous",
+    "home.recentListings": "Annonces récentes",
+    "home.networkLabel": "Réseau Kin-Sell",
+    "home.iosInstallHint": "Installez l'app : appuyez sur Partager puis Sur l'écran d'accueil",
+    "home.drawerMarketPrefs": "Preferences marche",
+    "home.marketMode": "Mode pays",
+    "home.marketModeAuto": "Auto (selon appareil)",
+    "home.marketModeManual": "Manuel (choix libre)",
+    "home.marketCountry": "Pays actif",
+    "home.marketDetected": "Pays detecte: {country}",
+    "home.marketActive": "Contexte actif: {country} ({region})",
     "home.adminNoTransact": "Les administrateurs ne peuvent pas effectuer de transactions.",
     "home.adminNoNegotiate": "Les administrateurs ne peuvent pas négocier.",
     "home.cannotBuyOwn": "Vous ne pouvez pas acheter vos propres articles.",
@@ -1588,6 +1734,7 @@ const DICT: Record<AppLanguage, Record<string, string>> = {
     "auth.forgotPassword": "Forgot password?",
     "auth.forgotPasswordMsg": "Password reset coming in the next backend step.",
     "auth.loggingIn": "Logging in...",
+    "auth.callbackLoading": "Signing you in...",
     "auth.loginBtn": "Log in",
     "auth.continueVisitor": "Continue as visitor",
     "auth.otpHelper": "Receive an SMS code to log in or create your account instantly.",
@@ -1639,6 +1786,20 @@ const DICT: Record<AppLanguage, Record<string, string>> = {
     "auth.backToHome": "Back to Kin-Sell home",
     "auth.registerGenericError": "Registration unavailable at the moment.",
     "auth.socialRegisterReady": "{provider} account creation ready on the interface. OAuth backend integration coming next.",
+    "auth.suspendedTitle": "Account suspended",
+    "auth.suspendedBody": "Your Kin-Sell account has been suspended and you can no longer access the services.",
+    "auth.suspensionReason": "Suspension reason:",
+    "auth.suspendedHelp": "If you believe this suspension is unjustified, you can submit an appeal. Our team will review your request as soon as possible.",
+    "auth.submitAppeal": "Submit an appeal",
+    "auth.appealTitle": "Submit an appeal",
+    "auth.appealBody": "Explain why you think your account was suspended by mistake. Be precise and factual.",
+    "auth.appealPlaceholder": "Describe your situation in detail…",
+    "auth.appealSending": "Sending...",
+    "auth.appealSend": "Send appeal",
+    "auth.appealSentTitle": "Appeal submitted",
+    "auth.appealSentBody": "Your appeal has been sent to our moderation team. You will be notified as soon as a decision is made.",
+    "auth.appealMinChars": "Please explain your situation (minimum 10 characters).",
+    "auth.appealError": "An error occurred. Please try again in a few moments.",
 
     "nav.home": "Home",
     "nav.explorer": "Explore",
@@ -2009,6 +2170,11 @@ const DICT: Record<AppLanguage, Record<string, string>> = {
     "cart.article": "item",
     "cart.articles": "items",
     "cart.allInNegotiation": "All items are being negotiated. Wait for resolution or cancel negotiations.",
+    "cart.qtyError": "Quantity error.",
+    "cart.orderSuccess": "Order validated!",
+    "cart.checkoutError": "Validation error.",
+    "cart.loadNegError": "Unable to load negotiation.",
+    "cart.cancelError": "Cancellation error.",
     "cart.deliveryAddressRequired": "Delivery address required for products.",
     "cart.maintenanceAddressRequired": "Maintenance address required for services.",
     "cart.executionAddressRequired": "Service address required for services.",
@@ -2213,6 +2379,98 @@ const DICT: Record<AppLanguage, Record<string, string>> = {
     "msg.stickerReactions": "Reactions",
     "msg.stickerCommerce": "Commerce",
     "msg.stickerKinshasa": "Kinshasa",
+    "msg.seenJustNow": "seen just now",
+    "msg.seenMinutes": "seen {count} min ago",
+    "msg.seenHours": "seen {count} h ago",
+    "msg.seenYesterday": "seen yesterday",
+    "msg.seenDays": "seen {count} d ago",
+    "msg.cameraSwitchError": "Unable to switch camera on this device.",
+    "msg.callMediaAccessError": "Unable to access microphone/camera.",
+    "msg.micAccessError": "Unable to access microphone.",
+    "msg.inviteSent": "Invitation sent to {name}.",
+    "msg.inviteFailed": "Unable to send invitation.",
+    "msg.cameraOff": "Camera disabled",
+    "msg.noArchivedConversations": "No archived conversations",
+    "msg.noConversation": "No conversations",
+    "msg.archivedHint": "Archived conversations will appear here",
+    "msg.startConversationHint": "Search a user to start",
+    "msg.placeholderTitle": "Kin-Sell Messaging",
+    "msg.placeholderBody": "Select a conversation or search a user",
+    "msg.typing": "is typing...",
+    "msg.online": "Online",
+    "msg.exitSelection": "Exit selection",
+    "msg.selectMessages": "Select multiple messages",
+    "msg.select": "Select",
+    "msg.audioCall": "Audio call",
+    "msg.videoCall": "Video call",
+    "msg.loadingMessages": "Loading messages...",
+    "msg.noMessages": "No messages",
+    "msg.sendFirstMessage": "Send the first message!",
+    "msg.deletedMessage": "Deleted message",
+    "msg.photo": "Photo",
+    "msg.audio": "Audio",
+    "msg.video": "Video",
+    "msg.file": "File",
+    "msg.you": "You",
+    "msg.newConversationLabel": "New conversation",
+    "msg.edited": "edited",
+    "msg.read": "Read",
+    "msg.sent": "Sent",
+    "msg.reply": "Reply",
+    "msg.forward": "Forward",
+    "msg.forwardTo": "Forward to...",
+    "msg.noOtherConversation": "No other conversation",
+    "msg.addPeople": "Add people",
+    "msg.searchContact": "Search a contact...",
+    "msg.noAvailableContact": "No contact available",
+    "msg.from": "From",
+    "msg.date": "Date",
+    "msg.type": "Type",
+    "msg.messageInfo": "Message info",
+    "msg.callType": "Call type",
+    "msg.callInProgressType": "{type} call in progress",
+    "live.defaultCategory": "General",
+    "live.dateUnavailable": "Date unavailable",
+    "live.mediaAccessError": "Allow camera and microphone to start a live.",
+    "live.mediaAccessPending": "Requesting camera access...",
+    "live.startLive": "Start a Live",
+    "live.titleLabel": "Live title *",
+    "live.titlePlaceholder": "E.g.: Flash phone sale!",
+    "live.descLabel": "Description (optional)",
+    "live.descPlaceholder": "Describe your live...",
+    "live.videoFormat": "Video format",
+    "live.portrait": "Portrait",
+    "live.landscape": "Landscape",
+    "live.cityLabel": "City",
+    "live.cityPlaceholder": "E.g.: Kinshasa",
+    "live.categoryLabel": "Category",
+    "live.categoryPlaceholder": "E.g.: Clearance, Q&A, Demo",
+    "live.visibilityLabel": "Visibility",
+    "live.visPublic": "Public",
+    "live.visFollowers": "Followers",
+    "live.visPrivate": "Private",
+    "live.visClients": "Clients only",
+    "live.pinnedProduct": "Pin a product",
+    "live.noProductSelected": "No product selected",
+    "live.loadingProducts": "Loading your active products...",
+    "live.thumbFromProduct": "Thumbnail is taken from product {title}.",
+    "live.thumbFromCamera": "Without a product, the live starts with your camera.",
+    "live.cameraPreview": "Camera preview",
+    "live.launchLive": "Launch Live",
+    "live.waiting": "Waiting",
+    "live.ended": "Ended",
+    "live.canceled": "Canceled",
+    "live.archive": "Archive",
+    "live.typeService": "Service",
+    "live.typeProduct": "Product",
+    "live.unknownUser": "User",
+    "live.tapAudioHint": "Tap Audio to enable sound on this device.",
+    "live.streamReadError": "Unable to read this live stream right now.",
+    "live.browserUnsupportedStream": "This browser does not support this live stream.",
+    "live.shareLinkCopied": "Live link copied.",
+    "live.shareError": "Unable to share this live right now.",
+    "live.pinListingError": "Unable to update the pinned product.",
+    "live.noLiveNow": "No live streams right now.",
 
     "explorer.catalog": "Catalog",
     "explorer.heroTitle": "Find the right category in seconds.",
@@ -2323,6 +2581,7 @@ const DICT: Record<AppLanguage, Record<string, string>> = {
     "sokin.boostProfileCta": "Boost my profile",
     "sokin.loadingProfiles": "Loading profiles…",
     "sokin.noProfile": "No profile",
+    "sokin.profileCount": "{count} profile(s)",
     "sokin.page": "Page",
     "sokin.loadingInProgress": "Loading…",
     "sokin.noPublicProfile": "No public profile yet. Set your username in your account to appear here.",
@@ -2490,6 +2749,34 @@ const DICT: Record<AppLanguage, Record<string, string>> = {
     "home.visitor": "Visitor",
     "home.homeAria": "Kin-Sell Home",
     "home.notifications": "Notifications",
+    "home.metaTitle": "Kin-Sell — African marketplace",
+    "home.metaDescription": "Buy, sell and discover the best offers in Kinshasa. Local shops, services, So-Kin feed and live sessions.",
+    "home.heroGuestTitle": "Kin-Sell — African marketplace",
+    "home.heroWelcome": "Welcome, {name}",
+    "home.heroSubtitle": "Buy, sell and discover the best deals",
+    "home.fullscreenEnter": "Fullscreen",
+    "home.fullscreenExit": "Exit fullscreen",
+    "home.categoryPageAria": "Categories page {page}",
+    "home.drawerExploreSection": "Explore",
+    "home.drawerUserSection": "User space",
+    "home.drawerPublicSection": "Public space",
+    "home.drawerInfoSection": "Useful links",
+    "home.drawerSellSpace": "My sales space",
+    "home.drawerBuySpace": "My buying space",
+    "home.publishOnSokin": "Publish on So-Kin",
+    "home.createMenuTitle": "Publish or add",
+    "home.createAction": "Create",
+    "home.suggestedArticles": "Items for you",
+    "home.recentListings": "Recent listings",
+    "home.networkLabel": "Kin-Sell Network",
+    "home.iosInstallHint": "Install the app: tap Share then Add to Home Screen",
+    "home.drawerMarketPrefs": "Market preferences",
+    "home.marketMode": "Country mode",
+    "home.marketModeAuto": "Auto (device based)",
+    "home.marketModeManual": "Manual (free choice)",
+    "home.marketCountry": "Active country",
+    "home.marketDetected": "Detected country: {country}",
+    "home.marketActive": "Active context: {country} ({region})",
     "home.adminNoTransact": "Administrators cannot make transactions.",
     "home.adminNoNegotiate": "Administrators cannot negotiate.",
     "home.cannotBuyOwn": "You cannot buy your own items.",
@@ -3090,6 +3377,7 @@ const DICT: Record<AppLanguage, Record<string, string>> = {
     "auth.forgotPassword": "Obosani mot de passe?",
     "auth.forgotPasswordMsg": "Kozongisa mot de passe ekoya na étape ya sima.",
     "auth.loggingIn": "Kokota...",
+    "auth.callbackLoading": "Connexion ezali kosalema...",
     "auth.loginBtn": "Kokota",
     "auth.continueVisitor": "Kokoba lokola mopaya",
     "auth.otpHelper": "Zwa code na SMS mpo okota to ofungola compte na mbango.",
@@ -3141,6 +3429,20 @@ const DICT: Record<AppLanguage, Record<string, string>> = {
     "auth.backToHome": "Kozonga na ndako Kin-Sell",
     "auth.registerGenericError": "Inscription ekoki te mpo na tango oyo.",
     "auth.socialRegisterReady": "Création ya compte {provider} esili na interface. Branchement OAuth backend ekoya na étape oyo elandi.",
+    "auth.suspendedTitle": "Compte ekangami",
+    "auth.suspendedBody": "Compte na yo ya Kin-Sell ekangami mpe okoki lisusu kosalela ba services te.",
+    "auth.suspensionReason": "Ntina ya suspension:",
+    "auth.suspendedHelp": "Soki omoni ete suspension oyo ezali ya sembo te, okoki kotinda appel. Équipe na biso ekotalela demande na yo noki.",
+    "auth.submitAppeal": "Kotinda appel",
+    "auth.appealTitle": "Kotinda appel",
+    "auth.appealBody": "Limbolá mpo na nini okanisi ete compte na yo ekangamaki na libunga. Zalá polele mpe ya solo.",
+    "auth.appealPlaceholder": "Limbolá situation na yo malamu…",
+    "auth.appealSending": "Kotinda...",
+    "auth.appealSend": "Tinda appel",
+    "auth.appealSentTitle": "Appel etindami",
+    "auth.appealSentBody": "Appel na yo etindami epai ya équipe ya modération. Okoyebisama soki décision ezwami.",
+    "auth.appealMinChars": "Limbolá situation na yo malamu (au moins ba caractères 10).",
+    "auth.appealError": "Erreur moko esalemi. Meka lisusu na mwa tango.",
 
     "nav.home": "Ndako",
     "nav.explorer": "Koluka",
@@ -3511,6 +3813,11 @@ const DICT: Record<AppLanguage, Record<string, string>> = {
     "cart.article": "article",
     "cart.articles": "ba articles",
     "cart.allInNegotiation": "Ba articles nyonso ezali na marchandage. Zelá résolution to boká ba négociations.",
+    "cart.qtyError": "Erreur ya quantité.",
+    "cart.orderSuccess": "Commande esili!",
+    "cart.checkoutError": "Erreur ya validation.",
+    "cart.loadNegError": "Ekoki te koluka négociation.",
+    "cart.cancelError": "Erreur ya kokata.",
     "cart.deliveryAddressRequired": "Adresse ya livraison esengeli mpo na ba produits.",
     "cart.maintenanceAddressRequired": "Adresse ya entretien esengeli mpo na ba services.",
     "cart.executionAddressRequired": "Adresse ya prestation esengeli mpo na ba services.",
@@ -3715,6 +4022,98 @@ const DICT: Record<AppLanguage, Record<string, string>> = {
     "msg.stickerReactions": "Ba réactions",
     "msg.stickerCommerce": "Commerce",
     "msg.stickerKinshasa": "Kinshasa",
+    "msg.seenJustNow": "emonani sikoyo",
+    "msg.seenMinutes": "emonani na min {count} eleki",
+    "msg.seenHours": "emonani na ngonga {count} eleki",
+    "msg.seenYesterday": "emonani lobi",
+    "msg.seenDays": "emonani na mikolo {count} eleki",
+    "msg.cameraSwitchError": "Ekoki te kobongola caméra na appareil oyo.",
+    "msg.callMediaAccessError": "Ekoki te kozwa accès na micro/caméra.",
+    "msg.micAccessError": "Ekoki te kozwa accès na micro.",
+    "msg.inviteSent": "Invitation etindami epai ya {name}.",
+    "msg.inviteFailed": "Ekoki te kotinda invitation.",
+    "msg.cameraOff": "Caméra ekangami",
+    "msg.noArchivedConversations": "Conversation archivée moko te",
+    "msg.noConversation": "Conversation moko te",
+    "msg.archivedHint": "Ba conversations archivée ekomonana awa",
+    "msg.startConversationHint": "Luka mosaleli mpo obanda",
+    "msg.placeholderTitle": "Messagerie Kin-Sell",
+    "msg.placeholderBody": "Pona conversation to luka mosaleli",
+    "msg.typing": "azali kokoma...",
+    "msg.online": "Na ligne",
+    "msg.exitSelection": "Bima na sélection",
+    "msg.selectMessages": "Pona ba messages ebele",
+    "msg.select": "Pona",
+    "msg.audioCall": "Appel audio",
+    "msg.videoCall": "Appel vidéo",
+    "msg.loadingMessages": "Chargement ya ba messages...",
+    "msg.noMessages": "Message moko te",
+    "msg.sendFirstMessage": "Tinda message ya liboso!",
+    "msg.deletedMessage": "Message elongolami",
+    "msg.photo": "Foto",
+    "msg.audio": "Audio",
+    "msg.video": "Video",
+    "msg.file": "Fichier",
+    "msg.you": "Yo",
+    "msg.newConversationLabel": "Conversation ya sika",
+    "msg.edited": "ebongisami",
+    "msg.read": "Etangami",
+    "msg.sent": "Etindami",
+    "msg.reply": "Yanola",
+    "msg.forward": "Tindela",
+    "msg.forwardTo": "Tindela...",
+    "msg.noOtherConversation": "Conversation mosusu ezali te",
+    "msg.addPeople": "Bakisa bato",
+    "msg.searchContact": "Luka contact...",
+    "msg.noAvailableContact": "Contact ezali te",
+    "msg.from": "Uta",
+    "msg.date": "Mokolo",
+    "msg.type": "Type",
+    "msg.messageInfo": "Ba infos ya message",
+    "msg.callType": "Lolenge ya appel",
+    "msg.callInProgressType": "Appel {type} ezali kokende",
+    "live.defaultCategory": "Général",
+    "live.dateUnavailable": "Mokolo ezali te",
+    "live.mediaAccessError": "Pesa permission caméra mpe micro mpo obanda live.",
+    "live.mediaAccessPending": "Demande ya accès caméra ezali...",
+    "live.startLive": "Banda Live",
+    "live.titleLabel": "Titre ya live *",
+    "live.titlePlaceholder": "Ndakisa: Vente flash ya ba téléphone!",
+    "live.descLabel": "Description (eloko te soki olingi)",
+    "live.descPlaceholder": "Longola live na yo...",
+    "live.videoFormat": "Format ya vidéo",
+    "live.portrait": "Portrait",
+    "live.landscape": "Paysage",
+    "live.cityLabel": "Ville",
+    "live.cityPlaceholder": "Ndakisa: Kinshasa",
+    "live.categoryLabel": "Catégorie",
+    "live.categoryPlaceholder": "Ndakisa: Déstockage, Q&A, Démo",
+    "live.visibilityLabel": "Visibilité",
+    "live.visPublic": "Public",
+    "live.visFollowers": "Ba suiveurs",
+    "live.visPrivate": "Privé",
+    "live.visClients": "Ba clients kaka",
+    "live.pinnedProduct": "Biloko ya kopona",
+    "live.noProductSelected": "Eloko moko te eponi",
+    "live.loadingProducts": "Ba biloko ya active ezali ko charger...",
+    "live.thumbFromProduct": "Miniature ezuami na eloko {title}.",
+    "live.thumbFromCamera": "Soki eloko te, live ebandi na caméra.",
+    "live.cameraPreview": "Aperçu caméra",
+    "live.launchLive": "Banda Live",
+    "live.waiting": "Ozali kolinda",
+    "live.ended": "Esilá",
+    "live.canceled": "Elongolami",
+    "live.archive": "Archive",
+    "live.typeService": "Misala",
+    "live.typeProduct": "Eloko",
+    "live.unknownUser": "Mosaleli",
+    "live.tapAudioHint": "Press Audio mpo ozwa son ya live na appareil oyo.",
+    "live.streamReadError": "Ekoki te kotanga flux oyo sikoyo.",
+    "live.browserUnsupportedStream": "Navigateur oyo esupporte te flux oyo.",
+    "live.shareLinkCopied": "Lien ya live ekopiami.",
+    "live.shareError": "Ekoki te kotinda live oyo sikoyo.",
+    "live.pinListingError": "Ekoki te kobongola eloko epinglé.",
+    "live.noLiveNow": "Live moko te na direct sikoyo.",
 
     "explorer.catalog": "Catalogue",
     "explorer.heroTitle": "Loká catégorie ya malamu na mwa secondes.",
@@ -3826,6 +4225,7 @@ const DICT: Record<AppLanguage, Record<string, string>> = {
     "sokin.loadingProfiles": "Kokarga ba profils…",
     "sokin.noProfile": "Profil moko te",
     "sokin.page": "Lokasa",
+    "sokin.profileCount": "{count} profil",
     "sokin.loadingInProgress": "Kokarga…",
     "sokin.noPublicProfile": "Profil publique moko te mpo na sikawa. Tyá kombo na yo na compte na yo mpo obima awa.",
     "sokin.noProfileFound": "Profil moko te emonanami",
@@ -3992,6 +4392,34 @@ const DICT: Record<AppLanguage, Record<string, string>> = {
     "home.visitor": "Moye",
     "home.homeAria": "Ndako Kin-Sell",
     "home.notifications": "Ba notifications",
+    "home.metaTitle": "Kin-Sell — Zando ya Afrika",
+    "home.metaDescription": "Sombá, téká mpe moná ba offres ya kitoko na Kinshasa. Ba boutiques, ba services, fil So-Kin mpe lives na direct.",
+    "home.heroGuestTitle": "Kin-Sell — Zando ya Afrika",
+    "home.heroWelcome": "Boyei malamu, {name}",
+    "home.heroSubtitle": "Sombá, téká mpe moná ba affaires ya kitoko",
+    "home.fullscreenEnter": "Écran mobimba",
+    "home.fullscreenExit": "Bima na écran mobimba",
+    "home.categoryPageAria": "Lokasa ya catégories {page}",
+    "home.drawerExploreSection": "Koluka",
+    "home.drawerUserSection": "Espace ya mosaleli",
+    "home.drawerPublicSection": "Espace ya bato nyonso",
+    "home.drawerInfoSection": "Ba liens ya ntina",
+    "home.drawerSellSpace": "Espace na ngai ya koteka",
+    "home.drawerBuySpace": "Espace na ngai ya kosomba",
+    "home.publishOnSokin": "Bimisa na So-Kin",
+    "home.createMenuTitle": "Bimisa to bakisa",
+    "home.createAction": "Kosalá",
+    "home.suggestedArticles": "Ba articles mpo na yo",
+    "home.recentListings": "Ba annonces ya sika",
+    "home.networkLabel": "Réseau Kin-Sell",
+    "home.iosInstallHint": "Installer app: fina Partager sima Sur l'écran d'accueil",
+    "home.drawerMarketPrefs": "Ba preferences ya zando",
+    "home.marketMode": "Mode ya pays",
+    "home.marketModeAuto": "Auto (selon appareil)",
+    "home.marketModeManual": "Manuel (choix libre)",
+    "home.marketCountry": "Pays actif",
+    "home.marketDetected": "Pays detecte: {country}",
+    "home.marketActive": "Contexte actif: {country} ({region})",
     "home.adminNoTransact": "Ba administrateurs bakoki kosala transaction te.",
     "home.adminNoNegotiate": "Ba administrateurs bakoki ko négocier te.",
     "home.cannotBuyOwn": "Okoki kosomba biloko na yo moko te.",
@@ -4533,16 +4961,53 @@ function readInitialLanguage(): AppLanguage {
 
 function readInitialCurrency(): AppCurrency {
   const value = localStorage.getItem(STORAGE_CURRENCY);
-  if (value === "CDF" || value === "USD" || value === "EUR") return value;
+  if (value === "CDF" || value === "USD" || value === "EUR" || value === "XAF" || value === "AOA" || value === "XOF" || value === "MAD") return value;
   if (value === "fc") return "CDF";
   if (value === "usd") return "USD";
   if (value === "eur") return "EUR";
+  if (value === "xaf") return "XAF";
+  if (value === "aoa") return "AOA";
+  if (value === "xof") return "XOF";
+  if (value === "mad") return "MAD";
   return "CDF";
 }
 
 export function LocaleCurrencyProvider({ children }: { children: React.ReactNode }) {
+  const { effectiveCountry, getCountryConfig } = useMarketPreference();
   const [language, setLanguageState] = useState<AppLanguage>(() => readInitialLanguage());
   const [currency, setCurrencyState] = useState<AppCurrency>(() => readInitialCurrency());
+
+  useEffect(() => {
+    const hasLanguage = Boolean(localStorage.getItem(STORAGE_LANGUAGE));
+    const hasCurrency = Boolean(localStorage.getItem(STORAGE_CURRENCY));
+    if (hasLanguage && hasCurrency) return;
+
+    const country = getCountryConfig(effectiveCountry);
+    if (!hasLanguage) {
+      const suggestedLanguage: AppLanguage = country.defaultContentLanguage === "en"
+        ? "en"
+        : country.defaultContentLanguage === "ln"
+          ? "ln"
+          : "fr";
+      setLanguageState(suggestedLanguage);
+      localStorage.setItem(STORAGE_LANGUAGE, suggestedLanguage);
+    }
+
+    if (!hasCurrency) {
+      const suggestedCurrency: AppCurrency =
+        country.defaultCurrency === "USD" ||
+        country.defaultCurrency === "EUR" ||
+        country.defaultCurrency === "CDF" ||
+        country.defaultCurrency === "XAF" ||
+        country.defaultCurrency === "AOA" ||
+        country.defaultCurrency === "XOF" ||
+        country.defaultCurrency === "MAD"
+          ? country.defaultCurrency
+          : "CDF";
+      setCurrencyState(suggestedCurrency);
+      localStorage.setItem(STORAGE_CURRENCY, suggestedCurrency);
+    }
+  }, [effectiveCountry, getCountryConfig]);
 
   const value = useMemo<LocaleCurrencyContextValue>(() => {
     const t = (key: string) => DICT[language][key] ?? DICT.fr[key] ?? key;
@@ -4559,8 +5024,10 @@ export function LocaleCurrencyProvider({ children }: { children: React.ReactNode
 
     const formatMoneyFromUsdCents = (usdCents: number): string => {
       const usd = usdCents / 100;
+      const locale = language === "fr" ? "fr-FR" : "en-US";
+
       if (currency === "USD") {
-        return new Intl.NumberFormat(language === "fr" ? "fr-FR" : "en-US", {
+        return new Intl.NumberFormat(locale, {
           style: "currency",
           currency: "USD",
           maximumFractionDigits: 2,
@@ -4568,11 +5035,43 @@ export function LocaleCurrencyProvider({ children }: { children: React.ReactNode
       }
 
       if (currency === "EUR") {
-        return new Intl.NumberFormat(language === "fr" ? "fr-FR" : "en-US", {
+        return new Intl.NumberFormat(locale, {
           style: "currency",
           currency: "EUR",
           maximumFractionDigits: 2,
         }).format(usd * USD_TO_EUR);
+      }
+
+      if (currency === "XAF") {
+        return new Intl.NumberFormat(locale, {
+          style: "currency",
+          currency: "XAF",
+          maximumFractionDigits: 0,
+        }).format(usd * USD_TO_XAF);
+      }
+
+      if (currency === "AOA") {
+        return new Intl.NumberFormat(locale, {
+          style: "currency",
+          currency: "AOA",
+          maximumFractionDigits: 0,
+        }).format(usd * USD_TO_AOA);
+      }
+
+      if (currency === "XOF") {
+        return new Intl.NumberFormat(locale, {
+          style: "currency",
+          currency: "XOF",
+          maximumFractionDigits: 0,
+        }).format(usd * USD_TO_XOF);
+      }
+
+      if (currency === "MAD") {
+        return new Intl.NumberFormat(locale, {
+          style: "currency",
+          currency: "MAD",
+          maximumFractionDigits: 2,
+        }).format(usd * USD_TO_MAD);
       }
 
       return `${new Intl.NumberFormat(language === "en" ? "en-US" : "fr-CD", {

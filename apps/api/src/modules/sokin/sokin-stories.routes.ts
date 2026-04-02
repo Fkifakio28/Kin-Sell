@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireAuth, type AuthenticatedRequest } from "../../shared/auth/auth-middleware.js";
 import { asyncHandler } from "../../shared/utils/async-handler.js";
 import { createStory, deleteStory, getFeedStories, viewStory } from "./sokin-stories.service.js";
+import { emitToAll } from "../messaging/socket.js";
 
 const createStorySchema = z.object({
   mediaUrl: z.string().optional(),
@@ -38,6 +39,13 @@ router.post(
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     const data = createStorySchema.parse(req.body);
     const story = await createStory(req.auth!.userId, data);
+    emitToAll("sokin:story-created", {
+      type: "SOKIN_STORY_CREATED",
+      storyId: story.id,
+      authorId: story.authorId,
+      createdAt: story.createdAt.toISOString(),
+      sourceUserId: req.auth!.userId,
+    });
     res.status(201).json(story);
   })
 );

@@ -13,6 +13,7 @@ import {
   type SoKinApiPost, type BasicInsights, type DeepInsights,
 } from '../../lib/api-client';
 import { OrderValidationQrModal } from '../../components/OrderValidationQrModal';
+import { useSocket } from '../../hooks/useSocket';
 import LocationPicker from '../../components/LocationPicker';
 import './dashboard.css';
 
@@ -66,6 +67,7 @@ export function BusinessDashboard() {
   const navigate = useNavigate();
   const { user, isLoading, isLoggedIn, refreshUser, logout } = useAuth();
   const { t } = useLocaleCurrency();
+  const { on, off } = useSocket();
   const [activeSection, setActiveSection] = useState<BizSection>(() => {
     const stored = sessionStorage.getItem('ud-section');
     if (stored) {
@@ -248,6 +250,90 @@ export function BusinessDashboard() {
     void load();
     return () => { cancelled = true; };
   }, [business]);
+
+  useEffect(() => {
+    if (!isLoggedIn || !user) return;
+
+    const handleOrderEvent = (payload: {
+      type: 'ORDER_STATUS_UPDATED' | 'ORDER_CONFIRMATION_COMPLETED';
+      orderId: string;
+      status: string;
+      buyerUserId: string;
+      sellerUserId: string;
+      sourceUserId: string;
+      updatedAt: string;
+    }) => {
+      if (payload.sellerUserId !== user.id && payload.buyerUserId !== user.id) return;
+
+      if (payload.status === 'DELIVERED' && sellerValidationQr?.orderId === payload.orderId) {
+        setSellerValidationQr(null);
+      }
+
+      invalidateCache('/orders/');
+      void orders.sellerOrders({ limit: 50 }).then((res) => setSellerOrders(res.orders)).catch(() => {});
+    };
+
+    const handleOrderStatusUpdated = (payload: {
+      type: 'ORDER_STATUS_UPDATED';
+      orderId: string;
+      status: string;
+      buyerUserId: string;
+      sellerUserId: string;
+      sourceUserId: string;
+      updatedAt: string;
+    }) => handleOrderEvent(payload);
+
+    const handleDeliveryConfirmed = (payload: {
+      type: 'ORDER_CONFIRMATION_COMPLETED';
+      orderId: string;
+      status: string;
+      buyerUserId: string;
+      sellerUserId: string;
+      sourceUserId: string;
+      updatedAt: string;
+    }) => handleOrderEvent(payload);
+
+    on('order:status-updated', handleOrderStatusUpdated);
+    on('order:delivery-confirmed', handleDeliveryConfirmed);
+
+    return () => {
+      off('order:status-updated', handleOrderStatusUpdated);
+      off('order:delivery-confirmed', handleDeliveryConfirmed);
+    };
+  }, [isLoggedIn, user, on, off, sellerValidationQr?.orderId]);
+
+  useEffect(() => {
+    if (!isLoggedIn || !user) return;
+
+    const handlePostCreated = (payload: {
+      type: 'SOKIN_POST_CREATED';
+      postId: string;
+      authorId: string;
+      createdAt: string;
+      sourceUserId: string;
+    }) => {
+      if (payload.authorId !== user.id || payload.sourceUserId === user.id) return;
+      void sokin.myPosts().then((res) => setSokinPosts(res.posts)).catch(() => {});
+    };
+
+    const handlePostShared = (payload: {
+      type: 'SOKIN_POST_SHARED';
+      postId: string;
+      shares: number;
+      sourceUserId: string;
+      updatedAt: string;
+    }) => {
+      setSokinPosts((prev) => prev.map((post) => (post.id === payload.postId ? { ...post, shares: payload.shares } : post)));
+    };
+
+    on('sokin:post-created', handlePostCreated);
+    on('sokin:post-shared', handlePostShared);
+
+    return () => {
+      off('sokin:post-created', handlePostCreated);
+      off('sokin:post-shared', handlePostShared);
+    };
+  }, [isLoggedIn, user, on, off]);
 
   /* ── Kin-Sell Analytique: fetch AI insights for business ── */
   const bizHasAnalytics = useMemo(() => {

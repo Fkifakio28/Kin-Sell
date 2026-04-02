@@ -1,13 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { formatPriceLabelToCdf } from '../../utils/currency';
 import { useAuth } from '../../app/providers/AuthProvider';
 import { useLocaleCurrency } from '../../app/providers/LocaleCurrencyProvider';
+import { useMarketPreference } from '../../app/providers/MarketPreferenceProvider';
 import { getDashboardPath } from '../../utils/role-routing';
 import { prepareMediaUrl, prepareMediaUrls } from '../../utils/media-upload';
 import { useScrollRestore } from '../../utils/useScrollRestore';
 import { useIsMobile } from '../../hooks/useIsMobile';
+import { useSocket } from '../../hooks/useSocket';
 import { listings as listingsApi, orders as ordersApi, sokin as sokinApi, type MyListing, type SoKinApiFeedPost, type SoKinStory } from '../../lib/api-client';
 import type { SoKinReactionType as ApiReactionType } from '../../lib/api-client';
 import { useHoverPopup, ProfileHoverPopup, ArticleHoverPopup, type ProfileHoverData, type ArticleHoverData } from '../../components/HoverPopup';
@@ -76,29 +78,25 @@ const buildContactUrl = (post: SoKinPost) => {
   return `${base}&mode=limited&requestContact=1`;
 };
 
-function formatRelativeTime(iso: string): string {
+function formatRelativeTime(iso: string, t: (k: string) => string, formatDate: (isoDate: string | Date) => string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const mins = Math.floor(diff / 60_000);
-  if (mins < 1) return "à l'instant";
-  if (mins < 60) return `il y a ${mins}min`;
+  if (mins < 1) return t('msg.justNow');
+  if (mins < 60) return `${mins} ${t('msg.minuteShort')}`;
   const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `il y a ${hrs}h`;
+  if (hrs < 24) return `${hrs} h`;
   const days = Math.floor(hrs / 24);
-  if (days < 7) return `il y a ${days}j`;
-  return new Date(iso).toLocaleDateString('fr-FR');
+  if (days < 7) return `${days} j`;
+  return formatDate(iso);
 }
 
-function formatStoryAge(iso: string): string {
+function formatStoryAge(iso: string, t: (k: string) => string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const mins = Math.max(1, Math.floor(diff / 60_000));
-  if (mins < 60) return `${mins} min`;
+  if (mins < 60) return `${mins} ${t('msg.minuteShort')}`;
   const hrs = Math.floor(mins / 60);
   if (hrs < 24) return `${hrs} h`;
   return `${Math.floor(hrs / 24)} j`;
-}
-
-function formatUsdFromCents(cents: number): string {
-  return `$${(cents / 100).toFixed(2)}`;
 }
 
 function extractLinkedProduct(tags: string[] | undefined) {
@@ -130,9 +128,14 @@ function buildProductTags(listing: MyListing | null): string[] {
   ];
 }
 
-function mapApiFeedPost(p: SoKinApiFeedPost): SoKinPost {
+function mapApiFeedPost(
+  p: SoKinApiFeedPost,
+  t: (k: string) => string,
+  formatDate: (isoDate: string | Date) => string,
+  formatMoneyFromUsdCents: (usdCents: number) => string
+): SoKinPost {
   const username = p.author.profile?.username;
-  const displayName = p.author.profile?.displayName ?? 'Utilisateur';
+  const displayName = p.author.profile?.displayName ?? t('home.defaultUser');
   const shortId = p.authorId.slice(0, 8);
   const linkedProduct = extractLinkedProduct(p.tags);
   return {
@@ -146,7 +149,7 @@ function mapApiFeedPost(p: SoKinApiFeedPost): SoKinPost {
       isPrivate: false,
     },
     text: p.text,
-    timestampLabel: formatRelativeTime(p.createdAt),
+    timestampLabel: formatRelativeTime(p.createdAt, t, formatDate),
     visibility: 'PUBLIC',
     sponsored: false,
     media: p.mediaUrls.map((src) => ({ kind: 'image' as const, src, label: '' })),
@@ -155,7 +158,7 @@ function mapApiFeedPost(p: SoKinApiFeedPost): SoKinPost {
           kind: linkedProduct.type === 'SERVICE' ? 'service' : 'product',
           title: linkedProduct.title,
           subtitle: linkedProduct.city ?? 'Kinshasa',
-          priceLabel: linkedProduct.price ? formatUsdFromCents(Number(linkedProduct.price) || 0) : undefined,
+          priceLabel: linkedProduct.price ? formatMoneyFromUsdCents(Number(linkedProduct.price) || 0) : undefined,
           actionLabel: 'Voir',
           href: `/explorer?q=${encodeURIComponent(linkedProduct.title)}`,
         }
@@ -203,6 +206,8 @@ export function SoKinPage() {
   const [isPublishing, setIsPublishing] = useState(false);
   const [reactionPickerPostId, setReactionPickerPostId] = useState<string | null>(null);
   const [reactionBusy, setReactionBusy] = useState<string | null>(null);
+  const [shareBusyPostId, setShareBusyPostId] = useState<string | null>(null);
+  const [highlightedPostId, setHighlightedPostId] = useState<string | null>(null);
   const [stories, setStories] = useState<Awaited<ReturnType<typeof sokinApi.stories>>["stories"]>([]);
   const [storyViewerOpen, setStoryViewerOpen] = useState(false);
   const [storyViewerIndex, setStoryViewerIndex] = useState(0);
@@ -222,14 +227,81 @@ export function SoKinPage() {
   const [selectedPostListingId, setSelectedPostListingId] = useState('');
   const [selectedStoryListingId, setSelectedStoryListingId] = useState('');
   const storyTouchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const highlightTimeoutRef = useRef<number | null>(null);
+  const location = useLocation();
   const navigate = useNavigate();
   const { isLoggedIn, user, logout } = useAuth();
-  const { t } = useLocaleCurrency();
+  const { t, formatDate, formatMoneyFromUsdCents } = useLocaleCurrency();
+  const { effectiveCountry, getCountryConfig } = useMarketPreference();
+  const defaultCity = getCountryConfig(effectiveCountry).defaultCity;
+  const { on, off } = useSocket();
   const isMobile = useIsMobile();
   const dashboardPath = getDashboardPath(user?.role);
+  const sharedPostId = useMemo(() => new URLSearchParams(location.search).get('post')?.trim() || null, [location.search]);
   const profileHover = useHoverPopup<ProfileHoverData>();
   const articleHover = useHoverPopup<ArticleHoverData>();
   useScrollRestore();
+
+  const loadPublicFeed = useCallback(async () => {
+    try {
+      const data = await sokinApi.publicFeed({ limit: sharedPostId ? 50 : 20, city: defaultCity, country: effectiveCountry });
+      setPosts(data.posts.map((post) => mapApiFeedPost(post, t, formatDate, formatMoneyFromUsdCents)));
+    } catch {
+      // Fil vide si l'API est indisponible
+    }
+  }, [defaultCity, effectiveCountry, sharedPostId, t, formatDate, formatMoneyFromUsdCents]);
+
+  const loadStories = useCallback(async () => {
+    try {
+      const data = await sokinApi.stories();
+      setStories(data.stories);
+    } catch {
+      setStories([]);
+    }
+  }, []);
+
+  const loadSokinNotifications = useCallback(async () => {
+    if (!isLoggedIn) {
+      setSokinNotifications([]);
+      return;
+    }
+
+    const notifs: SoKinNotification[] = [];
+    try {
+      const [buyerData, sellerData] = await Promise.all([
+        ordersApi.buyerOrders({ limit: 5, inProgressOnly: true }).catch(() => null),
+        ordersApi.sellerOrders({ limit: 5, inProgressOnly: true }).catch(() => null),
+      ]);
+      if (buyerData) {
+        for (const o of buyerData.orders) {
+          const statusLabel = o.status === 'SHIPPED' ? t('nav.shipped') : o.status === 'CONFIRMED' ? t('nav.confirmed') : t('nav.inProgress');
+          notifs.push({
+            id: `buy-${o.id}`,
+            label: `${t('nav.orderStatus')} ${statusLabel}`,
+            detail: `#${o.id.slice(0, 8).toUpperCase()} — ${o.itemsCount} ${o.itemsCount > 1 ? t('nav.articles') : t('nav.article')}`,
+            href: dashboardPath,
+            icon: '📦',
+            time: formatDate(o.createdAt),
+          });
+        }
+      }
+      if (sellerData) {
+        for (const o of sellerData.orders) {
+          notifs.push({
+            id: `sell-${o.id}`,
+            label: t('nav.newOrderReceived'),
+            detail: `#${o.id.slice(0, 8).toUpperCase()} de ${o.buyer.displayName}`,
+            href: dashboardPath,
+            icon: '🛒',
+            time: formatDate(o.createdAt),
+          });
+        }
+      }
+    } catch {
+      // ignore
+    }
+    setSokinNotifications(notifs);
+  }, [isLoggedIn, dashboardPath, t, formatDate]);
 
   useEffect(() => {
     const handleOutsideClick = (event: MouseEvent) => {
@@ -260,33 +332,111 @@ export function SoKinPage() {
 
   /* ── Chargement du fil public depuis l'API ── */
   useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      try {
-        const data = await sokinApi.publicFeed(20);
-        if (cancelled) return;
-        setPosts(data.posts.map(mapApiFeedPost));
-      } catch {
-        // Fil vide si l'API est indisponible
-      }
-    };
-    void load();
-    return () => { cancelled = true; };
-  }, []);
+    void loadPublicFeed();
+  }, [loadPublicFeed]);
 
   useEffect(() => {
-    let cancelled = false;
-    const loadStories = async () => {
-      try {
-        const data = await sokinApi.stories();
-        if (!cancelled) setStories(data.stories);
-      } catch {
-        if (!cancelled) setStories([]);
-      }
-    };
     void loadStories();
     const timer = setInterval(loadStories, 45_000);
-    return () => { cancelled = true; clearInterval(timer); };
+    return () => {
+      clearInterval(timer);
+    };
+  }, [loadStories]);
+
+  useEffect(() => {
+    const handlePostCreated = (payload: {
+      type: 'SOKIN_POST_CREATED';
+      postId: string;
+      authorId: string;
+      createdAt: string;
+      sourceUserId: string;
+    }) => {
+      if (payload.sourceUserId === user?.id) return;
+      void loadPublicFeed();
+    };
+
+    const handleStoryCreated = (payload: {
+      type: 'SOKIN_STORY_CREATED';
+      storyId: string;
+      authorId: string;
+      createdAt: string;
+      sourceUserId: string;
+    }) => {
+      if (payload.sourceUserId === user?.id) return;
+      void loadStories();
+    };
+
+    const handlePostShared = (payload: {
+      type: 'SOKIN_POST_SHARED';
+      postId: string;
+      shares: number;
+      sourceUserId: string;
+      updatedAt: string;
+    }) => {
+      setPosts((prev) => prev.map((post) => (post.id === payload.postId ? { ...post, shares: payload.shares } : post)));
+    };
+
+    on('sokin:post-created', handlePostCreated);
+    on('sokin:story-created', handleStoryCreated);
+    on('sokin:post-shared', handlePostShared);
+
+    return () => {
+      off('sokin:post-created', handlePostCreated);
+      off('sokin:story-created', handleStoryCreated);
+      off('sokin:post-shared', handlePostShared);
+    };
+  }, [on, off, user?.id, loadPublicFeed, loadStories]);
+
+  useEffect(() => {
+    if (!sharedPostId || posts.length === 0) return;
+
+    const target = document.getElementById(`sokin-post-${sharedPostId}`);
+    if (!target) return;
+
+    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setHighlightedPostId(sharedPostId);
+
+    if (highlightTimeoutRef.current) {
+      window.clearTimeout(highlightTimeoutRef.current);
+    }
+    highlightTimeoutRef.current = window.setTimeout(() => {
+      setHighlightedPostId((current) => (current === sharedPostId ? null : current));
+      highlightTimeoutRef.current = null;
+    }, 4200);
+  }, [sharedPostId, posts]);
+
+  useEffect(() => {
+    if (!sharedPostId) return;
+    if (posts.some((post) => post.id === sharedPostId)) return;
+
+    let cancelled = false;
+    const loadSharedPost = async () => {
+      try {
+        const data = await sokinApi.publicPost(sharedPostId);
+        if (cancelled) return;
+        setPosts((prev) => {
+          if (prev.some((post) => post.id === sharedPostId)) {
+            return prev;
+          }
+          return [mapApiFeedPost(data.post, t, formatDate, formatMoneyFromUsdCents), ...prev];
+        });
+      } catch {
+        // Ignore si le post n'est plus public ou a disparu.
+      }
+    };
+
+    void loadSharedPost();
+    return () => {
+      cancelled = true;
+    };
+  }, [sharedPostId, posts, t, formatDate, formatMoneyFromUsdCents]);
+
+  useEffect(() => {
+    return () => {
+      if (highlightTimeoutRef.current) {
+        window.clearTimeout(highlightTimeoutRef.current);
+      }
+    };
   }, []);
 
   const visiblePosts = useMemo(() => {
@@ -355,50 +505,28 @@ export function SoKinPage() {
   }, []);
 
   useEffect(() => {
-    if (!isLoggedIn) {
-      setSokinNotifications([]);
-      return;
-    }
-    let cancelled = false;
-    const load = async () => {
-      const notifs: SoKinNotification[] = [];
-      try {
-        const [buyerData, sellerData] = await Promise.all([
-          ordersApi.buyerOrders({ limit: 5, inProgressOnly: true }).catch(() => null),
-          ordersApi.sellerOrders({ limit: 5, inProgressOnly: true }).catch(() => null),
-        ]);
-        if (cancelled) return;
-        if (buyerData) {
-          for (const o of buyerData.orders) {
-            const statusLabel = o.status === 'SHIPPED' ? 'expédiée' : o.status === 'CONFIRMED' ? 'confirmée' : 'en cours';
-            notifs.push({
-              id: `buy-${o.id}`,
-              label: `Commande ${statusLabel}`,
-              detail: `#${o.id.slice(0, 8).toUpperCase()} — ${o.itemsCount} article${o.itemsCount > 1 ? 's' : ''}`,
-              href: dashboardPath,
-              icon: '📦',
-              time: new Date(o.createdAt).toLocaleDateString('fr-FR'),
-            });
-          }
-        }
-        if (sellerData) {
-          for (const o of sellerData.orders) {
-            notifs.push({
-              id: `sell-${o.id}`,
-              label: 'Nouvelle commande reçue',
-              detail: `#${o.id.slice(0, 8).toUpperCase()} de ${o.buyer.displayName}`,
-              href: dashboardPath,
-              icon: '🛒',
-              time: new Date(o.createdAt).toLocaleDateString('fr-FR'),
-            });
-          }
-        }
-      } catch { /* ignore */ }
-      if (!cancelled) setSokinNotifications(notifs);
+    void loadSokinNotifications();
+  }, [loadSokinNotifications]);
+
+  useEffect(() => {
+    const handleOrderChanged = () => {
+      void loadSokinNotifications();
     };
-    void load();
-    return () => { cancelled = true; };
-  }, [isLoggedIn, dashboardPath]);
+
+    const handleNegotiationChanged = () => {
+      void loadSokinNotifications();
+    };
+
+    on('order:status-updated', handleOrderChanged);
+    on('order:delivery-confirmed', handleOrderChanged);
+    on('negotiation:updated', handleNegotiationChanged);
+
+    return () => {
+      off('order:status-updated', handleOrderChanged);
+      off('order:delivery-confirmed', handleOrderChanged);
+      off('negotiation:updated', handleNegotiationChanged);
+    };
+  }, [on, off, loadSokinNotifications]);
 
   useEffect(() => {
     if (!isLoggedIn) {
@@ -496,7 +624,7 @@ export function SoKinPage() {
     try {
       const selectedListing = myListings.find((listing) => listing.id === selectedPostListingId) ?? null;
       const productTags = buildProductTags(selectedListing);
-      const productLine = selectedListing ? `\n\n🛒 ${selectedListing.title} · ${formatUsdFromCents(selectedListing.priceUsdCents)}` : '';
+      const productLine = selectedListing ? `\n\n🛒 ${selectedListing.title} · ${formatMoneyFromUsdCents(selectedListing.priceUsdCents)}` : '';
       const mediaUrls = composerMediaFiles.length > 0
         ? await prepareMediaUrls(composerMediaFiles)
         : undefined;
@@ -520,7 +648,7 @@ export function SoKinPage() {
         },
         reactionCounts: {},
         myReaction: null,
-      });
+      }, t, formatDate, formatMoneyFromUsdCents);
       setPosts((prev) => [mapped, ...prev]);
       /* Reset composer */
       setComposerText('');
@@ -563,8 +691,8 @@ export function SoKinPage() {
         await sokinApi.reactToPost(postId, type as ApiReactionType);
       }
     } catch {
-      const data = await sokinApi.publicFeed(20).catch(() => null);
-      if (data) setPosts(data.posts.map(mapApiFeedPost));
+      const data = await sokinApi.publicFeed({ limit: 20, city: defaultCity, country: effectiveCountry }).catch(() => null);
+      if (data) setPosts(data.posts.map((post) => mapApiFeedPost(post, t, formatDate, formatMoneyFromUsdCents)));
     } finally {
       setReactionBusy(null);
     }
@@ -593,19 +721,18 @@ export function SoKinPage() {
       const caption = [
         text,
         storyEnableProductCta && effectiveProductName
-          ? `🛒 ${effectiveProductName}${selectedListing ? ` · ${formatUsdFromCents(selectedListing.priceUsdCents)}` : ''}`
+          ? `🛒 ${effectiveProductName}${selectedListing ? ` · ${formatMoneyFromUsdCents(selectedListing.priceUsdCents)}` : ''}`
           : '',
       ]
         .filter(Boolean)
         .join('\n');
-      await sokinApi.createStory({
+      const created = await sokinApi.createStory({
         mediaUrl,
         mediaType,
         caption: caption || undefined,
         bgColor: mediaType === 'TEXT' ? storyBgColor : undefined,
       });
-      const refreshed = await sokinApi.stories();
-      setStories(refreshed.stories);
+      setStories((prev) => [created, ...prev]);
       setShowStoryComposer(false);
       setStoryText('');
       setStoryFile(null);
@@ -617,6 +744,37 @@ export function SoKinPage() {
       setStoryEnableProductCta(false);
     } catch {
       // Ignore - l'utilisateur peut réessayer
+    }
+  };
+
+  const handleSharePost = async (postId: string) => {
+    if (!isLoggedIn || shareBusyPostId === postId) return;
+
+    const currentShareCount = posts.find((post) => post.id === postId)?.shares ?? 0;
+    setShareBusyPostId(postId);
+    setPosts((prev) => prev.map((post) => (post.id === postId ? { ...post, shares: post.shares + 1 } : post)));
+
+    const shareUrl = `${window.location.origin}/sokin?post=${encodeURIComponent(postId)}`;
+    const currentPost = posts.find((post) => post.id === postId);
+    const shareData = {
+      title: 'So-Kin',
+      text: currentPost?.text?.trim().slice(0, 120) || 'Regarde cette publication sur So-Kin',
+      url: shareUrl,
+    };
+
+    try {
+      if (navigator.share) {
+        await navigator.share(shareData);
+      } else if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(shareUrl);
+      }
+
+      const result = await sokinApi.sharePost(postId);
+      setPosts((prev) => prev.map((post) => (post.id === postId ? { ...post, shares: result.shares } : post)));
+    } catch {
+      setPosts((prev) => prev.map((post) => (post.id === postId ? { ...post, shares: currentShareCount } : post)));
+    } finally {
+      setShareBusyPostId(null);
     }
   };
 
@@ -654,10 +812,6 @@ export function SoKinPage() {
   const selectedPostListing = myListings.find((listing) => listing.id === selectedPostListingId) ?? null;
   const selectedStoryListing = myListings.find((listing) => listing.id === selectedStoryListingId) ?? null;
 
-  const scrollToComposer = () => {
-    composerSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
-
   const waveCards = stories.slice(0, 12);
 
   const renderWaveCard = (story: SoKinStory, index: number) => {
@@ -675,7 +829,7 @@ export function SoKinPage() {
           style={hasMedia ? { backgroundImage: `linear-gradient(180deg, rgba(10, 8, 24, 0.05), rgba(10, 8, 24, 0.86)), url(${story.mediaUrl})` } : { background: story.bgColor ?? 'linear-gradient(145deg, rgba(111, 88, 255, 0.85), rgba(36, 23, 82, 0.96))' }}
         >
           <span className="sokin-wave-card-badge">Wave</span>
-          <span className="sokin-wave-card-time">{formatStoryAge(story.createdAt)}</span>
+          <span className="sokin-wave-card-time">{formatStoryAge(story.createdAt, t)}</span>
           <span className="sokin-wave-card-avatar-wrap">
             {story.author.profile?.avatarUrl ? (
               <img src={story.author.profile.avatarUrl} alt={authorName} className="sokin-wave-card-avatar" />
@@ -869,49 +1023,6 @@ export function SoKinPage() {
 
         {notifOpen ? <button className="sokin-notif-overlay" onClick={() => setNotifOpen(false)} aria-label={t('sokin.closeNotifications')} type="button" /> : null}
 
-        <section className="sokin-wave-panel" aria-label="Wave So-Kin">
-          <div className="sokin-wave-launcher">
-            <button type="button" className="sokin-wave-profile-card" onClick={() => isLoggedIn ? openStoryCapture('photo') : navigate('/login')}>
-              <span className="sokin-wave-profile-avatar-wrap">
-                {currentUserAvatar ? (
-                  <img src={currentUserAvatar} alt={currentUserName} className="sokin-wave-profile-avatar" />
-                ) : (
-                  <span className="sokin-wave-profile-avatar sokin-wave-profile-avatar-fallback">👤</span>
-                )}
-              </span>
-              <span className="sokin-wave-profile-copy">
-                <strong>{currentUserName}</strong>
-                <span>Capture rapide, produit, réactions et diffusion instantanée.</span>
-              </span>
-            </button>
-
-            <div className="sokin-wave-launch-actions">
-              <button type="button" className="sokin-wave-launch-btn sokin-wave-launch-btn--primary" onClick={() => isLoggedIn ? openStoryCapture('photo') : navigate('/login')}>
-                Wave
-              </button>
-              <button type="button" className="sokin-wave-launch-btn" onClick={scrollToComposer}>
-                Publier
-              </button>
-            </div>
-          </div>
-
-          <div className="sokin-wave-head">
-            <h3>Wave 24h</h3>
-            <span>{waveCards.length > 0 ? `${waveCards.length} active${waveCards.length > 1 ? 's' : ''}` : 'Prête pour la première Wave'}</span>
-          </div>
-
-          <div className="sokin-wave-rail">
-            {waveCards.length === 0 ? (
-              <button type="button" className="sokin-wave-empty-card" onClick={() => isLoggedIn ? setShowStoryComposer(true) : navigate('/login')}>
-                <strong>Lancer une Wave</strong>
-                <span>Photo, vidéo ou texte. Ouvre un format plus rapide et plus mobile que l’ancien bloc Stories.</span>
-              </button>
-            ) : (
-              waveCards.map(renderWaveCard)
-            )}
-          </div>
-        </section>
-
         <section className="sokin-composer" aria-label={t('sokin.createPost')} ref={composerSectionRef}>
           <div className="sokin-composer-head">
             <div className="sokin-composer-headline">
@@ -970,7 +1081,7 @@ export function SoKinPage() {
                 <span className="sokin-linked-kind">{selectedPostListing.type === 'SERVICE' ? 'Service' : 'Produit'}</span>
                 <h3>{selectedPostListing.title}</h3>
                 <p>{selectedPostListing.city}</p>
-                <strong>{formatUsdFromCents(selectedPostListing.priceUsdCents)}</strong>
+                <strong>{formatMoneyFromUsdCents(selectedPostListing.priceUsdCents)}</strong>
               </div>
               <button type="button" className="sokin-linked-action" onClick={() => navigate(`/explorer?q=${encodeURIComponent(selectedPostListing.title)}`)}>
                 Voir produit
@@ -1086,7 +1197,7 @@ export function SoKinPage() {
               <select value={selectedPostListingId} onChange={(e) => setSelectedPostListingId(e.target.value)}>
                 <option value="">Aucun produit lié</option>
                 {myListings.map((listing) => (
-                  <option key={listing.id} value={listing.id}>{listing.title} · {formatUsdFromCents(listing.priceUsdCents)}</option>
+                  <option key={listing.id} value={listing.id}>{listing.title} · {formatMoneyFromUsdCents(listing.priceUsdCents)}</option>
                 ))}
               </select>
               {loadingMyListings ? <p className="sokin-modal-intro">Chargement de vos produits…</p> : null}
@@ -1168,7 +1279,7 @@ export function SoKinPage() {
             </div>
           ) : null}
           {visiblePosts.map((post) => (
-            <article key={post.id} className={`sokin-post${post.sponsored ? ' sponsored' : ''}`}>
+            <article key={post.id} id={`sokin-post-${post.id}`} className={`sokin-post${post.sponsored ? ' sponsored' : ''}${highlightedPostId === post.id ? ' sokin-post--highlighted' : ''}`}>
               {post.sponsored ? <span className="sokin-sponsored-badge">{t('sokin.sponsoredTag')}</span> : null}
 
               <header className="sokin-post-head">
@@ -1292,7 +1403,15 @@ export function SoKinPage() {
                 >
                   💬 {post.comments}
                 </button>
-                <button className="sokin-action-btn" type="button" aria-label="Partages">🔁 {post.shares}</button>
+                <button
+                  className="sokin-action-btn"
+                  type="button"
+                  aria-label="Partages"
+                  onClick={() => void handleSharePost(post.id)}
+                  disabled={shareBusyPostId === post.id}
+                >
+                  🔁 {post.shares}
+                </button>
                 <button type="button" className="sokin-contact-btn" onClick={() => navigate(buildContactUrl(post))} aria-label="Contacter">📩</button>
               </footer>
 
@@ -1584,7 +1703,7 @@ export function SoKinPage() {
                   }}>
                     <option value="">Aucun produit lié</option>
                     {myListings.map((listing) => (
-                      <option key={listing.id} value={listing.id}>{listing.title} · {formatUsdFromCents(listing.priceUsdCents)}</option>
+                      <option key={listing.id} value={listing.id}>{listing.title} · {formatMoneyFromUsdCents(listing.priceUsdCents)}</option>
                     ))}
                   </select>
                 </label>
@@ -1650,7 +1769,7 @@ export function SoKinPage() {
                 {currentStory.author.profile?.avatarUrl ? <img src={currentStory.author.profile.avatarUrl} alt={currentStory.author.profile.displayName} /> : <span>👤</span>}
                 <div>
                   <strong>{currentStory.author.profile?.displayName ?? 'Utilisateur'}</strong>
-                  <span>{formatStoryAge(currentStory.createdAt)} · {currentStory.viewCount} vues</span>
+                  <span>{formatStoryAge(currentStory.createdAt, t)} · {currentStory.viewCount} vues</span>
                 </div>
               </div>
               <button type="button" className="sokin-story-viewer-close" onClick={() => setStoryViewerOpen(false)}>✕</button>

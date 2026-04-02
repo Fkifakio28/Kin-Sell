@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+﻿import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import Hls from 'hls.js';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../app/providers/AuthProvider';
@@ -17,10 +17,6 @@ type LiveVisibility = 'PUBLIC' | 'FOLLOWERS' | 'PRIVATE' | 'CLIENTS';
 const LIVE_CATEGORY_PREFIX = '__live_category__:';
 const LIVE_VISIBILITY_PREFIX = '__live_visibility__:';
 
-function formatUsdFromCents(cents: number): string {
-  return `$${(cents / 100).toFixed(2)}`;
-}
-
 function buildLiveTags(baseTags: string[], category: string, visibility: LiveVisibility) {
   return [
     ...baseTags.filter((tag) => !tag.startsWith(LIVE_CATEGORY_PREFIX) && !tag.startsWith(LIVE_VISIBILITY_PREFIX)),
@@ -29,17 +25,17 @@ function buildLiveTags(baseTags: string[], category: string, visibility: LiveVis
   ];
 }
 
-function extractLiveCategory(tags: string[]): string {
-  return tags.find((tag) => tag.startsWith(LIVE_CATEGORY_PREFIX))?.slice(LIVE_CATEGORY_PREFIX.length) ?? 'Général';
+function extractLiveCategory(tags: string[], defaultLabel: string): string {
+  return tags.find((tag) => tag.startsWith(LIVE_CATEGORY_PREFIX))?.slice(LIVE_CATEGORY_PREFIX.length) ?? defaultLabel;
 }
 
 function extractLiveVisibility(tags: string[]): LiveVisibility {
   return (tags.find((tag) => tag.startsWith(LIVE_VISIBILITY_PREFIX))?.slice(LIVE_VISIBILITY_PREFIX.length) as LiveVisibility | undefined) ?? 'PUBLIC';
 }
 
-function formatHistoryDate(iso: string | null): string {
-  if (!iso) return 'Date indisponible';
-  return new Date(iso).toLocaleString('fr-FR', {
+function formatHistoryDate(iso: string | null, locale: string, fallback: string): string {
+  if (!iso) return fallback;
+  return new Date(iso).toLocaleString(locale, {
     dateStyle: 'medium',
     timeStyle: 'short',
   });
@@ -66,6 +62,7 @@ function StartLiveModal({
   defaultCity: string;
   loadingListings: boolean;
 }) {
+  const { t, formatMoneyFromUsdCents } = useLocaleCurrency();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [aspect, setAspect] = useState<'LANDSCAPE' | 'PORTRAIT'>('PORTRAIT');
@@ -100,7 +97,7 @@ function StartLiveModal({
         setMediaError(null);
       } catch {
         setMediaReady(false);
-        setMediaError('Autorise la camera et le micro pour demarrer un live.');
+        setMediaError(t('live.mediaAccessError'));
       }
     };
 
@@ -117,26 +114,26 @@ function StartLiveModal({
     <div className="sklive-modal-overlay" onClick={onClose}>
       <div className="sklive-modal" onClick={(e) => e.stopPropagation()}>
         <button type="button" className="sklive-modal-close" onClick={onClose}>✕</button>
-        <h2 className="sklive-modal-title">🔴 Démarrer un Live</h2>
+        <h2 className="sklive-modal-title">🔴 {t('live.startLive')}</h2>
 
         <div className="sklive-form-group">
-          <label>Titre du live *</label>
+          <label>{t('live.titleLabel')}</label>
           <input
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="Ex: Vente flash téléphones !"
+            placeholder={t('live.titlePlaceholder')}
             maxLength={120}
             className="sklive-input"
           />
         </div>
 
         <div className="sklive-form-group">
-          <label>Description (optionnelle)</label>
+          <label>{t('live.descLabel')}</label>
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="Décrivez votre live..."
+            placeholder={t('live.descPlaceholder')}
             maxLength={500}
             rows={3}
             className="sklive-input"
@@ -144,7 +141,7 @@ function StartLiveModal({
         </div>
 
         <div className="sklive-form-group">
-          <label>Format vidéo</label>
+          <label>{t('live.videoFormat')}</label>
           <div className="sklive-aspect-picker">
             <button
               type="button"
@@ -158,7 +155,7 @@ function StartLiveModal({
                 </svg>
               </div>
               <span className="sklive-aspect-label">9:16</span>
-              <span className="sklive-aspect-desc">Portrait</span>
+              <span className="sklive-aspect-desc">{t('live.portrait')}</span>
             </button>
 
             <button
@@ -173,74 +170,74 @@ function StartLiveModal({
                 </svg>
               </div>
               <span className="sklive-aspect-label">16:9</span>
-              <span className="sklive-aspect-desc">Paysage</span>
+              <span className="sklive-aspect-desc">{t('live.landscape')}</span>
             </button>
           </div>
         </div>
 
         <div className="sklive-form-group">
-          <label>Ville</label>
+          <label>{t('live.cityLabel')}</label>
           <input
             type="text"
             value={city}
             onChange={(e) => setCity(e.target.value)}
-            placeholder="Ex: Kinshasa"
+            placeholder={t('live.cityPlaceholder')}
             className="sklive-input"
           />
         </div>
 
         <div className="sklive-form-grid">
           <div className="sklive-form-group">
-            <label>Catégorie</label>
+            <label>{t('live.categoryLabel')}</label>
             <input
               type="text"
               value={category}
               onChange={(e) => setCategory(e.target.value)}
-              placeholder="Ex: Déstockage, Q&A, Démo"
+              placeholder={t('live.categoryPlaceholder')}
               className="sklive-input"
             />
           </div>
 
           <div className="sklive-form-group">
-            <label>Visibilité</label>
+            <label>{t('live.visibilityLabel')}</label>
             <select value={visibility} onChange={(e) => setVisibility(e.target.value as LiveVisibility)} className="sklive-input">
-              <option value="PUBLIC">Public</option>
-              <option value="FOLLOWERS">Abonnés</option>
-              <option value="PRIVATE">Privé</option>
-              <option value="CLIENTS">Clients uniquement</option>
+              <option value="PUBLIC">{t('live.visPublic')}</option>
+              <option value="FOLLOWERS">{t('live.visFollowers')}</option>
+              <option value="PRIVATE">{t('live.visPrivate')}</option>
+              <option value="CLIENTS">{t('live.visClients')}</option>
             </select>
           </div>
         </div>
 
         <div className="sklive-form-group">
-          <label>Produit à épingler</label>
+          <label>{t('live.pinnedProduct')}</label>
           <select value={selectedListingId} onChange={(e) => setSelectedListingId(e.target.value)} className="sklive-input">
-            <option value="">Aucun produit sélectionné</option>
+            <option value="">{t('live.noProductSelected')}</option>
             {listings.map((listing) => (
-              <option key={listing.id} value={listing.id}>{listing.title} · {formatUsdFromCents(listing.priceUsdCents)}</option>
+              <option key={listing.id} value={listing.id}>{listing.title} · {formatMoneyFromUsdCents(listing.priceUsdCents)}</option>
             ))}
           </select>
-          {loadingListings ? <p className="sklive-field-help">Chargement de vos produits actifs...</p> : null}
+          {loadingListings ? <p className="sklive-field-help">{t('live.loadingProducts')}</p> : null}
         </div>
 
         <div className="sklive-live-plan-card">
           <div>
             <span className="sklive-plan-label">Thumbnail auto</span>
             <strong>{selectedListing?.title ?? 'Aperçu caméra'}</strong>
-            <p>{selectedListing ? `La miniature initiale est reprise depuis le produit ${selectedListing.title}.` : 'Sans produit choisi, le live démarre sur la caméra comme aperçu principal.'}</p>
+            <p>{selectedListing ? t('live.thumbFromProduct').replace('{title}', selectedListing.title) : t('live.thumbFromCamera')}</p>
           </div>
           {selectedListing?.imageUrl ? <img src={selectedListing.imageUrl} alt={selectedListing.title} className="sklive-plan-thumb" /> : <div className="sklive-plan-thumb ph">📺</div>}
         </div>
 
         <div className="sklive-form-group">
-          <label>Apercu camera</label>
+          <label>{t('live.cameraPreview')}</label>
           <div className="sklive-camera-preview">
             {mediaReady ? (
               <video ref={previewRef} autoPlay muted playsInline className="sklive-camera-preview-video" />
             ) : (
               <div className="sklive-camera-preview-empty">
                 <span>📷</span>
-                <p>{mediaError ?? 'Demande d acces camera en cours...'}</p>
+                <p>{mediaError ?? t('live.mediaAccessPending')}</p>
               </div>
             )}
           </div>
@@ -255,14 +252,14 @@ function StartLiveModal({
             description: description.trim(),
             aspect,
             city: city.trim(),
-            category: category.trim() || 'Général',
+            category: category.trim() || t('live.defaultCategory'),
             visibility,
             featuredListingId: selectedListing?.id,
             thumbnailUrl: selectedListing?.imageUrl ?? undefined,
-            tags: buildLiveTags([], category.trim() || 'Général', visibility),
+            tags: buildLiveTags([], category.trim() || t('live.defaultCategory'), visibility),
           })}
         >
-          🔴 Lancer le Live
+          🔴 {t('live.launchLive')}
         </button>
       </div>
     </div>
@@ -274,21 +271,23 @@ function StartLiveModal({
    ═══════════════════════════════════════════════════ */
 
 function LiveCard({ live, onClick }: { live: SoKinLiveData; onClick: () => void }) {
+  const { t, language } = useLocaleCurrency();
+  const locale = language === 'en' ? 'en-US' : language === 'ln' ? 'fr-CD' : 'fr-FR';
   const hostProfile = live.host?.profile;
-  const liveCategory = extractLiveCategory(live.tags);
+  const liveCategory = extractLiveCategory(live.tags, t('live.defaultCategory'));
   const badgeConfig =
     live.status === 'LIVE'
       ? { className: 'live', label: '🔴 LIVE' }
       : live.status === 'WAITING'
-        ? { className: 'waiting', label: '⏳ En attente' }
+        ? { className: 'waiting', label: `⏳ ${t('live.waiting')}` }
         : live.status === 'ENDED'
-          ? { className: 'ended', label: '⬛ Terminé' }
-          : { className: 'ended', label: '🚫 Annulé' };
+          ? { className: 'ended', label: `⬛ ${t('live.ended')}` }
+          : { className: 'ended', label: `🚫 ${t('live.canceled')}` };
   const viewersLabel = live.status === 'ENDED' || live.status === 'CANCELED'
     ? `👁️ Pic ${live.peakViewers}`
     : `👁️ ${live.viewerCount}`;
   const secondaryLabel = live.status === 'ENDED' || live.status === 'CANCELED'
-    ? formatHistoryDate(live.endedAt ?? live.createdAt)
+    ? formatHistoryDate(live.endedAt ?? live.createdAt, locale, t('live.dateUnavailable'))
     : live.city
       ? `📍 ${live.city}`
       : null;
@@ -309,7 +308,7 @@ function LiveCard({ live, onClick }: { live: SoKinLiveData; onClick: () => void 
         </div>
         <div className="sklive-card-overlay-meta">
           <span className="sklive-card-chip">{liveCategory}</span>
-          {live.featuredListing ? <span className="sklive-card-chip commerce">🛒 {live.featuredListing.type === 'SERVICE' ? 'Service' : 'Produit'}</span> : null}
+          {live.featuredListing ? <span className="sklive-card-chip commerce">🛒 {live.featuredListing.type === 'SERVICE' ? t('live.typeService') : t('live.typeProduct')}</span> : null}
         </div>
       </div>
 
@@ -322,14 +321,14 @@ function LiveCard({ live, onClick }: { live: SoKinLiveData; onClick: () => void 
           )}
           <div className="sklive-card-host-text">
             <span className="sklive-card-title">{live.title}</span>
-            <span className="sklive-card-hostname">{hostProfile?.displayName ?? 'Utilisateur'}</span>
+            <span className="sklive-card-hostname">{hostProfile?.displayName ?? t('live.unknownUser')}</span>
             {secondaryLabel && <span className="sklive-card-city">{secondaryLabel}</span>}
           </div>
         </div>
 
         <div className="sklive-card-stats">
           <span>❤️ {live.likesCount}</span>
-          {(live.status === 'ENDED' || live.status === 'CANCELED') && <span>💬 Archive</span>}
+          {(live.status === 'ENDED' || live.status === 'CANCELED') && <span>💬 {t('live.archive')}</span>}
           <span className="sklive-card-tag">{extractLiveVisibility(live.tags)}</span>
         </div>
       </div>
@@ -352,6 +351,8 @@ function LiveViewer({
 }) {
   const { isLoggedIn, user } = useAuth();
   const [chatMessages, setChatMessages] = useState<SoKinLiveChatMsg[]>([]);
+  const { t, formatMoneyFromUsdCents, language } = useLocaleCurrency();
+  const locale = language === "en" ? "en-US" : language === "ln" ? "fr-CD" : "fr-FR";
   const [chatInput, setChatInput] = useState('');
   const [liveData, setLiveData] = useState(live);
   const [localLikes, setLocalLikes] = useState(live.likesCount);
@@ -484,11 +485,11 @@ function LiveViewer({
         });
         hls.on(Hls.Events.ERROR, (_event, data) => {
           if (!cancelled && data.fatal) {
-            setLiveNotice('Impossible de lire ce flux live pour le moment.');
+            setLiveNotice(t('live.streamReadError'));
           }
         });
       } else {
-        setLiveNotice('Ce navigateur ne sait pas lire ce flux live.');
+        setLiveNotice(t('live.browserUnsupportedStream'));
       }
     } else {
       playbackHlsRef.current?.destroy();
@@ -630,13 +631,12 @@ function LiveViewer({
         });
         return;
       }
-
       await navigator.clipboard.writeText(shareUrl);
-      setLiveNotice('Lien du live copié.');
+      setLiveNotice(t('live.shareLinkCopied'));
     } catch {
-      setLiveNotice('Impossible de partager ce live pour le moment.');
+      setLiveNotice(t('live.shareError'));
     }
-  }, [live.id, liveData.host?.profile?.displayName, liveData.title]);
+  }, [live.id, liveData.host?.profile?.displayName, liveData.title, t]);
 
   const handleVideoSurfaceTap = useCallback(() => {
     const now = Date.now();
@@ -656,7 +656,7 @@ function LiveViewer({
   const canShowComposer = isLoggedIn && liveStatus === 'LIVE';
   const canShowJoinAsGuest = !isHost && liveStatus === 'LIVE';
   const hostOwnsLive = liveData.hostId === user?.id;
-  const liveCategory = extractLiveCategory(liveData.tags);
+  const liveCategory = extractLiveCategory(liveData.tags, t('live.defaultCategory'));
   const liveVisibility = extractLiveVisibility(liveData.tags);
 
   useEffect(() => {
@@ -694,7 +694,7 @@ function LiveViewer({
       setLiveData(updated);
       setShowListingPicker(false);
     } catch {
-      setLiveNotice('Impossible de mettre à jour le produit épinglé.');
+      setLiveNotice(t('live.pinListingError'));
     } finally {
       setListingBusy(false);
     }
@@ -722,8 +722,8 @@ function LiveViewer({
 
         <div className="sklive-viewer-meta">
           {liveStatus === 'LIVE' && <span className="sklive-badge live">🔴 LIVE</span>}
-          {liveStatus === 'WAITING' && <span className="sklive-badge waiting">⏳ En attente</span>}
-          {liveStatus === 'ENDED' && <span className="sklive-badge ended">⬛ Terminé</span>}
+          {liveStatus === 'WAITING' && <span className="sklive-badge waiting">⏳ {t('live.waiting')}</span>}
+          {liveStatus === 'ENDED' && <span className="sklive-badge ended">⬛ {t('live.ended')}</span>}
           <span className="sklive-viewer-count">👁️ {localViewers}</span>
         </div>
       </div>
@@ -867,7 +867,7 @@ function LiveViewer({
                 {liveData.featuredListing.imageUrl ? <img src={liveData.featuredListing.imageUrl} alt={liveData.featuredListing.title} /> : <span className="sklive-featured-placeholder">🛍️</span>}
                 <div>
                   <strong>{liveData.featuredListing.title}</strong>
-                  <span>{formatUsdFromCents(liveData.featuredListing.priceUsdCents)} • {liveData.featuredListing.city}</span>
+                  <span>{formatMoneyFromUsdCents(liveData.featuredListing.priceUsdCents)} • {liveData.featuredListing.city}</span>
                 </div>
                 <em>Acheter maintenant</em>
               </a>
@@ -902,7 +902,7 @@ function LiveViewer({
                     <button type="button" disabled={listingBusy} onClick={() => void handlePinListing(null)}>Retirer le produit épinglé</button>
                     {hostListings.map((item) => (
                       <button key={item.id} type="button" disabled={listingBusy} onClick={() => void handlePinListing(item.id)}>
-                        {item.title} — {(item.priceUsdCents / 100).toFixed(2)} $
+                      {item.title} — {formatMoneyFromUsdCents(item.priceUsdCents)}
                       </button>
                     ))}
                   </div>
@@ -1159,10 +1159,10 @@ export function SoKinLivePage() {
               </span>
               <strong>{live.host?.profile?.displayName ?? 'Live'}</strong>
               <span>👁️ {live.viewerCount}</span>
-              {live.featuredListing ? <em>🛒 {live.featuredListing.title}</em> : <em>{extractLiveCategory(live.tags)}</em>}
+              {live.featuredListing ? <em>🛒 {live.featuredListing.title}</em> : <em>{extractLiveCategory(live.tags, t('live.defaultCategory'))}</em>}
             </button>
           )) : (
-            <div className="sklive-now-empty">Aucun live en direct pour le moment.</div>
+            <div className="sklive-now-empty">{t('live.noLiveNow')}</div>
           )}
         </div>
       </section>

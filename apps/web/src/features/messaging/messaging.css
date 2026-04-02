@@ -747,11 +747,11 @@
   position: fixed;
   inset: 0;
   z-index: 9999;
-  background: rgba(0 0 0 / .7);
-  backdrop-filter: blur(8px);
+  background: radial-gradient(circle at 16% 18%, rgba(111 88 255 / .24), transparent 44%), radial-gradient(circle at 82% 84%, rgba(18 11 43 / .72), transparent 46%), rgba(5 4 14 / .94);
+  backdrop-filter: blur(12px);
   display: flex;
-  align-items: center;
-  justify-content: center;
+  align-items: stretch;
+  justify-content: stretch;
 }
 .msg-call-overlay--ear-mode {
   background: #000;
@@ -775,6 +775,19 @@
 }
 .msg-call-dialog--active {
   padding: 20px;
+}
+
+.msg-call-screen {
+  width: 100%;
+  min-width: 0;
+  min-height: 100dvh;
+  border-radius: 0;
+  border: none;
+  padding: calc(16px + env(safe-area-inset-top, 0px)) 16px calc(20px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 12px;
 }
 .msg-call-label {
   font-size: 1.1rem;
@@ -805,9 +818,9 @@
 .msg-call-videos {
   position: relative;
   width: 100%;
-  max-width: 500px;
-  aspect-ratio: 16/9;
-  margin: 0 auto 16px;
+  max-width: 860px;
+  aspect-ratio: 9/16;
+  margin: 0 auto;
   border-radius: 24px;
   overflow: hidden;
   background: #000;
@@ -1590,19 +1603,6 @@
     align-items: stretch;
     justify-content: stretch;
     padding: 0;
-  }
-  .msg-call-dialog,
-  .msg-call-dialog--active {
-    width: 100%;
-    min-width: 0;
-    min-height: 100dvh;
-    border-radius: 0;
-    border: none;
-    padding: calc(16px + env(safe-area-inset-top, 0px)) 16px calc(20px + env(safe-area-inset-bottom, 0px));
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    gap: 12px;
   }
   .msg-call-videos {
     max-width: 100%;

@@ -309,16 +309,17 @@ export function DashboardMessaging() {
     } catch { alert("Impossible d'accéder au micro/caméra."); }
   }, [activeConv, myId, createPeerConnection, emit]);
 
-  const acceptCall = useCallback(async () => {
+  const acceptCall = useCallback(async (preferredType?: "audio" | "video") => {
     if (!callState) return;
+    const acceptedType = preferredType ?? callState.type;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: callState.type === "video" });
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: acceptedType === "video" });
       localStreamRef.current = stream;
       if (localVideoRef.current) localVideoRef.current.srcObject = stream;
       const pc = createPeerConnection(callState.remoteUserId);
       stream.getTracks().forEach((t) => pc.addTrack(t, stream));
       emit("call:accept", { conversationId: callState.conversationId, callerId: callState.remoteUserId });
-      setCallState((p) => p ? { ...p, status: "connected" } : null);
+      setCallState((p) => p ? { ...p, type: acceptedType, status: "connected" } : null);
     } catch { alert("Impossible d'accéder au micro/caméra."); }
   }, [callState, createPeerConnection, emit]);
 
@@ -476,19 +477,36 @@ export function DashboardMessaging() {
       {/* Call overlays */}
       {callState && callState.status === "ringing" && callState.direction === "incoming" && (
         <div className="dm-call-overlay">
-          <div className="dm-call-dialog">
+          <div className="dm-call-screen dm-call-screen--incoming">
             <div className="dm-ringtone-pulse"><span className="dm-ringtone-dot" /><span className="dm-ringtone-dot" /><span className="dm-ringtone-dot" /></div>
+            <div className="dm-call-caller-avatar dm-call-caller-avatar--lg">
+              {(() => {
+                const conv = conversations.find((c) => c.id === callState.conversationId);
+                const avatar = conv ? getConversationAvatar(conv, myId) : null;
+                const name = conv ? getConversationName(conv, myId) : "Appel";
+                return avatar ? <img src={avatar} alt="" /> : <span>{initials(name)}</span>;
+              })()}
+            </div>
+            <p className="dm-call-label dm-call-label--title">
+              {(() => {
+                const conv = conversations.find((c) => c.id === callState.conversationId);
+                return conv ? getConversationName(conv, myId) : "Utilisateur";
+              })()}
+            </p>
             <p className="dm-call-label">📞 Appel {callState.type === "video" ? "vidéo" : "audio"} entrant</p>
             <div className="dm-call-actions">
-              <button className="dm-call-btn dm-call-btn--accept" onClick={() => void acceptCall()}>Accepter</button>
               <button className="dm-call-btn dm-call-btn--reject" onClick={rejectCall}>Refuser</button>
+              <button className="dm-call-btn dm-call-btn--accept" onClick={() => void acceptCall(callState.type)}>Accepter</button>
+              {callState.type === "video" && (
+                <button className="dm-call-btn dm-call-btn--audio" onClick={() => void acceptCall("audio")}>Audio seulement</button>
+              )}
             </div>
           </div>
         </div>
       )}
       {callState && (callState.status === "connected" || (callState.status === "ringing" && callState.direction === "outgoing")) && (
         <div className="dm-call-overlay">
-          <div className="dm-call-dialog">
+          <div className="dm-call-screen dm-call-screen--active">
             <audio ref={remoteAudioRef} autoPlay playsInline />
             {callState.status === "ringing" && <div className="dm-ringtone-pulse"><span className="dm-ringtone-dot" /><span className="dm-ringtone-dot" /><span className="dm-ringtone-dot" /></div>}
             {callState.type === "video" && <div className="dm-call-videos"><video ref={remoteVideoRef} autoPlay playsInline className="dm-call-video-remote" /><video ref={localVideoRef} autoPlay playsInline muted className="dm-call-video-local" /></div>}

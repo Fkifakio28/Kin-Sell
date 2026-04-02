@@ -8,6 +8,7 @@
 
 import { prisma } from "../../shared/db/prisma.js";
 import { computePricePosition, getMarketDemand, PRICE_THRESHOLD_PERCENT } from "../../shared/market/market-shared.js";
+import { CountryCode } from "@prisma/client";
 
 // ── Types ──
 
@@ -47,12 +48,23 @@ export async function getOrCreateCity(
   countryCode: string,
   currency = "CDF"
 ) {
+  const normalizedCountryCode = (countryCode ?? "").toUpperCase();
+  const safeCountryCode = (Object.values(CountryCode) as string[]).includes(normalizedCountryCode)
+    ? (normalizedCountryCode as CountryCode)
+    : CountryCode.CD;
+
   const existing = await prisma.marketCity.findFirst({
-    where: { city: { equals: cityName, mode: "insensitive" }, country },
+    where: { city: { equals: cityName, mode: "insensitive" }, countryCode: safeCountryCode },
   });
   if (existing) return existing;
   return prisma.marketCity.create({
-    data: { city: cityName.trim(), country, countryCode, currency },
+    data: {
+      city: cityName.trim(),
+      country,
+      countryCode: safeCountryCode,
+      currency,
+      marketCountry: { connect: { code: safeCountryCode } },
+    },
   });
 }
 

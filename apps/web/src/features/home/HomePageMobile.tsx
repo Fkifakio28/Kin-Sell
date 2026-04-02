@@ -14,10 +14,11 @@
  *   AccountPopup   — popup contextuelle du bouton Compte
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../app/providers/AuthProvider";
-import { useLocaleCurrency } from "../../app/providers/LocaleCurrencyProvider";
+import { useLocaleCurrency, type AppCurrency, type AppLanguage } from "../../app/providers/LocaleCurrencyProvider";
+import { useMarketPreference } from "../../app/providers/MarketPreferenceProvider";
 import { getDashboardPath } from "../../utils/role-routing";
 import {
   listings as listingsApi,
@@ -30,6 +31,7 @@ import { NegotiatePopup } from "../negotiations/NegotiatePopup";
 import { AdBanner } from "../../components/AdBanner";
 import { useLockedCategories, isCategoryLocked } from "../../hooks/useLockedCategories";
 import { usePwaInstall } from "../../hooks/usePwaInstall";
+import { useSocket } from "../../hooks/useSocket";
 import "./home-mobile.css";
 
 // ─────────────────────────────────────────────────────────────
@@ -61,25 +63,25 @@ function useSwipe(ref: React.RefObject<HTMLElement | null>, onSwipeLeft?: () => 
 
 const DRAWER_LINKS = {
   explorer: [
-    { label: "🛍️ Produits", href: "/explorer?type=produits" },
-    { label: "🔧 Services", href: "/explorer?type=services" },
+    { icon: "🛍️", labelKey: "common.products", href: "/explorer?type=produits" },
+    { icon: "🔧", labelKey: "common.services", href: "/explorer?type=services" },
   ],
   user: [
-    { label: "🏪 Mon espace de vente", href: "__DASHBOARD__?section=sell" },
-    { label: "🛒 Mon espace d'achat", href: "__DASHBOARD__?section=buy" },
+    { icon: "🏪", labelKey: "home.drawerSellSpace", href: "__DASHBOARD__?section=sell" },
+    { icon: "🛒", labelKey: "home.drawerBuySpace", href: "__DASHBOARD__?section=buy" },
   ],
   public: [
-    { label: "📢 SoKin — Posts", href: "/sokin" },
-    { label: "👤 SoKin — Profils", href: "/sokin/profiles" },
-    { label: "🏬 SoKin — Market", href: "/sokin/market" },
+    { icon: "📢", labelKey: "home.sokinFeed", href: "/sokin" },
+    { icon: "👤", labelKey: "home.sokinProfiles", href: "/sokin/profiles" },
+    { icon: "🏬", labelKey: "home.sokinMarket", href: "/sokin/market" },
   ],
   info: [
-    { label: "ℹ️ À propos", href: "/about" },
-    { label: "❓ FAQ", href: "/faq" },
-    { label: "📖 Guide vendeur", href: "/guide" },
-    { label: "📞 Contact", href: "/contact" },
-    { label: "🔒 Confidentialité", href: "/privacy" },
-    { label: "⚖️ Conditions d'utilisation", href: "/terms" },
+    { icon: "ℹ️", labelKey: "home.aboutUs", href: "/about" },
+    { icon: "❓", labelKey: "home.faq", href: "/faq" },
+    { icon: "📖", labelKey: "nav.guide", href: "/guide" },
+    { icon: "📞", labelKey: "home.contact", href: "/contact" },
+    { icon: "🔒", labelKey: "nav.privacy", href: "/privacy" },
+    { icon: "⚖️", labelKey: "home.terms", href: "/terms" },
   ],
 };
 
@@ -96,6 +98,22 @@ const QUICK_CATS = [
   { emoji: "📚", labelKey: "home.cat.books",      href: "/explorer?type=produits&category=livres" },
   { emoji: "🎮", labelKey: "home.cat.gaming",     href: "/explorer?type=produits&category=jeux" },
   { emoji: "👶", labelKey: "home.cat.baby",       href: "/explorer?type=produits&category=bebe" },
+];
+
+const LANGUAGE_OPTIONS: Array<{ code: AppLanguage; label: string }> = [
+  { code: "fr", label: "Francais" },
+  { code: "en", label: "English" },
+  { code: "ln", label: "Lingala" },
+];
+
+const CURRENCY_OPTIONS: Array<{ code: AppCurrency; label: string }> = [
+  { code: "CDF", label: "CDF (FC)" },
+  { code: "USD", label: "USD ($)" },
+  { code: "EUR", label: "EUR (€)" },
+  { code: "XAF", label: "XAF (FCFA)" },
+  { code: "XOF", label: "XOF (CFA)" },
+  { code: "AOA", label: "AOA (Kz)" },
+  { code: "MAD", label: "MAD (DH)" },
 ];
 
 // ─────────────────────────────────────────────────────────────
@@ -119,7 +137,19 @@ function SideDrawer({
   logout: () => Promise<void>;
 }) {
   const navigate = useNavigate();
+  const { language, setLanguage, currency, setCurrency } = useLocaleCurrency();
+  const {
+    countries,
+    detectedCountry,
+    selectedCountry,
+    effectiveCountry,
+    selectionMode,
+    setSelectionMode,
+    setSelectedCountry,
+    getCountryConfig,
+  } = useMarketPreference();
   const displayName = user?.profile?.displayName || user?.profile?.username || null;
+  const activeCountry = getCountryConfig(effectiveCountry);
 
   const handleLogout = async () => {
     await logout();
@@ -138,7 +168,7 @@ function SideDrawer({
       )}
       <aside
         className={`ksm-drawer${open ? " ksm-drawer--open" : ""}`}
-        aria-label="Menu principal"
+        aria-label={t('nav.ariaMain')}
         aria-hidden={!open}
       >
         {/* Header drawer */}
@@ -157,7 +187,7 @@ function SideDrawer({
               <div className="ksm-drawer-profile-info">
                 <p className="ksm-drawer-profile-name">{displayName ?? "Utilisateur"}</p>
                 <span className="ksm-drawer-profile-badge">
-                  {user.role === "BUSINESS" ? "🏢 Business" : user.role === "ADMIN" ? "⚡ Admin" : "👤 Utilisateur"}
+                  {user.role === "BUSINESS" ? `🏢 ${t('home.businessRole')}` : user.role === "ADMIN" ? `⚡ ${t('home.svc.admin')}` : `👤 ${t('home.userRole')}`}
                 </span>
               </div>
             </div>
@@ -167,15 +197,15 @@ function SideDrawer({
                 <span className="ksm-drawer-avatar-initial">?</span>
               </div>
               <div className="ksm-drawer-profile-info">
-                <p className="ksm-drawer-profile-name">Visiteur</p>
-                <span className="ksm-drawer-profile-badge">Non connecté</span>
+                <p className="ksm-drawer-profile-name">{t('home.visitor')}</p>
+                <span className="ksm-drawer-profile-badge">{t('home.visitorMode')}</span>
               </div>
             </div>
           )}
           <button
             className="ksm-drawer-close"
             onClick={onClose}
-            aria-label="Fermer le menu"
+            aria-label={t('nav.closeMenu')}
           >
             ✕
           </button>
@@ -190,31 +220,109 @@ function SideDrawer({
               void navigate(isLoggedIn ? `${getDashboardPath(user?.role)}?section=sell` : "/login");
             }}
           >
-            📝 Publier un article
+            📝 {t('publish.publishArticle')}
           </button>
         </div>
 
         {/* Sections */}
-        <nav className="ksm-drawer-nav" aria-label="Navigation principale">
-          <DrawerSection title="Explorer" links={DRAWER_LINKS.explorer} onClose={onClose} />
-          {isLoggedIn && <DrawerSection title="Espace utilisateur" links={DRAWER_LINKS.user.map(l => ({ ...l, href: l.href.replace('__DASHBOARD__', getDashboardPath(user?.role)) }))} onClose={onClose} />}
-          <DrawerSection title="Espace public" links={DRAWER_LINKS.public} onClose={onClose} />
-          <DrawerSection title="Liens utiles" links={DRAWER_LINKS.info} onClose={onClose} />
+        <nav className="ksm-drawer-nav" aria-label={t('nav.ariaMain')}>
+          <DrawerSection title={t('home.drawerExploreSection')} links={DRAWER_LINKS.explorer} onClose={onClose} t={t} />
+          {isLoggedIn && <DrawerSection title={t('home.drawerUserSection')} links={DRAWER_LINKS.user.map(l => ({ ...l, href: l.href.replace('__DASHBOARD__', getDashboardPath(user?.role)) }))} onClose={onClose} t={t} />}
+          <DrawerSection title={t('home.drawerPublicSection')} links={DRAWER_LINKS.public} onClose={onClose} t={t} />
+          <DrawerSection title={t('home.drawerInfoSection')} links={DRAWER_LINKS.info} onClose={onClose} t={t} />
         </nav>
+
+        <div className="ksm-drawer-market-prefs">
+          <p className="ksm-drawer-section-title">{t('home.drawerMarketPrefs')}</p>
+          <label className="ksm-drawer-pref-label" htmlFor="ksm-country-mode">{t('home.marketMode')}</label>
+          <select
+            id="ksm-country-mode"
+            className="ksm-drawer-pref-select"
+            value={selectionMode}
+            onChange={(e) => setSelectionMode(e.target.value === 'manual' ? 'manual' : 'auto')}
+          >
+            <option value="auto">{t('home.marketModeAuto')}</option>
+            <option value="manual">{t('home.marketModeManual')}</option>
+          </select>
+
+          <label className="ksm-drawer-pref-label" htmlFor="ksm-country-select">{t('home.marketCountry')}</label>
+          <select
+            id="ksm-country-select"
+            className="ksm-drawer-pref-select"
+            value={selectionMode === 'manual' ? selectedCountry : effectiveCountry}
+            onChange={(e) => setSelectedCountry(e.target.value as typeof selectedCountry)}
+          >
+            {countries.map((country) => (
+              <option key={country.code} value={country.code}>{country.name}</option>
+            ))}
+          </select>
+
+          <p className="ksm-drawer-pref-hint">
+            {t('home.marketDetected').replace('{country}', getCountryConfig(detectedCountry).name)}
+          </p>
+          <p className="ksm-drawer-pref-hint">
+            {t('home.marketActive').replace('{country}', activeCountry.name).replace('{region}', activeCountry.region)}
+          </p>
+
+          <label className="ksm-drawer-pref-label" htmlFor="ksm-language-select">{t('footer.language')}</label>
+          <select
+            id="ksm-language-select"
+            className="ksm-drawer-pref-select"
+            value={language}
+            onChange={(e) => setLanguage(e.target.value as AppLanguage)}
+          >
+            {LANGUAGE_OPTIONS.map((option) => (
+              <option key={option.code} value={option.code}>{option.label}</option>
+            ))}
+          </select>
+
+          <label className="ksm-drawer-pref-label" htmlFor="ksm-currency-select">{t('footer.currency')}</label>
+          <select
+            id="ksm-currency-select"
+            className="ksm-drawer-pref-select"
+            value={currency}
+            onChange={(e) => setCurrency(e.target.value as AppCurrency)}
+          >
+            {CURRENCY_OPTIONS.map((option) => (
+              <option key={option.code} value={option.code}>{option.label}</option>
+            ))}
+          </select>
+        </div>
 
         {/* Bottom auth actions */}
         <div className="ksm-drawer-footer">
+          <div className="ksm-drawer-socials" aria-label={t('footer.social')}>
+            <a href="https://web.facebook.com/profile.php?id=61576537875599" className="ksm-drawer-social-btn" aria-label="Facebook" title="Facebook" target="_blank" rel="noopener noreferrer">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>
+            </a>
+            <a href="https://www.instagram.com/kin.sell/" className="ksm-drawer-social-btn" aria-label="Instagram" title="Instagram" target="_blank" rel="noopener noreferrer">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg>
+            </a>
+            <a href="https://x.com/Kinsell_marketP" className="ksm-drawer-social-btn" aria-label="X (Twitter)" title="X" target="_blank" rel="noopener noreferrer">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+            </a>
+            <a href="https://www.linkedin.com/in/kin-sell-marketplace/" className="ksm-drawer-social-btn" aria-label="LinkedIn" title="LinkedIn" target="_blank" rel="noopener noreferrer">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/></svg>
+            </a>
+            <a href="https://www.tiktok.com/@kinsell1" className="ksm-drawer-social-btn" aria-label="TikTok" title="TikTok" target="_blank" rel="noopener noreferrer">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1V9.01a6.32 6.32 0 0 0-.79-.05 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.33-6.34V8.82a8.18 8.18 0 0 0 4.79 1.53V6.88a4.85 4.85 0 0 1-1.02-.19z"/></svg>
+            </a>
+            <a href="https://www.reddit.com/user/Kin-sell/" className="ksm-drawer-social-btn" aria-label="Reddit" title="Reddit" target="_blank" rel="noopener noreferrer">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M14.2 15.1c.1.1.1.2 0 .3-.6.6-1.3.9-2.2.9-.9 0-1.7-.3-2.2-.9-.1-.1-.1-.2 0-.3.1-.1.2-.1.3 0 .4.5 1.1.8 1.9.8s1.5-.3 1.9-.8c.1-.1.2-.1.3 0zM10.8 13.1c0-.5-.4-.9-.9-.9s-.9.4-.9.9.4.9.9.9.9-.4.9-.9zm4.2-.9c-.5 0-.9.4-.9.9s.4.9.9.9.9-.4.9-.9-.4-.9-.9-.9zm5 1c0-1.2-.7-2.3-1.8-3 .1-.2.1-.5.1-.7 0-.8-.6-1.4-1.4-1.4-.6 0-1.1.3-1.3.8-1-.7-2.2-1.1-3.5-1.2l.6-2.6 1.8.4c.1.6.7 1.1 1.3 1.1.8 0 1.4-.6 1.4-1.4S17.7 3.8 16.9 3.8c-.6 0-1.2.4-1.3 1l-2-.4c-.1 0-.2.1-.2.2l-.6 2.8c-1.3 0-2.6.4-3.6 1.2-.3-.4-.7-.6-1.2-.6-.8 0-1.4.6-1.4 1.4 0 .2 0 .4.1.6-1.1.7-1.8 1.8-1.8 3 0 2.2 2.6 4 5.8 4s5.8-1.8 5.8-4zm-10.9 7.7c-4.3 0-7.8-3.5-7.8-7.8S4.8 5.3 9.1 5.3s7.8 3.5 7.8 7.8-3.5 7.8-7.8 7.8z"/></svg>
+            </a>
+          </div>
+
           {isLoggedIn ? (
             <button className="ksm-drawer-logout-btn" onClick={handleLogout}>
-              🚪 Déconnexion
+              🚪 {t('common.logout')}
             </button>
           ) : (
             <div className="ksm-drawer-auth-btns">
               <Link to="/login" className="ksm-drawer-login-btn" onClick={onClose}>
-                🔑 Se connecter
+                🔑 {t('auth.loginBtn')}
               </Link>
               <Link to="/register" className="ksm-drawer-register-btn" onClick={onClose}>
-                ✨ Créer un compte
+                ✨ {t('common.signup')}
               </Link>
             </div>
           )}
@@ -228,10 +336,12 @@ function DrawerSection({
   title,
   links,
   onClose,
+  t,
 }: {
   title: string;
-  links: { label: string; href: string }[];
+  links: { icon: string; labelKey: string; href: string }[];
   onClose: () => void;
+  t: (k: string) => string;
 }) {
   return (
     <div className="ksm-drawer-section">
@@ -243,7 +353,7 @@ function DrawerSection({
           className="ksm-drawer-link"
           onClick={onClose}
         >
-          {l.label}
+          {l.icon} {t(l.labelKey)}
         </Link>
       ))}
     </div>
@@ -257,16 +367,18 @@ function MobileHeader({
   onSearchToggle,
   isFullscreen,
   onFullscreenToggle,
+  t,
 }: {
   onMenuOpen: () => void;
   onRefresh: () => void;
   onSearchToggle: () => void;
   isFullscreen: boolean;
   onFullscreenToggle: () => void;
+  t: (k: string) => string;
 }) {
   return (
     <header className="ksm-header-v2" role="banner">
-      <button className="ksm-hv2-btn" onClick={onMenuOpen} aria-label="Ouvrir le menu">
+      <button className="ksm-hv2-btn" onClick={onMenuOpen} aria-label={t('nav.openMenu')}>
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
           <line x1="3" y1="6" x2="21" y2="6" />
           <line x1="3" y1="12" x2="21" y2="12" />
@@ -285,18 +397,18 @@ function MobileHeader({
       </Link>
 
       <div className="ksm-hv2-actions">
-        <button className="ksm-hv2-btn" onClick={onRefresh} aria-label="Actualiser">
+        <button className="ksm-hv2-btn" onClick={onRefresh} aria-label={t('user.refresh')}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M23 4v6h-6" /><path d="M1 20v-6h6" />
             <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
           </svg>
         </button>
-        <button className="ksm-hv2-btn" onClick={onSearchToggle} aria-label="Rechercher">
+        <button className="ksm-hv2-btn" onClick={onSearchToggle} aria-label={t('common.search')}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
           </svg>
         </button>
-        <button className="ksm-hv2-btn" onClick={onFullscreenToggle} aria-label={isFullscreen ? "Quitter le plein écran" : "Plein écran"}>
+        <button className="ksm-hv2-btn" onClick={onFullscreenToggle} aria-label={t(isFullscreen ? 'home.fullscreenExit' : 'home.fullscreenEnter')}>
           {isFullscreen ? (
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/>
@@ -316,9 +428,11 @@ function MobileHeader({
 function SearchOverlay({
   open,
   onClose,
+  t,
 }: {
   open: boolean;
   onClose: () => void;
+  t: (k: string) => string;
 }) {
   const navigate = useNavigate();
   const [q, setQ] = useState("");
@@ -344,17 +458,17 @@ function SearchOverlay({
           ref={inputRef}
           type="search"
           className="ksm-search-overlay-input"
-          placeholder="Rechercher un produit, service…"
+          placeholder={t('home.searchPlaceholder')}
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          aria-label="Recherche"
+          aria-label={t('common.search')}
         />
-        <button type="submit" className="ksm-search-overlay-btn" aria-label="Lancer la recherche">
+        <button type="submit" className="ksm-search-overlay-btn" aria-label={t('common.search')}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
           </svg>
         </button>
-        <button type="button" className="ksm-search-overlay-cancel" onClick={onClose} aria-label="Annuler">
+        <button type="button" className="ksm-search-overlay-cancel" onClick={onClose} aria-label={t('common.close')}>
           ✕
         </button>
       </form>
@@ -366,9 +480,15 @@ function SearchOverlay({
 function SuggestionsRow({
   formatMoney,
   formatLabel,
+  cityHint,
+  countryHint,
+  t,
 }: {
   formatMoney: (c: number) => string;
   formatLabel: (c: number) => string;
+  cityHint?: string;
+  countryHint?: string;
+  t: (k: string) => string;
 }) {
   const [items, setItems] = useState<PublicListing[]>([]);
   const [loading, setLoading] = useState(true);
@@ -377,20 +497,20 @@ function SuggestionsRow({
     let cancelled = false;
     const load = async () => {
       try {
-        const results = await listingsApi.latest({ limit: 12 });
+        const results = await listingsApi.latest({ city: cityHint, country: countryHint, limit: 12 });
         if (!cancelled) setItems(results);
       } catch { if (!cancelled) setItems([]); }
       finally { if (!cancelled) setLoading(false); }
     };
     void load();
     return () => { cancelled = true; };
-  }, []);
+  }, [cityHint, countryHint]);
 
   if (!loading && items.length === 0) return null;
 
   return (
-    <section className="ksm-suggestions" aria-label="Articles suggérés">
-      <h2 className="ksm-section-title">🔥 Articles pour vous</h2>
+    <section className="ksm-suggestions" aria-label={t('home.suggestedArticles')}>
+      <h2 className="ksm-section-title">🔥 {t('home.suggestedArticles')}</h2>
       <div className="ksm-suggestions-scroll">
         {loading
           ? [1, 2, 3, 4, 5].map((i) => (
@@ -429,29 +549,67 @@ function SuggestionsRow({
 }
 
 // ── SoKin Feed (vertical) ──────────────────────────────────────
-function SoKinFeedSection() {
+function SoKinFeedSection({ t, cityHint, countryHint }: { t: (k: string) => string; cityHint: string; countryHint: string }) {
   const [posts, setPosts] = useState<SoKinApiFeedPost[]>([]);
   const [loading, setLoading] = useState(true);
+  const { on, off } = useSocket();
+
+  const loadFeed = useCallback(async () => {
+    try {
+      const res = await sokinApi.publicFeed({ limit: 12, city: cityHint, country: countryHint });
+      setPosts(res.posts);
+    } catch {
+      setPosts([]);
+    }
+  }, [cityHint, countryHint]);
 
   useEffect(() => {
     let cancelled = false;
-    const load = async () => {
+    const run = async () => {
+      setLoading(true);
       try {
-        const res = await sokinApi.publicFeed(12);
+        const res = await sokinApi.publicFeed({ limit: 12, city: cityHint, country: countryHint });
         if (!cancelled) setPosts(res.posts);
-      } catch { if (!cancelled) setPosts([]); }
-      finally { if (!cancelled) setLoading(false); }
+      } catch {
+        if (!cancelled) setPosts([]);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     };
-    void load();
+    void run();
     return () => { cancelled = true; };
-  }, []);
+  }, [cityHint, countryHint, loadFeed]);
+
+  useEffect(() => {
+    const handlePostCreated = () => {
+      void loadFeed();
+    };
+
+    const handlePostShared = (payload: {
+      type: 'SOKIN_POST_SHARED';
+      postId: string;
+      shares: number;
+      sourceUserId: string;
+      updatedAt: string;
+    }) => {
+      setPosts((prev) => prev.map((post) => (post.id === payload.postId ? { ...post, shares: payload.shares } : post)));
+    };
+
+    on('sokin:post-created', handlePostCreated);
+    on('sokin:post-shared', handlePostShared);
+
+    return () => {
+      off('sokin:post-created', handlePostCreated);
+      off('sokin:post-shared', handlePostShared);
+    };
+  }, [on, off, loadFeed]);
 
   // Insert ad slots every 4 posts
   const renderPostsWithAds = (items: SoKinApiFeedPost[]) => {
     const elements: React.ReactNode[] = [];
     items.forEach((post, idx) => {
       const profile = post.author?.profile;
-      const name = profile?.displayName ?? "Utilisateur";
+      const name = profile?.displayName ?? t('home.defaultUser');
       const city = profile?.city;
       const initial = name.charAt(0).toUpperCase();
 
@@ -502,10 +660,10 @@ function SoKinFeedSection() {
   };
 
   return (
-    <section className="ksm-sokin-feed" aria-label="SoKin — Fil d'actualité">
+    <section className="ksm-sokin-feed" aria-label={t('home.sokinFeed')}>
       <div className="ksm-sokin-feed-header">
-        <h2 className="ksm-section-title">📢 SoKin — Annonces</h2>
-        <Link to="/sokin" className="ksm-feed-see-all">Tout voir →</Link>
+        <h2 className="ksm-section-title">📢 {t('home.sokinFeed')}</h2>
+        <Link to="/sokin" className="ksm-feed-see-all">{t('home.viewAll')}</Link>
       </div>
 
       <div className="ksm-feed-list">
@@ -521,11 +679,11 @@ function SoKinFeedSection() {
               </div>
               <div className="ksm-feed-post-meta">
                 <p className="ksm-feed-post-author">So-Kin</p>
-                <p className="ksm-feed-post-city">Kin-Sell Network</p>
+                <p className="ksm-feed-post-city">{t('home.networkLabel')}</p>
               </div>
             </div>
             <p className="ksm-feed-post-text">
-              Aucune annonce So-Kin pour le moment. Publiez la première annonce pour lancer le fil.
+              {t('home.noSokinPosts')}
             </p>
             <div className="ksm-feed-post-stats">
               <span>❤️ 0</span>
@@ -533,7 +691,7 @@ function SoKinFeedSection() {
               <span>↗️ 0</span>
             </div>
             <Link to="/sokin" className="ksm-feed-see-all" style={{ alignSelf: "flex-start" }}>
-              Publier sur So-Kin →
+              {t('home.publishOnSokin')} →
             </Link>
           </article>
         ) : (
@@ -542,8 +700,8 @@ function SoKinFeedSection() {
       </div>
 
       <div className="ksm-sokin-links">
-        <Link to="/sokin/profiles" className="ksm-feed-see-all">Profils So-Kin</Link>
-        <Link to="/sokin/market" className="ksm-feed-see-all">Market So-Kin</Link>
+        <Link to="/sokin/profiles" className="ksm-feed-see-all">{t('home.sokinProfiles')}</Link>
+        <Link to="/sokin/market" className="ksm-feed-see-all">{t('home.sokinMarket')}</Link>
       </div>
     </section>
   );
@@ -631,14 +789,14 @@ function AccountPopup({
   return (
     <>
       <div className="ksm-popup-overlay" onClick={onClose} aria-hidden="true" />
-      <div className="ksm-account-popup" role="dialog" aria-label="Menu compte">
+      <div className="ksm-account-popup" role="dialog" aria-label={t('nav.accountAria')}>
         {isLoggedIn ? (
           <>
             <button
               className="ksm-account-popup-item"
               onClick={() => { onClose(); void navigate(getDashboardPath(user?.role)); }}
             >
-              👤 Mon compte
+              👤 {t('common.myAccount')}
             </button>
             <button
               className="ksm-account-popup-item"
@@ -648,21 +806,21 @@ function AccountPopup({
                 void navigate(getDashboardPath(user?.role));
               }}
             >
-              💬 Messagerie
+              💬 {t('common.messages')}
             </button>
             <div className="ksm-account-popup-divider" />
             <button className="ksm-account-popup-item ksm-account-popup-item--danger" onClick={handleLogout}>
-              🚪 Déconnexion
+              🚪 {t('common.logout')}
             </button>
           </>
         ) : (
           <>
             <button className="ksm-account-popup-item" onClick={() => { onClose(); void navigate("/login"); }}>
-              🔑 Connexion
+              🔑 {t('common.login')}
             </button>
             <div className="ksm-account-popup-divider" />
             <button className="ksm-account-popup-item" onClick={() => { onClose(); void navigate("/register"); }}>
-              ✨ Créer un compte
+              ✨ {t('common.signup')}
             </button>
           </>
         )}
@@ -676,10 +834,12 @@ function CreateMenu({
   open,
   onClose,
   isLoggedIn,
+  t,
 }: {
   open: boolean;
   onClose: () => void;
   isLoggedIn: boolean;
+  t: (k: string) => string;
 }) {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -693,20 +853,20 @@ function CreateMenu({
   return (
     <>
       <div className="ksm-popup-overlay" onClick={onClose} aria-hidden="true" />
-      <div className="ksm-create-menu" role="dialog" aria-label="Créer du contenu">
+      <div className="ksm-create-menu" role="dialog" aria-label={t('home.createAction')}>
         <div className="ksm-create-menu-handle" aria-hidden="true" />
-        <p className="ksm-create-menu-title">Publier ou ajouter</p>
+        <p className="ksm-create-menu-title">{t('home.createMenuTitle')}</p>
         <button className="ksm-create-item" onClick={() => go("/sokin")}>
           <span className="ksm-create-item-icon" aria-hidden="true">📢</span>
-          <span>Publier sur SoKin</span>
+          <span>{t('home.publishOnSokin')}</span>
         </button>
         <button className="ksm-create-item" onClick={() => go(`${getDashboardPath(user?.role)}?section=sell&create=produit`)}>
           <span className="ksm-create-item-icon" aria-hidden="true">🛍️</span>
-          <span>Ajouter un produit</span>
+          <span>{t('biz.addProductAction')}</span>
         </button>
         <button className="ksm-create-item" onClick={() => go(`${getDashboardPath(user?.role)}?section=sell&create=service`)}>
           <span className="ksm-create-item-icon" aria-hidden="true">🔧</span>
-          <span>Ajouter un service</span>
+          <span>{t('biz.addServiceAction')}</span>
         </button>
       </div>
     </>
@@ -729,7 +889,7 @@ function BottomNav({
 }) {
   const { user } = useAuth();
   return (
-    <nav className="ksm-bottom-nav-v2" aria-label="Navigation principale">
+    <nav className="ksm-bottom-nav-v2" aria-label={t('nav.ariaMain')}>
       {/* Home */}
       <Link to="/" className="ksm-bnav2-item">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -745,14 +905,14 @@ function BottomNav({
           <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
         </svg>
         {cartItemsCount > 0 && <span className="ksm-bnav2-badge">{cartItemsCount}</span>}
-        <span>Panier</span>
+        <span>{t('home.cartLabel')}</span>
       </Link>
 
       {/* + FAB center */}
       <button
         className={`ksm-bnav2-fab${activePopup === "create" ? " ksm-bnav2-fab--active" : ""}`}
         onClick={() => onToggle("create")}
-        aria-label="Créer"
+        aria-label={t('home.createAction')}
         aria-expanded={activePopup === "create"}
       >
         <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
@@ -768,28 +928,28 @@ function BottomNav({
           sessionStorage.setItem("ud-section", "notifications");
           window.location.href = getDashboardPath(user?.role);
         }}
-        aria-label="Notifications"
+        aria-label={t('home.notifications')}
       >
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
           <path d="M13.73 21a2 2 0 0 1-3.46 0" />
         </svg>
         {notificationsCount > 0 && <span className="ksm-bnav2-badge">{notificationsCount}</span>}
-        <span>Notifs</span>
+        <span>{t('home.notifications')}</span>
       </button>
 
       {/* Compte */}
       <button
         className={`ksm-bnav2-item${activePopup === "account" ? " ksm-bnav2-item--active" : ""}`}
         onClick={() => onToggle("account")}
-        aria-label="Compte"
+        aria-label={t('home.account')}
         aria-expanded={activePopup === "account"}
       >
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
           <circle cx="12" cy="7" r="4" />
         </svg>
-        <span>Compte</span>
+        <span>{t('home.account')}</span>
       </button>
     </nav>
   );
@@ -802,6 +962,9 @@ function BottomNav({
 export function HomePageMobile() {
   const { t, formatMoneyFromUsdCents, formatPriceLabelFromUsdCents } = useLocaleCurrency();
   const { isLoggedIn, user, logout } = useAuth();
+  const { effectiveCountry, getCountryConfig } = useMarketPreference();
+  const defaultCity = getCountryConfig(effectiveCountry).defaultCity;
+  const { on, off } = useSocket();
   const navigate = useNavigate();
   const lockedCats = useLockedCategories();
   const { platform } = usePwaInstall();
@@ -814,6 +977,22 @@ export function HomePageMobile() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [cartItemsCount, setCartItemsCount] = useState(0);
   const [notificationsCount, setNotificationsCount] = useState(0);
+
+  const reloadCounts = useCallback(async () => {
+    if (!isLoggedIn) return;
+    try {
+      const [cart, buyerData, sellerData] = await Promise.all([
+        ordersApi.buyerCart().catch(() => null),
+        ordersApi.buyerOrders({ limit: 5, inProgressOnly: true }).catch(() => null),
+        ordersApi.sellerOrders({ limit: 5, inProgressOnly: true }).catch(() => null),
+      ]);
+      setCartItemsCount(cart?.itemsCount ?? 0);
+      setNotificationsCount((buyerData?.orders.length ?? 0) + (sellerData?.orders.length ?? 0));
+    } catch {
+      setCartItemsCount(0);
+      setNotificationsCount(0);
+    }
+  }, [isLoggedIn]);
 
   // Fullscreen toggle
   useEffect(() => {
@@ -841,14 +1020,14 @@ export function HomePageMobile() {
     const load = async () => {
       setIsLoading(true);
       try {
-        const results = await listingsApi.latest({ type: activeTab, limit: 10 });
+        const results = await listingsApi.latest({ type: activeTab, city: defaultCity, country: effectiveCountry, limit: 10 });
         if (!cancelled) setListings(results);
       } catch { if (!cancelled) setListings([]); }
       finally { if (!cancelled) setIsLoading(false); }
     };
     void load();
     return () => { cancelled = true; };
-  }, [activeTab, refreshKey]);
+  }, [activeTab, refreshKey, defaultCity, effectiveCountry]);
 
   useEffect(() => {
     if (!isLoggedIn) {
@@ -879,6 +1058,26 @@ export function HomePageMobile() {
     return () => { cancelled = true; };
   }, [isLoggedIn, refreshKey]);
 
+  useEffect(() => {
+    const handleOrderChanged = () => {
+      void reloadCounts();
+    };
+
+    const handleNegotiationChanged = () => {
+      void reloadCounts();
+    };
+
+    on('order:status-updated', handleOrderChanged);
+    on('order:delivery-confirmed', handleOrderChanged);
+    on('negotiation:updated', handleNegotiationChanged);
+
+    return () => {
+      off('order:status-updated', handleOrderChanged);
+      off('order:delivery-confirmed', handleOrderChanged);
+      off('negotiation:updated', handleNegotiationChanged);
+    };
+  }, [on, off, reloadCounts]);
+
   const handleTogglePopup = (p: "account" | "create") => {
     setActivePopup((prev) => (prev === p ? null : p));
   };
@@ -908,7 +1107,7 @@ export function HomePageMobile() {
       />
 
       {/* ── SEARCH OVERLAY ── */}
-      <SearchOverlay open={searchOpen} onClose={() => setSearchOpen(false)} />
+      <SearchOverlay open={searchOpen} onClose={() => setSearchOpen(false)} t={t} />
 
       {/* ── COMPACT HEADER ── */}
       <MobileHeader
@@ -917,12 +1116,13 @@ export function HomePageMobile() {
         onSearchToggle={() => setSearchOpen(true)}
         isFullscreen={isFullscreen}
         onFullscreenToggle={toggleFullscreen}
+        t={t}
       />
 
       {/* ── IOS INSTALL HINT ── */}
       {showIosHint && (
         <div className="ksm-ios-hint" role="status">
-          📲 Installez l'app : appuyez sur <strong>Partager</strong> puis "Sur l'écran d'accueil"
+          📲 {t('home.iosInstallHint')}
         </div>
       )}
 
@@ -930,17 +1130,20 @@ export function HomePageMobile() {
       <SuggestionsRow
         formatMoney={formatMoneyFromUsdCents}
         formatLabel={formatPriceLabelFromUsdCents}
+        cityHint={defaultCity}
+        countryHint={effectiveCountry}
+        t={t}
       />
 
       {/* ── CATALOGUE RÉCENT ── */}
-      <section className="ksm-listings-section" aria-label="Annonces récentes">
+      <section className="ksm-listings-section" aria-label={t('home.recentListings')}>
         <div className="ksm-section-header">
-          <h2 className="ksm-section-title">🏪 Annonces récentes</h2>
+          <h2 className="ksm-section-title">🏪 {t('home.recentListings')}</h2>
           <Link
             to={`/explorer?type=${activeTab === "PRODUIT" ? "produits" : "services"}`}
             className="ksm-feed-see-all"
           >
-            Tout voir →
+            {t('home.viewAll')}
           </Link>
         </div>
 
@@ -985,7 +1188,7 @@ export function HomePageMobile() {
       </section>
 
       {/* ── SOKIN FEED ── */}
-      <SoKinFeedSection />
+      <SoKinFeedSection t={t} cityHint={defaultCity} countryHint={effectiveCountry} />
 
       {/* Spacer bottom nav */}
       <div className="ksm-bottom-spacer" aria-hidden="true" />
@@ -1013,6 +1216,7 @@ export function HomePageMobile() {
         open={activePopup === "create"}
         onClose={() => setActivePopup(null)}
         isLoggedIn={isLoggedIn}
+        t={t}
       />
 
       {/* ── NEGOTIATE POPUP ── */}

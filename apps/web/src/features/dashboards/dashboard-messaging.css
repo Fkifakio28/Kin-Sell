@@ -953,47 +953,99 @@
   position: fixed;
   inset: 0;
   z-index: 9999;
-  background: rgba(0,0,0,0.65);
-  backdrop-filter: blur(6px);
+  background: radial-gradient(circle at 15% 18%, rgba(30, 136, 229, 0.22), transparent 44%), radial-gradient(circle at 85% 82%, rgba(11, 31, 58, 0.78), transparent 45%), rgba(3, 11, 22, 0.93);
+  backdrop-filter: blur(10px);
+  display: flex;
+  align-items: stretch;
+  justify-content: stretch;
+}
+
+.dm-call-screen {
+  width: 100%;
+  min-height: 100dvh;
+  padding: calc(18px + env(safe-area-inset-top, 0px)) 16px calc(20px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+  text-align: center;
+  gap: 14px;
+}
+
+.dm-call-screen--incoming {
+  justify-content: space-evenly;
+}
+
+.dm-call-screen--active {
+  justify-content: space-between;
+}
+
+.dm-call-caller-avatar {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--ud-accent, #1E88E5), #5fa8ff);
+  color: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
+  font-size: 1.2rem;
+  font-weight: 800;
+  overflow: hidden;
 }
-.dm-call-dialog {
-  background: var(--ud-surface, rgba(11,31,58,0.95));
-  border: 1px solid var(--ud-border, rgba(30,136,229,0.25));
-  border-radius: 20px;
-  padding: 28px 36px;
-  text-align: center;
-  min-width: 260px;
+
+.dm-call-caller-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
+
+.dm-call-caller-avatar--lg {
+  width: 88px;
+  height: 88px;
+  margin-bottom: 6px;
+}
+
 .dm-call-label {
   font-size: 14px;
   font-weight: 600;
-  margin: 0 0 16px;
+  margin: 0;
+}
+
+.dm-call-label--title {
+  font-size: 20px;
+  font-weight: 800;
 }
 .dm-call-actions {
   display: flex;
   gap: 10px;
   justify-content: center;
+  flex-wrap: wrap;
+  width: 100%;
 }
 .dm-call-btn {
-  padding: 8px 22px;
+  min-width: 132px;
+  padding: 10px 20px;
   border: none;
-  border-radius: 20px;
+  border-radius: 999px;
   font-weight: 600;
   font-size: 12px;
   cursor: pointer;
 }
 .dm-call-btn--accept { background: #22C55E; color: #fff; }
 .dm-call-btn--reject { background: #EF4444; color: #fff; }
+.dm-call-btn--audio {
+  background: rgba(255,255,255,0.08);
+  color: var(--ud-text-1, #F0F4FF);
+  border: 1px solid var(--ud-border, rgba(30,136,229,0.25));
+}
 .dm-call-videos {
   position: relative;
   width: 100%;
-  max-width: 420px;
-  aspect-ratio: 16/9;
-  margin: 0 auto 12px;
-  border-radius: 16px;
+  max-width: 860px;
+  aspect-ratio: 9/16;
+  margin: 0;
+  border-radius: 20px;
   overflow: hidden;
   background: #000;
 }
@@ -1002,7 +1054,7 @@
   position: absolute;
   bottom: 8px;
   right: 8px;
-  width: 100px;
+  width: min(26vw, 140px);
   border-radius: 12px;
   border: 2px solid rgba(255,255,255,0.2);
 }

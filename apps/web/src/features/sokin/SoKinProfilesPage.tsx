@@ -2,6 +2,7 @@
 import { useNavigate } from 'react-router-dom';
 import type { ExplorerProfile } from '../explorer/explorer-data';
 import { useLocaleCurrency } from '../../app/providers/LocaleCurrencyProvider';
+import { useMarketPreference } from '../../app/providers/MarketPreferenceProvider';
 import { sokin as sokinApi } from '../../lib/api-client';
 import { useHoverPopup, ProfileHoverPopup, type ProfileHoverData } from '../../components/HoverPopup';
 import { useScrollRestore } from '../../utils/useScrollRestore';
@@ -20,7 +21,10 @@ const KINSHASA_COMMUNES = [
 
 export function SoKinProfilesPage() {
   const navigate = useNavigate();
-  const { t } = useLocaleCurrency();
+  const { t, language } = useLocaleCurrency();
+  const { effectiveCountry, getCountryConfig } = useMarketPreference();
+  const defaultCity = getCountryConfig(effectiveCountry).defaultCity;
+  const locale = language === 'en' ? 'en-US' : language === 'ln' ? 'fr-CD' : 'fr-FR';
   const profileHover = useHoverPopup<ProfileHoverData>();
   useScrollRestore();
 
@@ -38,9 +42,7 @@ export function SoKinProfilesPage() {
     const load = async () => {
       setIsLoading(true);
       try {
-        // Pas de filtre city : on charge tous les utilisateurs publics,
-        // le filtre commune se fait côté client.
-        const data = await sokinApi.publicUsers();
+        const data = await sokinApi.publicUsers({ city: defaultCity, country: effectiveCountry });
         if (cancelled) return;
         setProfiles(
           data.users.map((u) => ({
@@ -65,7 +67,7 @@ export function SoKinProfilesPage() {
     };
     void load();
     return () => { cancelled = true; };
-  }, []);
+  }, [defaultCity, effectiveCountry]);
 
   /* �"?�"? Filtre côté client �"?�"? */
   const filtered = useMemo(() => {
@@ -117,11 +119,11 @@ export function SoKinProfilesPage() {
         </p>
         <div className="skd-hero-metrics">
           <article>
-            <strong>{isLoading ? '\u2026' : profiles.length.toLocaleString('fr-FR')}</strong>
+            <strong>{isLoading ? '…' : profiles.length.toLocaleString(locale)}</strong>
             <span>{t('sokin.publicMembers')}</span>
           </article>
           <article>
-            <strong>{isLoading ? '\u2026' : filtered.length.toLocaleString('fr-FR')}</strong>
+            <strong>{isLoading ? '…' : filtered.length.toLocaleString(locale)}</strong>
             <span>{selectedCommune ? `\uD83D\uDCCD ${selectedCommune}` : t('sokin.total')}</span>
           </article>
           <article><strong>{t('sokin.community')}</strong><span>{t('sokin.trustNetwork')}</span></article>
@@ -157,7 +159,7 @@ export function SoKinProfilesPage() {
             onClick={() => setShowLocationPicker((prev) => !prev)}
             aria-label={t('sokin.changeLocation')}
           >
-            {'\uD83D\uDCCD'} {locationLabel} · {isLoading ? '\u2026' : `${filtered.length} profil${filtered.length !== 1 ? 's' : ''}`}
+            {'\uD83D\uDCCD'} {locationLabel} · {isLoading ? '\u2026' : t('sokin.profileCount').replace('{count}', String(filtered.length))}
           </button>
           {showLocationPicker && (
             <div className="skd-location-picker" role="listbox" aria-label={t('sokin.chooseCommune')}>
@@ -233,7 +235,7 @@ export function SoKinProfilesPage() {
                 <span className="skd-slider-info">
                   {filtered.length === 0
                     ? t('sokin.noProfile')
-                    : `${t('sokin.page')} ${sliderPage + 1} / ${totalPages} \u2014 ${filtered.length} profil${filtered.length !== 1 ? 's' : ''}`}
+                    : `${t('sokin.page')} ${sliderPage + 1} / ${totalPages} — ${t('sokin.profileCount').replace('{count}', String(filtered.length))}`}
                 </span>
               )}
               <div className="skd-slider-nav">

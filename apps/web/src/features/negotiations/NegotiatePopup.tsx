@@ -1,6 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useLocaleCurrency } from "../../app/providers/LocaleCurrencyProvider";
 import { negotiations, type NegotiationSummary, type GroupNegotiationSummary, ApiError } from "../../lib/api-client";
+import { useSocket } from "../../hooks/useSocket";
 import "./negotiate-popup.css";
 
 type NegotiatePopupProps = {
@@ -20,6 +21,7 @@ type NegMode = "SIMPLE" | "QUANTITY" | "GROUPED";
 
 export function NegotiatePopup({ listing, onClose, onSuccess }: NegotiatePopupProps) {
   const { t, formatMoneyFromUsdCents } = useLocaleCurrency();
+  const { on, off } = useSocket();
   const [mode, setMode] = useState<NegMode>("SIMPLE");
   const [priceDollars, setPriceDollars] = useState("");
   const [quantity, setQuantity] = useState(1);
@@ -33,15 +35,40 @@ export function NegotiatePopup({ listing, onClose, onSuccess }: NegotiatePopupPr
   const [loadingGroups, setLoadingGroups] = useState(false);
   const [joinGroupId, setJoinGroupId] = useState<string | null>(null);
 
+  const loadOpenGroups = useCallback(() => {
+    setLoadingGroups(true);
+    negotiations.listOpenGroups({ listingId: listing.id })
+      .then((data) => setOpenGroups(data.groups))
+      .catch(() => setOpenGroups([]))
+      .finally(() => setLoadingGroups(false));
+  }, [listing.id]);
+
   useEffect(() => {
     if (mode === "GROUPED") {
-      setLoadingGroups(true);
-      negotiations.listOpenGroups({ listingId: listing.id })
-        .then((data) => setOpenGroups(data.groups))
-        .catch(() => setOpenGroups([]))
-        .finally(() => setLoadingGroups(false));
+      loadOpenGroups();
     }
-  }, [mode, listing.id]);
+  }, [mode, loadOpenGroups]);
+
+  useEffect(() => {
+    if (mode !== "GROUPED") return;
+
+    const handleNegotiationUpdated = (_payload: {
+      type: 'NEGOTIATION_UPDATED';
+      action: 'CREATED' | 'RESPONDED' | 'CANCELED' | 'JOINED' | 'BUNDLE_CREATED';
+      negotiationId: string;
+      buyerUserId: string;
+      sellerUserId: string;
+      sourceUserId: string;
+      updatedAt: string;
+    }) => {
+      loadOpenGroups();
+    };
+
+    on('negotiation:updated', handleNegotiationUpdated);
+    return () => {
+      off('negotiation:updated', handleNegotiationUpdated);
+    };
+  }, [mode, on, off, loadOpenGroups]);
 
   const handleSubmit = async () => {
     const dollars = parseFloat(priceDollars);

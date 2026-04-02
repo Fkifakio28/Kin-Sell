@@ -2,11 +2,14 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './explorer.css';
 import { explorer as explorerApi, type ExplorerShopApi } from '../../lib/api-client';
+import { useMarketPreference } from '../../app/providers/MarketPreferenceProvider';
 import { useHoverPopup, ProfileHoverPopup, type ProfileHoverData } from '../../components/HoverPopup';
 import { useScrollRestore } from '../../utils/useScrollRestore';
 
 export function ExplorerShopsPage() {
   const navigate = useNavigate();
+  const { effectiveCountry, getCountryConfig } = useMarketPreference();
+  const defaultCity = getCountryConfig(effectiveCountry).defaultCity;
   const [shops, setShops] = useState<ExplorerShopApi[]>([]);
   const [loading, setLoading] = useState(true);
   const shopHover = useHoverPopup<ProfileHoverData>();
@@ -16,7 +19,7 @@ export function ExplorerShopsPage() {
     let cancelled = false;
     const load = async () => {
       try {
-        const data = await explorerApi.shops(50);
+        const data = await explorerApi.shops({ limit: 50, city: defaultCity, country: effectiveCountry });
         if (!cancelled) setShops(data);
       } catch {
         // silencieux
@@ -26,7 +29,7 @@ export function ExplorerShopsPage() {
     };
     load();
     return () => { cancelled = true; };
-  }, []);
+  }, [defaultCity, effectiveCountry]);
 
   return (
     <section className="explorer-directory-shell animate-fade-in">

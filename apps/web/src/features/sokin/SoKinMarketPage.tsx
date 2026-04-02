@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import type { ExplorerShop } from '../explorer/explorer-data';
 import { explorer, type ExplorerShopApi } from '../../lib/api-client';
 import { useLocaleCurrency } from '../../app/providers/LocaleCurrencyProvider';
+import { useMarketPreference } from '../../app/providers/MarketPreferenceProvider';
 import { useHoverPopup, ProfileHoverPopup, type ProfileHoverData } from '../../components/HoverPopup';
 import { useScrollRestore } from '../../utils/useScrollRestore';
 import { AdBanner } from '../../components/AdBanner';
@@ -17,6 +18,8 @@ type HoveredShopInfo = {
 export function SoKinMarketPage() {
   const navigate = useNavigate();
   const { t } = useLocaleCurrency();
+  const { effectiveCountry, getCountryConfig } = useMarketPreference();
+  const defaultCity = getCountryConfig(effectiveCountry).defaultCity;
   useScrollRestore();
   const KINSHASA_COMMUNES = [
     'Gombe', 'Lemba', 'Ngaliema', 'Lingwala', 'Barumbu', 'Kasa-Vubu',
@@ -39,7 +42,7 @@ export function SoKinMarketPage() {
     const load = async () => {
       setIsLoading(true);
       try {
-        const data = await explorer.shops(50);
+        const data = await explorer.shops({ limit: 50, city: defaultCity, country: effectiveCountry });
         if (cancelled) return;
         const mapped: ExplorerShop[] = data.map((s: ExplorerShopApi) => ({
           id: s.id,
@@ -62,7 +65,7 @@ export function SoKinMarketPage() {
     };
     void load();
     return () => { cancelled = true; };
-  }, []);
+  }, [defaultCity, effectiveCountry]);
 
   const allShops = apiShops;
 

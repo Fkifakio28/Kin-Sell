@@ -18,6 +18,54 @@ type SocketEvents = {
   "call:accepted": (data: { conversationId: string; accepterId: string }) => void;
   "call:rejected": (data: { conversationId: string; rejecterId: string }) => void;
   "call:ended": (data: { conversationId: string; enderId: string }) => void;
+  "order:status-updated": (data: {
+    type: "ORDER_STATUS_UPDATED";
+    orderId: string;
+    status: string;
+    buyerUserId: string;
+    sellerUserId: string;
+    sourceUserId: string;
+    updatedAt: string;
+  }) => void;
+  "order:delivery-confirmed": (data: {
+    type: "ORDER_CONFIRMATION_COMPLETED";
+    orderId: string;
+    status: "DELIVERED" | string;
+    buyerUserId: string;
+    sellerUserId: string;
+    sourceUserId: string;
+    updatedAt: string;
+  }) => void;
+  "negotiation:updated": (data: {
+    type: "NEGOTIATION_UPDATED";
+    action: "CREATED" | "RESPONDED" | "CANCELED" | "JOINED" | "BUNDLE_CREATED";
+    negotiationId: string;
+    buyerUserId: string;
+    sellerUserId: string;
+    sourceUserId: string;
+    updatedAt: string;
+  }) => void;
+  "sokin:post-created": (data: {
+    type: "SOKIN_POST_CREATED";
+    postId: string;
+    authorId: string;
+    createdAt: string;
+    sourceUserId: string;
+  }) => void;
+  "sokin:story-created": (data: {
+    type: "SOKIN_STORY_CREATED";
+    storyId: string;
+    authorId: string;
+    createdAt: string;
+    sourceUserId: string;
+  }) => void;
+  "sokin:post-shared": (data: {
+    type: "SOKIN_POST_SHARED";
+    postId: string;
+    shares: number;
+    sourceUserId: string;
+    updatedAt: string;
+  }) => void;
   "webrtc:offer": (data: { callerId: string; sdp: RTCSessionDescriptionInit }) => void;
   "webrtc:answer": (data: { answererId: string; sdp: RTCSessionDescriptionInit }) => void;
   "webrtc:ice-candidate": (data: { fromUserId: string; candidate: RTCIceCandidateInit }) => void;
