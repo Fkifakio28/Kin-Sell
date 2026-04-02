@@ -19,7 +19,12 @@ router.post(
   "/push/subscribe",
   requireAuth,
   asyncHandler(async (req, res) => {
-    const userId = (req as AuthenticatedRequest).auth!.userId;
+    const userId = (req as AuthenticatedRequest).auth?.userId;
+    if (!userId) {
+      res.status(401).json({ error: "Authentification requise" });
+      return;
+    }
+
     const { subscription, userAgent } = req.body as {
       subscription: { endpoint: string; keys: { p256dh: string; auth: string } };
       userAgent?: string;
@@ -40,7 +45,12 @@ router.post(
   "/push/unsubscribe",
   requireAuth,
   asyncHandler(async (req, res) => {
-    const userId = (req as AuthenticatedRequest).auth!.userId;
+    const userId = (req as AuthenticatedRequest).auth?.userId;
+    if (!userId) {
+      res.status(401).json({ error: "Authentification requise" });
+      return;
+    }
+
     const { endpoint } = req.body as { endpoint?: string };
 
     if (endpoint) {

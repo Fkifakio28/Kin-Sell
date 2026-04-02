@@ -33,6 +33,10 @@ export const requireAuth = (request: AuthenticatedRequest, _response: Response, 
 
   try {
     const payload = verifyAccessToken(token);
+    if (!payload?.sub || typeof payload.sub !== "string") {
+      throw new HttpError(401, "Token invalide");
+    }
+
     request.auth = {
       userId: payload.sub,
       role: payload.role as Role,
