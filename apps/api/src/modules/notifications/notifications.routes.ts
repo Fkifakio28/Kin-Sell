@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { requireAuth } from "../../shared/auth/auth-middleware.js";
+import { requireAuth, type AuthenticatedRequest } from "../../shared/auth/auth-middleware.js";
 import * as pushService from "./push.service.js";
 import { asyncHandler } from "../../shared/utils/async-handler.js";
 
@@ -19,7 +19,7 @@ router.post(
   "/push/subscribe",
   requireAuth,
   asyncHandler(async (req, res) => {
-    const userId = (req as unknown as { userId: string }).userId;
+    const userId = (req as AuthenticatedRequest).auth!.userId;
     const { subscription, userAgent } = req.body as {
       subscription: { endpoint: string; keys: { p256dh: string; auth: string } };
       userAgent?: string;
@@ -40,7 +40,7 @@ router.post(
   "/push/unsubscribe",
   requireAuth,
   asyncHandler(async (req, res) => {
-    const userId = (req as unknown as { userId: string }).userId;
+    const userId = (req as AuthenticatedRequest).auth!.userId;
     const { endpoint } = req.body as { endpoint?: string };
 
     if (endpoint) {
