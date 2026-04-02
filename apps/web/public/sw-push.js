@@ -3,6 +3,10 @@
    ═══════════════════════════════════════════════════════════ */
 // @ts-nocheck
 
+function toAbsoluteUrl(path) {
+  return new URL(path || "/", self.location.origin).href;
+}
+
 /* ── Push event ── */
 self.addEventListener("push", (event) => {
   if (!event.data) return;
@@ -58,19 +62,21 @@ self.addEventListener("notificationclick", (event) => {
     return;
   }
 
+  const absoluteTargetUrl = toAbsoluteUrl(targetUrl);
+
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(async (clients) => {
       for (const client of clients) {
-        if (client.url.includes(self.location.origin)) {
+        if (client.url && client.url.startsWith(self.location.origin)) {
           if ("navigate" in client) {
-            await client.navigate(targetUrl);
+            await client.navigate(absoluteTargetUrl);
           }
           await client.focus();
-          client.postMessage({ type: "NOTIFICATION_CLICK", data, targetUrl });
+          client.postMessage({ type: "NOTIFICATION_CLICK", data, targetUrl: absoluteTargetUrl });
           return undefined;
         }
       }
-      return self.clients.openWindow(targetUrl);
+      return self.clients.openWindow(absoluteTargetUrl);
     })
   );
 });
