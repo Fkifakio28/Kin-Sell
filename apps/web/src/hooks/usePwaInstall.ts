@@ -117,6 +117,7 @@ export function usePwaInstall(): PwaInstallControls {
   const [canShow, setCanShow] = useState(false);
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [engagementMet, setEngagementMet] = useState(false);
+  const hasAndroidApk = Boolean(import.meta.env.VITE_ANDROID_APK_URL?.trim());
 
   const deferredPrompt = useRef<BeforeInstallPromptEvent | null>(null);
   const lastInteractionTime = useRef(0);
@@ -222,7 +223,9 @@ export function usePwaInstall(): PwaInstallControls {
   // ── canShow : idle atteint + installState valide + cooldown OK ──
   useEffect(() => {
     if (!engagementMet) return;
-    if (installState !== "prompt" && installState !== "ios") return;
+
+    const canShowAndroidApk = platform === "android" && hasAndroidApk;
+    if (installState !== "prompt" && installState !== "ios" && !canShowAndroidApk) return;
 
     // Double-vérification cooldown pour iOS
     const cooldownUntil = getStorage<number>(KEYS.cooldownUntil, 0);
@@ -230,19 +233,20 @@ export function usePwaInstall(): PwaInstallControls {
 
     setCanShow(true);
     emitAnalytics("pwa_banner_shown", { platform, installState });
-  }, [engagementMet, installState, platform]);
+  }, [engagementMet, installState, platform, hasAndroidApk]);
 
   // ── Force-show via événement custom (ex: clic logo accueil) ──
   useEffect(() => {
     const handler = () => {
-      if (installState === "prompt" || installState === "ios") {
+      const canShowAndroidApk = platform === "android" && hasAndroidApk;
+      if (installState === "prompt" || installState === "ios" || canShowAndroidApk) {
         setCanShow(true);
         emitAnalytics("pwa_banner_force_shown", { platform, installState });
       }
     };
     window.addEventListener("ks-pwa-force-show", handler);
     return () => window.removeEventListener("ks-pwa-force-show", handler);
-  }, [installState, platform]);
+  }, [installState, platform, hasAndroidApk]);
 
   // ── triggerInstall ──
   const triggerInstall = useCallback(async (): Promise<"accepted" | "dismissed" | "unavailable"> => {

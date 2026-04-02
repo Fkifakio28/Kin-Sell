@@ -212,6 +212,7 @@ GOOGLE_MAPS_API_KEY=""
 
 # ── Frontend (sera injecté au build Vite) ──
 VITE_API_URL="https://api.kin-sell.com"
+VITE_ANDROID_APK_URL="https://kin-sell.com/downloads/kin-sell-release.apk"
 ```
 
 ```bash
@@ -255,7 +256,7 @@ cd /var/www/kin-sell
 
 # 7.1 — Build le frontend (React + Vite)
 cd apps/web
-VITE_API_URL="https://api.kin-sell.com" pnpm run build
+VITE_API_URL="https://api.kin-sell.com" VITE_ANDROID_APK_URL="https://kin-sell.com/downloads/kin-sell-release.apk" pnpm run build
 # → Génère le dossier apps/web/dist/ avec les fichiers statiques
 
 # 7.2 — Notifier les moteurs sur le sitemap index
