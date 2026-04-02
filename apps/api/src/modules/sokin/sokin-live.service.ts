@@ -37,16 +37,37 @@ async function attachFeaturedListing<T extends { featuredListingId: string | nul
 /* ── Créer un live ── */
 export async function createLive(
   hostId: string,
-  data: { title: string; description?: string; aspect: "LANDSCAPE" | "PORTRAIT"; tags?: string[]; city?: string }
+  data: { title: string; description?: string; aspect: "LANDSCAPE" | "PORTRAIT"; tags?: string[]; city?: string; thumbnailUrl?: string; featuredListingId?: string }
 ) {
+  let featuredListingId: string | null = null;
+
+  if (data.featuredListingId) {
+    const listing = await prisma.listing.findFirst({
+      where: {
+        id: data.featuredListingId,
+        ownerUserId: hostId,
+        status: "ACTIVE",
+      },
+      select: { id: true },
+    });
+
+    if (!listing) {
+      throw new Error("Article introuvable ou non autorisé");
+    }
+
+    featuredListingId = listing.id;
+  }
+
   return prisma.soKinLive.create({
     data: {
       hostId,
       title: data.title,
       description: data.description ?? null,
+      thumbnailUrl: data.thumbnailUrl ?? null,
       aspect: data.aspect,
       tags: data.tags ?? [],
       city: data.city ?? null,
+      featuredListingId,
       status: "WAITING",
     },
     include: {

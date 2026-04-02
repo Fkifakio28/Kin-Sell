@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import Hls from 'hls.js';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../app/providers/AuthProvider';
 import { useLocaleCurrency } from '../../app/providers/LocaleCurrencyProvider';
 import { useIsMobile } from '../../hooks/useIsMobile';
-import { sokinLive, type SoKinLiveData, type SoKinLiveChatMsg } from '../../lib/api-client';
+import { listings as listingsApi, sokinLive, type MyListing, type SoKinLiveData, type SoKinLiveChatMsg } from '../../lib/api-client';
 import './sokin-live.css';
 
 /* ═══════════════════════════════════════════════════
@@ -12,6 +12,30 @@ import './sokin-live.css';
    ═══════════════════════════════════════════════════ */
 
 type LiveView = 'browse' | 'watch' | 'create';
+type LiveVisibility = 'PUBLIC' | 'FOLLOWERS' | 'PRIVATE' | 'CLIENTS';
+
+const LIVE_CATEGORY_PREFIX = '__live_category__:';
+const LIVE_VISIBILITY_PREFIX = '__live_visibility__:';
+
+function formatUsdFromCents(cents: number): string {
+  return `$${(cents / 100).toFixed(2)}`;
+}
+
+function buildLiveTags(baseTags: string[], category: string, visibility: LiveVisibility) {
+  return [
+    ...baseTags.filter((tag) => !tag.startsWith(LIVE_CATEGORY_PREFIX) && !tag.startsWith(LIVE_VISIBILITY_PREFIX)),
+    `${LIVE_CATEGORY_PREFIX}${category}`,
+    `${LIVE_VISIBILITY_PREFIX}${visibility}`,
+  ];
+}
+
+function extractLiveCategory(tags: string[]): string {
+  return tags.find((tag) => tag.startsWith(LIVE_CATEGORY_PREFIX))?.slice(LIVE_CATEGORY_PREFIX.length) ?? 'Général';
+}
+
+function extractLiveVisibility(tags: string[]): LiveVisibility {
+  return (tags.find((tag) => tag.startsWith(LIVE_VISIBILITY_PREFIX))?.slice(LIVE_VISIBILITY_PREFIX.length) as LiveVisibility | undefined) ?? 'PUBLIC';
+}
 
 function formatHistoryDate(iso: string | null): string {
   if (!iso) return 'Date indisponible';
@@ -29,15 +53,31 @@ function isHlsSource(url: string): boolean {
    FORMAT OVERLAY MODAL — choix 16:9 / 9:16
    ═══════════════════════════════════════════════════ */
 
-function StartLiveModal({ onClose, onStart }: { onClose: () => void; onStart: (data: { title: string; description: string; aspect: 'LANDSCAPE' | 'PORTRAIT'; city: string }) => void }) {
+function StartLiveModal({
+  onClose,
+  onStart,
+  listings,
+  defaultCity,
+  loadingListings,
+}: {
+  onClose: () => void;
+  onStart: (data: { title: string; description: string; aspect: 'LANDSCAPE' | 'PORTRAIT'; city: string; category: string; visibility: LiveVisibility; featuredListingId?: string; thumbnailUrl?: string; tags: string[] }) => void;
+  listings: MyListing[];
+  defaultCity: string;
+  loadingListings: boolean;
+}) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [aspect, setAspect] = useState<'LANDSCAPE' | 'PORTRAIT'>('PORTRAIT');
-  const [city, setCity] = useState('');
+  const [city, setCity] = useState(defaultCity);
+  const [category, setCategory] = useState('Shopping live');
+  const [visibility, setVisibility] = useState<LiveVisibility>('PUBLIC');
+  const [selectedListingId, setSelectedListingId] = useState('');
   const [mediaReady, setMediaReady] = useState(false);
   const [mediaError, setMediaError] = useState<string | null>(null);
   const previewRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const selectedListing = listings.find((listing) => listing.id === selectedListingId) ?? null;
 
   useEffect(() => {
     let cancelled = false;
@@ -149,6 +189,49 @@ function StartLiveModal({ onClose, onStart }: { onClose: () => void; onStart: (d
           />
         </div>
 
+        <div className="sklive-form-grid">
+          <div className="sklive-form-group">
+            <label>Catégorie</label>
+            <input
+              type="text"
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              placeholder="Ex: Déstockage, Q&A, Démo"
+              className="sklive-input"
+            />
+          </div>
+
+          <div className="sklive-form-group">
+            <label>Visibilité</label>
+            <select value={visibility} onChange={(e) => setVisibility(e.target.value as LiveVisibility)} className="sklive-input">
+              <option value="PUBLIC">Public</option>
+              <option value="FOLLOWERS">Abonnés</option>
+              <option value="PRIVATE">Privé</option>
+              <option value="CLIENTS">Clients uniquement</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="sklive-form-group">
+          <label>Produit à épingler</label>
+          <select value={selectedListingId} onChange={(e) => setSelectedListingId(e.target.value)} className="sklive-input">
+            <option value="">Aucun produit sélectionné</option>
+            {listings.map((listing) => (
+              <option key={listing.id} value={listing.id}>{listing.title} · {formatUsdFromCents(listing.priceUsdCents)}</option>
+            ))}
+          </select>
+          {loadingListings ? <p className="sklive-field-help">Chargement de vos produits actifs...</p> : null}
+        </div>
+
+        <div className="sklive-live-plan-card">
+          <div>
+            <span className="sklive-plan-label">Thumbnail auto</span>
+            <strong>{selectedListing?.title ?? 'Aperçu caméra'}</strong>
+            <p>{selectedListing ? `La miniature initiale est reprise depuis le produit ${selectedListing.title}.` : 'Sans produit choisi, le live démarre sur la caméra comme aperçu principal.'}</p>
+          </div>
+          {selectedListing?.imageUrl ? <img src={selectedListing.imageUrl} alt={selectedListing.title} className="sklive-plan-thumb" /> : <div className="sklive-plan-thumb ph">📺</div>}
+        </div>
+
         <div className="sklive-form-group">
           <label>Apercu camera</label>
           <div className="sklive-camera-preview">
@@ -167,7 +250,17 @@ function StartLiveModal({ onClose, onStart }: { onClose: () => void; onStart: (d
           type="button"
           className="sklive-start-btn"
           disabled={!title.trim() || !mediaReady}
-          onClick={() => onStart({ title: title.trim(), description: description.trim(), aspect, city: city.trim() })}
+          onClick={() => onStart({
+            title: title.trim(),
+            description: description.trim(),
+            aspect,
+            city: city.trim(),
+            category: category.trim() || 'Général',
+            visibility,
+            featuredListingId: selectedListing?.id,
+            thumbnailUrl: selectedListing?.imageUrl ?? undefined,
+            tags: buildLiveTags([], category.trim() || 'Général', visibility),
+          })}
         >
           🔴 Lancer le Live
         </button>
@@ -182,6 +275,7 @@ function StartLiveModal({ onClose, onStart }: { onClose: () => void; onStart: (d
 
 function LiveCard({ live, onClick }: { live: SoKinLiveData; onClick: () => void }) {
   const hostProfile = live.host?.profile;
+  const liveCategory = extractLiveCategory(live.tags);
   const badgeConfig =
     live.status === 'LIVE'
       ? { className: 'live', label: '🔴 LIVE' }
@@ -213,6 +307,10 @@ function LiveCard({ live, onClick }: { live: SoKinLiveData; onClick: () => void 
           <span className={`sklive-badge ${badgeConfig.className}`}>{badgeConfig.label}</span>
           <span className="sklive-badge viewers">{viewersLabel}</span>
         </div>
+        <div className="sklive-card-overlay-meta">
+          <span className="sklive-card-chip">{liveCategory}</span>
+          {live.featuredListing ? <span className="sklive-card-chip commerce">🛒 {live.featuredListing.type === 'SERVICE' ? 'Service' : 'Produit'}</span> : null}
+        </div>
       </div>
 
       <div className="sklive-card-info">
@@ -232,7 +330,7 @@ function LiveCard({ live, onClick }: { live: SoKinLiveData; onClick: () => void 
         <div className="sklive-card-stats">
           <span>❤️ {live.likesCount}</span>
           {(live.status === 'ENDED' || live.status === 'CANCELED') && <span>💬 Archive</span>}
-          {live.tags.length > 0 && <span className="sklive-card-tag">#{live.tags[0]}</span>}
+          <span className="sklive-card-tag">{extractLiveVisibility(live.tags)}</span>
         </div>
       </div>
     </button>
@@ -266,7 +364,10 @@ function LiveViewer({
   const [hostListings, setHostListings] = useState<Array<{ id: string; title: string; priceUsdCents: number; city: string; imageUrl: string | null; type: 'PRODUIT' | 'SERVICE' }>>([]);
   const [showListingPicker, setShowListingPicker] = useState(false);
   const [listingBusy, setListingBusy] = useState(false);
+  const [promoGoal, setPromoGoal] = useState<{ label: string; value: string } | null>(null);
   const heartIdRef = useRef(0);
+  const lastTapRef = useRef(0);
+  const surfaceTouchStartRef = useRef<{ x: number; y: number } | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const chatPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const statusPollInFlightRef = useRef(false);
@@ -537,6 +638,14 @@ function LiveViewer({
     }
   }, [live.id, liveData.host?.profile?.displayName, liveData.title]);
 
+  const handleVideoSurfaceTap = useCallback(() => {
+    const now = Date.now();
+    if (now - lastTapRef.current < 260) {
+      void handleLike();
+    }
+    lastTapRef.current = now;
+  }, [handleLike]);
+
   const isPortrait = liveData.aspect === 'PORTRAIT';
   // Sur mobile, adapter le layout à l'orientation réelle de l'appareil
   const layoutOrientation = isMobile ? deviceOrientation : (isPortrait ? 'portrait' : 'landscape');
@@ -547,6 +656,20 @@ function LiveViewer({
   const canShowComposer = isLoggedIn && liveStatus === 'LIVE';
   const canShowJoinAsGuest = !isHost && liveStatus === 'LIVE';
   const hostOwnsLive = liveData.hostId === user?.id;
+  const liveCategory = extractLiveCategory(liveData.tags);
+  const liveVisibility = extractLiveVisibility(liveData.tags);
+
+  useEffect(() => {
+    if (localViewers >= 100) {
+      setPromoGoal({ label: 'Objectif audience atteint', value: `${localViewers} viewers` });
+      return;
+    }
+    if (liveData.featuredListing) {
+      setPromoGoal({ label: 'Produit mis en avant', value: liveData.featuredListing.title });
+      return;
+    }
+    setPromoGoal({ label: 'Objectif du live', value: `${Math.max(100 - localViewers, 1)} viewers restants` });
+  }, [liveData.featuredListing, localViewers]);
 
   useEffect(() => {
     if (!isHost) return;
@@ -607,7 +730,28 @@ function LiveViewer({
 
       {/* Video area */}
       <div className={`sklive-viewer-video${isPortrait ? ' portrait' : ' landscape'}`}>
-        <div className="sklive-video-placeholder">
+        <div
+          className="sklive-video-placeholder"
+          onDoubleClick={() => void handleLike()}
+          onClick={handleVideoSurfaceTap}
+          onTouchStart={(e) => {
+            const touch = e.touches[0];
+            surfaceTouchStartRef.current = { x: touch.clientX, y: touch.clientY };
+          }}
+          onTouchEnd={(e) => {
+            const start = surfaceTouchStartRef.current;
+            const touch = e.changedTouches[0];
+            if (!start) return;
+            const dx = touch.clientX - start.x;
+            const dy = touch.clientY - start.y;
+            if (dy > 100) {
+              onBack();
+            } else if (Math.abs(dx) < 12 && Math.abs(dy) < 12) {
+              handleVideoSurfaceTap();
+            }
+            surfaceTouchStartRef.current = null;
+          }}
+        >
           {canPlayPublicStream && (
             <video
               ref={playbackVideoRef}
@@ -634,6 +778,7 @@ function LiveViewer({
             <div className="sklive-video-meta-pill">
               <span>👁️ {localViewers}</span>
               <span>❤️ {localLikes}</span>
+              <span>{liveCategory}</span>
               {hostOwnsLive && <span>Toi</span>}
             </div>
           </div>
@@ -722,11 +867,16 @@ function LiveViewer({
                 {liveData.featuredListing.imageUrl ? <img src={liveData.featuredListing.imageUrl} alt={liveData.featuredListing.title} /> : <span className="sklive-featured-placeholder">🛍️</span>}
                 <div>
                   <strong>{liveData.featuredListing.title}</strong>
-                  <span>{(liveData.featuredListing.priceUsdCents / 100).toFixed(2)} $ • {liveData.featuredListing.city}</span>
+                  <span>{formatUsdFromCents(liveData.featuredListing.priceUsdCents)} • {liveData.featuredListing.city}</span>
                 </div>
-                <em>Acheter</em>
+                <em>Acheter maintenant</em>
               </a>
             )}
+
+            <div className="sklive-commerce-strip">
+              <span className="sklive-commerce-pill">Visibilité: {liveVisibility}</span>
+              {promoGoal ? <span className="sklive-commerce-pill strong">{promoGoal.label}: {promoGoal.value}</span> : null}
+            </div>
 
             <div className="sklive-live-copy">
               <p className="sklive-live-copy-handle">{creatorHandle}</p>
@@ -734,9 +884,10 @@ function LiveViewer({
               <p className="sklive-live-copy-description">{liveDescription}</p>
               {liveData.tags.length > 0 && (
                 <div className="sklive-live-tags">
-                  {liveData.tags.slice(0, 3).map((tag) => (
+                  {liveData.tags.filter((tag) => !tag.startsWith(LIVE_CATEGORY_PREFIX) && !tag.startsWith(LIVE_VISIBILITY_PREFIX)).slice(0, 3).map((tag) => (
                     <span key={tag} className="sklive-live-tag">#{tag}</span>
                   ))}
+                  <span className="sklive-live-tag sklive-live-tag--meta">{liveCategory}</span>
                 </div>
               )}
             </div>
@@ -818,6 +969,8 @@ export function SoKinLivePage() {
   const [selectedLive, setSelectedLive] = useState<SoKinLiveData | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [myListings, setMyListings] = useState<MyListing[]>([]);
+  const [loadingMyListings, setLoadingMyListings] = useState(false);
 
   // Swipe detection for mobile
   const touchStartRef = useRef<number | null>(null);
@@ -828,6 +981,27 @@ export function SoKinLivePage() {
       setShowCreateModal(true);
     }
   }, [searchParams, isLoggedIn]);
+
+  useEffect(() => {
+    if (!isLoggedIn) {
+      setMyListings([]);
+      return;
+    }
+    let cancelled = false;
+    const loadMyListings = async () => {
+      setLoadingMyListings(true);
+      try {
+        const data = await listingsApi.mine({ status: 'ACTIVE', page: 1, limit: 30 });
+        if (!cancelled) setMyListings(data.listings ?? []);
+      } catch {
+        if (!cancelled) setMyListings([]);
+      } finally {
+        if (!cancelled) setLoadingMyListings(false);
+      }
+    };
+    void loadMyListings();
+    return () => { cancelled = true; };
+  }, [isLoggedIn]);
 
   // Load active lives
   useEffect(() => {
@@ -862,7 +1036,7 @@ export function SoKinLivePage() {
     touchStartRef.current = null;
   };
 
-  const handleCreateLive = async (data: { title: string; description: string; aspect: 'LANDSCAPE' | 'PORTRAIT'; city: string }) => {
+  const handleCreateLive = async (data: { title: string; description: string; aspect: 'LANDSCAPE' | 'PORTRAIT'; city: string; category: string; visibility: LiveVisibility; featuredListingId?: string; thumbnailUrl?: string; tags: string[] }) => {
     if (isCreating) return;
     setIsCreating(true);
     try {
@@ -871,6 +1045,9 @@ export function SoKinLivePage() {
         description: data.description || undefined,
         aspect: data.aspect,
         city: data.city || undefined,
+        tags: data.tags,
+        thumbnailUrl: data.thumbnailUrl,
+        featuredListingId: data.featuredListingId,
       });
       setShowCreateModal(false);
       setSelectedLive(live);
@@ -903,8 +1080,31 @@ export function SoKinLivePage() {
   }
 
   // Browse view
-  const liveLives = lives.filter((l) => l.status === 'LIVE');
-  const waitingLives = lives.filter((l) => l.status === 'WAITING');
+  const sortedLives = useMemo(() => {
+    const userCity = user?.profile.city?.toLowerCase().trim() ?? '';
+    return [...lives].sort((left, right) => {
+      const score = (live: SoKinLiveData) => {
+        let value = 0;
+        if (live.status === 'LIVE') value += 1000;
+        value += live.viewerCount * 8;
+        value += live.likesCount * 2;
+        if (live.featuredListing) value += 60;
+        if (userCity && live.city?.toLowerCase().trim() === userCity) value += 120;
+        return value;
+      };
+      return score(right) - score(left);
+    });
+  }, [lives, user?.profile.city]);
+
+  const liveLives = sortedLives.filter((l) => l.status === 'LIVE');
+  const waitingLives = sortedLives.filter((l) => l.status === 'WAITING');
+  const featuredNowLives = liveLives.slice(0, 8);
+  const replayLives = historyLives.slice(0, 6);
+  const heroStats = {
+    liveCount: liveLives.length,
+    replayCount: replayLives.length,
+    viewers: liveLives.reduce((sum, live) => sum + live.viewerCount, 0),
+  };
 
   return (
     <div
@@ -940,6 +1140,33 @@ export function SoKinLivePage() {
         <p className="sklive-swipe-hint">← Swipe pour retourner à So-Kin</p>
       )}
 
+      <section className="sklive-hero">
+        <div className="sklive-hero-copy">
+          <span className="sklive-hero-kicker">LIVE NOW</span>
+          <h2>Le live commerce So-Kin met d’abord les diffusions qui convertissent: populaires, proches et déjà reliées à un produit.</h2>
+          <p>Cette refonte prépare le terrain pour la future couche média, tout en renforçant déjà la vente directe et la découverte en direct.</p>
+          <div className="sklive-hero-metrics">
+            <div><strong>{heroStats.liveCount}</strong><span>en direct</span></div>
+            <div><strong>{heroStats.viewers}</strong><span>viewers actifs</span></div>
+            <div><strong>{heroStats.replayCount}</strong><span>replays récents</span></div>
+          </div>
+        </div>
+        <div className="sklive-live-now-rail" aria-label="Lives en direct prioritaires">
+          {featuredNowLives.length > 0 ? featuredNowLives.map((live) => (
+            <button key={live.id} type="button" className="sklive-now-card" onClick={() => void handleOpenLive(live)}>
+              <span className="sklive-now-ring">
+                {live.host?.profile?.avatarUrl ? <img src={live.host.profile.avatarUrl} alt={live.host.profile.displayName} /> : <span>👤</span>}
+              </span>
+              <strong>{live.host?.profile?.displayName ?? 'Live'}</strong>
+              <span>👁️ {live.viewerCount}</span>
+              {live.featuredListing ? <em>🛒 {live.featuredListing.title}</em> : <em>{extractLiveCategory(live.tags)}</em>}
+            </button>
+          )) : (
+            <div className="sklive-now-empty">Aucun live en direct pour le moment.</div>
+          )}
+        </div>
+      </section>
+
       {/* Lives en cours */}
       {liveLives.length > 0 && (
         <section className="sklive-section">
@@ -972,15 +1199,15 @@ export function SoKinLivePage() {
         </section>
       )}
 
-      {historyLives.length > 0 && (
+      {replayLives.length > 0 && (
         <section className="sklive-section">
           <h2 className="sklive-section-title">
             <span className="sklive-section-dot history" />
-            Journal des lives
-            <span className="sklive-section-count">{historyLives.length}</span>
+            Replays récents
+            <span className="sklive-section-count">{replayLives.length}</span>
           </h2>
           <div className="sklive-grid">
-            {historyLives.map((live) => (
+            {replayLives.map((live) => (
               <LiveCard key={live.id} live={live} onClick={() => void handleOpenLive(live)} />
             ))}
           </div>
@@ -1007,6 +1234,9 @@ export function SoKinLivePage() {
         <StartLiveModal
           onClose={() => setShowCreateModal(false)}
           onStart={handleCreateLive}
+          listings={myListings}
+          defaultCity={user?.profile.city ?? ''}
+          loadingListings={loadingMyListings}
         />
       )}
 

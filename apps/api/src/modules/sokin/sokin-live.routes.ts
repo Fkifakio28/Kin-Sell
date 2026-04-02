@@ -28,6 +28,8 @@ const createLiveSchema = z.object({
   aspect: z.enum(["LANDSCAPE", "PORTRAIT"]),
   tags: z.array(z.string()).max(10).optional(),
   city: z.string().max(100).optional(),
+  thumbnailUrl: z.string().url().max(500).optional(),
+  featuredListingId: z.string().min(1).optional(),
 });
 
 const chatMessageSchema = z.object({

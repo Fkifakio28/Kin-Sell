@@ -1650,7 +1650,7 @@ export const sokinLive = {
     }),
   get: (id: string) =>
     request<SoKinLiveData>(`/sokin/lives/${encodeURIComponent(id)}`),
-  create: (body: { title: string; description?: string; aspect: 'LANDSCAPE' | 'PORTRAIT'; tags?: string[]; city?: string }) =>
+  create: (body: { title: string; description?: string; aspect: 'LANDSCAPE' | 'PORTRAIT'; tags?: string[]; city?: string; thumbnailUrl?: string; featuredListingId?: string }) =>
     request<SoKinLiveData>('/sokin/lives', { method: 'POST', body }),
   start: (id: string) =>
     request<SoKinLiveData>(`/sokin/lives/${encodeURIComponent(id)}/start`, { method: 'PATCH' }),
