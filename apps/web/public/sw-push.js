@@ -34,8 +34,8 @@ self.addEventListener("notificationclick", (event) => {
   let targetUrl = "/";
 
   switch (data.type) {
-    case "message":     targetUrl = "/account?tab=messages"; break;
-    case "call":        targetUrl = "/account?tab=messages"; break;
+    case "message":     targetUrl = "/messaging"; break;
+    case "call":        targetUrl = "/messaging"; break;
     case "order":       targetUrl = "/account?tab=commandes"; break;
     case "negotiation": targetUrl = "/account?tab=commandes"; break;
     case "like":
@@ -44,7 +44,7 @@ self.addEventListener("notificationclick", (event) => {
   }
 
   if (event.action === "accept") {
-    targetUrl = "/account?tab=messages&callAction=accept&callId=" + (data.callId || "");
+    targetUrl = "/messaging?callAction=accept&callId=" + (data.callId || "");
   } else if (event.action === "reject") {
     return;
   }

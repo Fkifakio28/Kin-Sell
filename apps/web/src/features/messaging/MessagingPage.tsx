@@ -9,6 +9,7 @@ import {
 } from "../../lib/api-client";
 import { useSocket } from "../../hooks/useSocket";
 import { createOptimizedAudioRecorder, createUploadFile, prepareMediaUrl } from "../../utils/media-upload";
+import { useGlobalNotification } from "../../app/providers/GlobalNotificationProvider";
 import "./messaging.css";
 
 /* ── Emoji data ── */
@@ -142,6 +143,7 @@ function AudioPlayer({ src }: { src: string }) {
 export function MessagingPage() {
   const { user, isLoading, isLoggedIn } = useAuth();
   const { emit, on, off, isConnected } = useSocket();
+  const { setMessagingActive } = useGlobalNotification();
 
   /* ── State ── */
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
@@ -193,6 +195,8 @@ export function MessagingPage() {
   const [isCameraOff, setIsCameraOff] = useState(false);
   const [isSpeakerOn, setIsSpeakerOn] = useState(true);
   const [callDuration, setCallDuration] = useState(0);
+  const [showAddPeople, setShowAddPeople] = useState(false);
+  const [inviteQuery, setInviteQuery] = useState("");
   const callTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
@@ -204,6 +208,7 @@ export function MessagingPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastKeyboardOffsetRef = useRef(0);
 
   /* ── MessageGuard feedback ── */
   const [guardAlert, setGuardAlert] = useState<{ type: "warn" | "block"; message: string } | null>(null);
@@ -212,6 +217,11 @@ export function MessagingPage() {
 
   const myId = user?.id ?? "";
   const myRole = user?.role ?? "";
+
+  useEffect(() => {
+    setMessagingActive(true);
+    return () => setMessagingActive(false);
+  }, [setMessagingActive]);
 
   // In a DM with admin, non-admin users cannot reply
   const isAdminDM = useMemo(() => {
@@ -261,6 +271,25 @@ export function MessagingPage() {
     return () => { if (callTimerRef.current) { clearInterval(callTimerRef.current); callTimerRef.current = null; } };
   }, [callState?.status]);
 
+  /* ── Ensure media streams are attached once video/audio nodes are mounted ── */
+  useEffect(() => {
+    if (localVideoRef.current && localStreamRef.current) {
+      localVideoRef.current.srcObject = localStreamRef.current;
+      localVideoRef.current.muted = true;
+      void localVideoRef.current.play().catch(() => {});
+    }
+    if (remoteVideoRef.current && remoteStreamRef.current) {
+      remoteVideoRef.current.srcObject = remoteStreamRef.current;
+      remoteVideoRef.current.muted = !isSpeakerOn;
+      void remoteVideoRef.current.play().catch(() => {});
+    }
+    if (remoteAudioRef.current && remoteStreamRef.current) {
+      remoteAudioRef.current.srcObject = remoteStreamRef.current;
+      remoteAudioRef.current.muted = !isSpeakerOn;
+      void remoteAudioRef.current.play().catch(() => {});
+    }
+  }, [callState?.status, callState?.type, isSpeakerOn]);
+
   /* ── Load conversations ── */
   useEffect(() => {
     if (!isLoggedIn) return;
@@ -287,8 +316,8 @@ export function MessagingPage() {
 
   /* ── Scroll to bottom ── */
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    messagesEndRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
+  }, [messages.length, activeConv?.id]);
 
   /* ── Socket events ── */
   useEffect(() => {
@@ -873,10 +902,9 @@ export function MessagingPage() {
       }
 
       const nextOffset = Math.max(0, Math.round(window.innerHeight - viewport.height - viewport.offsetTop));
+      if (Math.abs(nextOffset - lastKeyboardOffsetRef.current) < 4) return;
+      lastKeyboardOffsetRef.current = nextOffset;
       setKeyboardOffset(nextOffset);
-      if (nextOffset > 0) {
-        messagesEndRef.current?.scrollIntoView({ block: "end" });
-      }
     };
 
     updateKeyboardOffset();
@@ -890,6 +918,54 @@ export function MessagingPage() {
       window.removeEventListener("orientationchange", updateKeyboardOffset);
     };
   }, []);
+
+  const inviteCandidates = useMemo(() => {
+    const unique = new Map<string, { userId: string; displayName: string; avatarUrl: string | null; username: string | null }>();
+    conversations.forEach((conv) => {
+      if (conv.isGroup) return;
+      const other = getOtherParticipant(conv, myId);
+      if (!other) return;
+      if (callState && other.userId === callState.remoteUserId) return;
+      if (!unique.has(other.userId)) {
+        unique.set(other.userId, {
+          userId: other.userId,
+          displayName: other.user.profile.displayName,
+          avatarUrl: other.user.profile.avatarUrl,
+          username: other.user.profile.username ?? null,
+        });
+      }
+    });
+
+    const q = inviteQuery.trim().toLowerCase();
+    const values = Array.from(unique.values());
+    if (!q) return values;
+    return values.filter((u) =>
+      u.displayName.toLowerCase().includes(q) ||
+      (u.username ?? "").toLowerCase().includes(q),
+    );
+  }, [conversations, myId, callState, inviteQuery]);
+
+  const invitePersonToCall = useCallback(async (targetUserId: string, displayName: string) => {
+    if (!callState || !user) return;
+    try {
+      const { conversation } = await messaging.createDM(targetUserId);
+      setConversations((prev) => (prev.some((c) => c.id === conversation.id) ? prev : [conversation, ...prev]));
+      emit(
+        "message:send",
+        {
+          conversationId: conversation.id,
+          type: "TEXT",
+          content: `📞 ${user.profile.displayName} vous invite à rejoindre un appel ${callState.type === "video" ? "vidéo" : "audio"} sur Kin-Sell. Ouvrez la messagerie pour rejoindre la conversation.`,
+        },
+        () => {},
+      );
+      showGuardAlert("warn", `Invitation envoyée à ${displayName}.`);
+      setShowAddPeople(false);
+      setInviteQuery("");
+    } catch {
+      showGuardAlert("block", "Impossible d'envoyer l'invitation.");
+    }
+  }, [callState, user, emit, showGuardAlert]);
 
   /* ── Guards ── */
   if (isLoading) return <div className="msg-loading">Chargement...</div>;
@@ -1007,6 +1083,11 @@ export function MessagingPage() {
                   <span className="msg-call-ctrl-label">Caméra</span>
                 </button>
               )}
+
+              <button className="msg-call-ctrl-btn" onClick={() => setShowAddPeople(true)} title="Ajouter une personne">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="17" y1="11" x2="23" y2="11"/></svg>
+                <span className="msg-call-ctrl-label">Ajouter</span>
+              </button>
 
               <button className="msg-call-ctrl-btn msg-call-ctrl-btn--hangup" onClick={endCall} title="Raccrocher">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
@@ -1479,15 +1560,6 @@ export function MessagingPage() {
       </main>
 
       {/* ── FAB mobile: nouvelle conversation ── */}
-      <button
-        className="msg-mobile-fab"
-        onClick={() => { setShowSidebar(true); setShowSearch(true); }}
-        aria-label="Nouvelle conversation"
-        title="Nouvelle conversation"
-      >
-        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
-      </button>
-
       {/* ══ Forward conversation picker modal ══ */}
       {forwardMsg && (
         <div className="msg-forward-overlay" onClick={() => setForwardMsg(null)}>
@@ -1514,6 +1586,45 @@ export function MessagingPage() {
               {conversations.filter((c) => c.id !== activeConv?.id).length === 0 && (
                 <p className="msg-empty-sm">Aucune autre conversation</p>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══ Add participant modal (invite flow) ══ */}
+      {showAddPeople && callState && (
+        <div className="msg-forward-overlay" onClick={() => setShowAddPeople(false)}>
+          <div className="msg-forward-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="msg-forward-header">
+              <h3>Ajouter des personnes</h3>
+              <button className="msg-forward-close" onClick={() => setShowAddPeople(false)}>✕</button>
+            </div>
+            <div className="msg-forward-preview">
+              <span className="msg-forward-preview-label">Type d'appel :</span>
+              <span className="msg-forward-preview-text">Appel {callState.type === "video" ? "vidéo" : "audio"} en cours</span>
+            </div>
+            <div className="msg-search-panel msg-search-panel--inline">
+              <input
+                className="msg-search-input"
+                placeholder="Rechercher un contact..."
+                value={inviteQuery}
+                onChange={(e) => setInviteQuery(e.target.value)}
+              />
+            </div>
+            <div className="msg-forward-list">
+              {inviteCandidates.map((candidate) => (
+                <button
+                  key={candidate.userId}
+                  className="msg-forward-item"
+                  onClick={() => void invitePersonToCall(candidate.userId, candidate.displayName)}
+                >
+                  <div className="msg-avatar msg-avatar--sm">
+                    {candidate.avatarUrl ? <img src={candidate.avatarUrl} alt="" /> : initials(candidate.displayName)}
+                  </div>
+                  <span>{candidate.displayName}</span>
+                </button>
+              ))}
+              {inviteCandidates.length === 0 && <p className="msg-empty-sm">Aucun contact disponible</p>}
             </div>
           </div>
         </div>

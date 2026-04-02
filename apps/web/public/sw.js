@@ -4,7 +4,7 @@
 
 // @ts-nocheck — Service workers run in a different global scope
 
-const SW_VERSION = "1.0.0";
+const SW_VERSION = "1.1.0";
 
 /* ── Push event — shown even when app is closed ── */
 self.addEventListener("push", (event) => {
@@ -44,10 +44,10 @@ self.addEventListener("notificationclick", (event) => {
   // Route based on notification type
   switch (data.type) {
     case "message":
-      targetUrl = "/dashboard?tab=messages";
+      targetUrl = "/messaging";
       break;
     case "call":
-      targetUrl = "/dashboard?tab=messages";
+      targetUrl = "/messaging";
       break;
     case "order":
       targetUrl = "/dashboard?tab=commandes";
@@ -65,7 +65,7 @@ self.addEventListener("notificationclick", (event) => {
 
   // Handle action buttons (for calls)
   if (event.action === "accept") {
-    targetUrl = "/dashboard?tab=messages&callAction=accept&callId=" + (data.callId || "");
+    targetUrl = "/messaging?callAction=accept&callId=" + (data.callId || "");
   } else if (event.action === "reject") {
     // Just close the notification
     return;
