@@ -394,15 +394,11 @@ export function ExplorerPage() {
           listingsApi.search({
             type: 'PRODUIT',
             q: normalizedQuery || undefined,
-            city: defaultCity,
-            country: effectiveCountry,
             limit: 24,
           }),
           listingsApi.search({
             type: 'SERVICE',
             q: normalizedQuery || undefined,
-            city: defaultCity,
-            country: effectiveCountry,
             limit: 24,
           }),
         ]);
@@ -442,7 +438,7 @@ export function ExplorerPage() {
     void loadArticles();
 
     return () => { cancelled = true; };
-  }, [defaultCity, effectiveCountry, formatPriceLabelFromUsdCents, debouncedQuery]);
+  }, [formatPriceLabelFromUsdCents, debouncedQuery]);
 
   return (
     <div className="explorer-shell">

@@ -8,6 +8,12 @@ export function BackgroundMusic({ playing }: BackgroundMusicProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [muted, setMuted] = useState(false);
 
+  const tryPlay = () => {
+    const el = audioRef.current;
+    if (!el) return;
+    el.play().catch(() => { /* autoplay encore bloqué */ });
+  };
+
   /* Lancer la lecture dès que `playing` passe à true.
    * Les navigateurs bloquent l'autoplay si aucun geste utilisateur n'a eu lieu.
    * Solution : on tente play() immédiatement ; si le navigateur refuse,
@@ -23,22 +29,25 @@ export function BackgroundMusic({ playing }: BackgroundMusicProps) {
       return;
     }
 
-    const tryPlay = () => {
-      el.play().catch(() => { /* déjà en lecture ou toujours bloqué */ });
-    };
-
     // Tentative directe
     el.play().catch(() => {
-      // Navigateur bloque — on attend le prochain geste réel
+      // Navigateur bloque — on attend le prochain geste réel.
+      // On utilise document + capture:true pour intercepter les événements
+      // AVANT tout stopPropagation dans l'arbre, et on écoute plusieurs
+      // types de gestes (clic, touch, pointer, scroll, clavier).
       const unlock = () => {
         tryPlay();
-        window.removeEventListener("click",      unlock);
-        window.removeEventListener("touchstart", unlock);
-        window.removeEventListener("keydown",    unlock);
+        document.removeEventListener("pointerdown", unlock, true);
+        document.removeEventListener("touchstart",  unlock, true);
+        document.removeEventListener("click",       unlock, true);
+        document.removeEventListener("keydown",     unlock, true);
+        document.removeEventListener("scroll",      unlock, true);
       };
-      window.addEventListener("click",      unlock, { once: true, passive: true });
-      window.addEventListener("touchstart", unlock, { once: true, passive: true });
-      window.addEventListener("keydown",    unlock, { once: true, passive: true });
+      document.addEventListener("pointerdown", unlock, { once: true, capture: true, passive: true });
+      document.addEventListener("touchstart",  unlock, { once: true, capture: true, passive: true });
+      document.addEventListener("click",       unlock, { once: true, capture: true });
+      document.addEventListener("keydown",     unlock, { once: true, capture: true });
+      document.addEventListener("scroll",      unlock, { once: true, capture: true, passive: true });
     });
   }, [playing]);
 
@@ -60,7 +69,10 @@ export function BackgroundMusic({ playing }: BackgroundMusicProps) {
       />
       <button
         className="ks-mute-btn"
-        onClick={() => setMuted((m) => !m)}
+        onClick={() => {
+          setMuted((m) => !m);
+          if (playing) tryPlay();
+        }}
         aria-label={muted ? "Activer le son" : "Couper le son"}
         title={muted ? "Activer le son" : "Couper le son"}
       >

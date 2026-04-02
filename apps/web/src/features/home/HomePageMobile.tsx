@@ -497,7 +497,7 @@ function SuggestionsRow({
     let cancelled = false;
     const load = async () => {
       try {
-        const results = await listingsApi.latest({ city: cityHint, country: countryHint, limit: 12 });
+        const results = await listingsApi.latest({ limit: 12 });
         if (!cancelled) setItems(results);
       } catch { if (!cancelled) setItems([]); }
       finally { if (!cancelled) setLoading(false); }
@@ -561,7 +561,7 @@ function SoKinFeedSection({ t, cityHint, countryHint }: { t: (k: string) => stri
     } catch {
       setPosts([]);
     }
-  }, [cityHint, countryHint]);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -1020,14 +1020,14 @@ export function HomePageMobile() {
     const load = async () => {
       setIsLoading(true);
       try {
-        const results = await listingsApi.latest({ type: activeTab, city: defaultCity, country: effectiveCountry, limit: 10 });
+        const results = await listingsApi.latest({ type: activeTab, limit: 10 });
         if (!cancelled) setListings(results);
       } catch { if (!cancelled) setListings([]); }
       finally { if (!cancelled) setIsLoading(false); }
     };
     void load();
     return () => { cancelled = true; };
-  }, [activeTab, refreshKey, defaultCity, effectiveCountry]);
+  }, [activeTab, refreshKey]);
 
   useEffect(() => {
     if (!isLoggedIn) {
