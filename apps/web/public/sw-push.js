@@ -44,7 +44,7 @@ self.addEventListener("notificationclick", (event) => {
   }
 
   if (event.action === "accept") {
-    targetUrl = "/messaging?callAction=accept&callId=" + (data.callId || "");
+    targetUrl = "/messaging?callAction=accept&convId=" + (data.conversationId || "") + "&callerId=" + (data.callerId || "") + "&callType=" + (data.callType || "audio");
   } else if (event.action === "reject") {
     return;
   }

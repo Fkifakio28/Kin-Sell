@@ -317,6 +317,43 @@ export function MessagingPage() {
     }
   }, [callState?.status, callState?.type, isSpeakerOn]);
 
+  /* ── Handle incoming call from URL params (push notification or global overlay) ── */
+  const pendingCallConvIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const incomingConvId = params.get("incomingConvId");
+    const incomingCallerId = params.get("incomingCallerId");
+    const incomingCallType = params.get("incomingCallType") as "audio" | "video" | null;
+    const callAction = params.get("callAction");
+    const convId = params.get("convId");
+    const callerId = params.get("callerId");
+    const callType = params.get("callType") as "audio" | "video" | null;
+
+    if (incomingConvId && incomingCallerId) {
+      pendingCallConvIdRef.current = incomingConvId;
+      setCallState({
+        type: incomingCallType === "video" ? "video" : "audio",
+        conversationId: incomingConvId,
+        remoteUserId: incomingCallerId,
+        direction: "incoming",
+        status: "ringing",
+      });
+      window.history.replaceState(null, "", "/messaging");
+    } else if (callAction === "accept" && convId && callerId) {
+      pendingCallConvIdRef.current = convId;
+      setCallState({
+        type: callType === "video" ? "video" : "audio",
+        conversationId: convId,
+        remoteUserId: callerId,
+        direction: "incoming",
+        status: "ringing",
+      });
+      window.history.replaceState(null, "", "/messaging");
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // On mount only
+
   /* ── Load conversations ── */
   useEffect(() => {
     if (!isLoggedIn) return;
@@ -326,6 +363,16 @@ export function MessagingPage() {
       .catch(() => {})
       .finally(() => setLoadingConvs(false));
   }, [isLoggedIn]);
+
+  /* ── Auto-select conversation for URL-initiated call ── */
+  useEffect(() => {
+    if (!pendingCallConvIdRef.current || !conversations.length) return;
+    const conv = conversations.find((c) => c.id === pendingCallConvIdRef.current);
+    if (conv) {
+      setActiveConv(conv);
+      pendingCallConvIdRef.current = null;
+    }
+  }, [conversations]);
 
   /* ── Load messages when active conversation changes ── */
   useEffect(() => {

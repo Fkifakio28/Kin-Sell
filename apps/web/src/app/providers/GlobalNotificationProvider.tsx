@@ -78,6 +78,15 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
   /* ── Message toasts ── */
   const [toasts, setToasts] = useState<MessageToast[]>([]);
 
+  /* ── Incoming call overlay (intercepted when NOT on /messaging) ── */
+  const [incomingCall, setIncomingCall] = useState<{
+    conversationId: string;
+    callerId: string;
+    callerName: string;
+    callType: "audio" | "video";
+  } | null>(null);
+  const incomingCallTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   /* ── Push notification state ── */
   const [pushEnabled, setPushEnabled] = useState(false);
   const [showPushBanner, setShowPushBanner] = useState(false);
@@ -196,6 +205,24 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
     setToasts((p) => p.filter((t) => t.id !== id));
   }, []);
 
+  const acceptGlobalCall = useCallback(() => {
+    if (!incomingCall) return;
+    if (incomingCallTimerRef.current) clearTimeout(incomingCallTimerRef.current);
+    const { conversationId, callerId, callType } = incomingCall;
+    setIncomingCall(null);
+    window.location.href = `/messaging?incomingConvId=${conversationId}&incomingCallerId=${callerId}&incomingCallType=${callType}`;
+  }, [incomingCall]);
+
+  const rejectGlobalCall = useCallback(() => {
+    if (!incomingCall) return;
+    if (incomingCallTimerRef.current) clearTimeout(incomingCallTimerRef.current);
+    socketRef.current?.emit("call:reject", {
+      conversationId: incomingCall.conversationId,
+      callerId: incomingCall.callerId,
+    });
+    setIncomingCall(null);
+  }, [incomingCall]);
+
   /* ── Socket event listeners ── */
   useEffect(() => {
     const socket = socketRef.current;
@@ -235,10 +262,30 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
       setTimeout(() => setToasts((p) => p.filter((t) => t.id !== toast.id)), 5000);
     };
 
+    const handleIncomingCall = (data: { conversationId: string; callerId: string; callType: "audio" | "video" }) => {
+      // Let MessagingPage handle it if already on that page
+      if (window.location.pathname.startsWith("/messaging")) return;
+
+      if (incomingCallTimerRef.current) clearTimeout(incomingCallTimerRef.current);
+
+      void fetch(`${API_BASE}/users/${data.callerId}/public`)
+        .then((r) => r.json())
+        .then((u: { displayName?: string }) => {
+          setIncomingCall({ ...data, callerName: u?.displayName ?? "Quelqu'un" });
+        })
+        .catch(() => setIncomingCall({ ...data, callerName: "Quelqu'un" }));
+
+      if ("vibrate" in navigator) navigator.vibrate([400, 200, 400, 200, 400]);
+
+      incomingCallTimerRef.current = setTimeout(() => setIncomingCall(null), 45_000);
+    };
+
     socket.on("message:new", handleNewMessage);
+    socket.on("call:incoming", handleIncomingCall);
 
     return () => {
       socket.off("message:new", handleNewMessage);
+      socket.off("call:incoming", handleIncomingCall);
     };
   }, [isLoggedIn, user?.id, playMessageSound]);
 
@@ -274,6 +321,33 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
                 </button>
               </div>
             ))}
+          </div>,
+          document.body,
+        )}
+
+      {/* ── Incoming call overlay (any page except /messaging) ── */}
+      {incomingCall &&
+        createPortal(
+          <div className="gn-call-overlay">
+            <div className="gn-call-dialog">
+              <div className="gn-ringtone-pulse">
+                <div className="gn-ringtone-dot" />
+                <div className="gn-ringtone-dot" />
+                <div className="gn-ringtone-dot" />
+              </div>
+              <p className="gn-call-label">
+                {incomingCall.callType === "video" ? "📹 " : "📞 "}
+                <strong>{incomingCall.callerName}</strong> vous appelle
+              </p>
+              <div className="gn-call-actions">
+                <button className="gn-call-btn gn-call-btn--accept" onClick={acceptGlobalCall}>
+                  Répondre
+                </button>
+                <button className="gn-call-btn gn-call-btn--reject" onClick={rejectGlobalCall}>
+                  Refuser
+                </button>
+              </div>
+            </div>
           </div>,
           document.body,
         )}
