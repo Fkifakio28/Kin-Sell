@@ -195,6 +195,8 @@ export function MessagingPage() {
   const [isCameraOff, setIsCameraOff] = useState(false);
   const [isSpeakerOn, setIsSpeakerOn] = useState(true);
   const [isEarMode, setIsEarMode] = useState(false);
+  const [isSwitchingCamera, setIsSwitchingCamera] = useState(false);
+  const [connectionQuality, setConnectionQuality] = useState<"unknown" | "good" | "fair" | "poor">("unknown");
   const [callDuration, setCallDuration] = useState(0);
   const [showAddPeople, setShowAddPeople] = useState(false);
   const [inviteQuery, setInviteQuery] = useState("");
@@ -205,6 +207,8 @@ export function MessagingPage() {
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const remoteAudioRef = useRef<HTMLAudioElement>(null);
+  const callQualityTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const localFacingModeRef = useRef<"user" | "environment">("user");
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -525,6 +529,10 @@ export function MessagingPage() {
   const cleanupCall = useCallback(() => {
     peerConnectionRef.current?.close();
     peerConnectionRef.current = null;
+    if (callQualityTimerRef.current) {
+      clearInterval(callQualityTimerRef.current);
+      callQualityTimerRef.current = null;
+    }
     localStreamRef.current?.getTracks().forEach((t) => t.stop());
     localStreamRef.current = null;
     remoteStreamRef.current = null;
@@ -535,6 +543,73 @@ export function MessagingPage() {
     setIsCameraOff(false);
     setIsSpeakerOn(true);
     setIsEarMode(false);
+    setConnectionQuality("unknown");
+  }, []);
+
+  const startQualityMonitor = useCallback((pc: RTCPeerConnection) => {
+    if (callQualityTimerRef.current) {
+      clearInterval(callQualityTimerRef.current);
+      callQualityTimerRef.current = null;
+    }
+
+    const sample = async () => {
+      try {
+        const stats = await pc.getStats();
+        let fps = 0;
+        let packetsLost = 0;
+        let packetsRecv = 0;
+        let rtt = 0;
+
+        stats.forEach((report) => {
+          if (report.type === "inbound-rtp" && (report as any).kind === "video") {
+            fps = Number((report as any).framesPerSecond ?? fps);
+            packetsLost = Number((report as any).packetsLost ?? packetsLost);
+            packetsRecv = Number((report as any).packetsReceived ?? packetsRecv);
+          }
+          if (report.type === "candidate-pair" && (report as any).state === "succeeded") {
+            rtt = Number((report as any).currentRoundTripTime ?? rtt);
+          }
+        });
+
+        const totalPackets = packetsLost + packetsRecv;
+        const lossRate = totalPackets > 0 ? packetsLost / totalPackets : 0;
+
+        if (lossRate > 0.12 || fps < 12 || rtt > 0.8) {
+          setConnectionQuality("poor");
+        } else if (lossRate > 0.05 || fps < 20 || rtt > 0.35) {
+          setConnectionQuality("fair");
+        } else {
+          setConnectionQuality("good");
+        }
+      } catch {
+        setConnectionQuality("unknown");
+      }
+    };
+
+    void sample();
+    callQualityTimerRef.current = setInterval(() => {
+      void sample();
+    }, 3000);
+  }, []);
+
+  const getCallMedia = useCallback(async (callType: "audio" | "video", facingMode: "user" | "environment" = "user") => {
+    return navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+        channelCount: 1,
+        sampleRate: 48000,
+      },
+      video: callType === "video"
+        ? {
+            width: { ideal: 1280, max: 1920 },
+            height: { ideal: 720, max: 1080 },
+            frameRate: { ideal: 30, max: 30 },
+            facingMode,
+          }
+        : false,
+    });
   }, []);
 
   const optimizePeerSenders = useCallback(async (pc: RTCPeerConnection) => {
@@ -592,29 +667,59 @@ export function MessagingPage() {
     });
   }, []);
 
+  const switchCamera = useCallback(async () => {
+    if (!callState || callState.type !== "video") return;
+    if (!localStreamRef.current || !peerConnectionRef.current) return;
+    const currentVideoTrack = localStreamRef.current.getVideoTracks()[0];
+    if (!currentVideoTrack) return;
+
+    setIsSwitchingCamera(true);
+    const targetFacingMode: "user" | "environment" = localFacingModeRef.current === "user" ? "environment" : "user";
+
+    try {
+      const newStream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          width: { ideal: 1280, max: 1920 },
+          height: { ideal: 720, max: 1080 },
+          frameRate: { ideal: 30, max: 30 },
+          facingMode: targetFacingMode,
+        },
+        audio: false,
+      });
+
+      const newTrack = newStream.getVideoTracks()[0];
+      if (!newTrack) return;
+
+      const sender = peerConnectionRef.current.getSenders().find((s) => s.track?.kind === "video");
+      if (sender) {
+        await sender.replaceTrack(newTrack);
+      }
+
+      localStreamRef.current.removeTrack(currentVideoTrack);
+      currentVideoTrack.stop();
+      localStreamRef.current.addTrack(newTrack);
+
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = localStreamRef.current;
+        void localVideoRef.current.play().catch(() => {});
+      }
+
+      localFacingModeRef.current = targetFacingMode;
+    } catch {
+      alert("Impossible de changer de caméra sur cet appareil.");
+    } finally {
+      setIsSwitchingCamera(false);
+    }
+  }, [callState]);
+
   const startCall = useCallback(async (callType: "audio" | "video") => {
     if (!activeConv || activeConv.isGroup) return;
     const remoteUserId = getOtherUserId(activeConv, myId);
     if (!remoteUserId) return;
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-          channelCount: 1,
-          sampleRate: 48000,
-        },
-        video: callType === "video"
-          ? {
-              width: { ideal: 1280, max: 1920 },
-              height: { ideal: 720, max: 1080 },
-              frameRate: { ideal: 30, max: 30 },
-              facingMode: "user",
-            }
-          : false,
-      });
+      localFacingModeRef.current = "user";
+      const stream = await getCallMedia(callType, "user");
 
       localStreamRef.current = stream;
       if (localVideoRef.current) localVideoRef.current.srcObject = stream;
@@ -622,35 +727,21 @@ export function MessagingPage() {
       const pc = createPeerConnection(remoteUserId);
       stream.getTracks().forEach((track) => pc.addTrack(track, stream));
       await optimizePeerSenders(pc);
+      startQualityMonitor(pc);
 
       setCallState({ type: callType, conversationId: activeConv.id, remoteUserId, direction: "outgoing", status: "ringing" });
       emit("call:initiate", { conversationId: activeConv.id, targetUserId: remoteUserId, callType });
     } catch {
       alert("Impossible d'accéder au micro/caméra.");
     }
-  }, [activeConv, myId, createPeerConnection, emit, optimizePeerSenders]);
+  }, [activeConv, myId, createPeerConnection, emit, optimizePeerSenders, getCallMedia, startQualityMonitor]);
 
   const acceptCall = useCallback(async () => {
     if (!callState) return;
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-          channelCount: 1,
-          sampleRate: 48000,
-        },
-        video: callState.type === "video"
-          ? {
-              width: { ideal: 1280, max: 1920 },
-              height: { ideal: 720, max: 1080 },
-              frameRate: { ideal: 30, max: 30 },
-              facingMode: "user",
-            }
-          : false,
-      });
+      localFacingModeRef.current = "user";
+      const stream = await getCallMedia(callState.type, "user");
 
       localStreamRef.current = stream;
       if (localVideoRef.current) localVideoRef.current.srcObject = stream;
@@ -658,13 +749,14 @@ export function MessagingPage() {
       const pc = createPeerConnection(callState.remoteUserId);
       stream.getTracks().forEach((track) => pc.addTrack(track, stream));
       await optimizePeerSenders(pc);
+      startQualityMonitor(pc);
 
       emit("call:accept", { conversationId: callState.conversationId, callerId: callState.remoteUserId });
       setCallState((prev) => prev ? { ...prev, status: "connected" } : null);
     } catch {
       alert("Impossible d'accéder au micro/caméra.");
     }
-  }, [callState, createPeerConnection, emit, optimizePeerSenders]);
+  }, [callState, createPeerConnection, emit, optimizePeerSenders, getCallMedia, startQualityMonitor]);
 
   const rejectCall = useCallback(() => {
     if (!callState) return;
@@ -1104,7 +1196,12 @@ export function MessagingPage() {
               <p className="msg-call-status-text">Appel en cours...</p>
             )}
             {callState.status === "connected" && (
-              <p className="msg-call-timer">{Math.floor(callDuration / 60).toString().padStart(2, "0")}:{(callDuration % 60).toString().padStart(2, "0")}</p>
+              <>
+                <p className="msg-call-timer">{Math.floor(callDuration / 60).toString().padStart(2, "0")}:{(callDuration % 60).toString().padStart(2, "0")}</p>
+                <span className={`msg-call-quality msg-call-quality--${connectionQuality}`}>
+                  {connectionQuality === "good" ? "Qualite: Bonne" : connectionQuality === "fair" ? "Qualite: Moyenne" : connectionQuality === "poor" ? "Qualite: Faible" : "Qualite: ..."}
+                </span>
+              </>
             )}
 
             {callState.type === "video" && (
@@ -1150,6 +1247,13 @@ export function MessagingPage() {
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
                   )}
                   <span className="msg-call-ctrl-label">Caméra</span>
+                </button>
+              )}
+
+              {callState.type === "video" && (
+                <button className="msg-call-ctrl-btn" onClick={() => void switchCamera()} disabled={isSwitchingCamera} title="Changer de caméra">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.13-3.36L23 10"/><path d="M1 14l5.36 4.36A9 9 0 0 0 20.49 15"/></svg>
+                  <span className="msg-call-ctrl-label">{isSwitchingCamera ? "..." : "Flip"}</span>
                 </button>
               )}
 

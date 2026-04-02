@@ -123,6 +123,28 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
     return () => clearInterval(timer);
   }, [isLoggedIn, pushEnabled]);
 
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    if (!isPushSupported()) return;
+
+    const retrySubscribe = () => {
+      if (Notification.permission !== "granted") return;
+      if (pushEnabled) return;
+      void subscribeToPush().then((ok) => setPushEnabled(ok));
+    };
+
+    const onVisible = () => {
+      if (document.visibilityState === "visible") retrySubscribe();
+    };
+
+    window.addEventListener("online", retrySubscribe);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.removeEventListener("online", retrySubscribe);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [isLoggedIn, pushEnabled]);
+
   /* ── Listen for SW messages (notification clicks) ── */
   useEffect(() => {
     if (!isLoggedIn) return;

@@ -85,6 +85,17 @@ export async function subscribeToPush(): Promise<boolean> {
   }
 
   try {
+    const persistSubscription = async (sub: PushSubscription) => {
+      return fetch(`${API_BASE}/notifications/push/subscribe`, {
+        method: "POST",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          subscription: sub.toJSON(),
+          userAgent: navigator.userAgent,
+        }),
+      });
+    };
+
     // Check existing subscription
     let subscription = await registration.pushManager.getSubscription();
 
@@ -96,14 +107,17 @@ export async function subscribeToPush(): Promise<boolean> {
     }
 
     // Send subscription to backend
-    const res = await fetch(`${API_BASE}/notifications/push/subscribe`, {
-      method: "POST",
-      headers: getAuthHeaders(),
-      body: JSON.stringify({
-        subscription: subscription.toJSON(),
-        userAgent: navigator.userAgent,
-      }),
-    });
+    let res = await persistSubscription(subscription);
+
+    // Recover from stale/broken client subscription by forcing renewal once
+    if (!res.ok) {
+      await subscription.unsubscribe().catch(() => {});
+      subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(vapidKey) as BufferSource,
+      });
+      res = await persistSubscription(subscription);
+    }
 
     return res.ok;
   } catch (err) {
