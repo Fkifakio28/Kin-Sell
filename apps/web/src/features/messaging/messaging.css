@@ -1320,6 +1320,23 @@
   background: rgba(239 68 68 / .12);
   border-color: rgba(239 68 68 / .3);
 }
+.msg-call-quality-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 14px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--color-glass-border, rgba(255 255 255 / .16));
+  background: rgba(255 255 255 / .06);
+  color: var(--color-text-primary, #f0eef6);
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.msg-call-quality-toggle:hover {
+  background: rgba(255 255 255 / .12);
+}
 .msg-call-camera-off-label {
   position: absolute;
   inset: 0;

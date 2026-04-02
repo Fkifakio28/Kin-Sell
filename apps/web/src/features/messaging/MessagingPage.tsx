@@ -197,6 +197,8 @@ export function MessagingPage() {
   const [isEarMode, setIsEarMode] = useState(false);
   const [isSwitchingCamera, setIsSwitchingCamera] = useState(false);
   const [connectionQuality, setConnectionQuality] = useState<"unknown" | "good" | "fair" | "poor">("unknown");
+  const [qualityMode, setQualityMode] = useState<"auto" | "hd" | "balanced" | "data-saver">("auto");
+  const [appliedVideoProfile, setAppliedVideoProfile] = useState<"hd" | "balanced" | "data-saver">("hd");
   const [callDuration, setCallDuration] = useState(0);
   const [showAddPeople, setShowAddPeople] = useState(false);
   const [inviteQuery, setInviteQuery] = useState("");
@@ -209,6 +211,8 @@ export function MessagingPage() {
   const remoteAudioRef = useRef<HTMLAudioElement>(null);
   const callQualityTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const localFacingModeRef = useRef<"user" | "environment">("user");
+  const qualityPoorStreakRef = useRef(0);
+  const qualityGoodStreakRef = useRef(0);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -262,6 +266,24 @@ export function MessagingPage() {
     playTone();
     ringtoneIntervalRef.current = setInterval(playTone, 2000);
     return () => { if (ringtoneIntervalRef.current) clearInterval(ringtoneIntervalRef.current); };
+  }, [callState?.status, callState?.direction]);
+
+  useEffect(() => {
+    const isIncomingRinging = callState?.status === "ringing" && callState.direction === "incoming";
+    if (!isIncomingRinging) {
+      if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
+        navigator.vibrate(0);
+      }
+      return;
+    }
+    if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
+      navigator.vibrate([240, 140, 240]);
+      const id = setInterval(() => navigator.vibrate([240, 140, 240]), 2500);
+      return () => {
+        clearInterval(id);
+        navigator.vibrate(0);
+      };
+    }
   }, [callState?.status, callState?.direction]);
 
   /* ── Call duration timer ── */
@@ -544,6 +566,58 @@ export function MessagingPage() {
     setIsSpeakerOn(true);
     setIsEarMode(false);
     setConnectionQuality("unknown");
+    qualityPoorStreakRef.current = 0;
+    qualityGoodStreakRef.current = 0;
+  }, []);
+
+  const applyVideoProfile = useCallback(async (profile: "hd" | "balanced" | "data-saver") => {
+    const pc = peerConnectionRef.current;
+    const stream = localStreamRef.current;
+    if (!pc || !stream) return;
+    const track = stream.getVideoTracks()[0];
+    if (!track) return;
+
+    const constraintsByProfile = {
+      hd: { width: 1280, height: 720, frameRate: 30 },
+      balanced: { width: 960, height: 540, frameRate: 24 },
+      "data-saver": { width: 640, height: 360, frameRate: 15 },
+    } as const;
+
+    const bitrateByProfile = {
+      hd: 1_800_000,
+      balanced: 900_000,
+      "data-saver": 450_000,
+    } as const;
+
+    try {
+      const c = constraintsByProfile[profile];
+      await track.applyConstraints({
+        width: { ideal: c.width, max: c.width },
+        height: { ideal: c.height, max: c.height },
+        frameRate: { ideal: c.frameRate, max: c.frameRate },
+      });
+    } catch {
+      // Some devices can't apply dynamic constraints; sender tuning still helps.
+    }
+
+    const sender = pc.getSenders().find((s) => s.track?.kind === "video");
+    if (sender) {
+      try {
+        const params = sender.getParameters();
+        const current = params.encodings?.[0] ?? {};
+        params.encodings = [{
+          ...current,
+          maxBitrate: bitrateByProfile[profile],
+          maxFramerate: constraintsByProfile[profile].frameRate,
+          scaleResolutionDownBy: profile === "hd" ? 1 : profile === "balanced" ? 1.2 : 1.6,
+        }];
+        await sender.setParameters(params);
+      } catch {
+        // Ignore sender parameter errors on unsupported browsers.
+      }
+    }
+
+    setAppliedVideoProfile(profile);
   }, []);
 
   const startQualityMonitor = useCallback((pc: RTCPeerConnection) => {
@@ -575,10 +649,16 @@ export function MessagingPage() {
         const lossRate = totalPackets > 0 ? packetsLost / totalPackets : 0;
 
         if (lossRate > 0.12 || fps < 12 || rtt > 0.8) {
+          qualityPoorStreakRef.current += 1;
+          qualityGoodStreakRef.current = 0;
           setConnectionQuality("poor");
         } else if (lossRate > 0.05 || fps < 20 || rtt > 0.35) {
+          qualityPoorStreakRef.current = Math.max(0, qualityPoorStreakRef.current - 1);
+          qualityGoodStreakRef.current = 0;
           setConnectionQuality("fair");
         } else {
+          qualityGoodStreakRef.current += 1;
+          qualityPoorStreakRef.current = Math.max(0, qualityPoorStreakRef.current - 1);
           setConnectionQuality("good");
         }
       } catch {
@@ -640,6 +720,28 @@ export function MessagingPage() {
         }
       }),
     );
+  }, []);
+
+  useEffect(() => {
+    if (!callState || callState.type !== "video" || callState.status !== "connected") return;
+    if (!peerConnectionRef.current) return;
+
+    const targetProfile: "hd" | "balanced" | "data-saver" =
+      qualityMode === "auto"
+        ? (connectionQuality === "poor" ? "data-saver" : connectionQuality === "fair" ? "balanced" : "hd")
+        : qualityMode;
+
+    if (targetProfile === appliedVideoProfile) return;
+    void applyVideoProfile(targetProfile);
+  }, [callState?.status, callState?.type, connectionQuality, qualityMode, appliedVideoProfile, applyVideoProfile]);
+
+  const cycleQualityMode = useCallback(() => {
+    setQualityMode((prev) => {
+      if (prev === "auto") return "hd";
+      if (prev === "hd") return "balanced";
+      if (prev === "balanced") return "data-saver";
+      return "auto";
+    });
   }, []);
 
   const toggleMute = useCallback(() => {
@@ -727,6 +829,7 @@ export function MessagingPage() {
       const pc = createPeerConnection(remoteUserId);
       stream.getTracks().forEach((track) => pc.addTrack(track, stream));
       await optimizePeerSenders(pc);
+      await applyVideoProfile("hd");
       startQualityMonitor(pc);
 
       setCallState({ type: callType, conversationId: activeConv.id, remoteUserId, direction: "outgoing", status: "ringing" });
@@ -734,7 +837,7 @@ export function MessagingPage() {
     } catch {
       alert("Impossible d'accéder au micro/caméra.");
     }
-  }, [activeConv, myId, createPeerConnection, emit, optimizePeerSenders, getCallMedia, startQualityMonitor]);
+  }, [activeConv, myId, createPeerConnection, emit, optimizePeerSenders, getCallMedia, startQualityMonitor, applyVideoProfile]);
 
   const acceptCall = useCallback(async () => {
     if (!callState) return;
@@ -749,6 +852,7 @@ export function MessagingPage() {
       const pc = createPeerConnection(callState.remoteUserId);
       stream.getTracks().forEach((track) => pc.addTrack(track, stream));
       await optimizePeerSenders(pc);
+      await applyVideoProfile("hd");
       startQualityMonitor(pc);
 
       emit("call:accept", { conversationId: callState.conversationId, callerId: callState.remoteUserId });
@@ -756,7 +860,7 @@ export function MessagingPage() {
     } catch {
       alert("Impossible d'accéder au micro/caméra.");
     }
-  }, [callState, createPeerConnection, emit, optimizePeerSenders, getCallMedia, startQualityMonitor]);
+  }, [callState, createPeerConnection, emit, optimizePeerSenders, getCallMedia, startQualityMonitor, applyVideoProfile]);
 
   const rejectCall = useCallback(() => {
     if (!callState) return;
@@ -1201,6 +1305,11 @@ export function MessagingPage() {
                 <span className={`msg-call-quality msg-call-quality--${connectionQuality}`}>
                   {connectionQuality === "good" ? "Qualite: Bonne" : connectionQuality === "fair" ? "Qualite: Moyenne" : connectionQuality === "poor" ? "Qualite: Faible" : "Qualite: ..."}
                 </span>
+                {callState.type === "video" && (
+                  <button type="button" className="msg-call-quality-toggle" onClick={cycleQualityMode}>
+                    Mode: {qualityMode === "auto" ? "Auto" : qualityMode === "hd" ? "HD" : qualityMode === "balanced" ? "Equilibre" : "Eco"}
+                  </button>
+                )}
               </>
             )}
 
