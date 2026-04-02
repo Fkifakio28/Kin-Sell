@@ -13,7 +13,7 @@ self.addEventListener("push", (event) => {
 
   const { title = "Kin-Sell", body = "", icon, badge, tag, data, actions } = payload;
 
-  event.waitUntil(self.registration.showNotification(title, {
+  const notificationOptions = {
     body,
     icon: icon || "/assets/kin-sell/pwa-192.png",
     badge: badge || "/assets/kin-sell/badge-72.png",
@@ -23,7 +23,16 @@ self.addEventListener("push", (event) => {
     vibrate: [200, 100, 200],
     requireInteraction: tag === "call",
     silent: false,
-  }));
+  };
+
+  event.waitUntil(Promise.all([
+    self.registration.showNotification(title, notificationOptions),
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+      for (const client of clients) {
+        client.postMessage({ type: "PUSH_RECEIVED", payload: { title, body, data: data || {} } });
+      }
+    }),
+  ]));
 });
 
 /* ── Notification click ── */
@@ -39,7 +48,7 @@ self.addEventListener("notificationclick", (event) => {
     case "order":       targetUrl = "/account?tab=commandes"; break;
     case "negotiation": targetUrl = "/account?tab=commandes"; break;
     case "like":
-    case "publication": targetUrl = "/account?tab=sokin"; break;
+    case "publication": targetUrl = "/sokin"; break;
     default:            targetUrl = data.url || "/";
   }
 
@@ -50,12 +59,15 @@ self.addEventListener("notificationclick", (event) => {
   }
 
   event.waitUntil(
-    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(async (clients) => {
       for (const client of clients) {
         if (client.url.includes(self.location.origin)) {
-          client.focus();
+          if ("navigate" in client) {
+            await client.navigate(targetUrl);
+          }
+          await client.focus();
           client.postMessage({ type: "NOTIFICATION_CLICK", data, targetUrl });
-          return;
+          return undefined;
         }
       }
       return self.clients.openWindow(targetUrl);

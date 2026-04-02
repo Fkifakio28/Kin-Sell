@@ -122,13 +122,14 @@
 /* ── Message toasts ── */
 .gn-toast-container {
   position: fixed;
-  bottom: 24px;
-  right: 24px;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
   z-index: 99998;
   display: flex;
-  flex-direction: column-reverse;
+  flex-direction: column;
   gap: 10px;
-  max-width: 360px;
+  width: min(420px, calc(100vw - 24px));
   pointer-events: none;
 }
 
@@ -146,6 +147,23 @@
   pointer-events: auto;
   animation: gn-toast-in 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
   transition: opacity 0.2s, transform 0.2s;
+}
+
+.gn-toast--message {
+  border-color: rgba(111, 88, 255, 0.28);
+}
+
+.gn-toast--order {
+  border-color: rgba(34, 197, 94, 0.28);
+}
+
+.gn-toast--negotiation {
+  border-color: rgba(251, 191, 36, 0.28);
+}
+
+.gn-toast--like,
+.gn-toast--publication {
+  border-color: rgba(236, 72, 153, 0.28);
 }
 
 .gn-toast:hover {
@@ -173,6 +191,19 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.gn-toast-kind {
+  display: inline-flex;
+  align-items: center;
+  margin-bottom: 5px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--color-text-primary, #f0f4ff);
+  background: rgba(111, 88, 255, 0.18);
+  border: 1px solid rgba(111, 88, 255, 0.2);
 }
 
 .gn-toast-content {
@@ -239,11 +270,11 @@
 @keyframes gn-toast-in {
   from {
     opacity: 0;
-    transform: translateX(60px) scale(0.9);
+    transform: translateY(-32px) scale(0.94);
   }
   to {
     opacity: 1;
-    transform: translateX(0) scale(1);
+    transform: translateY(0) scale(1);
   }
 }
 
@@ -256,10 +287,11 @@
   }
 
   .gn-toast-container {
-    bottom: 16px;
-    right: 16px;
-    left: 16px;
-    max-width: unset;
+    top: 10px;
+    left: 12px;
+    right: 12px;
+    transform: none;
+    width: auto;
   }
 
   .gn-push-banner {

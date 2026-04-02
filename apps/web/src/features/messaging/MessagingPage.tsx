@@ -319,6 +319,7 @@ export function MessagingPage() {
 
   /* ── Handle incoming call from URL params (push notification or global overlay) ── */
   const pendingCallConvIdRef = useRef<string | null>(null);
+  const pendingAutoAcceptRef = useRef(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -332,6 +333,7 @@ export function MessagingPage() {
 
     if (incomingConvId && incomingCallerId) {
       pendingCallConvIdRef.current = incomingConvId;
+      pendingAutoAcceptRef.current = false;
       setCallState({
         type: incomingCallType === "video" ? "video" : "audio",
         conversationId: incomingConvId,
@@ -342,6 +344,7 @@ export function MessagingPage() {
       window.history.replaceState(null, "", "/messaging");
     } else if (callAction === "accept" && convId && callerId) {
       pendingCallConvIdRef.current = convId;
+      pendingAutoAcceptRef.current = true;
       setCallState({
         type: callType === "video" ? "video" : "audio",
         conversationId: convId,
@@ -929,6 +932,37 @@ export function MessagingPage() {
     setCallState(null);
   }, [callState, emit, cleanupCall]);
 
+  useEffect(() => {
+    const handleGlobalAccept = (event: Event) => {
+      const detail = (event as CustomEvent<{ conversationId?: string }>).detail;
+      if (!callState || callState.status !== "ringing" || callState.direction !== "incoming") return;
+      if (detail?.conversationId && detail.conversationId !== callState.conversationId) return;
+      void acceptCall();
+    };
+
+    const handleGlobalReject = (event: Event) => {
+      const detail = (event as CustomEvent<{ conversationId?: string }>).detail;
+      if (!callState) return;
+      if (detail?.conversationId && detail.conversationId !== callState.conversationId) return;
+      rejectCall();
+    };
+
+    window.addEventListener("ks:incoming-call-accept", handleGlobalAccept as EventListener);
+    window.addEventListener("ks:incoming-call-reject", handleGlobalReject as EventListener);
+    return () => {
+      window.removeEventListener("ks:incoming-call-accept", handleGlobalAccept as EventListener);
+      window.removeEventListener("ks:incoming-call-reject", handleGlobalReject as EventListener);
+    };
+  }, [acceptCall, rejectCall, callState]);
+
+  useEffect(() => {
+    if (!pendingAutoAcceptRef.current) return;
+    if (!callState || callState.status !== "ringing" || callState.direction !== "incoming") return;
+    if (!activeConv || activeConv.id !== callState.conversationId) return;
+    pendingAutoAcceptRef.current = false;
+    void acceptCall();
+  }, [acceptCall, activeConv, callState]);
+
   /* ── Typing indicator ── */
   const handleTyping = useCallback(() => {
     if (!activeConv) return;
@@ -1297,37 +1331,6 @@ export function MessagingPage() {
       className="msg-shell"
       style={{ "--ks-kb-offset": `${keyboardOffset}px` } as CSSProperties}
     >
-      {/* ══ Incoming call overlay ══ */}
-      {callState && callState.status === "ringing" && callState.direction === "incoming" && (
-        <div className="msg-call-overlay">
-          <div className="msg-call-dialog">
-            <div className="msg-call-caller-avatar">
-              {(() => {
-                const conv = conversations.find((c) => c.id === callState.conversationId);
-                const avatar = conv ? getConversationAvatar(conv, myId) : null;
-                const name = conv ? getConversationName(conv, myId) : "Appel";
-                return avatar ? <img src={avatar} alt="" /> : <span>{initials(name)}</span>;
-              })()}
-            </div>
-            <p className="msg-call-caller-name">
-              {(() => {
-                const conv = conversations.find((c) => c.id === callState.conversationId);
-                return conv ? getConversationName(conv, myId) : "Utilisateur";
-              })()}
-            </p>
-            <p className="msg-call-label">Appel {callState.type === "video" ? "vidéo" : "audio"} entrant</p>
-            <div className="msg-call-actions">
-              <button className="msg-call-btn-round msg-call-btn--accept" onClick={() => void acceptCall()} title="Accepter">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
-              </button>
-              <button className="msg-call-btn-round msg-call-btn--reject" onClick={rejectCall} title="Refuser">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* ══ Active/outgoing call overlay ══ */}
       {callState && (callState.status === "connected" || (callState.status === "ringing" && callState.direction === "outgoing")) && (
         <div className={`msg-call-overlay msg-call-overlay--active${isEarMode ? " msg-call-overlay--ear-mode" : ""}`}>

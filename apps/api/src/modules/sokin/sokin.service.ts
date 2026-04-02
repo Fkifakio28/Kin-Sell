@@ -113,7 +113,7 @@ export const reactToPost = async (
   postId: string,
   type: "LIKE" | "LOVE" | "HAHA" | "WOW" | "SAD" | "ANGRY"
 ) => {
-  const post = await prisma.soKinPost.findUnique({ where: { id: postId }, select: { id: true, status: true } });
+  const post = await prisma.soKinPost.findUnique({ where: { id: postId }, select: { id: true, status: true, authorId: true } });
   if (!post || post.status === "DELETED") throw new HttpError(404, "Publication introuvable");
 
   await prisma.soKinReaction.upsert({
@@ -126,7 +126,7 @@ export const reactToPost = async (
   const total = await prisma.soKinReaction.count({ where: { postId } });
   await prisma.soKinPost.update({ where: { id: postId }, data: { likes: total } });
 
-  return { ok: true, type };
+  return { ok: true, type, authorId: post.authorId };
 };
 
 export const unreactToPost = async (userId: string, postId: string) => {

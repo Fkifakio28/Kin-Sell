@@ -164,7 +164,7 @@ export async function isSubscribedToPush(): Promise<boolean> {
 }
 
 /** Listen for messages from the service worker */
-export function onServiceWorkerMessage(callback: (data: { type: string; data?: unknown; targetUrl?: string }) => void): () => void {
+export function onServiceWorkerMessage(callback: (data: { type: string; data?: unknown; targetUrl?: string; payload?: unknown }) => void): () => void {
   const handler = (event: MessageEvent) => {
     if (event.data && event.data.type) {
       callback(event.data);

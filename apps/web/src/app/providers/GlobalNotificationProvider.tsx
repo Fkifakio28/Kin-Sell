@@ -18,6 +18,19 @@ type GlobalNotifContextValue = {
   requestPushPermission: () => Promise<boolean>;
 };
 
+type NotificationKind = "message" | "order" | "negotiation" | "like" | "publication" | "system";
+
+type PushPayloadData = {
+  type?: string;
+  url?: string;
+  conversationId?: string;
+  callerId?: string;
+  callType?: "audio" | "video";
+  orderId?: string;
+  negotiationId?: string;
+  postId?: string;
+};
+
 const GlobalNotifContext = createContext<GlobalNotifContextValue>({
   messagingActive: false,
   setMessagingActive: () => {},
@@ -32,10 +45,55 @@ export function useGlobalNotification() {
 /* ── Types ── */
 type MessageToast = {
   id: string;
-  senderName: string;
+  kind: NotificationKind;
+  title: string;
   content: string;
+  icon: string;
+  targetUrl: string;
   timestamp: number;
 };
+
+function resolveNotificationTarget(data: PushPayloadData): string {
+  switch (data.type) {
+    case "message":
+      return "/messaging";
+    case "call":
+      return `/messaging?incomingConvId=${data.conversationId ?? ""}&incomingCallerId=${data.callerId ?? ""}&incomingCallType=${data.callType ?? "audio"}`;
+    case "order":
+      return "/account?tab=commandes";
+    case "negotiation":
+      return "/account?tab=commandes";
+    case "like":
+    case "publication":
+      return "/sokin";
+    default:
+      return data.url || "/";
+  }
+}
+
+function resolveNotificationKind(data: PushPayloadData): NotificationKind {
+  if (data.type === "message" || data.type === "order" || data.type === "negotiation" || data.type === "like" || data.type === "publication") {
+    return data.type;
+  }
+  return "system";
+}
+
+function resolveNotificationIcon(kind: NotificationKind): string {
+  switch (kind) {
+    case "message":
+      return "💬";
+    case "order":
+      return "📦";
+    case "negotiation":
+      return "🤝";
+    case "like":
+      return "❤️";
+    case "publication":
+      return "🌍";
+    default:
+      return "🔔";
+  }
+}
 
 /* ── Provider ── */
 export function GlobalNotificationProvider({ children }: { children: ReactNode }) {
@@ -86,6 +144,18 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
     callType: "audio" | "video";
   } | null>(null);
   const incomingCallTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const navigateInApp = useCallback((targetUrl: string) => {
+    if (!targetUrl) return;
+    if (/^https?:\/\//i.test(targetUrl)) {
+      window.location.href = targetUrl;
+      return;
+    }
+    const current = `${window.location.pathname}${window.location.search}`;
+    if (current === targetUrl) return;
+    window.history.pushState({}, "", targetUrl);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  }, []);
 
   /* ── Push notification state ── */
   const [pushEnabled, setPushEnabled] = useState(false);
@@ -162,11 +232,31 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
   useEffect(() => {
     if (!isLoggedIn) return;
     return onServiceWorkerMessage((msg) => {
+      const swMsg = msg as { type: string; data?: PushPayloadData; targetUrl?: string; payload?: { title?: string; body?: string; data?: PushPayloadData } };
       if (msg.type === "NOTIFICATION_CLICK" && msg.targetUrl) {
-        window.location.href = msg.targetUrl as string;
+        navigateInApp(msg.targetUrl as string);
+        return;
+      }
+      if (swMsg.type === "CALL_DISMISSED" && swMsg.data?.conversationId) {
+        setIncomingCall((prev) => (prev?.conversationId === swMsg.data?.conversationId ? null : prev));
+        return;
+      }
+      if (swMsg.type === "PUSH_RECEIVED" && swMsg.payload?.data?.type && swMsg.payload.data.type !== "call") {
+        const kind = resolveNotificationKind(swMsg.payload.data);
+        const toast: MessageToast = {
+          id: `${swMsg.payload.data.type}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          kind,
+          title: swMsg.payload.title || "Kin-Sell",
+          content: swMsg.payload.body || "Nouvelle notification",
+          icon: resolveNotificationIcon(kind),
+          targetUrl: resolveNotificationTarget(swMsg.payload.data),
+          timestamp: Date.now(),
+        };
+        setToasts((prev) => [toast, ...prev].slice(0, 4));
+        setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== toast.id)), 6000);
       }
     });
-  }, [isLoggedIn]);
+  }, [isLoggedIn, navigateInApp]);
 
   const requestPushPermission = useCallback(async () => {
     const ok = await subscribeToPush();
@@ -210,8 +300,12 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
     if (incomingCallTimerRef.current) clearTimeout(incomingCallTimerRef.current);
     const { conversationId, callerId, callType } = incomingCall;
     setIncomingCall(null);
-    window.location.href = `/messaging?incomingConvId=${conversationId}&incomingCallerId=${callerId}&incomingCallType=${callType}`;
-  }, [incomingCall]);
+    if (window.location.pathname.startsWith("/messaging")) {
+      window.dispatchEvent(new CustomEvent("ks:incoming-call-accept", { detail: incomingCall }));
+      return;
+    }
+    navigateInApp(`/messaging?callAction=accept&convId=${conversationId}&callerId=${callerId}&callType=${callType}`);
+  }, [incomingCall, navigateInApp]);
 
   const rejectGlobalCall = useCallback(() => {
     if (!incomingCall) return;
@@ -220,6 +314,7 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
       conversationId: incomingCall.conversationId,
       callerId: incomingCall.callerId,
     });
+    window.dispatchEvent(new CustomEvent("ks:incoming-call-reject", { detail: incomingCall }));
     setIncomingCall(null);
   }, [incomingCall]);
 
@@ -237,7 +332,6 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
         type: string;
       };
     }) => {
-      if (messagingActiveRef.current) return;
       const msg = data.message;
       if (msg.senderId === user?.id) return;
 
@@ -245,7 +339,8 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
 
       const toast: MessageToast = {
         id: msg.id + "-" + Date.now(),
-        senderName: msg.sender?.profile?.displayName ?? "Nouveau message",
+        kind: "message",
+        title: msg.sender?.profile?.displayName ?? "Nouveau message",
         content:
           msg.type === "TEXT"
             ? (msg.content?.slice(0, 80) ?? "")
@@ -256,24 +351,30 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
                 : msg.type === "VIDEO"
                   ? "🎬 Vidéo"
                   : "📎 Fichier",
+        icon: "💬",
+        targetUrl: "/messaging",
         timestamp: Date.now(),
       };
-      setToasts((p) => [toast, ...p].slice(0, 5));
-      setTimeout(() => setToasts((p) => p.filter((t) => t.id !== toast.id)), 5000);
+      setToasts((p) => [toast, ...p].slice(0, 4));
+      setTimeout(() => setToasts((p) => p.filter((t) => t.id !== toast.id)), 6000);
     };
 
     const handleIncomingCall = (data: { conversationId: string; callerId: string; callType: "audio" | "video" }) => {
-      // Let MessagingPage handle it if already on that page
-      if (window.location.pathname.startsWith("/messaging")) return;
-
       if (incomingCallTimerRef.current) clearTimeout(incomingCallTimerRef.current);
+
+      const showIncomingCall = (callerName: string) => {
+        setIncomingCall({ ...data, callerName });
+        if (!window.location.pathname.startsWith("/messaging")) {
+          navigateInApp(`/messaging?incomingConvId=${data.conversationId}&incomingCallerId=${data.callerId}&incomingCallType=${data.callType}`);
+        }
+      };
 
       void fetch(`${API_BASE}/users/${data.callerId}/public`)
         .then((r) => r.json())
         .then((u: { displayName?: string }) => {
-          setIncomingCall({ ...data, callerName: u?.displayName ?? "Quelqu'un" });
+          showIncomingCall(u?.displayName ?? "Quelqu'un");
         })
-        .catch(() => setIncomingCall({ ...data, callerName: "Quelqu'un" }));
+        .catch(() => showIncomingCall("Quelqu'un"));
 
       if ("vibrate" in navigator) navigator.vibrate([400, 200, 400, 200, 400]);
 
@@ -287,7 +388,15 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
       socket.off("message:new", handleNewMessage);
       socket.off("call:incoming", handleIncomingCall);
     };
-  }, [isLoggedIn, user?.id, playMessageSound]);
+  }, [isLoggedIn, user?.id, playMessageSound, navigateInApp]);
+
+  useEffect(() => {
+    return () => {
+      if (incomingCallTimerRef.current) {
+        clearTimeout(incomingCallTimerRef.current);
+      }
+    };
+  }, []);
 
   /* ── Context value ── */
   const ctxValue = useMemo(
@@ -304,10 +413,18 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
         createPortal(
           <div className="gn-toast-container">
             {toasts.map((toast) => (
-              <div key={toast.id} className="gn-toast" onClick={() => dismissToast(toast.id)}>
-                <div className="gn-toast-icon">💬</div>
+              <div
+                key={toast.id}
+                className={`gn-toast gn-toast--${toast.kind}`}
+                onClick={() => {
+                  navigateInApp(toast.targetUrl);
+                  dismissToast(toast.id);
+                }}
+              >
+                <div className="gn-toast-icon">{toast.icon}</div>
                 <div className="gn-toast-body">
-                  <strong className="gn-toast-sender">{toast.senderName}</strong>
+                  <span className="gn-toast-kind">{toast.kind === "message" ? "Message" : toast.kind === "order" ? "Commande" : toast.kind === "negotiation" ? "Marchandage" : toast.kind === "like" ? "So-Kin" : toast.kind === "publication" ? "Publication" : "Notification"}</span>
+                  <strong className="gn-toast-sender">{toast.title}</strong>
                   <p className="gn-toast-content">{toast.content}</p>
                 </div>
                 <button
@@ -325,7 +442,7 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
           document.body,
         )}
 
-      {/* ── Incoming call overlay (any page except /messaging) ── */}
+      {/* ── Incoming call overlay (single centered popup, all pages) ── */}
       {incomingCall &&
         createPortal(
           <div className="gn-call-overlay">
@@ -335,6 +452,7 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
                 <div className="gn-ringtone-dot" />
                 <div className="gn-ringtone-dot" />
               </div>
+              <p className="gn-toast-kind">Appel Kin-Sell</p>
               <p className="gn-call-label">
                 {incomingCall.callType === "video" ? "📹 " : "📞 "}
                 <strong>{incomingCall.callerName}</strong> vous appelle

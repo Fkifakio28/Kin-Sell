@@ -15,6 +15,8 @@ import {
   reactToPost,
   unreactToPost,
 } from "./sokin.service.js";
+import { sendPushToUser } from "../notifications/push.service.js";
+import { prisma } from "../../shared/db/prisma.js";
 
 const createPostSchema = z.object({
   text: z.string().min(1).max(500),
@@ -134,6 +136,19 @@ router.post(
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     const { type } = reactionSchema.parse(req.body);
     const result = await reactToPost(req.auth!.userId, req.params.id, type);
+    if (result.authorId && result.authorId !== req.auth!.userId) {
+      const actor = await prisma.userProfile.findUnique({
+        where: { userId: req.auth!.userId },
+        select: { displayName: true },
+      });
+      const label = actor?.displayName ?? "Quelqu'un";
+      void sendPushToUser(result.authorId, {
+        title: "❤️ Nouvelle réaction So-Kin",
+        body: `${label} a réagi à votre publication.`,
+        tag: `sokin-like-${req.params.id}`,
+        data: { type: "like", postId: req.params.id },
+      });
+    }
     res.json(result);
   })
 );
