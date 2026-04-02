@@ -194,6 +194,7 @@ export function MessagingPage() {
   const [isMuted, setIsMuted] = useState(false);
   const [isCameraOff, setIsCameraOff] = useState(false);
   const [isSpeakerOn, setIsSpeakerOn] = useState(true);
+  const [isEarMode, setIsEarMode] = useState(false);
   const [callDuration, setCallDuration] = useState(0);
   const [showAddPeople, setShowAddPeople] = useState(false);
   const [inviteQuery, setInviteQuery] = useState("");
@@ -494,6 +495,8 @@ export function MessagingPage() {
         { urls: "turn:openrelay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" },
         { urls: "turn:openrelay.metered.ca:443?transport=tcp", username: "openrelayproject", credential: "openrelayproject" },
       ],
+      bundlePolicy: "max-bundle",
+      rtcpMuxPolicy: "require",
     });
 
     pc.onicecandidate = (event) => {
@@ -531,6 +534,37 @@ export function MessagingPage() {
     setIsMuted(false);
     setIsCameraOff(false);
     setIsSpeakerOn(true);
+    setIsEarMode(false);
+  }, []);
+
+  const optimizePeerSenders = useCallback(async (pc: RTCPeerConnection) => {
+    await Promise.all(
+      pc.getSenders().map(async (sender) => {
+        try {
+          const params = sender.getParameters();
+          params.degradationPreference = "maintain-framerate";
+          if (sender.track?.kind === "video") {
+            const current = params.encodings?.[0] ?? {};
+            params.encodings = [{
+              ...current,
+              maxBitrate: 1_500_000,
+              maxFramerate: 30,
+              scaleResolutionDownBy: 1,
+            }];
+          }
+          if (sender.track?.kind === "audio") {
+            const current = params.encodings?.[0] ?? {};
+            params.encodings = [{
+              ...current,
+              maxBitrate: 64_000,
+            }];
+          }
+          await sender.setParameters(params);
+        } catch {
+          // Some browsers may not support sender parameter tuning.
+        }
+      }),
+    );
   }, []);
 
   const toggleMute = useCallback(() => {
@@ -565,8 +599,21 @@ export function MessagingPage() {
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
-        video: callType === "video",
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          channelCount: 1,
+          sampleRate: 48000,
+        },
+        video: callType === "video"
+          ? {
+              width: { ideal: 1280, max: 1920 },
+              height: { ideal: 720, max: 1080 },
+              frameRate: { ideal: 30, max: 30 },
+              facingMode: "user",
+            }
+          : false,
       });
 
       localStreamRef.current = stream;
@@ -574,21 +621,35 @@ export function MessagingPage() {
 
       const pc = createPeerConnection(remoteUserId);
       stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+      await optimizePeerSenders(pc);
 
       setCallState({ type: callType, conversationId: activeConv.id, remoteUserId, direction: "outgoing", status: "ringing" });
       emit("call:initiate", { conversationId: activeConv.id, targetUserId: remoteUserId, callType });
     } catch {
       alert("Impossible d'accéder au micro/caméra.");
     }
-  }, [activeConv, myId, createPeerConnection, emit]);
+  }, [activeConv, myId, createPeerConnection, emit, optimizePeerSenders]);
 
   const acceptCall = useCallback(async () => {
     if (!callState) return;
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
-        video: callState.type === "video",
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          channelCount: 1,
+          sampleRate: 48000,
+        },
+        video: callState.type === "video"
+          ? {
+              width: { ideal: 1280, max: 1920 },
+              height: { ideal: 720, max: 1080 },
+              frameRate: { ideal: 30, max: 30 },
+              facingMode: "user",
+            }
+          : false,
       });
 
       localStreamRef.current = stream;
@@ -596,13 +657,14 @@ export function MessagingPage() {
 
       const pc = createPeerConnection(callState.remoteUserId);
       stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+      await optimizePeerSenders(pc);
 
       emit("call:accept", { conversationId: callState.conversationId, callerId: callState.remoteUserId });
       setCallState((prev) => prev ? { ...prev, status: "connected" } : null);
     } catch {
       alert("Impossible d'accéder au micro/caméra.");
     }
-  }, [callState, createPeerConnection, emit]);
+  }, [callState, createPeerConnection, emit, optimizePeerSenders]);
 
   const rejectCall = useCallback(() => {
     if (!callState) return;
@@ -1019,7 +1081,7 @@ export function MessagingPage() {
 
       {/* ══ Active/outgoing call overlay ══ */}
       {callState && (callState.status === "connected" || (callState.status === "ringing" && callState.direction === "outgoing")) && (
-        <div className="msg-call-overlay msg-call-overlay--active">
+        <div className={`msg-call-overlay msg-call-overlay--active${isEarMode ? " msg-call-overlay--ear-mode" : ""}`}>
           <div className="msg-call-dialog msg-call-dialog--active">
             <audio ref={remoteAudioRef} autoPlay playsInline />
             {/* Remote caller info */}
@@ -1072,6 +1134,13 @@ export function MessagingPage() {
                 )}
                 <span className="msg-call-ctrl-label">HP</span>
               </button>
+
+              {callState.type === "audio" && (
+                <button className={`msg-call-ctrl-btn${isEarMode ? " msg-call-ctrl-btn--active" : ""}`} onClick={() => setIsEarMode((prev) => !prev)} title="Mode oreille (écran sombre)">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9a6 6 0 0 1 12 0c0 7-3 9-6 9s-6-2-6-9z"/><path d="M12 22v-4"/></svg>
+                  <span className="msg-call-ctrl-label">Oreille</span>
+                </button>
+              )}
 
               {callState.type === "video" && (
                 <button className={`msg-call-ctrl-btn${isCameraOff ? " msg-call-ctrl-btn--active" : ""}`} onClick={toggleCamera} title={isCameraOff ? "Activer caméra" : "Couper caméra"}>

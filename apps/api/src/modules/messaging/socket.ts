@@ -101,13 +101,13 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
           }
         }
 
-        // Push notification to offline participants
-        const offlineRecipients = participantIds.filter((pid) => pid !== userId && !onlineUsers.has(pid));
-        if (offlineRecipients.length > 0) {
+        // Push notification to all recipients (offline detection can be stale on mobile)
+        const recipients = participantIds.filter((pid) => pid !== userId);
+        if (recipients.length > 0) {
           const senderProfile = await prisma.userProfile.findUnique({ where: { userId }, select: { displayName: true } });
           const senderName = senderProfile?.displayName ?? "Quelqu'un";
           const bodyText = message.type === "TEXT" ? (message.content?.slice(0, 100) ?? "Nouveau message") : message.type === "IMAGE" ? "📷 Photo" : message.type === "AUDIO" ? "🎵 Audio" : message.type === "VIDEO" ? "🎬 Vidéo" : "📎 Fichier";
-          void sendPushToUsers(offlineRecipients, {
+          void sendPushToUsers(recipients, {
             title: senderName,
             body: bodyText,
             tag: `msg-${data.conversationId}`,
@@ -182,23 +182,21 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
         } catch (e) { console.error("[CallLog] create error", e); }
       })();
 
-      // Push notification for call (especially when target is offline)
-      if (!onlineUsers.has(data.targetUserId)) {
-        void (async () => {
-          const senderProfile = await prisma.userProfile.findUnique({ where: { userId }, select: { displayName: true } });
-          const senderName = senderProfile?.displayName ?? "Quelqu'un";
-          void sendPushToUser(data.targetUserId, {
-            title: `📞 Appel ${data.callType === "video" ? "vidéo" : "audio"}`,
-            body: `${senderName} vous appelle`,
-            tag: "call",
-            data: { type: "call", conversationId: data.conversationId, callerId: userId, callType: data.callType },
-            actions: [
-              { action: "accept", title: "Accepter" },
-              { action: "reject", title: "Refuser" },
-            ],
-          });
-        })();
-      }
+      // Push notification for call (send even when socket presence is stale)
+      void (async () => {
+        const senderProfile = await prisma.userProfile.findUnique({ where: { userId }, select: { displayName: true } });
+        const senderName = senderProfile?.displayName ?? "Quelqu'un";
+        void sendPushToUser(data.targetUserId, {
+          title: `📞 Appel ${data.callType === "video" ? "vidéo" : "audio"}`,
+          body: `${senderName} vous appelle`,
+          tag: "call",
+          data: { type: "call", conversationId: data.conversationId, callerId: userId, callType: data.callType },
+          actions: [
+            { action: "accept", title: "Accepter" },
+            { action: "reject", title: "Refuser" },
+          ],
+        });
+      })();
     });
 
     socket.on("call:accept", (data: { conversationId: string; callerId: string }) => {
