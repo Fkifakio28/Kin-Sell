@@ -7,6 +7,24 @@ function toAbsoluteUrl(path) {
   return new URL(path || "/", self.location.origin).href;
 }
 
+function resolveTargetPath(data) {
+  switch (data?.type) {
+    case "message":
+      return "/messaging";
+    case "call":
+      return "/messaging";
+    case "order":
+      return "/account?tab=commandes";
+    case "negotiation":
+      return "/account?tab=commandes";
+    case "like":
+    case "publication":
+      return "/sokin";
+    default:
+      return data?.url || "/";
+  }
+}
+
 /* ── Push event ── */
 self.addEventListener("push", (event) => {
   if (!event.data) return;
@@ -19,12 +37,15 @@ self.addEventListener("push", (event) => {
   const payloadData = data || {};
   const payloadType = payloadData.type || "system";
 
+  const targetPath = payloadData.url || resolveTargetPath(payloadData);
+  const dataWithUrl = { ...payloadData, url: targetPath };
+
   const notificationOptions = {
     body,
     icon: icon || "/assets/kin-sell/pwa-192.png",
     badge: badge || "/assets/kin-sell/badge-72.png",
     tag: tag || `kin-sell-${payloadType}`,
-    data: payloadData,
+    data: dataWithUrl,
     actions: actions || [],
     vibrate: payloadType === "call" ? [320, 120, 320, 120, 320] : [200, 100, 200],
     requireInteraction: payloadType === "call",
@@ -37,7 +58,7 @@ self.addEventListener("push", (event) => {
     const visibleClients = clients.filter((client) => client.visibilityState === "visible");
 
     for (const client of visibleClients) {
-      client.postMessage({ type: "PUSH_RECEIVED", payload: { title, body, data: payloadData } });
+      client.postMessage({ type: "PUSH_RECEIVED", payload: { title, body, data: dataWithUrl } });
     }
 
     if (visibleClients.length > 0) {
@@ -53,17 +74,7 @@ self.addEventListener("notificationclick", (event) => {
   event.notification.close();
 
   const data = event.notification.data || {};
-  let targetUrl = "/";
-
-  switch (data.type) {
-    case "message":     targetUrl = "/messaging"; break;
-    case "call":        targetUrl = "/messaging"; break;
-    case "order":       targetUrl = "/account?tab=commandes"; break;
-    case "negotiation": targetUrl = "/account?tab=commandes"; break;
-    case "like":
-    case "publication": targetUrl = "/sokin"; break;
-    default:            targetUrl = data.url || "/";
-  }
+  let targetUrl = data.url || resolveTargetPath(data);
 
   if (event.action === "accept") {
     targetUrl = "/messaging?callAction=accept&convId=" + (data.conversationId || "") + "&callerId=" + (data.callerId || "") + "&callType=" + (data.callType || "audio");
@@ -75,7 +86,13 @@ self.addEventListener("notificationclick", (event) => {
 
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(async (clients) => {
-      for (const client of clients) {
+      const sameOrigin = clients.filter((client) => client.url && client.url.startsWith(self.location.origin));
+      const orderedClients = [
+        ...sameOrigin.filter((client) => client.visibilityState === "visible"),
+        ...sameOrigin.filter((client) => client.visibilityState !== "visible"),
+      ];
+
+      for (const client of orderedClients) {
         if (client.url && client.url.startsWith(self.location.origin)) {
           if ("navigate" in client) {
             await client.navigate(absoluteTargetUrl);
@@ -85,7 +102,12 @@ self.addEventListener("notificationclick", (event) => {
           return undefined;
         }
       }
-      return self.clients.openWindow(absoluteTargetUrl);
+
+      const opened = await self.clients.openWindow(absoluteTargetUrl);
+      if (opened) {
+        await opened.focus();
+      }
+      return opened;
     })
   );
 });

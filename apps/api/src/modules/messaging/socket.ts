@@ -121,7 +121,12 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
             title: senderName,
             body: bodyText,
             tag: `msg-${data.conversationId}`,
-            data: { type: "message", conversationId: data.conversationId, senderId: userId },
+            data: {
+              type: "message",
+              conversationId: data.conversationId,
+              senderId: userId,
+              url: "/messaging",
+            },
           });
         }
 
@@ -200,7 +205,13 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
             title: senderName,
             body: `Appel ${data.callType === "video" ? "vidéo" : "audio"} entrant sur Kin-Sell`,
             tag: `call-${data.conversationId}`,
-          data: { type: "call", conversationId: data.conversationId, callerId: userId, callType: data.callType },
+          data: {
+            type: "call",
+            conversationId: data.conversationId,
+            callerId: userId,
+            callType: data.callType,
+            url: `/messaging?incomingConvId=${data.conversationId}&incomingCallerId=${userId}&incomingCallType=${data.callType}`,
+          },
           actions: [
             { action: "accept", title: "Accepter" },
             { action: "reject", title: "Refuser" },
