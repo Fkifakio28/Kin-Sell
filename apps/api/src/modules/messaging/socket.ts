@@ -13,6 +13,9 @@ const onlineVisibility = new Map<string, boolean>();
 
 /** conversationId → active call log ID (tracks in-progress calls) */
 const activeCallLogs = new Map<string, string>();
+/** userId → pending offline timeout (grace period for mobile/background transitions) */
+const pendingOfflineTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const OFFLINE_GRACE_MS = 120_000;
 
 export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
   const io = new SocketIOServer(httpServer, {
@@ -38,8 +41,15 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
     const userId: string = (socket.data as { userId: string }).userId;
 
     /* ── Track online status ── */
+    const wasOffline = !onlineUsers.has(userId) || (onlineUsers.get(userId)?.size ?? 0) === 0;
     if (!onlineUsers.has(userId)) onlineUsers.set(userId, new Set());
     onlineUsers.get(userId)!.add(socket.id);
+
+    const pendingOffline = pendingOfflineTimers.get(userId);
+    if (pendingOffline) {
+      clearTimeout(pendingOffline);
+      pendingOfflineTimers.delete(userId);
+    }
 
     void (async () => {
       const pref = await prisma.userPreference.findUnique({
@@ -54,7 +64,7 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
         userIds: Array.from(onlineUsers.keys()).filter((id) => id !== userId && (onlineVisibility.get(id) ?? true)),
       });
 
-      if (isVisible) {
+      if (isVisible && wasOffline) {
         io.emit("user:online", { userId });
       }
     })();
@@ -287,18 +297,30 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
       if (sockets) {
         sockets.delete(socket.id);
         if (sockets.size === 0) {
-          const wasVisible = onlineVisibility.get(userId) ?? true;
-          onlineUsers.delete(userId);
-          onlineVisibility.delete(userId);
-          const lastSeenAt = new Date();
-          // Persist lastSeenAt (respect privacy: only if status was visible)
-          void prisma.userProfile.updateMany({
-            where: { userId },
-            data: { lastSeenAt },
-          }).catch(() => {});
-          if (wasVisible) {
-            io.emit("user:offline", { userId, lastSeenAt: lastSeenAt.toISOString() });
-          }
+          const timer = setTimeout(() => {
+            const hasReconnected = (onlineUsers.get(userId)?.size ?? 0) > 0;
+            if (hasReconnected) {
+              pendingOfflineTimers.delete(userId);
+              return;
+            }
+
+            const wasVisible = onlineVisibility.get(userId) ?? true;
+            onlineUsers.delete(userId);
+            onlineVisibility.delete(userId);
+            pendingOfflineTimers.delete(userId);
+
+            const lastSeenAt = new Date();
+            void prisma.userProfile.updateMany({
+              where: { userId },
+              data: { lastSeenAt },
+            }).catch(() => {});
+
+            if (wasVisible) {
+              io.emit("user:offline", { userId, lastSeenAt: lastSeenAt.toISOString() });
+            }
+          }, OFFLINE_GRACE_MS);
+
+          pendingOfflineTimers.set(userId, timer);
         }
       }
     });

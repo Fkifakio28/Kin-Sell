@@ -7,6 +7,8 @@ import { isPushSupported, subscribeToPush, onServiceWorkerMessage, registerServi
 import "../../styles/global-notifications.css";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:4000";
+const PUSH_BANNER_DISMISSED_AT_KEY = "kinsell.push.banner.dismissedAt";
+const PUSH_BANNER_DISMISS_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 /* ── Context ── */
 type GlobalNotifContextValue = {
@@ -98,13 +100,15 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
     if (Notification.permission === "granted") {
       void subscribeToPush().then((ok) => {
         setPushEnabled(ok);
-        if (!ok) {
-          pushSubscribedRef.current = false;
-          setShowPushBanner(true);
-        }
+        if (!ok) pushSubscribedRef.current = false;
       });
+      setShowPushBanner(false);
     } else if (Notification.permission === "default") {
-      // Show banner after a short delay
+      const dismissedAtRaw = localStorage.getItem(PUSH_BANNER_DISMISSED_AT_KEY);
+      const dismissedAt = dismissedAtRaw ? Number(dismissedAtRaw) : 0;
+      const canShowBanner = !dismissedAt || Number.isNaN(dismissedAt) || Date.now() - dismissedAt > PUSH_BANNER_DISMISS_TTL_MS;
+      if (!canShowBanner) return;
+
       const timer = setTimeout(() => setShowPushBanner(true), 3000);
       return () => clearTimeout(timer);
     }
@@ -159,11 +163,15 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
     const ok = await subscribeToPush();
     setPushEnabled(ok);
     setShowPushBanner(false);
+    if (ok) {
+      localStorage.removeItem(PUSH_BANNER_DISMISSED_AT_KEY);
+    }
     return ok;
   }, []);
 
   const dismissPushBanner = useCallback(() => {
     setShowPushBanner(false);
+    localStorage.setItem(PUSH_BANNER_DISMISSED_AT_KEY, String(Date.now()));
   }, []);
 
   /* ── Notification sound for messages ── */
