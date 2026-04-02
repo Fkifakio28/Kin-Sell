@@ -1,6 +1,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { useLocaleCurrency, type AppCurrency, type AppLanguage } from "../app/providers/LocaleCurrencyProvider";
+import { useMarketPreference } from "../app/providers/MarketPreferenceProvider";
 import { useTheme } from "../app/providers/ThemeProvider";
 
 const LANGUAGES: { code: AppLanguage; flag: string; label: string }[] = [
@@ -29,6 +30,7 @@ const USEFUL_LINKS = [
 export function Footer() {
   const { theme, toggleTheme } = useTheme();
   const { language, setLanguage, currency, setCurrency, t } = useLocaleCurrency();
+  const { countries, selectedCountry, effectiveCountry, selectionMode, setSelectedCountry, setSelectionMode } = useMarketPreference();
 
   return (
     <footer className="ks-footer">
@@ -98,6 +100,23 @@ export function Footer() {
                 {c.symbol}
               </button>
             ))}
+          </div>
+
+          <div className="ks-country-selector-wrap" role="group" aria-label={t("home.marketCountry")}>
+            <select
+              className="ks-country-selector"
+              value={selectionMode === "manual" ? selectedCountry : effectiveCountry}
+              onChange={(e) => {
+                setSelectionMode("manual");
+                setSelectedCountry(e.target.value as typeof selectedCountry);
+              }}
+            >
+              {countries.map((country) => (
+                <option key={country.code} value={country.code}>
+                  {country.name}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
 

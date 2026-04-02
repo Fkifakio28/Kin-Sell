@@ -224,14 +224,6 @@ function SideDrawer({
           </button>
         </div>
 
-        {/* Sections */}
-        <nav className="ksm-drawer-nav" aria-label={t('nav.ariaMain')}>
-          <DrawerSection title={t('home.drawerExploreSection')} links={DRAWER_LINKS.explorer} onClose={onClose} t={t} />
-          {isLoggedIn && <DrawerSection title={t('home.drawerUserSection')} links={DRAWER_LINKS.user.map(l => ({ ...l, href: l.href.replace('__DASHBOARD__', getDashboardPath(user?.role)) }))} onClose={onClose} t={t} />}
-          <DrawerSection title={t('home.drawerPublicSection')} links={DRAWER_LINKS.public} onClose={onClose} t={t} />
-          <DrawerSection title={t('home.drawerInfoSection')} links={DRAWER_LINKS.info} onClose={onClose} t={t} />
-        </nav>
-
         <div className="ksm-drawer-market-prefs">
           <p className="ksm-drawer-section-title">{t('home.drawerMarketPrefs')}</p>
           <label className="ksm-drawer-pref-label" htmlFor="ksm-country-mode">{t('home.marketMode')}</label>
@@ -288,6 +280,14 @@ function SideDrawer({
             ))}
           </select>
         </div>
+
+        {/* Sections */}
+        <nav className="ksm-drawer-nav" aria-label={t('nav.ariaMain')}>
+          <DrawerSection title={t('home.drawerExploreSection')} links={DRAWER_LINKS.explorer} onClose={onClose} t={t} />
+          {isLoggedIn && <DrawerSection title={t('home.drawerUserSection')} links={DRAWER_LINKS.user.map(l => ({ ...l, href: l.href.replace('__DASHBOARD__', getDashboardPath(user?.role)) }))} onClose={onClose} t={t} />}
+          <DrawerSection title={t('home.drawerPublicSection')} links={DRAWER_LINKS.public} onClose={onClose} t={t} />
+          <DrawerSection title={t('home.drawerInfoSection')} links={DRAWER_LINKS.info} onClose={onClose} t={t} />
+        </nav>
 
         {/* Bottom auth actions */}
         <div className="ksm-drawer-footer">

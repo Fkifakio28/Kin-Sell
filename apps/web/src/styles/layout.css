@@ -961,6 +961,27 @@
   font-weight: var(--font-weight-semibold);
 }
 
+.ks-country-selector-wrap {
+  margin-top: calc(var(--space-xs) * -1);
+  margin-bottom: var(--space-md);
+}
+
+.ks-country-selector {
+  width: 100%;
+  padding: 6px 10px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  font-family: inherit;
+}
+
+.ks-country-selector:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
 /* Coordonnées */
 .ks-footer-col--center { text-align: center; }
 
@@ -1073,6 +1094,11 @@
   }
   .ks-selector-row {
     justify-content: center;
+  }
+  .ks-country-selector-wrap {
+    width: min(220px, 100%);
+    margin-left: auto;
+    margin-right: auto;
   }
   /* Ligne 2 : Liens utiles centré, pleine largeur */
   .ks-footer-col--right {

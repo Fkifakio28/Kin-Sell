@@ -17,13 +17,16 @@
 
 .gn-call-screen {
   width: 100%;
-  min-height: 100dvh;
+  height: 100dvh;
+  max-height: 100dvh;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: space-between;
-  padding: clamp(18px, 3.5vh, 36px) clamp(16px, 4vw, 42px) calc(24px + env(safe-area-inset-bottom));
+  padding: calc(clamp(18px, 3.5vh, 36px) + env(safe-area-inset-top, 0px)) clamp(16px, 4vw, 42px) calc(24px + env(safe-area-inset-bottom, 0px));
   text-align: center;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .gn-call-screen-top {
