@@ -6,6 +6,7 @@ import { useLocaleCurrency } from "../app/providers/LocaleCurrencyProvider";
 import { getDashboardPath } from "../utils/role-routing";
 import { orders as ordersApi } from "../lib/api-client";
 import { InstallPrompt } from "./InstallPrompt";
+import { RegionLanguageCurrencySelector } from "./RegionLanguageCurrencySelector";
 
 const INFO_ITEMS = [
   { titleKey: "nav.about", href: "/about" },
@@ -264,33 +265,13 @@ export const Header = React.memo(function Header() {
             <Link to="/sokin" className="ks-mobile-link" onClick={() => setMobileOpen(false)}>{t('nav.sokin')}</Link>
             <Link to="/contact" className="ks-mobile-link" onClick={() => setMobileOpen(false)}>{t('nav.contact')}</Link>
             <div className="ks-mobile-divider" />
+            <RegionLanguageCurrencySelector className="ks-mobile-rlc" />
+            <div className="ks-mobile-divider" />
             {isLoggedIn ? (
               <>
                 <Link to={getDashboardPath(user?.role)} className="ks-mobile-link" onClick={() => setMobileOpen(false)}>{t('common.myAccount')}</Link>
                 <Link to="/messaging" className="ks-mobile-link" onClick={() => { setMobileOpen(false); }}>{t('common.messages')}</Link>
                 <Link to="/cart" className="ks-mobile-link" onClick={() => setMobileOpen(false)}>{t('nav.cartAria')}</Link>
-                <div className="ks-mobile-locale-row">
-                  <select
-                    className="ks-mobile-locale-select"
-                    value={language}
-                    onChange={(e) => setLanguage(e.target.value as import('../app/providers/LocaleCurrencyProvider').AppLanguage)}
-                    aria-label={t('footer.language')}
-                  >
-                    <option value="fr">🌐 Français</option>
-                    <option value="en">🌐 English</option>
-                    <option value="ln">🌐 Lingála</option>
-                  </select>
-                  <select
-                    className="ks-mobile-locale-select"
-                    value={currency}
-                    onChange={(e) => setCurrency(e.target.value as import('../app/providers/LocaleCurrencyProvider').AppCurrency)}
-                    aria-label={t('footer.currency')}
-                  >
-                    <option value="CDF">💱 CDF</option>
-                    <option value="USD">💱 USD</option>
-                    <option value="EUR">💱 EUR</option>
-                  </select>
-                </div>
                 <button className="ks-mobile-link ks-mobile-logout" type="button" onClick={() => void handleLogout()}>{t('common.logout')}</button>
               </>
             ) : (

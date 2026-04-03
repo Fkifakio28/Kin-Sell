@@ -39,6 +39,7 @@ const DICT: Record<AppLanguage, Record<string, string>> = {
     "footer.social": "Réseaux sociaux",
     "footer.language": "Langue",
     "footer.currency": "Devise",
+    "footer.country": "Pays",
     "footer.contacts": "Coordonnées",
     "footer.navigation": "Navigation",
     "footer.links": "Liens utiles",
@@ -1674,6 +1675,7 @@ const DICT: Record<AppLanguage, Record<string, string>> = {
   en: {
     "footer.language": "Language",
     "footer.currency": "Currency",
+    "footer.country": "Country",
     "footer.contacts": "Contacts",
     "footer.navigation": "Navigation",
     "footer.links": "Useful links",
@@ -3320,6 +3322,7 @@ const DICT: Record<AppLanguage, Record<string, string>> = {
     "footer.social": "Ba réseaux sociaux",
     "footer.language": "Lokota",
     "footer.currency": "Mbongo",
+    "footer.country": "Ekolo",
     "footer.contacts": "Ba coordonnées",
     "footer.navigation": "Navigation",
     "footer.links": "Ba lien utiles",

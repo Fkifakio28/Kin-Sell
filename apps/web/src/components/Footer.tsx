@@ -1,20 +1,8 @@
 import React from "react";
 import { Link } from "react-router-dom";
-import { useLocaleCurrency, type AppCurrency, type AppLanguage } from "../app/providers/LocaleCurrencyProvider";
-import { useMarketPreference } from "../app/providers/MarketPreferenceProvider";
+import { useLocaleCurrency } from "../app/providers/LocaleCurrencyProvider";
 import { useTheme } from "../app/providers/ThemeProvider";
-
-const LANGUAGES: { code: AppLanguage; flag: string; label: string }[] = [
-  { code: "fr", flag: "🇫🇷", label: "Français" },
-  { code: "en", flag: "🇬🇧", label: "English" },
-  { code: "ln", flag: "🇨🇩", label: "Lingala" },
-];
-
-const CURRENCIES: { code: AppCurrency; symbol: string; label: string }[] = [
-  { code: "CDF", symbol: "FC", label: "Franc Congolais" },
-  { code: "USD", symbol: "$", label: "Dollar US" },
-  { code: "EUR", symbol: "€", label: "Euro" },
-];
+import { RegionLanguageCurrencySelector } from "./RegionLanguageCurrencySelector";
 
 const USEFUL_LINKS = [
   { labelKey: "nav.about",        href: "/about" },
@@ -29,18 +17,9 @@ const USEFUL_LINKS = [
   { labelKey: "nav.contact",      href: "/contact" },
 ];
 
-const NAV_LINKS = [
-  { labelKey: "nav.home",     href: "/",         icon: "🏠" },
-  { labelKey: "nav.explorer", href: "/explorer",  icon: "🔍" },
-  { labelKey: "nav.sokin",    href: "/sokin",     icon: "✦" },
-  { labelKey: "nav.plans",    href: "/forfaits",  icon: "💎" },
-  { labelKey: "nav.contact",  href: "/contact",   icon: "✉️" },
-];
-
 export const Footer = React.memo(function Footer() {
   const { theme, toggleTheme } = useTheme();
-  const { language, setLanguage, currency, setCurrency, t } = useLocaleCurrency();
-  const { countries, selectedCountry, effectiveCountry, selectionMode, setSelectedCountry, setSelectionMode } = useMarketPreference();
+  const { t } = useLocaleCurrency();
 
   return (
     <footer className="ks-footer">
@@ -82,52 +61,7 @@ export const Footer = React.memo(function Footer() {
             <span className="ks-footer-brand">Kin-Sell</span>
           </div>
 
-          {/* Barre de langue */}
-          <div className="ks-selector-row" role="group" aria-label={t("footer.language")}>
-            {LANGUAGES.map(l => (
-              <button
-                key={l.code}
-                className={`ks-selector-btn${language === l.code ? " active" : ""}`}
-                onClick={() => setLanguage(l.code)}
-                title={l.label}
-                aria-pressed={language === l.code}
-              >
-                {l.flag}
-              </button>
-            ))}
-          </div>
-
-          {/* Barre de devise */}
-          <div className="ks-selector-row" role="group" aria-label={t("footer.currency")}>
-            {CURRENCIES.map(c => (
-              <button
-                key={c.code}
-                className={`ks-selector-btn${currency === c.code ? " active" : ""}`}
-                onClick={() => setCurrency(c.code)}
-                title={c.label}
-                aria-pressed={currency === c.code}
-              >
-                {c.symbol}
-              </button>
-            ))}
-          </div>
-
-          <div className="ks-country-selector-wrap" role="group" aria-label={t("home.marketCountry")}>
-            <select
-              className="ks-country-selector"
-              value={selectionMode === "manual" ? selectedCountry : effectiveCountry}
-              onChange={(e) => {
-                setSelectionMode("manual");
-                setSelectedCountry(e.target.value as typeof selectedCountry);
-              }}
-            >
-              {countries.map((country) => (
-                <option key={country.code} value={country.code}>
-                  {country.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          <RegionLanguageCurrencySelector />
         </div>
 
         {/* ── Colonne centre : coordonnées ── */}
@@ -167,20 +101,7 @@ export const Footer = React.memo(function Footer() {
 
         {/* ── Colonne droite : liens utiles ── */}
         <div className="ks-footer-col ks-footer-col--right">
-          {/* Navigation rapide */}
-          <p className="ks-footer-title">{t("footer.navigation") || "Navigation"}</p>
-          <ul className="ks-footer-links ks-footer-nav-links">
-            {NAV_LINKS.map(link => (
-              <li key={link.href}>
-                <Link to={link.href} className="ks-footer-link">
-                  <span aria-hidden="true">{link.icon}</span> {t(link.labelKey)}
-                </Link>
-              </li>
-            ))}
-          </ul>
-
-          {/* Liens utiles */}
-          <p className="ks-footer-title" style={{ marginTop: 'var(--space-md, 16px)' }}>{t("footer.links")}</p>
+          <p className="ks-footer-title">{t("footer.links")}</p>
           <ul className="ks-footer-links">
             {USEFUL_LINKS.map(link => (
               <li key={link.href}>
