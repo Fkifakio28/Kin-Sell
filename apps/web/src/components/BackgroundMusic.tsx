@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
+const MUSIC_PREF_KEY = "ks-music-stopped";
+
 interface BackgroundMusicProps {
   playing: boolean;
 }
@@ -7,34 +9,40 @@ interface BackgroundMusicProps {
 export function BackgroundMusic({ playing }: BackgroundMusicProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [muted, setMuted] = useState(false);
+  // Respecter le choix utilisateur : si explicitement stoppé, ne jamais relancer
+  const [userStopped, setUserStopped] = useState(
+    () => localStorage.getItem(MUSIC_PREF_KEY) === "1"
+  );
 
   const tryPlay = () => {
     const el = audioRef.current;
-    if (!el) return;
+    if (!el || userStopped) return;
     el.play().catch(() => { /* autoplay encore bloqué */ });
   };
 
+  /** STOP complet : pause + reset position */
+  const stopMusic = () => {
+    const el = audioRef.current;
+    if (!el) return;
+    el.pause();
+    el.currentTime = 0;
+  };
+
   /* Lancer la lecture dès que `playing` passe à true.
-   * Les navigateurs bloquent l'autoplay si aucun geste utilisateur n'a eu lieu.
-   * Solution : on tente play() immédiatement ; si le navigateur refuse,
-   * on inscrit des listeners sur les prochaines interactions (click / touch / keydown)
-   * et on rejoue dès que l'utilisateur agit. */
+   * Si `userStopped` ou `!playing` → stop complet (pause + currentTime = 0).
+   * Les navigateurs bloquent l'autoplay si aucun geste utilisateur n'a eu lieu. */
   useEffect(() => {
     const el = audioRef.current;
     if (!el) return;
     el.volume = 0.2;
 
-    if (!playing) {
-      el.pause();
+    if (!playing || userStopped) {
+      stopMusic();
       return;
     }
 
     // Tentative directe
     el.play().catch(() => {
-      // Navigateur bloque — on attend le prochain geste réel.
-      // On utilise document + capture:true pour intercepter les événements
-      // AVANT tout stopPropagation dans l'arbre, et on écoute plusieurs
-      // types de gestes (clic, touch, pointer, scroll, clavier).
       const unlock = () => {
         tryPlay();
         document.removeEventListener("pointerdown", unlock, true);
@@ -49,7 +57,7 @@ export function BackgroundMusic({ playing }: BackgroundMusicProps) {
       document.addEventListener("keydown",     unlock, { once: true, capture: true });
       document.addEventListener("scroll",      unlock, { once: true, capture: true, passive: true });
     });
-  }, [playing]);
+  }, [playing, userStopped]);
 
   /* Synchroniser le mute */
   useEffect(() => {
@@ -57,6 +65,33 @@ export function BackgroundMusic({ playing }: BackgroundMusicProps) {
       audioRef.current.muted = muted;
     }
   }, [muted]);
+
+  const handleToggle = () => {
+    if (userStopped) {
+      // Utilisateur veut relancer → supprimer la préférence
+      setUserStopped(false);
+      localStorage.removeItem(MUSIC_PREF_KEY);
+      if (playing) tryPlay();
+    } else if (muted) {
+      setMuted(false);
+    } else {
+      // Premier clic : mute. Deuxième logique gérée par le bouton stop ci-dessous.
+      setMuted(true);
+    }
+  };
+
+  const handleStop = () => {
+    stopMusic();
+    setUserStopped(true);
+    localStorage.setItem(MUSIC_PREF_KEY, "1");
+  };
+
+  const icon = userStopped ? "⏹" : muted ? "🔇" : "🔊";
+  const label = userStopped
+    ? "Relancer la musique"
+    : muted
+      ? "Activer le son"
+      : "Couper le son";
 
   return (
     <>
@@ -69,14 +104,12 @@ export function BackgroundMusic({ playing }: BackgroundMusicProps) {
       />
       <button
         className="ks-mute-btn"
-        onClick={() => {
-          setMuted((m) => !m);
-          if (playing) tryPlay();
-        }}
-        aria-label={muted ? "Activer le son" : "Couper le son"}
-        title={muted ? "Activer le son" : "Couper le son"}
+        onClick={handleToggle}
+        onDoubleClick={handleStop}
+        aria-label={label}
+        title={`${label} (double-clic = arrêter)`}
       >
-        {muted ? "🔇" : "🔊"}
+        {icon}
       </button>
     </>
   );

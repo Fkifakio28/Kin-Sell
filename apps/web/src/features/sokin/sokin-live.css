@@ -999,6 +999,40 @@
 }
 
 /* ══════════════════════════════════════════════════
+   MOBILE + TABLET ONLY — Caméra & vidéo optimisées
+   Pas de zoom, pas d'étirement, rendu naturel.
+   NE concerne PAS le desktop (≥1024px).
+   ══════════════════════════════════════════════════ */
+
+@media (max-width: 1023px) {
+  /* Caméra créateur : miroir horizontal mais pas de scale/zoom */
+  .lv-creator-camera {
+    object-fit: contain;
+    transform: scaleX(-1);
+    background: #000;
+  }
+  /* Vidéo live viewer : pas de crop sur petit écran */
+  .lv-viewer-video {
+    object-fit: contain;
+    background: #000;
+  }
+  /* Poster : conserver les proportions */
+  .lv-viewer-poster {
+    object-fit: contain;
+    background: #000;
+  }
+  /* Host preview : même logique */
+  .lv-viewer-surface video[autoplay][muted] {
+    object-fit: contain;
+    background: #000;
+  }
+  /* Réduire la complexité graphique du shade pour fluidité */
+  .lv-viewer-shade {
+    background: linear-gradient(180deg, rgba(0,0,0,0.4) 0%, transparent 20%, transparent 70%, rgba(0,0,0,0.6) 100%);
+  }
+}
+
+/* ══════════════════════════════════════════════════
    TABLET BREAKPOINT
    ══════════════════════════════════════════════════ */
 

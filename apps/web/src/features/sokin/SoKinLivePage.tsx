@@ -25,6 +25,48 @@ function isHls(url: string) {
   return /\.m3u8(?:$|[?#])/i.test(url);
 }
 
+/**
+ * Contraintes caméra adaptées par appareil avec fallback progressif.
+ * Mobile/tablette → portrait 720p ou 540p ou 480p
+ * Desktop → 720p paysage (webcam standard)
+ */
+async function getAdaptiveStream(isMobileOrTablet: boolean): Promise<MediaStream> {
+  const audioConstraints: MediaTrackConstraints = {
+    echoCancellation: true,
+    noiseSuppression: true,
+    autoGainControl: true,
+  };
+
+  // Niveaux de fallback : du meilleur au plus compatible
+  const profiles: MediaTrackConstraints[] = isMobileOrTablet
+    ? [
+        // Mobile/Tablette : portrait, qualité décroissante
+        { facingMode: 'user', width: { ideal: 720 }, height: { ideal: 1280 }, frameRate: { ideal: 30, max: 30 } },
+        { facingMode: 'user', width: { ideal: 540 }, height: { ideal: 960 },  frameRate: { ideal: 24, max: 30 } },
+        { facingMode: 'user', width: { ideal: 480 }, height: { ideal: 640 },  frameRate: { ideal: 24, max: 24 } },
+        { facingMode: 'user' }, // dernier recours
+      ]
+    : [
+        // Desktop : paysage, webcam standard
+        { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30, max: 30 } },
+        { facingMode: 'user', width: { ideal: 960 },  height: { ideal: 540 }, frameRate: { ideal: 30, max: 30 } },
+        { facingMode: 'user' }, // dernier recours
+      ];
+
+  for (const videoConstraints of profiles) {
+    try {
+      return await navigator.mediaDevices.getUserMedia({
+        video: videoConstraints,
+        audio: audioConstraints,
+      });
+    } catch {
+      // passage au profil suivant
+    }
+  }
+  // Si tout échoue, tenter sans contrainte vidéo
+  return navigator.mediaDevices.getUserMedia({ video: true, audio: audioConstraints });
+}
+
 const TAG_OPTIONS = [
   { key: 'article', label: '📰 Article', value: 'article' },
   { key: 'produit', label: '🛍️ Produit', value: 'produit' },
@@ -39,9 +81,11 @@ const TAG_OPTIONS = [
 function LiveCreator({
   onCancel,
   onStart,
+  isMobileOrTablet,
 }: {
   onCancel: () => void;
   onStart: (data: { title: string; description: string; tags: string[]; city: string }) => void;
+  isMobileOrTablet: boolean;
 }) {
   const { t } = useLocaleCurrency();
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -58,10 +102,7 @@ function LiveCreator({
     let cancelled = false;
     (async () => {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'user', width: { ideal: 1080 }, height: { ideal: 1920 } },
-          audio: true,
-        });
+        const stream = await getAdaptiveStream(isMobileOrTablet);
         if (cancelled) { stream.getTracks().forEach((t) => t.stop()); return; }
         streamRef.current = stream;
         if (videoRef.current) videoRef.current.srcObject = stream;
@@ -186,10 +227,12 @@ function LiveViewer({
   live,
   onBack,
   isHost,
+  isMobileOrTablet,
 }: {
   live: SoKinLiveData;
   onBack: () => void;
   isHost: boolean;
+  isMobileOrTablet: boolean;
 }) {
   const { isLoggedIn, user } = useAuth();
   const { t, formatMoneyFromUsdCents } = useLocaleCurrency();
@@ -227,10 +270,18 @@ function LiveViewer({
     return () => { if (isLoggedIn && !isHost) sokinLive.leave(live.id).catch(() => {}); };
   }, [isLoggedIn, isHost, live.id]);
 
-  // Polling status
+  // Unified polling: status (every 2 ticks = 8s) + chat (every tick = 4s)
+  // Reduces from 3 intervals to 1 → fewer re-renders, lighter on CPU/battery (mobile priority)
+  const pollTickRef = useRef(0);
   useEffect(() => {
     let c = false;
-    const poll = setInterval(async () => {
+    const fetchChat = async () => {
+      try {
+        const d = await sokinLive.chat(live.id, 80);
+        if (!c) setMessages(d.messages.reverse());
+      } catch { /* */ }
+    };
+    const fetchStatus = async () => {
       try {
         const u = await sokinLive.get(live.id);
         if (c) return;
@@ -239,26 +290,24 @@ function LiveViewer({
         setLikes(u.likesCount);
         setStatus((prev) => prev === 'LIVE' && u.status === 'WAITING' ? prev : u.status);
       } catch { /* */ }
-    }, 5000);
+    };
+    // Initial fetch
+    void fetchChat();
+    void fetchStatus();
+    const poll = setInterval(() => {
+      pollTickRef.current++;
+      void fetchChat();
+      // Status every 2nd tick (~8s) to reduce load
+      if (pollTickRef.current % 2 === 0) void fetchStatus();
+    }, 4000);
     return () => { c = true; clearInterval(poll); };
   }, [live.id]);
 
-  // Polling chat
+  // Auto-scroll chat (using requestAnimationFrame for smoothness)
   useEffect(() => {
-    const fetch = async () => {
-      try {
-        const d = await sokinLive.chat(live.id, 80);
-        setMessages(d.messages.reverse());
-      } catch { /* */ }
-    };
-    void fetch();
-    const int = setInterval(fetch, 3000);
-    return () => clearInterval(int);
-  }, [live.id]);
-
-  // Auto-scroll chat
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    requestAnimationFrame(() => {
+      chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    });
   }, [messages]);
 
   // Host camera preview (when no stream URL)
@@ -267,14 +316,14 @@ function LiveViewer({
     let c = false;
     (async () => {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: true });
+        const stream = await getAdaptiveStream(isMobileOrTablet);
         if (c) { stream.getTracks().forEach((t) => t.stop()); return; }
         hostStreamRef.current = stream;
         if (hostVideoRef.current) hostVideoRef.current.srcObject = stream;
       } catch { /* */ }
     })();
     return () => { c = true; hostStreamRef.current?.getTracks().forEach((t) => t.stop()); hostStreamRef.current = null; };
-  }, [canPlay, isHost, status]);
+  }, [canPlay, isHost, status, isMobileOrTablet]);
 
   // Video playback (HLS or direct)
   useEffect(() => {
@@ -666,9 +715,10 @@ export function SoKinLivePage() {
       } catch { /* */ }
     };
     void load();
-    const int = setInterval(load, 10000);
+    // 15s sur mobile pour ménager la batterie, 10s sur desktop
+    const int = setInterval(load, isMobileOrTablet ? 15000 : 10000);
     return () => { c = true; clearInterval(int); };
-  }, []);
+  }, [isMobileOrTablet]);
 
   // Sort lives by relevance
   const sortedLives = useMemo(() => {
@@ -723,6 +773,7 @@ export function SoKinLivePage() {
       <LiveCreator
         onCancel={() => setView('browse')}
         onStart={handleCreateLive}
+        isMobileOrTablet={isMobileOrTablet}
       />
     );
   }
@@ -734,6 +785,7 @@ export function SoKinLivePage() {
         live={selectedLive}
         onBack={() => { setView('browse'); setSelectedLive(null); }}
         isHost={selectedLive.hostId === user?.id}
+        isMobileOrTablet={isMobileOrTablet}
       />
     );
   }

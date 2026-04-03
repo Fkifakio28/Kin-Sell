@@ -1,4 +1,4 @@
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { Outlet, ScrollRestoration, useLocation } from "react-router-dom";
 import { BackgroundMusic } from "../../components/BackgroundMusic";
 import { Footer } from "../../components/Footer";
@@ -6,6 +6,9 @@ import { shouldShowSplash, SplashScreen } from "../../components/SplashScreen";
 import { SuspensionGuard } from "../providers/AuthProvider";
 import { InstallBanner } from "../../components/InstallBanner";
 import { useIsMobile } from "../../hooks/useIsMobile";
+
+/** Routes où la musique de fond doit être stoppée (caméra/micro/live actifs). */
+const MUSIC_OFF_ROUTES = ["/sokin", "/sokin/live"];
 
 /**
  * Root layout — wraps all pages with background shell + footer.
@@ -19,9 +22,13 @@ export function RootLayout() {
     || location.pathname === "/suspended";
 
   const [splashVisible, setSplashVisible] = useState(() => shouldShowSplash());
-  // Si le splash n'est pas affiché (déjà vu), on démarre la musique dès le montage.
-  // BackgroundMusic gère lui-même le blocage autoplay du navigateur.
   const [musicPlaying, setMusicPlaying] = useState(() => !shouldShowSplash());
+
+  // Stop musique sur les pages So-Kin / So-Kin Live (tous appareils)
+  useEffect(() => {
+    const onMusicOffRoute = MUSIC_OFF_ROUTES.includes(location.pathname);
+    setMusicPlaying((prev) => onMusicOffRoute ? false : prev || !shouldShowSplash());
+  }, [location.pathname]);
 
   function handleSplashDismiss() {
     setSplashVisible(false);
