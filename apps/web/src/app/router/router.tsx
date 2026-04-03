@@ -58,6 +58,7 @@ export const router = createBrowserRouter([
       { path: "/sokin/profiles", element: <SoKinProfilesPage /> },
       { path: "/sokin/market", element: <SoKinMarketPage /> },
       { path: "/sokin/live", element: <SoKinLivePage /> },
+      { path: "/explorer", element: <ExplorerPage /> },
 
       /* All other pages — with header */
       {
@@ -79,7 +80,6 @@ export const router = createBrowserRouter([
           { path: "/business/dashboard", element: <BusinessDashboard /> },
           { path: "/admin/dashboard", element: <AdminDashboard /> },
 
-          { path: "/explorer", element: <ExplorerPage /> },
           { path: "/messaging", element: <MessagingPage /> },
           { path: "/messaging/:conversationId", element: <MessagingPage /> },
           { path: "/explorer/shops-online", element: <ExplorerShopsPage /> },
