@@ -32,7 +32,9 @@ jobs:
           accept-android-sdk-licenses: true
 
       - name: Install Android SDK platform 36
-        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+        run: |
+          sdkmanager --list 2>/dev/null | grep "platforms;android-3" | head -10
+          sdkmanager "platforms;android-36" "build-tools;36.0.0" || sdkmanager "platforms;android-36"
 
       - name: Install dependencies
         run: npm install
@@ -49,7 +51,14 @@ jobs:
 
       - name: Build debug APK
         working-directory: apps/web/android
-        run: ./gradlew assembleDebug
+        run: ./gradlew assembleDebug --stacktrace 2>&1 | tail -200
+
+      - name: Show Gradle failure logs
+        if: failure()
+        run: |
+          echo "=== Last Gradle build output ==="
+          find apps/web/android -name "*.log" -exec tail -100 {} \; 2>/dev/null || true
+          cat apps/web/android/app/build/reports/*.html 2>/dev/null || true
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
