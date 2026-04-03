@@ -1227,9 +1227,9 @@ function SoKinPostCard({
   );
 }
 
-/* ────────────── FAB ────────────── */
+/* ────────────── Bottom Nav ────────────── */
 
-function HomeFAB({
+function BottomNav({
   visible,
   isLoggedIn,
   t,
@@ -1241,30 +1241,76 @@ function HomeFAB({
   const [menuOpen, setMenuOpen] = useState(false);
   const navigate = useNavigate();
   const { user } = useAuth();
+  const location = window.location.pathname;
 
   const go = (path: string) => {
     setMenuOpen(false);
     void navigate(isLoggedIn ? path : "/login");
   };
 
-  const fabCls =
-    "hm-fab" +
-    (visible ? "" : " hm-fab--hidden") +
-    (menuOpen ? " hm-fab--open" : "");
+  const navCls = "hm-bottomnav" + (visible ? "" : " hm-bottomnav--hidden");
 
   return (
     <>
-      <button
-        className={fabCls}
-        onClick={() => setMenuOpen((o) => !o)}
-        aria-label={t("home.createAction")}
-        aria-expanded={menuOpen}
-      >
-        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-          <line x1="12" y1="5" x2="12" y2="19" />
-          <line x1="5" y1="12" x2="19" y2="12" />
-        </svg>
-      </button>
+      <nav className={navCls} aria-label="Navigation principale">
+        {/* Home */}
+        <Link to="/" className={`hm-bnav-item${location === "/" ? " hm-bnav-item--active" : ""}`}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+            <polyline points="9 22 9 12 15 12 15 22" />
+          </svg>
+          <span className="hm-bnav-label">{t("nav.home")}</span>
+        </Link>
+
+        {/* Panier */}
+        <Link to="/cart" className={`hm-bnav-item${location === "/cart" ? " hm-bnav-item--active" : ""}`}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="9" cy="21" r="1" />
+            <circle cx="20" cy="21" r="1" />
+            <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+          </svg>
+          <span className="hm-bnav-label">{t("nav.cart")}</span>
+        </Link>
+
+        {/* (+) Publier — Centre */}
+        <button
+          className={`hm-bnav-create${menuOpen ? " hm-bnav-create--open" : ""}`}
+          onClick={() => setMenuOpen((o) => !o)}
+          aria-label={t("home.createAction")}
+          aria-expanded={menuOpen}
+        >
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+        </button>
+
+        {/* Notifications */}
+        <Link
+          to={isLoggedIn ? getDashboardPath(user?.role) + "?section=notifications" : "/login"}
+          className="hm-bnav-item"
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+            <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+          </svg>
+          <span className="hm-bnav-label">{t("nav.notifications")}</span>
+        </Link>
+
+        {/* Compte */}
+        <Link
+          to={isLoggedIn ? getDashboardPath(user?.role) : "/login"}
+          className="hm-bnav-item"
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+            <circle cx="12" cy="7" r="4" />
+          </svg>
+          <span className="hm-bnav-label">{t("nav.account")}</span>
+        </Link>
+      </nav>
+
+      {/* Bottom sheet menu du (+) */}
       {menuOpen && (
         <>
           <div
@@ -1375,7 +1421,7 @@ export function HomePageMobile() {
         />
       </main>
 
-      <HomeFAB visible={barsVisible} isLoggedIn={isLoggedIn} t={t} />
+      <BottomNav visible={barsVisible} isLoggedIn={isLoggedIn} t={t} />
 
       {negotiateListing && (
         <NegotiatePopup

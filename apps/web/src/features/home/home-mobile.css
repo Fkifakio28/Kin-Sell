@@ -84,7 +84,7 @@
 
 .hm-content {
   padding-top: 64px;
-  padding-bottom: 32px;
+  padding-bottom: 72px;
   transition: padding-top 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -566,46 +566,88 @@
   color: var(--color-primary);
 }
 
-/* ─── FAB ─── */
+/* ─── Bottom Nav ─── */
 
-.hm-fab {
+.hm-bottomnav {
   position: fixed;
-  bottom: 24px;
-  right: 20px;
+  bottom: 0;
+  left: 0;
+  right: 0;
   z-index: 950;
-  width: 54px;
-  height: 54px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  background: var(--color-glass-bg, rgba(18, 11, 43, 0.85));
+  backdrop-filter: blur(18px) saturate(1.4);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  border-top: 1px solid var(--color-glass-border, rgba(255, 255, 255, 0.08));
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform;
+}
+
+.hm-bottomnav--hidden {
+  transform: translateY(100%);
+}
+
+.hm-bnav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  flex: 1;
+  height: 100%;
+  color: var(--color-text-muted, rgba(255, 255, 255, 0.5));
+  text-decoration: none;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  transition: color 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.hm-bnav-item--active {
+  color: var(--color-primary);
+}
+
+.hm-bnav-item:active {
+  color: var(--color-primary);
+}
+
+.hm-bnav-label {
+  font-family: var(--font-heading, "Sora", sans-serif);
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1;
+}
+
+/* Bouton central (+) */
+.hm-bnav-create {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 50px;
+  height: 50px;
   border-radius: 50%;
   border: none;
   background: linear-gradient(135deg, var(--color-primary), var(--color-secondary, #a78bfa));
   color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   cursor: pointer;
-  box-shadow: 0 4px 20px rgba(111, 88, 255, 0.4);
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-    box-shadow 0.2s, opacity 0.3s;
-  will-change: transform;
+  box-shadow: 0 4px 16px rgba(111, 88, 255, 0.4);
+  margin-top: -18px;
+  transition: transform 0.2s, box-shadow 0.2s;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.hm-fab--hidden {
-  transform: translateY(100px);
-  opacity: 0;
-  pointer-events: none;
-}
-
-.hm-fab--open {
+.hm-bnav-create--open {
   transform: rotate(45deg);
 }
 
-.hm-fab--hidden.hm-fab--open {
-  transform: translateY(100px) rotate(45deg);
-}
-
-.hm-fab:active {
-  box-shadow: 0 2px 10px rgba(111, 88, 255, 0.3);
-  transform: scale(0.93);
+.hm-bnav-create:active {
+  transform: scale(0.92);
+  box-shadow: 0 2px 8px rgba(111, 88, 255, 0.3);
 }
 
 /* FAB Menu */
@@ -1054,6 +1096,10 @@
     border-radius: 20px;
     bottom: 16px;
   }
+
+  .hm-bnav-label {
+    font-size: 0.65rem;
+  }
 }
 
 /* ─── Safe-area (iOS) ─── */
@@ -1068,8 +1114,13 @@
     padding-top: calc(64px + env(safe-area-inset-top));
   }
 
-  .hm-fab {
-    bottom: calc(24px + env(safe-area-inset-bottom));
+  .hm-bottomnav {
+    padding-bottom: env(safe-area-inset-bottom);
+    height: calc(60px + env(safe-area-inset-bottom));
+  }
+
+  .hm-content {
+    padding-bottom: calc(72px + env(safe-area-inset-bottom));
   }
 
   .hm-fab-menu {
