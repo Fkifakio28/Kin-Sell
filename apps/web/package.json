@@ -9,9 +9,17 @@
     "notify:sitemaps": "node ./scripts/notify-search-engines.mjs",
     "prebuild": "npm run sitemap",
     "build": "tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "cap:sync": "npm run build && npx cap sync android",
+    "cap:open": "npx cap open android",
+    "cap:copy": "npm run build && npx cap copy android"
   },
   "dependencies": {
+    "@capacitor/android": "^8.3.0",
+    "@capacitor/app": "^8.1.0",
+    "@capacitor/browser": "^8.0.3",
+    "@capacitor/cli": "^8.3.0",
+    "@capacitor/core": "^8.3.0",
     "@types/qrcode": "^1.5.6",
     "hls.js": "^1.6.15",
     "html5-qrcode": "^2.3.8",

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Kin-Sell</string>
+    <string name="title_activity_main">Kin-Sell</string>
+    <string name="package_name">com.kinsell.app</string>
+    <string name="custom_url_scheme">com.kinsell.app</string>
+</resources>

@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
+import { Browser } from "@capacitor/browser";
+import { Capacitor } from "@capacitor/core";
 import { AuthShell } from "./AuthShell";
 import { useAuth } from "../../app/providers/AuthProvider";
 import { useLocaleCurrency } from "../../app/providers/LocaleCurrencyProvider";
@@ -58,11 +60,16 @@ export function RegisterPage() {
       : t("auth.registerHelperUser");
   }, [profileType, t]);
 
-  const handleSocialClick = (provider: "google" | "facebook") => {
+  const handleSocialClick = async (provider: "google" | "facebook") => {
     setErrorMessage(null);
     if (provider === "google") {
       const apiBase = import.meta.env.VITE_API_URL ?? "/api";
-      window.location.href = `${apiBase}/auth/google`;
+      const authUrl = `${apiBase}/auth/google${Capacitor.isNativePlatform() ? "?source=app" : ""}`;
+      if (Capacitor.isNativePlatform()) {
+        await Browser.open({ url: authUrl });
+      } else {
+        window.location.href = authUrl;
+      }
       return;
     }
     setSocialMessage(t("auth.socialRegisterReady").replace("{provider}", "Facebook"));

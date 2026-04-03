@@ -1,0 +1,5 @@
+# Copy this file to key.properties and fill values for signed release builds.
+storeFile=../keystore/kinsell-release.jks
+storePassword=CHANGE_ME
+keyAlias=kinsell
+keyPassword=CHANGE_ME

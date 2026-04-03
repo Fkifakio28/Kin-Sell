@@ -21,7 +21,7 @@ interface GoogleUserInfo {
   picture?: string;
 }
 
-export const getGoogleAuthUrl = (): string => {
+export const getGoogleAuthUrl = (source: "web" | "app" = "web"): string => {
   if (!env.GOOGLE_CLIENT_ID) throw new Error("GOOGLE_CLIENT_ID non configuré");
 
   const params = new URLSearchParams({
@@ -31,6 +31,7 @@ export const getGoogleAuthUrl = (): string => {
     scope: "openid email profile",
     access_type: "offline",
     prompt: "consent",
+    state: source,
   });
 
   return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;

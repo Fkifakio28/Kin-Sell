@@ -122,13 +122,17 @@ router.get("/google", (req, res) => {
     res.status(501).json({ error: "Google OAuth non configuré" });
     return;
   }
-  res.redirect(getGoogleAuthUrl());
+  const source = req.query.source === "app" ? "app" : "web";
+  res.redirect(getGoogleAuthUrl(source));
 });
 
 router.get("/google/callback", asyncHandler(async (req, res) => {
   const code = req.query.code as string;
+  const source = req.query.state === "app" ? "app" : "web";
+  const callbackBase = source === "app" ? env.MOBILE_APP_AUTH_CALLBACK : `${env.FRONTEND_URL}/auth/callback`;
   if (!code) {
-    res.redirect(`${env.FRONTEND_URL}/login?error=google_no_code`);
+    const params = new URLSearchParams({ error: "google_no_code" });
+    res.redirect(`${callbackBase}?${params.toString()}`);
     return;
   }
 
@@ -143,10 +147,11 @@ router.get("/google/callback", asyncHandler(async (req, res) => {
       role: result.user.role,
       isNew: result.isNewUser ? "1" : "0",
     });
-    res.redirect(`${env.FRONTEND_URL}/auth/callback?${params.toString()}`);
+    res.redirect(`${callbackBase}?${params.toString()}`);
   } catch (error) {
     logger.error({ err: error }, "[Google OAuth] Callback failed");
-    res.redirect(`${env.FRONTEND_URL}/login?error=google_failed`);
+    const params = new URLSearchParams({ error: "google_failed" });
+    res.redirect(`${callbackBase}?${params.toString()}`);
   }
 }));
 
