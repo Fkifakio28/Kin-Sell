@@ -42,6 +42,7 @@ import { setupSocketServer } from "./modules/messaging/socket.js";
 import { errorHandler } from "./shared/errors/error-handler.js";
 import { startAiAutonomyScheduler } from "./modules/analytics/ai-autonomy.service.js";
 import { seedDefaultAgents } from "./modules/analytics/ai-admin.service.js";
+import { getRedis, disconnectRedis } from "./shared/db/redis.js";
 
 const app = express();
 const httpServer = createServer(app);
@@ -107,7 +108,8 @@ app.get("/health", async (_req, res) => {
   }
   try {
     await prisma.$queryRaw`SELECT 1`;
-    _healthCache = { data: { status: "ok", service: "kinsell-api", db: "connected", uptime: Math.floor(process.uptime()) }, expiresAt: now + 30_000 };
+    const redisOk = !!getRedis();
+    _healthCache = { data: { status: "ok", service: "kinsell-api", db: "connected", redis: redisOk ? "connected" : "fallback-memory", uptime: Math.floor(process.uptime()) }, expiresAt: now + 30_000 };
     res.set("Cache-Control", "public, max-age=30");
     res.json(_healthCache.data);
   } catch {
@@ -152,6 +154,42 @@ app.use("/mobile-money", mobileMoneyRoutes);
 app.use("/geo", geoRoutes);
 app.use("/reviews", reviewsRoutes);
 
+// ── Client-side error reporting endpoint ──
+const _errorRateLimit = new Map<string, number>();
+app.post("/errors", (req, res) => {
+  const { type, message, stack, url, timestamp } = req.body || {};
+  if (!type || !message) {
+    res.status(400).json({ error: "type and message required" });
+    return;
+  }
+  // Rate limit: 10 reports per IP per minute
+  const ip = req.ip ?? "unknown";
+  const now = Date.now();
+  const count = _errorRateLimit.get(ip) ?? 0;
+  if (count > 10) {
+    res.status(429).end();
+    return;
+  }
+  _errorRateLimit.set(ip, count + 1);
+  setTimeout(() => {
+    const c = _errorRateLimit.get(ip);
+    if (c !== undefined) _errorRateLimit.set(ip, Math.max(0, c - 1));
+  }, 60_000);
+
+  logger.warn({
+    clientError: true,
+    errorType: type,
+    errorMessage: String(message).slice(0, 500),
+    errorStack: String(stack || "").slice(0, 1000),
+    errorUrl: String(url || "").slice(0, 300),
+    errorTimestamp: timestamp,
+    ip,
+    ua: req.headers["user-agent"],
+  }, `[Client Error] ${type}: ${String(message).slice(0, 200)}`);
+
+  res.status(204).end();
+});
+
 app.use(errorHandler);
 
 // Setup Socket.IO with WebRTC signaling
@@ -159,6 +197,8 @@ setupSocketServer(httpServer, env.CORS_ORIGIN);
 
 httpServer.listen(env.API_PORT, async () => {
   logger.info("Kin-Sell API lancee sur le port " + env.API_PORT);
+  // Warm up Redis connection
+  getRedis();
   startAdScheduler();
   await seedDefaultAgents();
   startAiAutonomyScheduler();
@@ -169,6 +209,7 @@ httpServer.listen(env.API_PORT, async () => {
 const shutdown = async (signal: string) => {
   logger.info(`${signal} reçu — arrêt gracieux...`);
   httpServer.close(async () => {
+    await disconnectRedis();
     await prisma.$disconnect();
     logger.info("Serveur arrêté proprement.");
     process.exit(0);

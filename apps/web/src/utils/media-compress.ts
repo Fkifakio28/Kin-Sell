@@ -1,5 +1,7 @@
 /**
  * Compression d'images côté client (style WhatsApp).
+ * - Utilise un Web Worker + OffscreenCanvas si supporté (off-main-thread)
+ * - Fallback sur Canvas principal sinon
  * - Redimensionne si la plus grande dimension dépasse MAX_DIMENSION
  * - Convertit en JPEG (meilleur rapport taille/qualité pour photos)
  * - Qualité progressive : essaie 0.82 puis réduit si le fichier reste trop gros
@@ -11,6 +13,75 @@ const TARGET_MAX_BYTES = 1.5 * 1024 * 1024; // 1.5 Mo cible
 const INITIAL_QUALITY = 0.82;
 const MIN_QUALITY = 0.55;
 const QUALITY_STEP = 0.08;
+
+/* ── Web Worker singleton ── */
+let _worker: Worker | null = null;
+let _workerSupported: boolean | null = null;
+let _msgId = 0;
+
+function getCompressWorker(): Worker | null {
+  if (_workerSupported === false) return null;
+  if (_worker) return _worker;
+
+  try {
+    // OffscreenCanvas check
+    if (typeof OffscreenCanvas === "undefined") {
+      _workerSupported = false;
+      return null;
+    }
+    _worker = new Worker(
+      new URL("../workers/compress.worker.ts", import.meta.url),
+      { type: "module" },
+    );
+    _workerSupported = true;
+    _worker.addEventListener("error", () => {
+      _workerSupported = false;
+      _worker?.terminate();
+      _worker = null;
+    });
+    return _worker;
+  } catch {
+    _workerSupported = false;
+    return null;
+  }
+}
+
+function compressViaWorker(file: File): Promise<File> {
+  const worker = getCompressWorker();
+  if (!worker) return compressImageFallback(file);
+
+  return new Promise((resolve, reject) => {
+    const id = ++_msgId;
+    const timeout = setTimeout(() => {
+      reject(new Error("Worker timeout"));
+    }, 30_000);
+
+    function handler(e: MessageEvent) {
+      if (e.data.id !== id) return;
+      worker!.removeEventListener("message", handler);
+      clearTimeout(timeout);
+
+      if (e.data.error) {
+        // Fallback to main thread
+        compressImageFallback(file).then(resolve, reject);
+        return;
+      }
+
+      const { buffer, name, type } = e.data.result;
+      resolve(new File([buffer], name, { type, lastModified: Date.now() }));
+    }
+
+    worker.addEventListener("message", handler);
+
+    // Read file and transfer to worker
+    file.arrayBuffer().then((buf) => {
+      worker.postMessage(
+        { id, imageData: buf, fileName: file.name, mimeType: file.type },
+        [buf], // transfer (zero-copy)
+      );
+    }).catch(reject);
+  });
+}
 
 function loadImage(file: File): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -35,10 +106,9 @@ function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality: number):
 }
 
 /**
- * Compresse une image : redimensionne + encode en JPEG.
- * Retourne un nouveau File prêt à être uploadé.
+ * Compresse une image sur le main thread (fallback).
  */
-export async function compressImage(file: File): Promise<File> {
+async function compressImageFallback(file: File): Promise<File> {
   // GIF animés : on ne compresse pas (perte d'animation)
   if (file.type === "image/gif") return file;
 
@@ -92,6 +162,23 @@ export async function compressImage(file: File): Promise<File> {
     return compressedFile;
   } finally {
     URL.revokeObjectURL(srcUrl);
+  }
+}
+
+/**
+ * Compresse une image : Web Worker (off-thread) avec fallback Canvas principal.
+ * Retourne un nouveau File prêt à être uploadé.
+ */
+export async function compressImage(file: File): Promise<File> {
+  // GIF: skip
+  if (file.type === "image/gif") return file;
+  // Small JPEG/WebP: skip
+  if (file.size < 200 * 1024 && (file.type === "image/jpeg" || file.type === "image/webp")) return file;
+
+  try {
+    return await compressViaWorker(file);
+  } catch {
+    return compressImageFallback(file);
   }
 }
 

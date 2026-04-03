@@ -1,7 +1,8 @@
 /**
  * Rate Limit Middleware — Kin-Sell
  *
- * In-memory sliding-window rate limiter per user or IP.
+ * Redis-backed sliding-window rate limiter per user or IP.
+ * Falls back to in-memory store if Redis is unavailable.
  * Lightweight: no DB writes on hot paths; logged only on violation.
  */
 
@@ -9,15 +10,15 @@ import { NextFunction, Request, Response } from "express";
 import type { AuthenticatedRequest } from "../auth/auth-middleware.js";
 import { HttpError } from "../errors/http-error.js";
 import { logSecurityEvent } from "../../modules/security/security.service.js";
+import { getRedis } from "../db/redis.js";
 
-/* ── Window entry ── */
+/* ── In-memory fallback ── */
 interface WindowEntry {
   timestamps: number[];
 }
 
 const store = new Map<string, WindowEntry>();
 
-/* ── Cleanup old entries every 5 min ── */
 setInterval(() => {
   const now = Date.now();
   for (const [key, entry] of store) {
@@ -42,18 +43,61 @@ export const RateLimits = {
 
 type RateLimitConfig = { windowMs: number; max: number; label: string };
 
+/** Redis sliding-window check — returns current count */
+async function redisRateCheck(key: string, windowMs: number): Promise<number> {
+  const redis = getRedis();
+  if (!redis) return -1; // fallback to memory
+
+  const now = Date.now();
+  const windowStart = now - windowMs;
+  const redisKey = `rl:${key}`;
+
+  // Atomic pipeline: remove old entries, add current, count, set TTL
+  const results = await redis
+    .multi()
+    .zremrangebyscore(redisKey, 0, windowStart)
+    .zadd(redisKey, now, `${now}-${Math.random().toString(36).slice(2, 8)}`)
+    .zcard(redisKey)
+    .pexpire(redisKey, windowMs)
+    .exec();
+
+  if (!results) return -1;
+  // results[2] = [error, count] from zcard
+  const count = results[2]?.[1] as number;
+  return typeof count === "number" ? count : -1;
+}
+
 /**
  * Creates an Express middleware that enforces a rate limit.
- *
- * For authenticated routes, the key is `userId:label`.
- * For unauthenticated routes (login/register), the key is `ip:label`.
+ * Uses Redis when available, falls back to in-memory.
  */
 export function rateLimit(config: RateLimitConfig) {
-  return (req: Request, _res: Response, next: NextFunction): void => {
+  return async (req: Request, _res: Response, next: NextFunction): Promise<void> => {
     const authReq = req as AuthenticatedRequest;
     const identifier = authReq.auth?.userId ?? req.ip ?? "unknown";
     const key = `${identifier}:${config.label}`;
 
+    // Try Redis first
+    const redisCount = await redisRateCheck(key, config.windowMs).catch(() => -1);
+
+    if (redisCount >= 0) {
+      // Redis path
+      if (redisCount > config.max) {
+        void logSecurityEvent({
+          userId: authReq.auth?.userId,
+          eventType: `RATE_LIMIT_${config.label}`,
+          ipAddress: req.ip ?? undefined,
+          userAgent: req.headers["user-agent"],
+          riskLevel: 3,
+          metadata: { count: redisCount, windowMs: config.windowMs, max: config.max, backend: "redis" },
+        });
+        throw new HttpError(429, `Trop de requêtes. Réessayez dans quelques instants.`);
+      }
+      next();
+      return;
+    }
+
+    // In-memory fallback
     const now = Date.now();
     let entry = store.get(key);
     if (!entry) {
@@ -61,18 +105,16 @@ export function rateLimit(config: RateLimitConfig) {
       store.set(key, entry);
     }
 
-    // Keep only timestamps within the window
     entry.timestamps = entry.timestamps.filter(t => now - t < config.windowMs);
 
     if (entry.timestamps.length >= config.max) {
-      // Log the violation asynchronously (fire-and-forget)
       void logSecurityEvent({
         userId: authReq.auth?.userId,
         eventType: `RATE_LIMIT_${config.label}`,
         ipAddress: req.ip ?? undefined,
         userAgent: req.headers["user-agent"],
         riskLevel: 3,
-        metadata: { count: entry.timestamps.length, windowMs: config.windowMs, max: config.max },
+        metadata: { count: entry.timestamps.length, windowMs: config.windowMs, max: config.max, backend: "memory" },
       });
 
       throw new HttpError(429, `Trop de requêtes. Réessayez dans quelques instants.`);

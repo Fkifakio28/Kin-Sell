@@ -381,7 +381,7 @@ function PostFeed({
       ) : (
         items
       )}
-      {hasMore && <div ref={sentinelRef} className="sk-sentinel" />}
+      {hasMore && <div ref={sentinelRef as React.RefObject<HTMLDivElement>} className="sk-sentinel" />}
     </section>
   );
 }

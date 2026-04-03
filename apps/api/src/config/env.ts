@@ -29,6 +29,9 @@ const schema = z.object({
   VAPID_PRIVATE_KEY: z.string().min(20).optional(),
   VAPID_SUBJECT: z.string().default("mailto:contact@kin-sell.com"),
 
+  // ── Redis ──
+  REDIS_URL: z.string().default("redis://127.0.0.1:6379"),
+
   // ── Mobile Money ──
   ORANGE_MONEY_CLIENT_ID: z.string().optional(),
   ORANGE_MONEY_CLIENT_SECRET: z.string().optional(),

@@ -58,6 +58,26 @@ export function invalidateCache(pathPrefix: string): void {
 export function clearCache(): void {
   _memCache.clear();
 }
+
+// ── Background Sync: queue failed mutating requests for retry ──────────────
+async function queueForBackgroundSync(url: string, method: string, headers: Record<string, string>, body: unknown): Promise<void> {
+  if (!("serviceWorker" in navigator)) return;
+  const reg = await navigator.serviceWorker.ready.catch(() => null);
+  if (!reg?.active) return;
+
+  reg.active.postMessage({
+    type: "QUEUE_REQUEST",
+    url,
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : null,
+  });
+
+  // Request background sync if supported
+  if ("sync" in reg) {
+    await (reg as any).sync.register("kin-sell-background-sync").catch(() => {});
+  }
+}
 // ────────────────────────────────────────────────────────────────────────────
 
 type RequestOptions = {
@@ -204,11 +224,20 @@ async function request<T>(path: string, opts: RequestOptions = {}, allowRefresh 
 
   const cacheKey = method === "GET" ? _cacheKey(url) : null;
   const fetchWork = (async (): Promise<T> => {
-    const res = await fetch(url, {
-      method,
-      headers: reqHeaders,
-      body: body ? JSON.stringify(body) : undefined,
-    });
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method,
+        headers: reqHeaders,
+        body: body ? JSON.stringify(body) : undefined,
+      });
+    } catch (err) {
+      // Network failure — queue mutating requests for Background Sync retry
+      if (method !== "GET" && !navigator.onLine) {
+        void queueForBackgroundSync(url, method, reqHeaders, body);
+      }
+      throw err;
+    }
 
     if (!res.ok) {
       if (res.status === 401 && allowRefresh && path !== "/account/refresh") {

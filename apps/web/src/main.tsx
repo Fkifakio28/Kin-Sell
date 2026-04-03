@@ -10,6 +10,7 @@ import { GlobalNotificationProvider } from "./app/providers/GlobalNotificationPr
 import { LocaleCurrencyProvider } from "./app/providers/LocaleCurrencyProvider";
 import { MarketPreferenceProvider } from "./app/providers/MarketPreferenceProvider";
 import { SocketProvider } from "./app/providers/SocketProvider";
+import ErrorBoundary from "./components/ErrorBoundary";
 import "./styles/index.css";
 
 // ── Native platform setup ──
@@ -49,18 +50,20 @@ if (Capacitor.isNativePlatform()) {
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <ThemeProvider>
-      <MarketPreferenceProvider>
-        <LocaleCurrencyProvider>
-          <AuthProvider>
-            <SocketProvider>
-              <GlobalNotificationProvider>
-                <App />
-              </GlobalNotificationProvider>
-            </SocketProvider>
-          </AuthProvider>
-        </LocaleCurrencyProvider>
-      </MarketPreferenceProvider>
-    </ThemeProvider>
+    <ErrorBoundary>
+      <ThemeProvider>
+        <MarketPreferenceProvider>
+          <LocaleCurrencyProvider>
+            <AuthProvider>
+              <SocketProvider>
+                <GlobalNotificationProvider>
+                  <App />
+                </GlobalNotificationProvider>
+              </SocketProvider>
+            </AuthProvider>
+          </LocaleCurrencyProvider>
+        </MarketPreferenceProvider>
+      </ThemeProvider>
+    </ErrorBoundary>
   </React.StrictMode>
 );
