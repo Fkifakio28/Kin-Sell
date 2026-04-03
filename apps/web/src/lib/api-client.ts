@@ -352,6 +352,8 @@ export const users = {
     request<unknown>("/users/me", { method: "PATCH", body }),
   publicProfile: (username: string) => request<unknown>(`/users/public/${encodeURIComponent(username)}`),
   publicProfileById: (id: string) => request<unknown>(`/users/${encodeURIComponent(id)}/public`),
+  report: (body: { reportedUserId: string; reason: string; message?: string }) =>
+    request<{ id: string; status: string }>("/users/report", { method: "POST", body }),
 };
 
 // ── Reviews ──

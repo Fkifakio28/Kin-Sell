@@ -1,18 +1,25 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../app/providers/AuthProvider';
 import { useLocaleCurrency } from '../../app/providers/LocaleCurrencyProvider';
-import { orders, listings as listingsApi, reviews as reviewsApi, type ReviewItem } from '../../lib/api-client';
+import {
+  users as usersApi,
+  orders,
+  listings as listingsApi,
+  reviews as reviewsApi,
+  type ReviewItem,
+} from '../../lib/api-client';
 import { useHoverPopup, ArticleHoverPopup, type ArticleHoverData } from '../../components/HoverPopup';
 import { useScrollRestore } from '../../utils/useScrollRestore';
 import { NegotiatePopup } from '../negotiations/NegotiatePopup';
 import { useLockedCategories, isCategoryLocked } from '../../hooks/useLockedCategories';
-import './public-pages.css';
+import { useSocket } from '../../hooks/useSocket';
 import { SeoMeta } from '../../components/SeoMeta';
+import './public-profile.css';
 
-type PublicProfilePageProps = {
-  username: string;
-};
+/* ═══════════════════════════════════════════════════
+   TYPES
+   ═══════════════════════════════════════════════════ */
 
 type ApiListing = {
   id: string;
@@ -22,6 +29,7 @@ type ApiListing = {
   city: string | null;
   imageUrl: string | null;
   priceUsdCents: number;
+  isNegotiable?: boolean;
   createdAt: string;
 };
 
@@ -54,77 +62,53 @@ type ApiPublicProfile = {
   listings: ApiListing[];
 };
 
-type PublicProfileMeta = {
+type CatalogItem = {
+  id: string;
+  type: 'PRODUIT' | 'SERVICE';
+  title: string;
+  priceLabel: string;
+  priceUsdCents: number;
+  imageUrl: string;
+  isNegotiable?: boolean;
+  category?: string;
+};
+
+type ProfileData = {
+  id: string;
   username: string;
   displayName: string;
   avatarUrl: string | null;
   kinId: string;
   city: string;
-  rating: string;
-  isVerified: boolean;
-  qualification?: string;
-  experience?: string;
-  workHours?: string;
-  domain: string;
-  responseTime: string;
-  salesCount: number;
-  servicesDone: number;
+  country: string;
   bio: string;
-  status: 'En ligne' | 'Hors ligne';
-  products: PublicCatalogItem[];
-  services: PublicCatalogItem[];
-  adSlots: PublicAdSlot[];
+  domain: string;
+  qualification: string;
+  experience: string;
+  workHours: string;
+  isVerified: boolean;
+  rating: number;
+  reviewCount: number;
+  listings: CatalogItem[];
 };
 
-type PublicCatalogItem = {
-  id: string;
-  title: string;
-  priceLabel: string;
-  priceUsdCents: number;
-  imageUrl: string;
-  promoLabel?: string;
-  isNegotiable?: boolean;
-  category?: string;
-};
+const PAGE_SIZE = 8;
+const REPORT_REASONS = ['Contenu inapproprié', 'Arnaque / fraude suspectée', 'Faux profil', 'Harcèlement', 'Autre'];
 
-type PublicAdSlot = {
-  id: string;
-  title: string;
-  description: string;
-};
+/* ═══════════════════════════════════════════════════
+   STAR RATING
+   ═══════════════════════════════════════════════════ */
 
-const PAGE_SIZE = 5;
-
-const DEFAULT_META: PublicProfileMeta = {
-  username: 'unknown',
-  displayName: 'Utilisateur Kin-Sell',
-  avatarUrl: null,
-  kinId: '#KS-…',
-  city: '',
-  rating: '—',
-  isVerified: false,
-  domain: '',
-  responseTime: '—',
-  salesCount: 0,
-  servicesDone: 0,
-  bio: '',
-  status: 'Hors ligne',
-  products: [],
-  services: [],
-  adSlots: [],
-};
-
-/* ── Star rating helper ── */
-function StarRating({ value, onChange, size = 24 }: { value: number; onChange?: (v: number) => void; size?: number }) {
+function StarRating({ value, onChange, size = 20 }: { value: number; onChange?: (v: number) => void; size?: number }) {
   const [hover, setHover] = useState(0);
   return (
-    <span className="pp-star-row" style={{ fontSize: size }}>
+    <span className="up-stars" style={{ fontSize: size }}>
       {[1, 2, 3, 4, 5].map((s) => (
         <span
           key={s}
           role={onChange ? 'button' : undefined}
           tabIndex={onChange ? 0 : undefined}
-          className={`pp-star ${(hover || value) >= s ? 'pp-star--filled' : ''}`}
+          className={`up-star${(hover || value) >= s ? ' up-star--filled' : ''}${onChange ? ' up-star--clickable' : ''}`}
           onMouseEnter={() => onChange && setHover(s)}
           onMouseLeave={() => onChange && setHover(0)}
           onClick={() => onChange?.(s)}
@@ -137,205 +121,92 @@ function StarRating({ value, onChange, size = 24 }: { value: number; onChange?: 
   );
 }
 
-export function PublicProfilePage({ username }: PublicProfilePageProps) {
+/* ═══════════════════════════════════════════════════
+   MAIN COMPONENT
+   ═══════════════════════════════════════════════════ */
+
+export function PublicProfilePage({ username }: { username: string }) {
   const { t, formatPriceLabelFromUsdCents } = useLocaleCurrency();
   const lockedCats = useLockedCategories();
   const { isLoggedIn, user } = useAuth();
   const navigate = useNavigate();
+  const { on, off } = useSocket();
   useScrollRestore();
 
-  const [profileMeta, setProfileMeta] = useState<PublicProfileMeta>({ ...DEFAULT_META });
-  const [profileOwnerId, setProfileOwnerId] = useState<string | null>(null);
-  const [productsPage, setProductsPage] = useState(0);
-  const [servicesPage, setServicesPage] = useState(0);
-  const [cartBusy, setCartBusy] = useState<string | null>(null);
-  const [cartFeedback, setCartFeedback] = useState<{ id: string; message: string } | null>(null);
-  const [cartQty, setCartQty] = useState<Record<string, number>>({});
-  const getPubQty = (id: string) => cartQty[id] ?? 1;
-  const changePubQty = (id: string, delta: number) => {
-    setCartQty((prev) => ({ ...prev, [id]: Math.max(1, (prev[id] ?? 1) + delta) }));
-  };
-  const articleHover = useHoverPopup<ArticleHoverData>();
-  const [negotiateListing, setNegotiateListing] = useState<PublicCatalogItem | null>(null);
+  /* ── Profile state ── */
+  const [profile, setProfile] = useState<ProfileData | null>(null);
+  const [notFound, setNotFound] = useState(false);
+  const [isOnline, setIsOnline] = useState(false);
 
-  // ── Reviews state ──
+  /* ── Articles filter ── */
+  type FilterType = 'all' | 'PRODUIT' | 'SERVICE';
+  const [filter, setFilter] = useState<FilterType>('all');
+  const [page, setPage] = useState(0);
+
+  /* ── Cart ── */
+  const [cartBusy, setCartBusy] = useState<string | null>(null);
+  const [cartFeedback, setCartFeedback] = useState<{ id: string; msg: string } | null>(null);
+  const [cartQty, setCartQty] = useState<Record<string, number>>({});
+  const articleHover = useHoverPopup<ArticleHoverData>();
+  const [negotiateItem, setNegotiateItem] = useState<CatalogItem | null>(null);
+
+  /* ── Reviews ── */
   const [allReviews, setAllReviews] = useState<ReviewItem[]>([]);
   const [showAllReviews, setShowAllReviews] = useState(false);
   const [showReviewForm, setShowReviewForm] = useState(false);
   const [reviewRating, setReviewRating] = useState(0);
   const [reviewText, setReviewText] = useState('');
   const [reviewBusy, setReviewBusy] = useState(false);
-  const [reviewMsg, setReviewMsg] = useState<string | null>(null);
+  const [reviewMsg, setReviewMsg] = useState('');
 
-  // ── Report state ──
-  const REPORT_REASONS = ['Contenu inapproprié', 'Arnaque / fraude suspectée', 'Faux profil', 'Harcèlement', 'Autre'];
-  const [showReportPopup, setShowReportPopup] = useState(false);
-  const [reportDraft, setReportDraft] = useState({ reason: 'Contenu inapproprié', detail: '' });
+  /* ── Report ── */
+  const [showReport, setShowReport] = useState(false);
+  const [reportDraft, setReportDraft] = useState({ reason: REPORT_REASONS[0], detail: '' });
   const [reportMsg, setReportMsg] = useState('');
 
-  const handleSubmitReport = async () => {
-    if (!profileOwnerId || !reportDraft.detail.trim()) return;
-    try {
-      const apiBaseUrl = import.meta.env.VITE_API_URL ?? '/api';
-      const token = localStorage.getItem('ks-auth-token');
-      await fetch(`${apiBaseUrl}/users/report`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        body: JSON.stringify({ reportedUserId: profileOwnerId, reason: reportDraft.reason, message: reportDraft.detail }),
-      });
-    } catch { /* ignore */ }
-    setReportDraft({ reason: REPORT_REASONS[0], detail: '' });
-    setReportMsg('✓ Signalement envoyé, merci.');
-    setTimeout(() => { setShowReportPopup(false); setReportMsg(''); }, 1500);
-  };
+  /* ── Favorite (local toggle — no backend yet) ── */
+  const [isFavorited, setIsFavorited] = useState(false);
 
-  const isOwnProfile = Boolean(user && profileOwnerId && user.id === profileOwnerId);
-
-  const productPagesCount = Math.max(1, Math.ceil(profileMeta.products.length / PAGE_SIZE));
-  const servicePagesCount = Math.max(1, Math.ceil(profileMeta.services.length / PAGE_SIZE));
-
-  const visibleProducts = useMemo(
-    () => profileMeta.products.slice(productsPage * PAGE_SIZE, (productsPage + 1) * PAGE_SIZE),
-    [productsPage, profileMeta.products]
-  );
-
-  const visibleServices = useMemo(
-    () => profileMeta.services.slice(servicesPage * PAGE_SIZE, (servicesPage + 1) * PAGE_SIZE),
-    [servicesPage, profileMeta.services]
-  );
-
+  const isOwnProfile = Boolean(user && profile && user.id === profile.id);
   const isAdmin = user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN';
 
-  const handleAddToCart = async (listingId: string) => {
-    if (!isLoggedIn) { navigate('/login'); return; }
-    if (isAdmin) {
-      setCartFeedback({ id: listingId, message: '🔒 Les administrateurs ne peuvent pas effectuer de transactions.' });
-      setTimeout(() => setCartFeedback((prev) => (prev?.id === listingId ? null : prev)), 3000);
-      return;
-    }
-    if (isOwnProfile) {
-      setCartFeedback({ id: listingId, message: '⚠️ Vous ne pouvez pas acheter vos propres articles.' });
-      setTimeout(() => setCartFeedback((prev) => (prev?.id === listingId ? null : prev)), 3000);
-      return;
-    }
-    if (cartBusy) return;
-    setCartBusy(listingId);
-    setCartFeedback(null);
-    try {
-      const qty = getPubQty(listingId);
-      await orders.addCartItem({ listingId, quantity: qty });
-      setCartFeedback({ id: listingId, message: `✅ ${qty > 1 ? qty + '× ' : ''}Ajouté au panier !` });
-      setCartQty((prev) => { const next = { ...prev }; delete next[listingId]; return next; });
-      setTimeout(() => setCartFeedback((prev) => (prev?.id === listingId ? null : prev)), 2500);
-    } catch {
-      setCartFeedback({ id: listingId, message: '❌ Erreur, réessayez.' });
-      setTimeout(() => setCartFeedback((prev) => (prev?.id === listingId ? null : prev)), 3000);
-    } finally {
-      setCartBusy(null);
-    }
-  };
-
-  const handleNegotiate = (item: PublicCatalogItem) => {
-    if (!isLoggedIn) { navigate('/login'); return; }
-    if (isAdmin) {
-      setCartFeedback({ id: item.id, message: '🔒 Les administrateurs ne peuvent pas négocier.' });
-      setTimeout(() => setCartFeedback((prev) => (prev?.id === item.id ? null : prev)), 3000);
-      return;
-    }
-    setNegotiateListing(item);
-  };
-
-  const handleContactSeller = async (listingId?: string) => {
-    if (!isLoggedIn) { navigate('/login'); return; }
-    if (!profileOwnerId) return;
-    try {
-      if (listingId) {
-        const result = await listingsApi.contactSeller(listingId);
-        navigate(`/messaging/${result.conversationId}`);
-      } else {
-        navigate(`/messaging?newDm=${profileOwnerId}`);
-      }
-    } catch {
-      navigate('/messaging');
-    }
-  };
-
-  const handleSubmitReview = async () => {
-    if (!isLoggedIn) { navigate('/login'); return; }
-    if (!profileOwnerId || reviewRating < 1) return;
-    setReviewBusy(true);
-    setReviewMsg(null);
-    try {
-      await reviewsApi.create({ targetId: profileOwnerId, rating: reviewRating, text: reviewText || undefined });
-      setReviewMsg('✅ Avis envoyé !');
-      setReviewRating(0);
-      setReviewText('');
-      // Reload reviews
-      const fresh = await reviewsApi.forUser(profileOwnerId);
-      setAllReviews(fresh.reviews);
-      setProfileMeta((prev) => ({ ...prev, rating: fresh.averageRating > 0 ? fresh.averageRating.toFixed(1) : '—' }));
-      setTimeout(() => { setReviewMsg(null); setShowReviewForm(false); }, 1500);
-    } catch {
-      setReviewMsg('❌ Erreur, réessayez.');
-      setTimeout(() => setReviewMsg(null), 3000);
-    } finally {
-      setReviewBusy(false);
-    }
-  };
-
-  /* ── Load profile from API ── */
+  /* ── Load profile ── */
   useEffect(() => {
     const controller = new AbortController();
-
-    const loadProfile = async () => {
+    (async () => {
       try {
-        const apiBaseUrl = import.meta.env.VITE_API_URL ?? '/api';
-        const response = await fetch(`${apiBaseUrl}/users/public/${encodeURIComponent(username)}`, {
-          signal: controller.signal,
-        });
+        const payload = (await usersApi.publicProfile(username)) as ApiPublicProfile;
 
-        if (!response.ok) return;
-
-        const payload = (await response.json()) as ApiPublicProfile;
-        setProfileOwnerId(payload.id);
-
-        const mapListing = (l: ApiListing): PublicCatalogItem => ({
+        const mapItem = (l: ApiListing): CatalogItem => ({
           id: l.id,
+          type: l.type,
           title: l.title,
           priceLabel: formatPriceLabelFromUsdCents(l.priceUsdCents),
           priceUsdCents: l.priceUsdCents,
           imageUrl: l.imageUrl ?? '',
+          isNegotiable: l.isNegotiable,
           category: l.category,
         });
 
-        const products = payload.listings.filter((l) => l.type === 'PRODUIT').map(mapListing);
-        const services = payload.listings.filter((l) => l.type === 'SERVICE').map(mapListing);
-
-        const ratingStr = payload.averageRating && payload.averageRating > 0
-          ? payload.averageRating.toFixed(1)
-          : '—';
-
-        setProfileMeta((prev) => ({
-          ...prev,
+        setProfile({
+          id: payload.id,
           username: payload.username ?? username,
           displayName: payload.displayName,
           avatarUrl: payload.avatarUrl,
           kinId: `#KS-${payload.id.slice(-6).toUpperCase()}`,
           city: payload.city ?? '',
-          rating: ratingStr,
-          isVerified: payload.verificationStatus === 'VERIFIED',
+          country: payload.country ?? '',
           bio: payload.bio ?? '',
           domain: payload.domain ?? '',
-          qualification: payload.qualification ?? prev.qualification,
-          experience: payload.experience ?? prev.experience,
-          workHours: payload.workHours ?? prev.workHours,
-          products,
-          services,
-        }));
-        setProductsPage(0);
-        setServicesPage(0);
+          qualification: payload.qualification ?? '',
+          experience: payload.experience ?? '',
+          workHours: payload.workHours ?? '',
+          isVerified: payload.verificationStatus === 'VERIFIED',
+          rating: payload.averageRating ?? 0,
+          reviewCount: payload.reviewCount ?? 0,
+          listings: payload.listings.map(mapItem),
+        });
 
-        // Set reviews from API
         if (payload.reviews) {
           setAllReviews(payload.reviews.map((r) => ({
             ...r,
@@ -343,432 +214,508 @@ export function PublicProfilePage({ username }: PublicProfilePageProps) {
           })));
         }
       } catch {
-        // Fallback silencieux
+        setNotFound(true);
       }
+    })();
+    return () => controller.abort();
+  }, [username, formatPriceLabelFromUsdCents]);
+
+  /* ── Presence via WebSocket ── */
+  useEffect(() => {
+    if (!profile?.id) return;
+    const targetId = profile.id;
+
+    const handleSnapshot = (data: { userIds: string[] }) => {
+      setIsOnline(data.userIds.includes(targetId));
+    };
+    const handleOnline = (data: { userId: string }) => {
+      if (data.userId === targetId) setIsOnline(true);
+    };
+    const handleOffline = (data: { userId: string }) => {
+      if (data.userId === targetId) setIsOnline(false);
     };
 
-    loadProfile();
-    return () => controller.abort();
-  }, [username]);
+    on('presence:snapshot', handleSnapshot);
+    on('user:online', handleOnline);
+    on('user:offline', handleOffline);
+
+    return () => {
+      off('presence:snapshot', handleSnapshot);
+      off('user:online', handleOnline);
+      off('user:offline', handleOffline);
+    };
+  }, [profile?.id, on, off]);
 
   /* ── Scroll-to-listing ── */
   useEffect(() => {
-    const hash = window.location.hash;
-    if (!hash) return;
-
-    const targetId = hash.replace('#', '');
-    const element = document.getElementById(targetId);
-    if (element) {
+    const hash = window.location.hash?.replace('#', '');
+    if (!hash || !profile) return;
+    const el = document.getElementById(hash);
+    if (el) {
       requestAnimationFrame(() => {
-        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        element.classList.add('public-listing-highlight');
-        setTimeout(() => element.classList.remove('public-listing-highlight'), 2500);
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.classList.add('up-card--highlight');
+        setTimeout(() => el.classList.remove('up-card--highlight'), 2500);
       });
     }
-  }, [username, profileMeta.products.length, profileMeta.services.length]);
+  }, [profile]);
 
-  const renderPager = (pageCount: number, currentPage: number, onChange: (page: number) => void) => {
-    if (pageCount <= 1) return null;
-    return (
-      <div className="public-catalog-pager" aria-label="Pagination articles">
-        <button type="button" className="public-pager-arrow" onClick={() => onChange(Math.max(0, currentPage - 1))} disabled={currentPage === 0}>←</button>
-        <div className="public-pager-indexes">
-          {Array.from({ length: pageCount }, (_, index) => (
-            <button key={`pager-${index}`} type="button" className={`public-pager-index${index === currentPage ? ' active' : ''}`} onClick={() => onChange(index)}>
-              [{index + 1}]
-            </button>
-          ))}
-        </div>
-        <button type="button" className="public-pager-arrow" onClick={() => onChange(Math.min(pageCount - 1, currentPage + 1))} disabled={currentPage === pageCount - 1}>→</button>
-      </div>
-    );
+  /* ── Filtered + paginated articles ── */
+  const filtered = useMemo(() => {
+    if (!profile) return [];
+    if (filter === 'all') return profile.listings;
+    return profile.listings.filter((l) => l.type === filter);
+  }, [profile, filter]);
+
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const visibleItems = useMemo(
+    () => filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE),
+    [filtered, page],
+  );
+
+  /* ── Handlers ── */
+  const getQty = (id: string) => cartQty[id] ?? 1;
+  const changeQty = (id: string, d: number) =>
+    setCartQty((prev) => ({ ...prev, [id]: Math.max(1, (prev[id] ?? 1) + d) }));
+
+  const feedbackTimeout = useCallback((id: string, msg: string, ms = 2500) => {
+    setCartFeedback({ id, msg });
+    setTimeout(() => setCartFeedback((p) => (p?.id === id ? null : p)), ms);
+  }, []);
+
+  const handleAddToCart = async (id: string) => {
+    if (!isLoggedIn) { navigate('/login'); return; }
+    if (isAdmin) { feedbackTimeout(id, '🔒 Admin — transactions non autorisées.'); return; }
+    if (isOwnProfile) { feedbackTimeout(id, '⚠️ Vous ne pouvez pas acheter vos propres articles.'); return; }
+    if (cartBusy) return;
+    setCartBusy(id);
+    setCartFeedback(null);
+    try {
+      const qty = getQty(id);
+      await orders.addCartItem({ listingId: id, quantity: qty });
+      feedbackTimeout(id, `✅ ${qty > 1 ? qty + '× ' : ''}Ajouté au panier !`);
+      setCartQty((prev) => { const n = { ...prev }; delete n[id]; return n; });
+    } catch {
+      feedbackTimeout(id, '❌ Erreur, réessayez.', 3000);
+    } finally {
+      setCartBusy(null);
+    }
   };
 
-  const visibleReviews = allReviews.slice(0, 3);
+  const handleContact = async (listingId?: string) => {
+    if (!isLoggedIn) { navigate('/login'); return; }
+    if (!profile) return;
+    try {
+      if (listingId) {
+        const res = await listingsApi.contactSeller(listingId);
+        navigate(`/messaging/${res.conversationId}`);
+      } else {
+        navigate(`/messaging?newDm=${profile.id}`);
+      }
+    } catch {
+      navigate('/messaging');
+    }
+  };
 
-  return (
-    <section className="public-page-shell animate-fade-in">
-      <SeoMeta
-        title={`${profileMeta.displayName} — Vendeur sur Kin-Sell`}
-        description={`Découvrez le profil de ${profileMeta.displayName} sur Kin-Sell. Parcourez ses produits et services disponibles à Kinshasa.`}
-        canonical={`https://kin-sell.com/user/${username}`}
-        ogImage={profileMeta.avatarUrl ?? undefined}
-      />
-      {/* ── Banner + Avatar Hero ── */}
-      <div className="public-hero-banner">
-        <div className="public-hero-backdrop" />
-        <div className="public-hero-inner">
-          <div className="public-avatar-frame">
-            {profileMeta.avatarUrl ? (
-              <img
-                src={profileMeta.avatarUrl}
-                alt={profileMeta.displayName}
-              />
-            ) : (
-              <div className="public-avatar-placeholder">{profileMeta.displayName.charAt(0).toUpperCase()}</div>
-            )}
-            <span className={`public-status-dot ${profileMeta.status === 'En ligne' ? 'online' : ''}`} />
-          </div>
+  const handleNegotiate = (item: CatalogItem) => {
+    if (!isLoggedIn) { navigate('/login'); return; }
+    if (isAdmin) { feedbackTimeout(item.id, '🔒 Admin — négociations non autorisées.'); return; }
+    setNegotiateItem(item);
+  };
 
-          <div className="public-hero-info">
-            <div className="public-hero-name-row">
-              <h1 className="public-title">{profileMeta.displayName}</h1>
-              {profileMeta.isVerified ? <span className="public-verified-badge" title="Profil vérifié">✔</span> : null}
-              <span className="public-kinid-chip">{profileMeta.kinId}</span>
-            </div>
-            <p className="public-hero-domain">{profileMeta.domain}</p>
-            <div className="public-meta-row">
-              <span className="public-pill">📍 {profileMeta.city}</span>
-              <button
-                type="button"
-                className="public-pill public-pill--clickable"
-                onClick={() => {
-                  if (!isLoggedIn) { navigate('/login'); return; }
-                  if (isOwnProfile) return;
-                  setShowReviewForm(true);
-                }}
-                title="Laisser un avis"
-              >
-                ⭐ {profileMeta.rating} ({allReviews.length})
-              </button>
-              <span className="public-pill">{profileMeta.status === 'En ligne' ? '🟢' : '⚪'} {profileMeta.status}</span>
-            </div>
-          </div>
+  const handleSubmitReview = async () => {
+    if (!isLoggedIn) { navigate('/login'); return; }
+    if (!profile || reviewRating < 1) return;
+    setReviewBusy(true);
+    setReviewMsg('');
+    try {
+      await reviewsApi.create({ targetId: profile.id, rating: reviewRating, text: reviewText || undefined });
+      setReviewMsg('✅ Avis envoyé !');
+      setReviewRating(0);
+      setReviewText('');
+      const fresh = await reviewsApi.forUser(profile.id);
+      setAllReviews(fresh.reviews);
+      setProfile((p) => p ? { ...p, rating: fresh.averageRating, reviewCount: fresh.totalCount } : p);
+      setTimeout(() => { setReviewMsg(''); setShowReviewForm(false); }, 1500);
+    } catch {
+      setReviewMsg('❌ Erreur, réessayez.');
+      setTimeout(() => setReviewMsg(''), 3000);
+    } finally {
+      setReviewBusy(false);
+    }
+  };
 
-          <div className="public-hero-actions">
-            <button type="button" className="public-contact-btn" onClick={() => handleContactSeller()}>
-              💬 Écrire
-            </button>
-            <button type="button" className="public-connect-btn" onClick={() => navigate(`/messaging?newDm=${profileOwnerId}&requestContact=1`)}>
-              🤝 Ajouter
-            </button>
-            <button type="button" className="public-favorite-btn">♡ Favori</button>
-          </div>
+  const handleSubmitReport = async () => {
+    if (!profile || !reportDraft.detail.trim()) return;
+    try {
+      await usersApi.report({ reportedUserId: profile.id, reason: reportDraft.reason, message: reportDraft.detail });
+    } catch { /* ignore */ }
+    setReportDraft({ reason: REPORT_REASONS[0], detail: '' });
+    setReportMsg('✓ Signalement envoyé, merci.');
+    setTimeout(() => { setShowReport(false); setReportMsg(''); }, 1500);
+  };
+
+  /* ── 404 ── */
+  if (notFound) {
+    return (
+      <div className="up-page">
+        <div className="up-empty" style={{ paddingTop: 60 }}>
+          <p style={{ fontSize: '2rem', marginBottom: 8 }}>😕</p>
+          <p>Ce profil n'existe pas ou a été supprimé.</p>
+          <button type="button" className="up-action-btn up-action-btn--primary" style={{ marginTop: 16 }} onClick={() => navigate('/')}>
+            Retour à l'accueil
+          </button>
         </div>
       </div>
+    );
+  }
 
-      {/* ── Stats strip ── */}
-      <section className="public-quick-stats" aria-label="Informations rapides">
-        <article className="public-stat-card">
-          <strong>{profileMeta.salesCount}</strong>
+  /* ── Loading ── */
+  if (!profile) {
+    return (
+      <div className="up-page">
+        <div className="up-empty" style={{ paddingTop: 60 }}>Chargement du profil…</div>
+      </div>
+    );
+  }
+
+  const initial = profile.displayName.charAt(0).toUpperCase();
+  const ratingStr = profile.rating > 0 ? profile.rating.toFixed(1) : '—';
+  const locationParts = [profile.city, profile.country].filter(Boolean).join(', ');
+  const visibleReviews = allReviews.slice(0, 3);
+  const prodCount = profile.listings.filter((l) => l.type === 'PRODUIT').length;
+  const servCount = profile.listings.filter((l) => l.type === 'SERVICE').length;
+
+  return (
+    <div className="up-page">
+      <SeoMeta
+        title={`${profile.displayName} — Vendeur sur Kin-Sell`}
+        description={`Découvrez le profil de ${profile.displayName} sur Kin-Sell. Parcourez ses produits et services à Kinshasa.`}
+        canonical={`https://kin-sell.com/user/${username}`}
+        ogImage={profile.avatarUrl ?? undefined}
+      />
+
+      {/* ══════ BLOC 1 — HERO ══════ */}
+      <header className="up-hero">
+        <div className="up-hero-inner">
+          {/* Avatar */}
+          <div className="up-avatar">
+            {profile.avatarUrl
+              ? <img src={profile.avatarUrl} alt={profile.displayName} className="up-avatar-img" />
+              : <div className="up-avatar-ph">{initial}</div>}
+            <span className={`up-status-dot${isOnline ? ' up-status-dot--online' : ''}`} title={isOnline ? 'En ligne' : 'Hors ligne'} />
+          </div>
+
+          {/* Identity */}
+          <div className="up-identity">
+            <div className="up-name-row">
+              <h1 className="up-name">{profile.displayName}</h1>
+              {profile.isVerified && <span className="up-verified" title="Vérifié">✔</span>}
+              <span className="up-kinid">{profile.kinId}</span>
+            </div>
+            {profile.domain && <p style={{ margin: '2px 0 0', fontSize: '0.82rem', color: 'rgba(255,255,255,0.5)' }}>{profile.domain}</p>}
+            <div className="up-meta">
+              {locationParts && <span className="up-pill">📍 {locationParts}</span>}
+              <button
+                type="button"
+                className="up-pill up-pill--rating"
+                onClick={() => { if (!isLoggedIn) { navigate('/login'); return; } if (!isOwnProfile) setShowReviewForm(true); }}
+                title={isOwnProfile ? 'Votre profil' : 'Laisser un avis'}
+              >
+                ⭐ {ratingStr} ({allReviews.length})
+              </button>
+              <span className="up-pill">{isOnline ? '🟢 En ligne' : '⚪ Hors ligne'}</span>
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="up-actions">
+            <button type="button" className="up-action-btn up-action-btn--primary" onClick={() => handleContact()} disabled={isOwnProfile}>
+              💬 Écrire
+            </button>
+            <button type="button" className="up-action-btn up-action-btn--secondary" onClick={() => {
+              if (!isLoggedIn) { navigate('/login'); return; }
+              navigate(`/messaging?newDm=${profile.id}&requestContact=1`);
+            }} disabled={isOwnProfile}>
+              🤝 Ajouter
+            </button>
+            <button
+              type="button"
+              className={`up-action-btn ${isFavorited ? 'up-action-btn--active' : 'up-action-btn--secondary'}`}
+              onClick={() => {
+                if (!isLoggedIn) { navigate('/login'); return; }
+                setIsFavorited((p) => !p);
+              }}
+              disabled={isOwnProfile}
+              title="Les favoris seront synchronisés prochainement"
+            >
+              {isFavorited ? '♥ Favori' : '♡ Favori'}
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {/* ══════ BLOC 2 — STATS ══════ */}
+      <section className="up-stats" aria-label="Statistiques">
+        <article className="up-stat">
+          <strong>—</strong>
           <span>Ventes</span>
         </article>
-        <article className="public-stat-card">
-          <strong>{profileMeta.servicesDone}</strong>
+        <article className="up-stat">
+          <strong>—</strong>
           <span>Services réalisés</span>
         </article>
-        <article className="public-stat-card">
-          <strong>{profileMeta.responseTime}</strong>
+        <article className="up-stat">
+          <strong>—</strong>
           <span>Temps de réponse</span>
         </article>
-        <article className="public-stat-card">
-          <strong>⭐ {profileMeta.rating}</strong>
+        <article className="up-stat">
+          <strong>⭐ {ratingStr}</strong>
           <span>Note globale</span>
         </article>
       </section>
 
-      {/* ── Bio + facts ── */}
-      <div className="public-bio-section">
-        <p className="public-bio">{profileMeta.bio}</p>
-        <div className="public-profile-facts">
-          <span className="public-pill accent">Domaine: {profileMeta.domain}</span>
-          {profileMeta.qualification ? <span className="public-pill">Qualification: {profileMeta.qualification}</span> : null}
-          {profileMeta.experience ? <span className="public-pill">Expérience: {profileMeta.experience}</span> : null}
-          {profileMeta.workHours ? <span className="public-pill">Horaire: {profileMeta.workHours}</span> : null}
+      {/* ══════ BLOC 3 — BIO ══════ */}
+      {(profile.bio || profile.domain || profile.qualification || profile.experience || profile.workHours) && (
+        <section className="up-bio-section">
+          <div className="up-bio-card">
+            <h2 className="up-bio-title">À propos</h2>
+            {profile.bio && <p className="up-bio-text">{profile.bio}</p>}
+            <div className="up-bio-facts">
+              {profile.domain && <span className="up-fact">🏷️ {profile.domain}</span>}
+              {profile.qualification && <span className="up-fact">🎓 {profile.qualification}</span>}
+              {profile.experience && <span className="up-fact">💼 {profile.experience}</span>}
+              {profile.workHours && <span className="up-fact">🕐 {profile.workHours}</span>}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* ══════ BLOC 4 — ARTICLES ══════ */}
+      <section className="up-section" aria-label="Articles publiés">
+        <div className="up-section-head">
+          <h2>📦 Articles</h2>
+          <span className="up-section-count">{profile.listings.length} article{profile.listings.length !== 1 ? 's' : ''}</span>
         </div>
-      </div>
 
-      {/* ── Qualifications & Expérience highlight ── */}
-      {(profileMeta.qualification || profileMeta.experience) ? (
-        <section className="public-highlights-section">
-          <h2 className="public-highlights-title">🏅 Compétences & Expérience</h2>
-          <div className="public-highlights-grid">
-            {profileMeta.qualification ? (
-              <div className="public-highlight-card">
-                <span className="public-highlight-icon">🎓</span>
-                <div>
-                  <strong>Qualification</strong>
-                  <p>{profileMeta.qualification}</p>
-                </div>
-              </div>
-            ) : null}
-            {profileMeta.experience ? (
-              <div className="public-highlight-card">
-                <span className="public-highlight-icon">💼</span>
-                <div>
-                  <strong>Expérience</strong>
-                  <p>{profileMeta.experience}</p>
-                </div>
-              </div>
-            ) : null}
-            {profileMeta.workHours ? (
-              <div className="public-highlight-card">
-                <span className="public-highlight-icon">🕐</span>
-                <div>
-                  <strong>Horaires</strong>
-                  <p>{profileMeta.workHours}</p>
-                </div>
-              </div>
-            ) : null}
-          </div>
-        </section>
-      ) : null}
+        {/* Filter tabs */}
+        <div className="up-filter-tabs">
+          <button type="button" className={`up-filter-tab${filter === 'all' ? ' up-filter-tab--active' : ''}`} onClick={() => { setFilter('all'); setPage(0); }}>
+            Tous ({profile.listings.length})
+          </button>
+          <button type="button" className={`up-filter-tab${filter === 'PRODUIT' ? ' up-filter-tab--active' : ''}`} onClick={() => { setFilter('PRODUIT'); setPage(0); }}>
+            Produits ({prodCount})
+          </button>
+          <button type="button" className={`up-filter-tab${filter === 'SERVICE' ? ' up-filter-tab--active' : ''}`} onClick={() => { setFilter('SERVICE'); setPage(0); }}>
+            Services ({servCount})
+          </button>
+        </div>
 
-      {profileMeta.adSlots[0] ? (
-        <section className="public-ad-banner" aria-label="Espace publicitaire profil">
-          <strong>{profileMeta.adSlots[0].title}</strong>
-          <span>{profileMeta.adSlots[0].description}</span>
-        </section>
-      ) : null}
-
-      {profileMeta.products.length > 0 ? (
-        <section className="public-section" aria-label="Produits proposés">
-          <div className="public-section-head">
-            <h2>📦 Produits</h2>
-            <span className="public-section-count">{profileMeta.products.length} article{profileMeta.products.length > 1 ? 's' : ''}</span>
-          </div>
-
-          <div className="public-catalog-box">
-            <div className="public-catalog-grid five-up">
-              {visibleProducts.map((article) => (
-                <article key={article.id} id={`listing-${article.id}`} className="public-listing-card public-catalog-card"
-                  onMouseEnter={(e) => articleHover.handleMouseEnter({ title: article.title, description: null, price: article.priceLabel, sellerName: profileMeta.displayName }, e)}
+        {visibleItems.length > 0 ? (
+          <>
+            <div className="up-grid">
+              {visibleItems.map((item) => (
+                <article
+                  key={item.id}
+                  id={`listing-${item.id}`}
+                  className="up-card"
+                  onMouseEnter={(e) => articleHover.handleMouseEnter({ title: item.title, description: null, price: item.priceLabel, sellerName: profile.displayName }, e)}
                   onMouseLeave={articleHover.handleMouseLeave}
                 >
-                  <div className="public-card-media-wrap">
-                    {article.imageUrl ? (
-                      <img className="public-card-image" src={article.imageUrl} alt={article.title} />
-                    ) : (
-                      <div className="public-card-image public-card-no-img">📦</div>
-                    )}
-                    <button type="button" className="public-card-fav" aria-label="Ajouter aux favoris">♡</button>
-                    {article.promoLabel ? <span className="public-card-badge">{article.promoLabel}</span> : null}
+                  <div className="up-card-img-wrap">
+                    {item.imageUrl
+                      ? <img className="up-card-img" src={item.imageUrl} alt={item.title} />
+                      : <div className="up-card-noimg">{item.type === 'PRODUIT' ? '📦' : '🛠️'}</div>}
+                    <span className="up-card-type-badge">{item.type === 'PRODUIT' ? 'Produit' : 'Service'}</span>
                   </div>
-                  <h3 className="public-listing-title">{article.title}</h3>
-                  <p className="public-listing-price">{article.priceLabel}</p>
-                  <div className="public-card-actions">
-                    <span className="public-qty-selector">
-                      <button type="button" className="public-qty-btn" onClick={() => changePubQty(article.id, -1)} disabled={getPubQty(article.id) <= 1}>−</button>
-                      <span className="public-qty-value">{getPubQty(article.id)}</span>
-                      <button type="button" className="public-qty-btn" onClick={() => changePubQty(article.id, 1)}>+</button>
-                    </span>
-                    <button type="button" className="public-card-btn primary icon-only" title={t("common.addToCart")} aria-label={t("common.addToCart")} disabled={cartBusy === article.id} onClick={() => void handleAddToCart(article.id)}>🛒</button>
-                    {article.isNegotiable !== false && !isCategoryLocked(lockedCats, article.category) && <button type="button" className="public-card-btn secondary icon-only" title={t("common.negotiate")} aria-label={t("common.negotiate")} onClick={() => handleNegotiate(article)}>🤝</button>}
-                    <button type="button" className="public-card-btn secondary icon-only" title="Contacter le vendeur" aria-label="Contacter le vendeur" onClick={() => void handleContactSeller(article.id)}>💬</button>
+                  <div className="up-card-body">
+                    <h3 className="up-card-title">{item.title}</h3>
+                    <p className="up-card-price">{item.priceLabel}</p>
+                    <div className="up-card-actions">
+                      <span className="up-card-qty">
+                        <button type="button" onClick={() => changeQty(item.id, -1)} disabled={getQty(item.id) <= 1}>−</button>
+                        <span>{getQty(item.id)}</span>
+                        <button type="button" onClick={() => changeQty(item.id, 1)}>+</button>
+                      </span>
+                      <button type="button" className="up-card-btn up-card-btn--cart" title={t('common.addToCart')} disabled={cartBusy === item.id} onClick={() => void handleAddToCart(item.id)}>🛒</button>
+                      {item.isNegotiable !== false && !isCategoryLocked(lockedCats, item.category) && (
+                        <button type="button" className="up-card-btn up-card-btn--negotiate" title={t('common.negotiate')} onClick={() => handleNegotiate(item)}>🤝</button>
+                      )}
+                      <button type="button" className="up-card-btn up-card-btn--contact" title="Contacter" onClick={() => void handleContact(item.id)}>💬</button>
+                    </div>
+                    {cartFeedback?.id === item.id && <div className="up-card-feedback">{cartFeedback.msg}</div>}
                   </div>
-                  {cartFeedback?.id === article.id ? <span className="public-card-feedback">{cartFeedback.message}</span> : null}
                 </article>
               ))}
             </div>
-            {renderPager(productPagesCount, productsPage, setProductsPage)}
+            {/* Pager */}
+            {pageCount > 1 && (
+              <div className="up-pager">
+                <button type="button" onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0}>←</button>
+                {Array.from({ length: pageCount }, (_, i) => (
+                  <button key={i} type="button" className={i === page ? 'active' : ''} onClick={() => setPage(i)}>{i + 1}</button>
+                ))}
+                <button type="button" onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))} disabled={page === pageCount - 1}>→</button>
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="up-empty">
+            {profile.listings.length === 0 ? 'Aucun article publié pour le moment.' : 'Aucun résultat pour ce filtre.'}
           </div>
-        </section>
-      ) : null}
+        )}
+      </section>
 
-      {profileMeta.adSlots[1] ? (
-        <section className="public-ad-banner subtle" aria-label="Espace publicitaire secondaire">
-          <strong>{profileMeta.adSlots[1].title}</strong>
-          <span>{profileMeta.adSlots[1].description}</span>
-        </section>
-      ) : null}
-
-      {profileMeta.services.length > 0 ? (
-        <section className="public-section" aria-label="Services proposés">
-          <div className="public-section-head">
-            <h2>🛠️ Services</h2>
-            <span className="public-section-count">{profileMeta.services.length} service{profileMeta.services.length > 1 ? 's' : ''}</span>
-          </div>
-
-          <div className="public-catalog-box">
-            <div className="public-catalog-grid five-up">
-              {visibleServices.map((service) => (
-                <article key={service.id} id={`listing-${service.id}`} className="public-listing-card public-catalog-card"
-                  onMouseEnter={(e) => articleHover.handleMouseEnter({ title: service.title, description: null, price: service.priceLabel, sellerName: profileMeta.displayName }, e)}
-                  onMouseLeave={articleHover.handleMouseLeave}
-                >
-                  <div className="public-card-media-wrap">
-                    {service.imageUrl ? (
-                      <img className="public-card-image" src={service.imageUrl} alt={service.title} />
-                    ) : (
-                      <div className="public-card-image public-card-no-img">🛠️</div>
-                    )}
-                    <button type="button" className="public-card-fav" aria-label="Ajouter aux favoris">♡</button>
-                    {service.promoLabel ? <span className="public-card-badge">{service.promoLabel}</span> : null}
-                  </div>
-                  <h3 className="public-listing-title">{service.title}</h3>
-                  <p className="public-listing-price">{service.priceLabel}</p>
-                  <div className="public-card-actions">
-                    <span className="public-qty-selector">
-                      <button type="button" className="public-qty-btn" onClick={() => changePubQty(service.id, -1)} disabled={getPubQty(service.id) <= 1}>−</button>
-                      <span className="public-qty-value">{getPubQty(service.id)}</span>
-                      <button type="button" className="public-qty-btn" onClick={() => changePubQty(service.id, 1)}>+</button>
-                    </span>
-                    <button type="button" className="public-card-btn primary icon-only" title={t("common.addToCart")} aria-label={t("common.addToCart")} disabled={cartBusy === service.id} onClick={() => void handleAddToCart(service.id)}>🛒</button>
-                    {service.isNegotiable !== false && !isCategoryLocked(lockedCats, service.category) && <button type="button" className="public-card-btn secondary icon-only" title={t("common.negotiate")} aria-label={t("common.negotiate")} onClick={() => handleNegotiate(service)}>🤝</button>}
-                    <button type="button" className="public-card-btn secondary icon-only" title="Contacter le vendeur" aria-label="Contacter le vendeur" onClick={() => void handleContactSeller(service.id)}>💬</button>
-                  </div>
-                  {cartFeedback?.id === service.id ? <span className="public-card-feedback">{cartFeedback.message}</span> : null}
-                </article>
-              ))}
-            </div>
-            {renderPager(servicePagesCount, servicesPage, setServicesPage)}
-          </div>
-        </section>
-      ) : null}
-
-      {profileMeta.products.length === 0 && profileMeta.services.length === 0 ? (
-        <div className="public-empty">Aucun article publié pour ce profil pour le moment.</div>
-      ) : null}
-
-      {/* ── Avis clients ── */}
-      <section className="public-section" aria-label="Avis clients">
-        <div className="public-section-head">
+      {/* ══════ BLOC 5 — AVIS ══════ */}
+      <section className="up-section" aria-label="Avis clients">
+        <div className="up-section-head">
           <h2>⭐ Avis ({allReviews.length})</h2>
           {!isOwnProfile && (
-            <button
-              type="button"
-              className="public-connect-btn"
-              onClick={() => {
-                if (!isLoggedIn) { navigate('/login'); return; }
-                setShowReviewForm(true);
-              }}
-            >
+            <button type="button" className="up-show-more-btn" onClick={() => { if (!isLoggedIn) { navigate('/login'); return; } setShowReviewForm(true); }}>
               ✏️ Laisser un avis
             </button>
           )}
         </div>
 
         {visibleReviews.length > 0 ? (
-          <div className="public-reviews-grid">
-            {visibleReviews.map((review) => (
-              <article key={review.id} className="public-review-card">
-                <div className="public-review-top">
-                  <strong>{review.authorName}</strong>
-                  <span><StarRating value={review.rating} size={16} /></span>
+          <div className="up-reviews-grid">
+            {visibleReviews.map((r) => (
+              <article key={r.id} className="up-review">
+                <div className="up-review-top">
+                  <span className="up-review-author">{r.authorName}</span>
+                  <StarRating value={r.rating} size={14} />
                 </div>
-                {review.text ? <p>{review.text}</p> : null}
+                {r.text && <p>{r.text}</p>}
               </article>
             ))}
           </div>
         ) : (
-          <div className="public-empty">Aucun avis pour le moment. Soyez le premier !</div>
+          <div className="up-empty">Aucun avis pour le moment. Soyez le premier !</div>
         )}
 
-        {allReviews.length > 3 ? (
-          <button type="button" className="public-connect-btn pp-show-all-btn" onClick={() => setShowAllReviews(true)}>
+        {allReviews.length > 3 && (
+          <button type="button" className="up-show-more-btn" onClick={() => setShowAllReviews(true)}>
             Voir tous les avis ({allReviews.length})
           </button>
-        ) : null}
+        )}
       </section>
 
-      {/* ── Popup : tous les avis ── */}
-      {showAllReviews ? (
-        <div className="pp-popup-overlay" onClick={() => setShowAllReviews(false)}>
-          <div className="pp-popup" onClick={(e) => e.stopPropagation()}>
-            <div className="pp-popup-head">
+      {/* ══════ DRAWER — Tous les avis ══════ */}
+      {showAllReviews && (
+        <div className="up-overlay" onClick={() => setShowAllReviews(false)}>
+          <div className="up-drawer" onClick={(e) => e.stopPropagation()}>
+            <div className="up-drawer-head">
               <h2>⭐ Tous les avis ({allReviews.length})</h2>
-              <button type="button" className="pp-popup-close" onClick={() => setShowAllReviews(false)}>✕</button>
+              <button type="button" className="up-drawer-close" onClick={() => setShowAllReviews(false)}>✕</button>
             </div>
-            <div className="pp-popup-body">
-              {allReviews.map((review) => (
-                <article key={review.id} className="public-review-card">
-                  <div className="public-review-top">
-                    <strong>{review.authorName}</strong>
-                    <span><StarRating value={review.rating} size={16} /></span>
+            <div className="up-drawer-body">
+              {allReviews.map((r) => (
+                <article key={r.id} className="up-review" style={{ marginBottom: 10 }}>
+                  <div className="up-review-top">
+                    <span className="up-review-author">{r.authorName}</span>
+                    <StarRating value={r.rating} size={14} />
                   </div>
-                  {review.text ? <p>{review.text}</p> : null}
+                  {r.text && <p>{r.text}</p>}
                 </article>
               ))}
             </div>
           </div>
         </div>
-      ) : null}
+      )}
 
-      {/* ── Popup : laisser un avis ── */}
-      {showReviewForm ? (
-        <div className="pp-popup-overlay" onClick={() => setShowReviewForm(false)}>
-          <div className="pp-popup pp-popup--sm" onClick={(e) => e.stopPropagation()}>
-            <div className="pp-popup-head">
+      {/* ══════ DRAWER — Laisser un avis ══════ */}
+      {showReviewForm && (
+        <div className="up-overlay" onClick={() => setShowReviewForm(false)}>
+          <div className="up-drawer" onClick={(e) => e.stopPropagation()}>
+            <div className="up-drawer-head">
               <h2>✏️ Laisser un avis</h2>
-              <button type="button" className="pp-popup-close" onClick={() => setShowReviewForm(false)}>✕</button>
+              <button type="button" className="up-drawer-close" onClick={() => setShowReviewForm(false)}>✕</button>
             </div>
-            <div className="pp-popup-body pp-review-form">
-              <label>Note</label>
-              <StarRating value={reviewRating} onChange={setReviewRating} size={32} />
-              <label>Commentaire (optionnel)</label>
+            <div className="up-drawer-body">
+              <label className="up-form-label">Note</label>
+              <StarRating value={reviewRating} onChange={setReviewRating} size={30} />
+              <label className="up-form-label" style={{ marginTop: 14 }}>Commentaire (optionnel)</label>
               <textarea
-                className="pp-review-textarea"
+                className="up-form-textarea"
                 value={reviewText}
                 onChange={(e) => setReviewText(e.target.value)}
                 placeholder="Partagez votre expérience…"
                 rows={3}
                 maxLength={500}
               />
-              <span className="pp-char-count">{reviewText.length}/500</span>
-              {reviewMsg ? <span className="pp-review-msg">{reviewMsg}</span> : null}
-              <button type="button" className="public-contact-btn" disabled={reviewRating < 1 || reviewBusy} onClick={handleSubmitReview}>
+              <span className="up-form-charcount">{reviewText.length}/500</span>
+              {reviewMsg && <span className="up-form-msg">{reviewMsg}</span>}
+              <button type="button" className="up-form-submit" disabled={reviewRating < 1 || reviewBusy} onClick={handleSubmitReview}>
                 {reviewBusy ? '⏳ Envoi…' : '📤 Envoyer'}
               </button>
             </div>
           </div>
         </div>
-      ) : null}
-
-      <ArticleHoverPopup popup={articleHover.popup} />
-
-      {/* ═══ BOUTON SIGNALEMENT FLOTTANT ═════════════════════ */}
-      {!isOwnProfile && (
-        <div className="biz-report-float">
-          <button type="button" className="biz-report-float-btn" onClick={() => { if (!isLoggedIn) { navigate('/login'); return; } setShowReportPopup(true); }} title="Signaler ce profil">🚩</button>
-        </div>
       )}
 
-      {/* ═══ POPUP — SIGNALEMENT ═════════════════════════════ */}
-      {showReportPopup && (
-        <div className="biz-popup-overlay" onClick={() => { setShowReportPopup(false); setReportMsg(''); }}>
-          <div className="biz-popup glass-container" onClick={e => e.stopPropagation()}>
-            <div className="biz-popup-head">
-              <strong>🚩 Signaler ce profil</strong>
-              <button type="button" className="biz-popup-close" onClick={() => { setShowReportPopup(false); setReportMsg(''); }}>✕</button>
+      {/* ══════ DRAWER — Signalement ══════ */}
+      {showReport && (
+        <div className="up-overlay" onClick={() => { setShowReport(false); setReportMsg(''); }}>
+          <div className="up-drawer" onClick={(e) => e.stopPropagation()}>
+            <div className="up-drawer-head">
+              <h2>🚩 Signaler ce profil</h2>
+              <button type="button" className="up-drawer-close" onClick={() => { setShowReport(false); setReportMsg(''); }}>✕</button>
             </div>
-            {reportMsg ? (
-              <p className="biz-popup-success">{reportMsg}</p>
-            ) : (
-              <div className="biz-popup-body">
-                <label className="biz-popup-field">
-                  <span>Raison du signalement</span>
-                  <select value={reportDraft.reason} onChange={e => setReportDraft(d => ({ ...d, reason: e.target.value }))}>
-                    {REPORT_REASONS.map(r => <option key={r} value={r}>{r}</option>)}
+            <div className="up-drawer-body">
+              {reportMsg ? (
+                <p className="up-form-msg">{reportMsg}</p>
+              ) : (
+                <>
+                  <label className="up-form-label">Raison</label>
+                  <select className="up-report-select" value={reportDraft.reason} onChange={(e) => setReportDraft((d) => ({ ...d, reason: e.target.value }))}>
+                    {REPORT_REASONS.map((r) => <option key={r} value={r}>{r}</option>)}
                   </select>
-                </label>
-                <label className="biz-popup-field">
-                  <span>Détails</span>
-                  <textarea rows={3} maxLength={500} placeholder="Décrivez le problème..." value={reportDraft.detail} onChange={e => setReportDraft(d => ({ ...d, detail: e.target.value }))} />
-                </label>
-                <button type="button" className="business-lux-cta primary" style={{ width: '100%', marginTop: '8px' }} disabled={!reportDraft.detail.trim()} onClick={() => void handleSubmitReport()}>Envoyer le signalement</button>
-              </div>
-            )}
+                  <label className="up-form-label">Détails</label>
+                  <textarea
+                    className="up-form-textarea"
+                    rows={3}
+                    maxLength={500}
+                    placeholder="Décrivez le problème…"
+                    value={reportDraft.detail}
+                    onChange={(e) => setReportDraft((d) => ({ ...d, detail: e.target.value }))}
+                  />
+                  <button type="button" className="up-form-submit" disabled={!reportDraft.detail.trim()} onClick={() => void handleSubmitReport()}>
+                    Envoyer le signalement
+                  </button>
+                </>
+              )}
+            </div>
           </div>
         </div>
       )}
 
-      {negotiateListing ? (
+      {/* ══════ Hover Popup ══════ */}
+      <ArticleHoverPopup popup={articleHover.popup} />
+
+      {/* ══════ Report Float ══════ */}
+      {!isOwnProfile && (
+        <div className="up-report-float">
+          <button type="button" className="up-report-btn" onClick={() => { if (!isLoggedIn) { navigate('/login'); return; } setShowReport(true); }} title="Signaler ce profil">
+            🚩
+          </button>
+        </div>
+      )}
+
+      {/* ══════ Negotiate ══════ */}
+      {negotiateItem && (
         <NegotiatePopup
           listing={{
-            id: negotiateListing.id,
-            title: negotiateListing.title,
-            imageUrl: negotiateListing.imageUrl,
-            type: 'PRODUIT',
-            priceUsdCents: negotiateListing.priceUsdCents,
-            ownerDisplayName: profileMeta.displayName,
+            id: negotiateItem.id,
+            title: negotiateItem.title,
+            imageUrl: negotiateItem.imageUrl,
+            type: negotiateItem.type,
+            priceUsdCents: negotiateItem.priceUsdCents,
+            ownerDisplayName: profile.displayName,
           }}
-          onClose={() => setNegotiateListing(null)}
-          onSuccess={() => {
-            setNegotiateListing(null);
-            navigate('/cart');
-          }}
+          onClose={() => setNegotiateItem(null)}
+          onSuccess={() => { setNegotiateItem(null); navigate('/cart'); }}
         />
-      ) : null}
-    </section>
+      )}
+    </div>
   );
 }
