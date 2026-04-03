@@ -112,24 +112,25 @@ function MobileBottomNav({
   hidden: boolean;
 }) {
   const { user } = useAuth();
+  const location = useLocation();
   const dashPath = getDashboardPath(user?.role);
+  const isActive = (path: string) => location.pathname === path || location.pathname.startsWith(path + '/');
   return (
     <nav className={`msh-bottom-nav${hidden ? ' msh-bottom-nav--hidden' : ''}`} aria-label="Navigation principale">
       {/* Accueil */}
-      <Link to="/" className="msh-bnav-item">
+      <Link to="/" className={`msh-bnav-item${isActive('/') && location.pathname === '/' ? ' msh-bnav-item--active' : ''}`}>
         <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
           <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z" />
         </svg>
         <span>Accueil</span>
       </Link>
 
-      {/* Panier */}
-      <Link to="/cart" className="msh-bnav-item">
+      {/* Explorer */}
+      <Link to="/explorer" className={`msh-bnav-item${isActive('/explorer') ? ' msh-bnav-item--active' : ''}`}>
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" />
-          <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+          <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
         </svg>
-        <span>Panier</span>
+        <span>Explorer</span>
       </Link>
 
       {/* FAB + */}
@@ -145,24 +146,16 @@ function MobileBottomNav({
         </svg>
       </button>
 
-      {/* Notifications */}
-      <button
-        className="msh-bnav-item"
-        onClick={() => {
-          sessionStorage.setItem("ud-section", "notifications");
-          window.location.href = dashPath;
-        }}
-        aria-label="Notifications"
-      >
+      {/* Messagerie */}
+      <Link to="/messaging" className={`msh-bnav-item${isActive('/messaging') ? ' msh-bnav-item--active' : ''}`}>
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-          <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
         </svg>
-        <span>Notifs</span>
-      </button>
+        <span>Messages</span>
+      </Link>
 
       {/* Compte */}
-      <Link to={dashPath} className="msh-bnav-item">
+      <Link to={dashPath} className={`msh-bnav-item${isActive(dashPath) ? ' msh-bnav-item--active' : ''}`}>
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
           <circle cx="12" cy="7" r="4" />

@@ -18,13 +18,23 @@ const CURRENCIES: { code: AppCurrency; symbol: string; label: string }[] = [
 
 const USEFUL_LINKS = [
   { labelKey: "nav.about",        href: "/about" },
-  { labelKey: "nav.plans", href: "/forfaits" },
-  { labelKey: "nav.terms", href: "/terms" },
-  { labelKey: "nav.guide", href: "/guide" },
-  { labelKey: "nav.howItWorks",      href: "/how-it-works" },
-  { labelKey: "nav.privacy",  href: "/privacy" },
-  { labelKey: "nav.faq",                    href: "/faq" },
-  { labelKey: "nav.contact",                href: "/contact" },
+  { labelKey: "nav.plans",        href: "/forfaits" },
+  { labelKey: "nav.terms",        href: "/terms" },
+  { labelKey: "nav.guide",        href: "/guide" },
+  { labelKey: "nav.howItWorks",   href: "/how-it-works" },
+  { labelKey: "nav.privacy",      href: "/privacy" },
+  { labelKey: "nav.legal",        href: "/legal" },
+  { labelKey: "nav.faq",          href: "/faq" },
+  { labelKey: "nav.blog",         href: "/blog" },
+  { labelKey: "nav.contact",      href: "/contact" },
+];
+
+const NAV_LINKS = [
+  { labelKey: "nav.home",     href: "/",         icon: "🏠" },
+  { labelKey: "nav.explorer", href: "/explorer",  icon: "🔍" },
+  { labelKey: "nav.sokin",    href: "/sokin",     icon: "✦" },
+  { labelKey: "nav.plans",    href: "/forfaits",  icon: "💎" },
+  { labelKey: "nav.contact",  href: "/contact",   icon: "✉️" },
 ];
 
 export const Footer = React.memo(function Footer() {
@@ -157,7 +167,20 @@ export const Footer = React.memo(function Footer() {
 
         {/* ── Colonne droite : liens utiles ── */}
         <div className="ks-footer-col ks-footer-col--right">
-          <p className="ks-footer-title">{t("footer.links")}</p>
+          {/* Navigation rapide */}
+          <p className="ks-footer-title">{t("footer.navigation") || "Navigation"}</p>
+          <ul className="ks-footer-links ks-footer-nav-links">
+            {NAV_LINKS.map(link => (
+              <li key={link.href}>
+                <Link to={link.href} className="ks-footer-link">
+                  <span aria-hidden="true">{link.icon}</span> {t(link.labelKey)}
+                </Link>
+              </li>
+            ))}
+          </ul>
+
+          {/* Liens utiles */}
+          <p className="ks-footer-title" style={{ marginTop: 'var(--space-md, 16px)' }}>{t("footer.links")}</p>
           <ul className="ks-footer-links">
             {USEFUL_LINKS.map(link => (
               <li key={link.href}>
