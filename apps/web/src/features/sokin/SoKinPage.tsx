@@ -46,7 +46,7 @@ const MAX_SCHEDULE_DAYS = 30;
    SOKIN TOP BAR (mobile)
    ═══════════════════════════════════════════════════ */
 
-function SoKinTopBar({ t, cartCount }: { t: (k: string) => string; cartCount: number }) {
+function SoKinTopBar({ t }: { t: (k: string) => string }) {
   const nav = useNavigate();
   return (
     <header className="sk-topbar" role="banner">
@@ -57,9 +57,8 @@ function SoKinTopBar({ t, cartCount }: { t: (k: string) => string; cartCount: nu
         <img src="/assets/kin-sell/logo.png" alt="Kin-Sell" className="sk-topbar-logo-img" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
         <span className="sk-topbar-logo-text">So-Kin</span>
       </button>
-      <button className="sk-topbar-btn" type="button" onClick={() => nav('/cart')} aria-label={t('nav.cartAria')}>
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" /><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" /></svg>
-        {cartCount > 0 && <span className="sk-topbar-badge">{cartCount}</span>}
+      <button className="sk-topbar-btn" type="button" onClick={() => nav('/explorer')} aria-label={t('common.search')}>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" /></svg>
       </button>
     </header>
   );
@@ -781,7 +780,6 @@ export function SoKinPage() {
   const [hasMore, setHasMore] = useState(true);
   const loadingRef = useRef(false);
   const sentinelRef = useRef<HTMLDivElement>(null);
-  const [cartCount, setCartCount] = useState(0);
   const [notifCount, setNotifCount] = useState(0);
 
   // Creator state
@@ -852,19 +850,7 @@ export function SoKinPage() {
     return () => obs.disconnect();
   }, [hasMore, loadFeed]);
 
-  // Cart count
-  useEffect(() => {
-    if (!isLoggedIn) { setCartCount(0); return; }
-    let c = false;
-    (async () => {
-      try {
-        const { orders } = await import('../../lib/api-client');
-        const cart = await orders.buyerCart().catch(() => null);
-        if (!c) setCartCount(cart?.itemsCount ?? 0);
-      } catch { if (!c) setCartCount(0); }
-    })();
-    return () => { c = true; };
-  }, [isLoggedIn]);
+
 
   // ── Handlers ──
   const handleReaction = async (postId: string, type: SoKinReactionType) => {
@@ -974,7 +960,7 @@ export function SoKinPage() {
       />
 
       <div className="sk-page">
-        <SoKinTopBar t={t} cartCount={cartCount} />
+        <SoKinTopBar t={t} />
 
         <CreateZone
           avatarUrl={currentAvatar}
