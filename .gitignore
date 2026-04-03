@@ -36,3 +36,6 @@ Thumbs.db
 # Cache Vite / TypeScript
 *.tsbuildinfo
 .vite/
+
+# Generated sitemaps
+apps/web/public/sitemap*.xml
