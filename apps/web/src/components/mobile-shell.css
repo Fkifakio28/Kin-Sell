@@ -20,6 +20,10 @@
   -webkit-backdrop-filter: blur(18px);
   border-bottom: 1px solid var(--glass-border);
   flex-shrink: 0;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.msh-topbar--hidden {
+  transform: translateY(-100%);
 }
 
 .msh-topbar-back,
@@ -104,11 +108,15 @@
   align-items: center;
   height: 64px;
   background: var(--glass-bg);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border-top: 1px solid var(--glass-border);
   padding: 0 4px;
   padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.msh-bottom-nav--hidden {
+  transform: translateY(100%);
 }
 
 .msh-bnav-item {

@@ -619,3 +619,59 @@
     width: 100%;
   }
 }
+
+/* ── Mobile ≤ 480px — Full-screen form, no visual panel ── */
+@media (max-width: 480px) {
+  .auth-visual-panel {
+    display: none;
+  }
+
+  .auth-page {
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .auth-form-panel {
+    flex: 1;
+    padding: 16px 12px;
+    margin-top: 0;
+    align-items: flex-start;
+    padding-top: env(safe-area-inset-top, 16px);
+  }
+
+  .auth-card {
+    width: 100%;
+    padding: 1rem 0.75rem;
+    gap: 1rem;
+  }
+
+  .auth-title {
+    font-size: 1.6rem;
+  }
+
+  .auth-subtitle {
+    font-size: 0.9rem;
+  }
+
+  .auth-input {
+    min-height: 3rem;
+    font-size: 1rem;
+  }
+
+  .auth-submit-button,
+  .auth-social-button {
+    min-height: 3.2rem;
+    border-radius: 14px;
+  }
+
+  .auth-stat {
+    min-width: unset;
+    flex: 1;
+  }
+
+  .auth-trust {
+    font-size: 0.78rem;
+  }
+}

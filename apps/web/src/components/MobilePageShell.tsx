@@ -9,6 +9,7 @@
 import { Suspense, useState } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../app/providers/AuthProvider";
+import { useScrollDirection } from "../hooks/useScrollDirection";
 import { getDashboardPath } from "../utils/role-routing";
 import "./mobile-shell.css";
 
@@ -63,10 +64,10 @@ function CreateMenu({
 // Top Bar
 // ─────────────────────────────────────────────────────────────
 
-function MobileTopBar() {
+function MobileTopBar({ hidden }: { hidden: boolean }) {
   const navigate = useNavigate();
   return (
-    <header className="msh-topbar" role="banner">
+    <header className={`msh-topbar${hidden ? ' msh-topbar--hidden' : ''}`} role="banner">
       <button
         className="msh-topbar-back"
         onClick={() => navigate(-1)}
@@ -104,14 +105,16 @@ function MobileTopBar() {
 function MobileBottomNav({
   createOpen,
   onToggleCreate,
+  hidden,
 }: {
   createOpen: boolean;
   onToggleCreate: () => void;
+  hidden: boolean;
 }) {
   const { user } = useAuth();
   const dashPath = getDashboardPath(user?.role);
   return (
-    <nav className="msh-bottom-nav" aria-label="Navigation principale">
+    <nav className={`msh-bottom-nav${hidden ? ' msh-bottom-nav--hidden' : ''}`} aria-label="Navigation principale">
       {/* Accueil */}
       <Link to="/" className="msh-bnav-item">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -178,12 +181,14 @@ export function MobilePageShell() {
   const { isLoggedIn } = useAuth();
   const [createOpen, setCreateOpen] = useState(false);
   const { pathname } = useLocation();
+  const scrollDir = useScrollDirection();
   const isDashboard = DASHBOARD_PATHS.some((p) => pathname.startsWith(p));
   const isMessaging = pathname.startsWith('/messaging');
+  const hideBar = scrollDir === 'down' && !createOpen;
 
   return (
     <>
-      {!isDashboard && <MobileTopBar />}
+      {!isDashboard && <MobileTopBar hidden={hideBar} />}
       <div className={`msh-content${isMessaging ? ' msh-content--messaging' : ''}`}>
         <Suspense fallback={<div className="ks-page-loader">Chargement…</div>}>
           <Outlet />
@@ -200,6 +205,7 @@ export function MobilePageShell() {
           <MobileBottomNav
             createOpen={createOpen}
             onToggleCreate={() => setCreateOpen((p) => !p)}
+            hidden={hideBar}
           />
         </>
       )}

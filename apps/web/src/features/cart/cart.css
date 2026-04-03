@@ -1121,6 +1121,16 @@
   }
 }
 
+@media (max-width: 480px) {
+  .cart-shell { padding: 8px 8px 100px; }
+  .cart-hero { padding: 10px 10px 8px; }
+  .cart-hero h1 { font-size: 18px; }
+  .cart-item { grid-template-columns: 64px 1fr; gap: 8px; padding: 8px; }
+  .cart-item-visual { width: 64px; height: 64px; }
+  .cart-item-title { font-size: 12px; }
+  .cart-checkout-modal { padding: 16px 12px 20px; }
+}
+
 /* ══════════════════════════════════════
    IA Commande – Checkout Advice Panel
    ══════════════════════════════════════ */

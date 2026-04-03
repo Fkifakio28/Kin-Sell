@@ -1,0 +1,105 @@
+/* ============================================================
+   BLOG PAGE — Kin-Sell
+   Prefix: blog-*
+   ============================================================ */
+
+.blog {
+  display: flex;
+  flex-direction: column;
+  gap: 1.2rem;
+  padding: 1.2rem 1rem 2rem;
+  max-width: 960px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.blog-hero {
+  padding: 1.4rem;
+}
+
+.blog-hero-eyebrow {
+  margin: 0;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--color-primary-hover);
+}
+
+.blog-hero-title {
+  margin: 0.35rem 0 0.55rem;
+  font-family: var(--font-family-display);
+  color: var(--color-text-primary);
+}
+
+.blog-hero-desc {
+  margin: 0;
+  color: var(--color-text-secondary);
+  line-height: 1.6;
+}
+
+/* ── Loading / empty states ── */
+.blog-status {
+  padding: 1rem;
+  color: var(--color-text-secondary);
+}
+
+/* ── Grid ── */
+.blog-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 0.9rem;
+}
+
+/* ── Article card ── */
+.blog-card {
+  padding: 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.blog-card-meta {
+  font-size: 0.68rem;
+  color: var(--color-primary-hover);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.blog-card-title {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--color-text-primary);
+}
+
+.blog-card-excerpt {
+  margin: 0;
+  color: var(--color-text-secondary);
+  line-height: 1.6;
+}
+
+.blog-card-content {
+  margin: 0;
+  color: var(--color-text-tertiary);
+  line-height: 1.7;
+  font-size: 0.9rem;
+}
+
+/* ── Mobile ── */
+@media (max-width: 768px) {
+  .blog {
+    padding: 1rem 0.75rem 90px;
+    gap: 1rem;
+  }
+
+  .blog-hero {
+    padding: 1.2rem 1rem;
+  }
+
+  .blog-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .blog-card {
+    padding: 1rem;
+  }
+}

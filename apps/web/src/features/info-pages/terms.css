@@ -331,3 +331,9 @@
     padding: 1.5rem 1.2rem;
   }
 }
+
+@media (max-width: 480px) {
+  .terms { padding: 0.75rem 0.5rem 90px; gap: 0.75rem; }
+  .terms-hero { padding: 1.2rem 0.75rem 0.75rem; }
+  .terms-hero-title { font-size: 1.5rem; }
+}

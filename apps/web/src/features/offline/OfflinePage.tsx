@@ -110,6 +110,12 @@ export function OfflinePage() {
           border: 1px solid var(--color-border, rgba(255,255,255,0.15));
         }
         .ks-offline-btn--ghost:hover { background: rgba(255,255,255,0.07); }
+        @media (max-width: 480px) {
+          .ks-offline-page { padding: 16px; }
+          .ks-offline-card { padding: 24px 16px; }
+          .ks-offline-icon { font-size: 40px; }
+          .ks-offline-title { font-size: 1.2rem; }
+        }
       `}</style>
     </div>
   );

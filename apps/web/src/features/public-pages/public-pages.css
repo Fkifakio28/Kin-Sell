@@ -2153,3 +2153,17 @@
     right: 16px;
   }
 }
+
+/* ── Extra-small mobile ── */
+@media (max-width: 480px) {
+  .pub-profile-shell,
+  .bshop-shell {
+    padding: 8px 6px 90px;
+  }
+  .pub-profile-hero { padding: 12px 10px; }
+  .pub-profile-name { font-size: 1.1rem; }
+  .pub-profile-avatar { width: 64px; height: 64px; }
+  .bshop-hero { border-radius: 12px; }
+  .bshop-identity-logo { width: 48px; height: 48px; }
+  .bshop-name { font-size: 1.1rem; }
+}

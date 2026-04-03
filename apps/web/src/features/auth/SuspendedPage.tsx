@@ -248,6 +248,13 @@ export function SuspendedPage() {
           width: 100%;
           text-align: left;
         }
+        @media (max-width: 480px) {
+          .ks-suspended-page { padding: 16px; }
+          .ks-suspended-card { padding: 24px 16px; }
+          .ks-suspended-icon { font-size: 40px; }
+          .ks-suspended-title { font-size: 1.3rem; }
+          .ks-suspended-body { font-size: 0.88rem; }
+        }
       `}</style>
     </div>
   );

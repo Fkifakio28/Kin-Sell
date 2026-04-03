@@ -274,3 +274,11 @@
     padding-bottom: 90px;
   }
 }
+
+@media (max-width: 480px) {
+  .pricing-shell { padding: 10px 8px 90px; gap: 12px; }
+  .pricing-hero { padding: 12px 10px; }
+  .pricing-hero h1 { font-size: 20px; }
+  .pricing-tabs { gap: 4px; }
+  .pricing-tab { font-size: 12px; padding: 8px 10px; }
+}

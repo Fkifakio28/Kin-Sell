@@ -490,3 +490,10 @@
     padding: 1.5rem 1.2rem;
   }
 }
+
+@media (max-width: 480px) {
+  .contact { padding: 0.75rem 0.5rem 90px; gap: 1.5rem; }
+  .contact-hero { padding: 1.5rem 0.75rem 1rem; }
+  .contact-hero-title { font-size: 1.5rem; }
+  .contact-input, .contact-textarea, .contact-select { font-size: 16px; }
+}

@@ -488,8 +488,11 @@
    ═══════════════════════════════════════════ */
 
 .mg-conv-view {
-  position: absolute;
-  inset: 0;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: var(--mg-kb-offset, 0px);
   z-index: 150;
   display: flex;
   flex-direction: column;
@@ -554,8 +557,7 @@
 .mg-messages {
   flex: 1;
   overflow-y: auto;
-  padding: 12px 12px;
-  padding-bottom: calc(12px + var(--mg-kb-offset, 0px));
+  padding: 12px;
   display: flex;
   flex-direction: column;
   gap: 4px;

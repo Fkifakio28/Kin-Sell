@@ -1025,6 +1025,7 @@ export function MessagingPage() {
       if (Math.abs(next - lastKeyboardOffsetRef.current) < 4) return;
       lastKeyboardOffsetRef.current = next;
       setKeyboardOffset(next);
+      if (next > 0) window.scrollTo(0, 0);
     };
     update();
     viewport.addEventListener("resize", update);

@@ -1,4 +1,5 @@
 import { useNavigate, useRouteError, isRouteErrorResponse } from "react-router-dom";
+import "./error.css";
 
 export function ErrorBoundaryPage() {
   const error = useRouteError();
@@ -31,30 +32,28 @@ export function ErrorBoundaryPage() {
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "60vh", padding: "2rem", textAlign: "center" }}>
-      <h1 style={{ fontSize: "3rem", margin: 0, color: "var(--color-primary, #6f58ff)" }}>{title}</h1>
-      <p style={{ fontSize: "1.15rem", color: "var(--color-text-secondary, #b0a8d0)", marginTop: "0.5rem" }}>
+    <div className="err-page">
+      <h1 className="err-title err-title--sm">{title}</h1>
+      <p className="err-message">
         {message}
       </p>
       {debugInfo && (
-        <pre style={{ marginTop: "1rem", padding: "0.75rem 1rem", background: "rgba(255,0,0,0.1)", borderRadius: "8px", fontSize: "0.75rem", color: "#ff8080", maxWidth: "90vw", overflowX: "auto", textAlign: "left", whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
+        <pre className="err-debug">
           {debugInfo}
         </pre>
       )}
-      <div style={{ display: "flex", gap: "1rem", marginTop: "1.5rem" }}>
+      <div className="err-actions">
         <button
           type="button"
           onClick={() => navigate(-1)}
-          className="glass-btn"
-          style={{ padding: "0.6rem 1.5rem", cursor: "pointer" }}
+          className="glass-btn err-btn"
         >
           ← Retour
         </button>
         <button
           type="button"
           onClick={() => navigate("/")}
-          className="glass-btn glass-btn--primary"
-          style={{ padding: "0.6rem 1.5rem", cursor: "pointer" }}
+          className="glass-btn glass-btn--primary err-btn"
         >
           Accueil
         </button>
