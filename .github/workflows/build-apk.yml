@@ -46,6 +46,9 @@ jobs:
         working-directory: apps/web
         run: npx cap sync android
 
+      - name: Remove compressed assets (prevents AAPT duplicate resource error)
+        run: find apps/web/android/app/src/main/assets/public \( -name "*.gz" -o -name "*.br" \) -delete
+
       - name: Make gradlew executable
         run: chmod +x apps/web/android/gradlew
 
