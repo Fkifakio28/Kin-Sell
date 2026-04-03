@@ -662,7 +662,7 @@
 
 .hm-fab-menu {
   position: fixed;
-  bottom: 0;
+  bottom: 60px;
   left: 0;
   right: 0;
   z-index: 960;
@@ -671,7 +671,7 @@
   -webkit-backdrop-filter: blur(20px);
   border-top: 1px solid var(--color-glass-border, rgba(255, 255, 255, 0.1));
   border-radius: 20px 20px 0 0;
-  padding: 12px 20px 32px;
+  padding: 12px 20px 20px;
   animation: hm-sheet-up 0.25s ease-out;
 }
 
@@ -1094,7 +1094,7 @@
     left: 50%;
     transform: translateX(-50%);
     border-radius: 20px;
-    bottom: 16px;
+    bottom: 72px;
   }
 
   .hm-bnav-label {
@@ -1124,7 +1124,8 @@
   }
 
   .hm-fab-menu {
-    padding-bottom: calc(32px + env(safe-area-inset-bottom));
+    bottom: calc(60px + env(safe-area-inset-bottom));
+    padding-bottom: 20px;
   }
 
   .hm-drawer {
