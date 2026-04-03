@@ -112,18 +112,12 @@ export function fileToBase64(file: File): Promise<string> {
  * Les images sont compressées, les vidéos passent telles quelles.
  */
 export async function compressMediaFiles(files: File[]): Promise<File[]> {
-  const results: File[] = [];
-
-  for (const file of files) {
-    if (file.type.startsWith("image/")) {
-      results.push(await compressImage(file));
-    } else {
-      // Vidéos et autres : pas de compression côté navigateur
-      results.push(file);
-    }
-  }
-
-  return results;
+  // Compression parallèle : toutes les images en même temps
+  return Promise.all(
+    files.map((file) =>
+      file.type.startsWith("image/") ? compressImage(file) : Promise.resolve(file)
+    )
+  );
 }
 
 /**
@@ -132,16 +126,11 @@ export async function compressMediaFiles(files: File[]): Promise<File[]> {
  * Les vidéos sont encodées directement (pas de compression navigateur).
  */
 export async function compressAndEncodeMedia(files: File[]): Promise<string[]> {
-  const results: string[] = [];
-
-  for (const file of files) {
-    if (file.type.startsWith("image/")) {
-      const compressed = await compressImage(file);
-      results.push(await fileToBase64(compressed));
-    } else {
-      results.push(await fileToBase64(file));
-    }
-  }
-
-  return results;
+  // Compression + encodage parallèle
+  return Promise.all(
+    files.map(async (file) => {
+      const compressed = file.type.startsWith("image/") ? await compressImage(file) : file;
+      return fileToBase64(compressed);
+    })
+  );
 }

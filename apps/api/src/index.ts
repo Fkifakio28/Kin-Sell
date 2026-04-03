@@ -55,14 +55,43 @@ app.use(pinoHttp({ logger, autoLogging: { ignore: (req: any) => req.url === "/he
 app.use(express.json({ limit: "20mb" }));
 app.use(cors({ origin: env.CORS_ORIGIN }));
 
+// ── Cache-Control headers pour réponses API ──
+app.use((req, res, next) => {
+  if (req.method === "GET") {
+    // Endpoints publics (explorer, listings, blog) : cache navigateur 5 min
+    if (/^\/(explorer|listings|blog|geo|sokin-trends)/.test(req.path)) {
+      res.set("Cache-Control", "public, max-age=300, stale-while-revalidate=60");
+    }
+    // Données session (account, orders) : cache privé 1 min
+    else if (/^\/(account|orders|negotiations|messaging|notifications)/.test(req.path)) {
+      res.set("Cache-Control", "private, max-age=60");
+    }
+    // Autres GET : cache court
+    else {
+      res.set("Cache-Control", "public, max-age=120");
+    }
+  } else {
+    res.set("Cache-Control", "no-store");
+  }
+  next();
+});
+
 // Serve uploaded files statically
 app.use("/uploads", express.static(path.resolve(process.cwd(), "uploads")));
 
+let _healthCache: { data: unknown; expiresAt: number } | null = null;
+
 app.get("/health", async (_req, res) => {
+  const now = Date.now();
+  if (_healthCache && now < _healthCache.expiresAt) {
+    return res.json(_healthCache.data);
+  }
   try {
     await prisma.$queryRaw`SELECT 1`;
-    res.json({ status: "ok", service: "kinsell-api", db: "connected", uptime: Math.floor(process.uptime()) });
+    _healthCache = { data: { status: "ok", service: "kinsell-api", db: "connected", uptime: Math.floor(process.uptime()) }, expiresAt: now + 30_000 };
+    res.json(_healthCache.data);
   } catch {
+    _healthCache = null;
     res.status(503).json({ status: "degraded", service: "kinsell-api", db: "unreachable" });
   }
 });

@@ -8,6 +8,7 @@ const SESSION_ID_KEY = "kin-sell.session-id";
 // ── In-memory GET cache ──────────────────────────────────────────────────────
 type CacheEntry = { data: unknown; expiresAt: number };
 const _memCache = new Map<string, CacheEntry>();
+const _pendingGets = new Map<string, Promise<unknown>>();
 
 function _cacheKey(url: string): string {
   // Sépare le cache par utilisateur (8 derniers chars du token)
@@ -31,12 +32,17 @@ function _cacheGet<T>(key: string): T | null {
 
 function _cacheSet(key: string, data: unknown, ttl: number): void {
   _memCache.set(key, { data, expiresAt: Date.now() + ttl });
-  // Nettoyage si trop d'entrées
-  if (_memCache.size > 120) {
+  // Nettoyage si trop d'entrées (LRU-like)
+  if (_memCache.size > 150) {
     const now = Date.now();
+    // D'abord supprimer les expirées
     for (const [k, v] of _memCache.entries()) {
       if (v.expiresAt < now) _memCache.delete(k);
-      if (_memCache.size <= 80) break;
+    }
+    // Si toujours trop, supprimer les plus anciennes
+    if (_memCache.size > 100) {
+      const sorted = [..._memCache.entries()].sort((a, b) => a[1].expiresAt - b[1].expiresAt);
+      for (let i = 0; i < sorted.length - 80; i++) _memCache.delete(sorted[i][0]);
     }
   }
 }
@@ -134,28 +140,39 @@ type AccountAuthResponse = {
   user: AccountUser;
 };
 
+let _refreshPromise: Promise<boolean> | null = null;
+
 async function refreshAccessToken(): Promise<boolean> {
-  const refreshToken = getRefreshToken();
-  if (!refreshToken) {
-    return false;
+  // Éviter les refresh parallèles (race condition si plusieurs 401 simultanés)
+  if (_refreshPromise) return _refreshPromise;
+
+  _refreshPromise = (async () => {
+    const refreshToken = getRefreshToken();
+    if (!refreshToken) return false;
+
+    const res = await fetch(`${API_BASE}/account/refresh`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refreshToken })
+    });
+
+    if (!res.ok) {
+      clearAuthSession();
+      return false;
+    }
+
+    const data = (await res.json()) as AccountAuthResponse;
+    setToken(data.accessToken);
+    setRefreshToken(data.refreshToken);
+    setSessionId(data.sessionId);
+    return true;
+  })();
+
+  try {
+    return await _refreshPromise;
+  } finally {
+    _refreshPromise = null;
   }
-
-  const res = await fetch(`${API_BASE}/account/refresh`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ refreshToken })
-  });
-
-  if (!res.ok) {
-    clearAuthSession();
-    return false;
-  }
-
-  const data = (await res.json()) as AccountAuthResponse;
-  setToken(data.accessToken);
-  setRefreshToken(data.refreshToken);
-  setSessionId(data.sessionId);
-  return true;
 }
 
 async function request<T>(path: string, opts: RequestOptions = {}, allowRefresh = true): Promise<T> {
@@ -176,6 +193,8 @@ async function request<T>(path: string, opts: RequestOptions = {}, allowRefresh 
     const ck = _cacheKey(url);
     const cached = _cacheGet<T>(ck);
     if (cached !== null) return cached;
+    // Déduplication: si même GET déjà en vol, attendre son résultat
+    if (_pendingGets.has(ck)) return (await _pendingGets.get(ck)) as T;
   }
 
   const token = getToken();
@@ -183,34 +202,45 @@ async function request<T>(path: string, opts: RequestOptions = {}, allowRefresh 
   if (token) reqHeaders["Authorization"] = `Bearer ${token}`;
   if (body) reqHeaders["Content-Type"] = "application/json";
 
-  const res = await fetch(url, {
-    method,
-    headers: reqHeaders,
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  const cacheKey = method === "GET" ? _cacheKey(url) : null;
+  const fetchWork = (async (): Promise<T> => {
+    const res = await fetch(url, {
+      method,
+      headers: reqHeaders,
+      body: body ? JSON.stringify(body) : undefined,
+    });
 
-  if (!res.ok) {
-    if (res.status === 401 && allowRefresh && path !== "/account/refresh") {
-      const refreshed = await refreshAccessToken();
-      if (refreshed) {
-        return request<T>(path, opts, false);
+    if (!res.ok) {
+      if (res.status === 401 && allowRefresh && path !== "/account/refresh") {
+        const refreshed = await refreshAccessToken();
+        if (refreshed) {
+          return request<T>(path, opts, false);
+        }
       }
+
+      let data: unknown;
+      try { data = await res.json(); } catch { /* ignore */ }
+      throw new ApiError(res.status, `API ${res.status}`, data);
     }
 
-    let data: unknown;
-    try { data = await res.json(); } catch { /* ignore */ }
-    throw new ApiError(res.status, `API ${res.status}`, data);
+    if (res.status === 204) return undefined as T;
+    const result = await res.json() as T;
+
+    // ── Mise en cache des GET ──
+    if (method === "GET") {
+      _cacheSet(_cacheKey(url), result, _cacheTtl(path));
+    }
+
+    return result;
+  })();
+
+  // Enregistrer pour déduplication
+  if (cacheKey) _pendingGets.set(cacheKey, fetchWork);
+  try {
+    return await fetchWork;
+  } finally {
+    if (cacheKey) _pendingGets.delete(cacheKey);
   }
-
-  if (res.status === 204) return undefined as T;
-  const result = await res.json() as T;
-
-  // ── Mise en cache des GET ──
-  if (method === "GET") {
-    _cacheSet(_cacheKey(url), result, _cacheTtl(path));
-  }
-
-  return result;
 }
 
 // ── Auth ──
