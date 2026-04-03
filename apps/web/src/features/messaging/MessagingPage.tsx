@@ -642,39 +642,31 @@ export function MessagingPage() {
       if (remoteAudioRef.current) { remoteAudioRef.current.srcObject = event.streams[0]; remoteAudioRef.current.muted = !isSpeakerOn; void remoteAudioRef.current.play().catch(() => {}); }
     };
 
-    // ── ICE reconnection automatique ──
-    // Si la connexion ICE se dégrade (disconnected/failed), tenter un ICE restart
-    // au lieu de couper l'appel. Max 3 tentatives.
+    // ── ICE reconnection automatique avec backoff exponentiel ──
+    const ICE_RESTART_DELAYS = [500, 1000, 2000, 3000, 5000];
+    const ICE_MAX_ATTEMPTS = 5;
     pc.oniceconnectionstatechange = () => {
       const state = pc.iceConnectionState;
       if (state === "connected" || state === "completed") {
-        iceRestartAttemptRef.current = 0; // reset compteur si OK
+        iceRestartAttemptRef.current = 0;
       }
-      if (state === "disconnected") {
-        // Attendre 2s avant de tenter un restart (le réseau peut revenir seul)
+      const attemptRestart = () => {
+        if (iceRestartAttemptRef.current >= ICE_MAX_ATTEMPTS) return;
+        const delay = ICE_RESTART_DELAYS[Math.min(iceRestartAttemptRef.current, ICE_RESTART_DELAYS.length - 1)];
         setTimeout(() => {
-          if (pc.iceConnectionState === "disconnected" && iceRestartAttemptRef.current < 3) {
-            iceRestartAttemptRef.current++;
-            pc.restartIce();
-            // Renégocier avec iceRestart
-            pc.createOffer({ iceRestart: true }).then(async (offer) => {
-              await pc.setLocalDescription(offer);
-              emit("webrtc:offer", { targetUserId: remoteUserId, sdp: offer });
-            }).catch(() => {});
-          }
-        }, 2000);
-      }
-      if (state === "failed") {
-        if (iceRestartAttemptRef.current < 3) {
+          if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") return;
           iceRestartAttemptRef.current++;
+          // Dégrader la qualité après 2 échecs pour aider la reconnexion
+          if (iceRestartAttemptRef.current >= 2) void applyVideoProfile("data-saver");
           pc.restartIce();
           pc.createOffer({ iceRestart: true }).then(async (offer) => {
             await pc.setLocalDescription(offer);
             emit("webrtc:offer", { targetUserId: remoteUserId, sdp: offer });
           }).catch(() => {});
-        }
-        // Après 3 tentatives, la qualité monitor basculera en "poor"
-      }
+        }, delay);
+      };
+      if (state === "disconnected") attemptRestart();
+      if (state === "failed") attemptRestart();
     };
 
     peerConnectionRef.current = pc;
@@ -729,7 +721,7 @@ export function MessagingPage() {
       } catch { setConnectionQuality("unknown"); }
     };
     void sample();
-    callQualityTimerRef.current = setInterval(() => void sample(), 3000);
+    callQualityTimerRef.current = setInterval(() => void sample(), 1500);
   }, []);
 
   const getCallMedia = useCallback(async (callType: "audio" | "video", facingMode: "user" | "environment" = "user") => {

@@ -304,32 +304,29 @@ export function DashboardMessaging() {
         void remoteAudioRef.current.play().catch(() => {});
       }
     };
-    // ── ICE reconnection automatique ──
+    // ── ICE reconnection automatique avec backoff exponentiel ──
+    const ICE_RESTART_DELAYS = [500, 1000, 2000, 3000, 5000];
+    const ICE_MAX_ATTEMPTS = 5;
     pc.oniceconnectionstatechange = () => {
       const state = pc.iceConnectionState;
       if (state === "connected" || state === "completed") {
         iceRestartAttemptRef.current = 0;
       }
-      if (state === "disconnected") {
+      const attemptRestart = () => {
+        if (iceRestartAttemptRef.current >= ICE_MAX_ATTEMPTS) return;
+        const delay = ICE_RESTART_DELAYS[Math.min(iceRestartAttemptRef.current, ICE_RESTART_DELAYS.length - 1)];
         setTimeout(() => {
-          if (pc.iceConnectionState === "disconnected" && iceRestartAttemptRef.current < 3) {
-            iceRestartAttemptRef.current++;
-            pc.restartIce();
-            pc.createOffer({ iceRestart: true }).then(async (offer) => {
-              await pc.setLocalDescription(offer);
-              emit("webrtc:offer", { targetUserId: remoteUserId, sdp: offer });
-            }).catch(() => {});
-          }
-        }, 2000);
-      }
-      if (state === "failed" && iceRestartAttemptRef.current < 3) {
-        iceRestartAttemptRef.current++;
-        pc.restartIce();
-        pc.createOffer({ iceRestart: true }).then(async (offer) => {
-          await pc.setLocalDescription(offer);
-          emit("webrtc:offer", { targetUserId: remoteUserId, sdp: offer });
-        }).catch(() => {});
-      }
+          if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") return;
+          iceRestartAttemptRef.current++;
+          pc.restartIce();
+          pc.createOffer({ iceRestart: true }).then(async (offer) => {
+            await pc.setLocalDescription(offer);
+            emit("webrtc:offer", { targetUserId: remoteUserId, sdp: offer });
+          }).catch(() => {});
+        }, delay);
+      };
+      if (state === "disconnected") attemptRestart();
+      if (state === "failed") attemptRestart();
     };
     peerConnectionRef.current = pc;
     return pc;

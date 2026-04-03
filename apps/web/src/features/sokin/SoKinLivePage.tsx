@@ -275,6 +275,7 @@ function LiveViewer({
   const pollTickRef = useRef(0);
   useEffect(() => {
     let c = false;
+    let pollInterval: ReturnType<typeof setInterval> | null = null;
     const fetchChat = async () => {
       try {
         const d = await sokinLive.chat(live.id, 80);
@@ -294,13 +295,30 @@ function LiveViewer({
     // Initial fetch
     void fetchChat();
     void fetchStatus();
-    const poll = setInterval(() => {
-      pollTickRef.current++;
-      void fetchChat();
-      // Status every 2nd tick (~8s) to reduce load
-      if (pollTickRef.current % 2 === 0) void fetchStatus();
-    }, 4000);
-    return () => { c = true; clearInterval(poll); };
+    const startPolling = () => {
+      if (pollInterval) return;
+      pollInterval = setInterval(() => {
+        pollTickRef.current++;
+        void fetchChat();
+        if (pollTickRef.current % 2 === 0) void fetchStatus();
+      }, 4000);
+    };
+    const stopPolling = () => {
+      if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+    };
+    startPolling();
+    // Pause polling when tab is hidden (save battery/bandwidth)
+    const onVisChange = () => {
+      if (document.visibilityState === 'visible') {
+        void fetchChat();
+        void fetchStatus();
+        startPolling();
+      } else {
+        stopPolling();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisChange);
+    return () => { c = true; stopPolling(); document.removeEventListener('visibilitychange', onVisChange); };
   }, [live.id]);
 
   // Auto-scroll chat (using requestAnimationFrame for smoothness)
@@ -342,22 +360,30 @@ function LiveViewer({
         const hls = new Hls({
           enableWorker: true,
           lowLatencyMode: true,
-          // Buffer : petit pour basse latence, assez grand pour éviter les saccades
-          maxBufferLength: 8,
-          maxMaxBufferLength: 15,
-          maxBufferSize: 30 * 1000 * 1000, // 30 MB
-          maxBufferHole: 0.5,
+          // Buffer : optimisé pour live basse latence sans saccades
+          maxBufferLength: 6,
+          maxMaxBufferLength: 12,
+          maxBufferSize: 20 * 1000 * 1000, // 20 MB (mobile-friendly)
+          maxBufferHole: 0.3,
           // Latence : rattraper le live si trop en retard
           liveSyncDurationCount: 3,
-          liveMaxLatencyDurationCount: 6,
+          liveMaxLatencyDurationCount: 5,
           liveDurationInfinity: true,
+          liveBackBufferLength: 0, // pas de buffer arrière (économie mémoire)
+          // Timeouts adaptés réseau mobile
+          fragLoadingTimeOut: 8000,   // 8s au lieu de 20s par défaut
+          manifestLoadingTimeOut: 8000,
+          levelLoadingTimeOut: 8000,
           // Récupération réseau robuste
-          manifestLoadingMaxRetry: 6,
-          levelLoadingMaxRetry: 6,
-          fragLoadingMaxRetry: 6,
+          manifestLoadingMaxRetry: 4,
+          levelLoadingMaxRetry: 4,
+          fragLoadingMaxRetry: 4,
           manifestLoadingRetryDelay: 500,
           levelLoadingRetryDelay: 500,
           fragLoadingRetryDelay: 500,
+          // Startup rapide
+          startLevel: -1, // auto-select best level
+          testBandwidth: true,
         });
         hlsRef.current = hls;
         hls.loadSource(playbackUrl); hls.attachMedia(vid);

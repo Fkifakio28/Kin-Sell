@@ -11,6 +11,11 @@ const onlineUsers = new Map<string, Set<string>>();
 /** userId → true si le statut en ligne est visible aux autres */
 const onlineVisibility = new Map<string, boolean>();
 
+/** userId → { count, resetAt } for socket message rate limiting */
+const socketMessageRates = new Map<string, { count: number; resetAt: number }>();
+const SOCKET_MSG_MAX = 40; // max 40 messages par fenêtre
+const SOCKET_MSG_WINDOW_MS = 60_000; // fenêtre de 60 secondes
+
 /** conversationId → active call log ID (tracks in-progress calls) */
 const activeCallLogs = new Map<string, string>();
 /** userId → pending offline timeout (grace period for mobile/background transitions) */
@@ -93,6 +98,19 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
     /* ── Send message via socket ── */
     socket.on("message:send", async (data: { conversationId: string; content?: string; type?: string; mediaUrl?: string; fileName?: string; replyToId?: string }, callback?: (res: unknown) => void) => {
       try {
+        // ── Rate limit: max SOCKET_MSG_MAX messages per window ──
+        const now = Date.now();
+        let rate = socketMessageRates.get(userId);
+        if (!rate || now > rate.resetAt) {
+          rate = { count: 0, resetAt: now + SOCKET_MSG_WINDOW_MS };
+          socketMessageRates.set(userId, rate);
+        }
+        rate.count++;
+        if (rate.count > SOCKET_MSG_MAX) {
+          if (callback) callback({ ok: false, error: "Trop de messages envoyés. Réessayez dans un instant." });
+          return;
+        }
+
         const message = await messagingService.sendMessage(data.conversationId, userId, {
           content: data.content,
           type: (data.type ?? "TEXT") as "TEXT" | "IMAGE" | "AUDIO" | "VIDEO" | "FILE",
@@ -116,13 +134,13 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
           }
         }
 
-        // Push notification to all recipients (offline detection can be stale on mobile)
-        const recipients = participantIds.filter((pid) => pid !== userId);
-        if (recipients.length > 0) {
+        // Push notification only to truly offline recipients (not connected via socket)
+        const offlineRecipients = participantIds.filter((pid) => pid !== userId && (onlineUsers.get(pid)?.size ?? 0) === 0);
+        if (offlineRecipients.length > 0) {
           const senderProfile = await prisma.userProfile.findUnique({ where: { userId }, select: { displayName: true } });
           const senderName = senderProfile?.displayName ?? "Quelqu'un";
           const bodyText = message.type === "TEXT" ? (message.content?.slice(0, 100) ?? "Nouveau message") : message.type === "IMAGE" ? "📷 Photo" : message.type === "AUDIO" ? "🎵 Audio" : message.type === "VIDEO" ? "🎬 Vidéo" : "📎 Fichier";
-          void sendPushToUsers(recipients, {
+          void sendPushToUsers(offlineRecipients, {
             title: senderName,
             body: bodyText,
             tag: `msg-${data.conversationId}`,
