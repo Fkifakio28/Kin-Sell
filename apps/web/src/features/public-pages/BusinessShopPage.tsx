@@ -1,4 +1,7 @@
 ﻿import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../app/providers/AuthProvider';
+import { businesses as businessesApi, reviews as reviewsApi, type ReviewItem } from '../../lib/api-client';
 import './public-pages.css';
 import { SeoMeta } from '../../components/SeoMeta';
 
@@ -21,6 +24,7 @@ type PublicListing = {
 
 type PublicBusiness = {
   id: string;
+  ownerUserId: string;
   publicName: string;
   slug: string;
   verificationStatus: string;
@@ -59,14 +63,20 @@ const REPORT_REASONS = [
 ];
 
 export function BusinessShopPage({ slug }: BusinessShopPageProps) {
+  const { isLoggedIn } = useAuth();
+  const navigate = useNavigate();
   const [business, setBusiness] = useState<PublicBusiness | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [heroIndex, setHeroIndex] = useState(0);
   const [shopPhotoIdx, setShopPhotoIdx] = useState(0);
+  // ─── Follow
+  const [isFollowingState, setIsFollowingState] = useState(false);
+  const [followersCount, setFollowersCount] = useState(0);
+  const [followBusy, setFollowBusy] = useState(false);
   // ─── Popup avis
   const [showReviewPopup, setShowReviewPopup] = useState(false);
-  const [reviewDraft, setReviewDraft] = useState({ author: '', score: 5, text: '' });
+  const [reviewDraft, setReviewDraft] = useState({ score: 5, text: '' });
   const [reviewMsg, setReviewMsg] = useState('');
   // ─── Popup signalement
   const [showReportPopup, setShowReportPopup] = useState(false);
@@ -79,14 +89,54 @@ export function BusinessShopPage({ slug }: BusinessShopPageProps) {
     setError(null);
     setBusiness(null);
     setHeroIndex(0);
-    fetch(`/api/business-accounts/${encodeURIComponent(slug)}`)
-      .then(r => {
-        if (!r.ok) throw new Error('Boutique introuvable');
-        return r.json() as Promise<PublicBusiness>;
-      })
-      .then(data => { setBusiness(data); setLoading(false); })
+    businessesApi.getBySlug(slug)
+      .then(data => { setBusiness(data as unknown as PublicBusiness); setLoading(false); })
       .catch(() => { setError('Boutique introuvable ou non disponible.'); setLoading(false); });
   }, [slug]);
+
+  // ─── Follow state ────────────────────────────────────────
+  useEffect(() => {
+    if (!business) return;
+    businessesApi.followersCount(business.id)
+      .then(r => setFollowersCount(r.followersCount))
+      .catch(() => {});
+    if (isLoggedIn) {
+      businessesApi.isFollowing(business.id)
+        .then(r => setIsFollowingState(r.following))
+        .catch(() => {});
+    }
+  }, [business, isLoggedIn]);
+
+  const handleFollow = useCallback(async () => {
+    if (!isLoggedIn) { navigate('/login'); return; }
+    if (!business || followBusy) return;
+    setFollowBusy(true);
+    try {
+      const res = isFollowingState
+        ? await businessesApi.unfollow(business.id)
+        : await businessesApi.follow(business.id);
+      setIsFollowingState(res.following);
+      setFollowersCount(res.followersCount);
+    } catch { /* ignore */ }
+    setFollowBusy(false);
+  }, [isLoggedIn, business, followBusy, isFollowingState, navigate]);
+
+  const handleShare = useCallback(async () => {
+    if (!business) return;
+    const shareData = {
+      title: `${business.publicName} — Kin-Sell`,
+      text: `Découvrez la boutique ${business.publicName} sur Kin-Sell`,
+      url: window.location.href,
+    };
+    try {
+      if (navigator.share) {
+        await navigator.share(shareData);
+      } else {
+        await navigator.clipboard.writeText(window.location.href);
+        alert('Lien copié dans le presse-papier !');
+      }
+    } catch { /* user cancelled */ }
+  }, [business]);
 
   // ─── Scroll to hash ───────────────────────────────────────
   useEffect(() => {
@@ -137,15 +187,22 @@ export function BusinessShopPage({ slug }: BusinessShopPageProps) {
     return [];
   }, [business]);
 
-  // ─── Avis clients depuis localStorage ─────────────────────
+  // ─── Avis clients depuis API ───────────────────────────────
   const [reviews, setReviews] = useState<Review[]>([]);
+  const [reviewBusy, setReviewBusy] = useState(false);
   useEffect(() => {
     if (!business) return;
-    try {
-      const stored = localStorage.getItem(`ks-reviews-${business.id}`);
-      if (stored) { const parsed = JSON.parse(stored); if (Array.isArray(parsed)) { setReviews(parsed); return; } }
-    } catch { /* ignore */ }
-    setReviews([]);
+    reviewsApi.forUser(business.ownerUserId)
+      .then(r => {
+        setReviews(r.reviews.map(rv => ({
+          id: rv.id,
+          author: rv.authorName,
+          score: rv.rating,
+          text: rv.text ?? '',
+          date: new Date(rv.createdAt).toLocaleDateString('fr-FR'),
+        })));
+      })
+      .catch(() => setReviews([]));
   }, [business]);
 
   const avgScore = useMemo(() => {
@@ -153,22 +210,35 @@ export function BusinessShopPage({ slug }: BusinessShopPageProps) {
     return reviews.reduce((sum, r) => sum + r.score, 0) / reviews.length;
   }, [reviews]);
 
-  const handleSubmitReview = useCallback(() => {
-    if (!business || !reviewDraft.author.trim() || !reviewDraft.text.trim()) return;
-    const newReview: Review = {
-      id: `rv-${Date.now()}`,
-      author: reviewDraft.author.trim(),
-      score: reviewDraft.score,
-      text: reviewDraft.text.trim(),
-      date: new Date().toLocaleDateString('fr-FR'),
-    };
-    const next = [newReview, ...reviews];
-    setReviews(next);
-    localStorage.setItem(`ks-reviews-${business.id}`, JSON.stringify(next));
-    setReviewDraft({ author: '', score: 5, text: '' });
-    setReviewMsg('✓ Merci pour votre avis !');
-    setTimeout(() => { setShowReviewPopup(false); setReviewMsg(''); }, 1500);
-  }, [business, reviewDraft, reviews]);
+  const handleSubmitReview = useCallback(async () => {
+    if (!isLoggedIn) { navigate('/login'); return; }
+    if (!business || reviewDraft.score < 1 || reviewBusy) return;
+    setReviewBusy(true);
+    try {
+      await reviewsApi.create({
+        targetId: business.ownerUserId,
+        rating: reviewDraft.score,
+        text: reviewDraft.text.trim() || undefined,
+      });
+      // Reload reviews from server
+      const fresh = await reviewsApi.forUser(business.ownerUserId);
+      setReviews(fresh.reviews.map(rv => ({
+        id: rv.id,
+        author: rv.authorName,
+        score: rv.rating,
+        text: rv.text ?? '',
+        date: new Date(rv.createdAt).toLocaleDateString('fr-FR'),
+      })));
+      setReviewDraft({ score: 5, text: '' });
+      setReviewMsg('✓ Merci pour votre avis !');
+      setTimeout(() => { setShowReviewPopup(false); setReviewMsg(''); }, 1500);
+    } catch {
+      setReviewMsg('❌ Erreur, réessayez.');
+      setTimeout(() => setReviewMsg(''), 3000);
+    } finally {
+      setReviewBusy(false);
+    }
+  }, [business, reviewDraft, isLoggedIn, navigate, reviewBusy]);
 
   const handleSubmitReport = useCallback(async () => {
     if (!business || !reportDraft.author.trim() || !reportDraft.detail.trim()) return;
@@ -305,9 +375,11 @@ export function BusinessShopPage({ slug }: BusinessShopPageProps) {
               <span>{salesCount} ventes</span>
             </div>
             <div className="business-lux-cta-row">
-              <a href="#" className="business-lux-cta primary">Suivre</a>
+              <button type="button" className="business-lux-cta primary" onClick={handleFollow} disabled={followBusy}>
+                {isFollowingState ? '✓ Suivi' : 'Suivre'}{followersCount > 0 ? ` (${followersCount})` : ''}
+              </button>
               <a href={`/messages?contact=${encodeURIComponent(business.publicName)}`} className="business-lux-cta">Contacter</a>
-              <a href="#" className="business-lux-cta">Partager</a>
+              <button type="button" className="business-lux-cta" onClick={handleShare}>Partager</button>
             </div>
           </div>
 
@@ -420,7 +492,7 @@ export function BusinessShopPage({ slug }: BusinessShopPageProps) {
       <section className="public-section" aria-label="Avis clients">
         <div className="public-section-head" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
           <h2>⭐ Avis Clients {reviews.length > 0 && <span style={{ fontWeight: 400, fontSize: '.85em', color: 'var(--color-text-secondary)' }}>({reviews.length} avis · {avgScore.toFixed(1)}/5)</span>}</h2>
-          <button type="button" className="business-lux-cta primary" style={{ fontSize: '.85rem', padding: '6px 16px' }} onClick={() => setShowReviewPopup(true)}>✍️ Laisser un avis</button>
+          <button type="button" className="business-lux-cta primary" style={{ fontSize: '.85rem', padding: '6px 16px' }} onClick={() => { if (!isLoggedIn) { navigate('/login'); return; } setShowReviewPopup(true); }}>✍️ Laisser un avis</button>
         </div>
         {reviews.length > 0 ? (
           <div className="business-lux-reviews-grid">
@@ -441,7 +513,7 @@ export function BusinessShopPage({ slug }: BusinessShopPageProps) {
         ) : (
           <div style={{ textAlign: 'center', padding: 'var(--space-lg) 0', color: 'var(--color-text-secondary)' }}>
             <p>Aucun avis pour le moment.</p>
-            <button type="button" className="business-lux-cta primary" style={{ marginTop: '12px' }} onClick={() => setShowReviewPopup(true)}>Soyez le premier à laisser un avis</button>
+            <button type="button" className="business-lux-cta primary" style={{ marginTop: '12px' }} onClick={() => { if (!isLoggedIn) { navigate('/login'); return; } setShowReviewPopup(true); }}>Soyez le premier à laisser un avis</button>
           </div>
         )}
       </section>
@@ -464,10 +536,6 @@ export function BusinessShopPage({ slug }: BusinessShopPageProps) {
             ) : (
               <div className="biz-popup-body">
                 <label className="biz-popup-field">
-                  <span>Votre nom</span>
-                  <input type="text" maxLength={60} placeholder="Ex: Arielle M." value={reviewDraft.author} onChange={e => setReviewDraft(d => ({ ...d, author: e.target.value }))} />
-                </label>
-                <label className="biz-popup-field">
                   <span>Note</span>
                   <div className="biz-popup-stars">
                     {[1, 2, 3, 4, 5].map(n => (
@@ -476,10 +544,10 @@ export function BusinessShopPage({ slug }: BusinessShopPageProps) {
                   </div>
                 </label>
                 <label className="biz-popup-field">
-                  <span>Votre avis</span>
+                  <span>Votre avis (optionnel)</span>
                   <textarea rows={3} maxLength={500} placeholder="Partagez votre expérience..." value={reviewDraft.text} onChange={e => setReviewDraft(d => ({ ...d, text: e.target.value }))} />
                 </label>
-                <button type="button" className="business-lux-cta primary" style={{ width: '100%', marginTop: '8px' }} disabled={!reviewDraft.author.trim() || !reviewDraft.text.trim()} onClick={handleSubmitReview}>Publier mon avis</button>
+                <button type="button" className="business-lux-cta primary" style={{ width: '100%', marginTop: '8px' }} disabled={reviewDraft.score < 1 || reviewBusy} onClick={handleSubmitReview}>{reviewBusy ? '⏳ Envoi…' : 'Publier mon avis'}</button>
               </div>
             )}
           </div>

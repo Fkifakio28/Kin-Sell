@@ -589,7 +589,7 @@ function SuggestionsSection({
     let cancelled = false;
     (async () => {
       try {
-        const results = await listingsApi.latest({ limit: 12 });
+        const results = await listingsApi.latest({ limit: 12, city: cityHint, country: countryHint });
         if (!cancelled) setItems(results);
       } catch {
         if (!cancelled) setItems([]);

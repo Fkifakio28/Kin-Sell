@@ -226,6 +226,7 @@ model User {
   soKinReactions           SoKinReaction[]
   soKinStories             SoKinStory[]              @relation("SoKinStories")
   soKinStoryViews          SoKinStoryView[]
+  businessFollows          BusinessFollow[]           @relation("BusinessFollows")
 
   @@index([role])
   @@index([accountStatus])
@@ -275,6 +276,7 @@ model BusinessAccount {
   paymentOrders  PaymentOrder[]
   sellerOrders   Order[]
   advertisements Advertisement[] @relation("BusinessAds")
+  followers      BusinessFollow[] @relation("BusinessFollowers")
 
   @@index([ownerUserId])
 }
@@ -1754,5 +1756,23 @@ model SoKinStoryView {
   user  User       @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([storyId, userId])
+  @@index([userId])
+}
+
+// ══════════════════════════════════════════════
+// BUSINESS FOLLOW — Suivi de boutiques
+// ══════════════════════════════════════════════
+
+model BusinessFollow {
+  id         String   @id @default(cuid())
+  userId     String
+  businessId String
+  createdAt  DateTime @default(now())
+
+  user     User            @relation("BusinessFollows", fields: [userId], references: [id], onDelete: Cascade)
+  business BusinessAccount @relation("BusinessFollowers", fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, businessId])
+  @@index([businessId])
   @@index([userId])
 }

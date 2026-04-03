@@ -208,3 +208,37 @@ export const getPublicBusinessPage = async (slug: string) => {
 
   return business;
 };
+
+/* ── Follow / Unfollow ────────────────────────────────────── */
+
+export const followBusiness = async (userId: string, businessId: string) => {
+  const business = await prisma.businessAccount.findUnique({ where: { id: businessId } });
+  if (!business) throw new HttpError(404, "Boutique introuvable");
+
+  await prisma.businessFollow.upsert({
+    where: { userId_businessId: { userId, businessId } },
+    create: { userId, businessId },
+    update: {},
+  });
+
+  const count = await prisma.businessFollow.count({ where: { businessId } });
+  return { following: true, followersCount: count };
+};
+
+export const unfollowBusiness = async (userId: string, businessId: string) => {
+  await prisma.businessFollow.deleteMany({ where: { userId, businessId } });
+  const count = await prisma.businessFollow.count({ where: { businessId } });
+  return { following: false, followersCount: count };
+};
+
+export const isFollowing = async (userId: string, businessId: string) => {
+  const row = await prisma.businessFollow.findUnique({
+    where: { userId_businessId: { userId, businessId } },
+  });
+  return { following: Boolean(row) };
+};
+
+export const getFollowersCount = async (businessId: string) => {
+  const count = await prisma.businessFollow.count({ where: { businessId } });
+  return { followersCount: count };
+};

@@ -67,4 +67,40 @@ router.get(
   })
 );
 
+// ── Follow / Unfollow ──
+router.post(
+  "/:id/follow",
+  requireAuth,
+  asyncHandler(async (request: AuthenticatedRequest, response) => {
+    const result = await businessService.followBusiness(request.auth!.userId, request.params.id);
+    response.json(result);
+  })
+);
+
+router.delete(
+  "/:id/follow",
+  requireAuth,
+  asyncHandler(async (request: AuthenticatedRequest, response) => {
+    const result = await businessService.unfollowBusiness(request.auth!.userId, request.params.id);
+    response.json(result);
+  })
+);
+
+router.get(
+  "/:id/follow",
+  requireAuth,
+  asyncHandler(async (request: AuthenticatedRequest, response) => {
+    const result = await businessService.isFollowing(request.auth!.userId, request.params.id);
+    response.json(result);
+  })
+);
+
+router.get(
+  "/:id/followers-count",
+  asyncHandler(async (request, response) => {
+    const result = await businessService.getFollowersCount(request.params.id);
+    response.json(result);
+  })
+);
+
 export default router;

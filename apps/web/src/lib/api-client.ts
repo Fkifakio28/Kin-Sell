@@ -403,6 +403,28 @@ export const businesses = {
   me: () => request<BusinessAccount>("/business-accounts/me"),
   updateMe: (body: Record<string, unknown>) =>
     request<BusinessAccount>("/business-accounts/me", { method: "PATCH", body }),
+  getBySlug: (slug: string) =>
+    request<BusinessAccount & { listings: unknown[]; _count: { sellerOrders: number } }>(
+      `/business-accounts/${encodeURIComponent(slug)}`
+    ),
+  follow: (businessId: string) =>
+    request<{ following: boolean; followersCount: number }>(
+      `/business-accounts/${encodeURIComponent(businessId)}/follow`,
+      { method: "POST" }
+    ),
+  unfollow: (businessId: string) =>
+    request<{ following: boolean; followersCount: number }>(
+      `/business-accounts/${encodeURIComponent(businessId)}/follow`,
+      { method: "DELETE" }
+    ),
+  isFollowing: (businessId: string) =>
+    request<{ following: boolean }>(
+      `/business-accounts/${encodeURIComponent(businessId)}/follow`
+    ),
+  followersCount: (businessId: string) =>
+    request<{ followersCount: number }>(
+      `/business-accounts/${encodeURIComponent(businessId)}/followers-count`
+    ),
 };
 
 // ── Listings ──
