@@ -315,7 +315,7 @@
 .ks-account-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(7, 5, 18, 0.45);
+  background: rgba(8, 23, 44, 0.55);
   z-index: 500;
   animation: ks-overlay-fade 0.15s ease-out;
 }
@@ -328,13 +328,18 @@
 .ks-account-popup {
   position: fixed;
   z-index: 501;
-  width: 280px;
+  width: 290px;
   max-width: calc(100vw - 16px);
   max-height: calc(100vh - 80px);
   overflow-y: auto;
-  padding: 1.2rem;
-  border-radius: var(--radius-lg);
-  animation: ks-acct-drop 0.2s ease-out;
+  padding: 0;
+  border-radius: 16px;
+  background: #0B1F3A;
+  border: 1px solid rgba(30, 136, 229, 0.18);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(30, 136, 229, 0.06);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  animation: ks-acct-drop 0.22s ease-out;
 }
 
 @keyframes ks-acct-drop {
@@ -343,57 +348,60 @@
 }
 
 .ks-account-popup-head {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-bottom: 0.8rem;
+  position: relative;
+  padding: 1rem 1.2rem 0.8rem;
+  border-bottom: 1px solid rgba(30, 136, 229, 0.1);
 }
 
 .ks-account-popup-head strong {
-  font-size: var(--font-size-lg);
-  flex: 0 0 auto;
+  display: block;
+  font-size: var(--font-size-base);
+  color: #fff;
+  margin-bottom: 3px;
 }
 
 .ks-account-popup-head p {
   font-size: var(--font-size-xs);
-  color: var(--color-text-secondary);
-  flex: 1;
-  min-width: 0;
+  color: rgba(255, 255, 255, 0.5);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  padding-right: 2rem;
 }
 
 .ks-account-popup-close {
-  background: none;
-  border: none;
-  color: var(--color-text-secondary);
-  font-size: 1.1rem;
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: rgba(30, 136, 229, 0.08);
+  border: 1px solid rgba(30, 136, 229, 0.12);
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.85rem;
   cursor: pointer;
   padding: 4px 8px;
-  border-radius: var(--radius-sm);
-  transition: color var(--transition-fast), background var(--transition-fast);
+  border-radius: 8px;
+  transition: all 0.2s;
 }
 
 .ks-account-popup-close:hover {
-  color: var(--color-text-primary);
-  background: var(--glass-bg-hover);
+  color: #fff;
+  background: rgba(30, 136, 229, 0.18);
+  border-color: rgba(30, 136, 229, 0.3);
 }
 
 .ks-account-popup-links {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  padding: 0.4rem 0;
 }
 
 .ks-account-popup-link {
   display: block;
-  padding: 0.55rem 0.6rem;
-  border-radius: var(--radius-sm);
+  padding: 0.6rem 1.2rem;
   border: none;
   border-left: 3px solid transparent;
   background: transparent;
-  color: var(--color-text-primary);
+  color: rgba(255, 255, 255, 0.85);
   text-decoration: none;
   font-size: var(--font-size-sm);
   font-family: inherit;
@@ -403,15 +411,15 @@
   opacity: 0;
   transform: translateX(10px);
   animation: ks-acct-link-in 0.25s ease-out forwards;
-  transition: background 0.18s, border-color 0.18s, transform 0.18s, box-shadow 0.18s, color 0.18s;
+  transition: all 0.2s ease;
 }
 
 /* Stagger chaque lien */
-.ks-account-popup-link:nth-child(1) { animation-delay: 0.04s; }
-.ks-account-popup-link:nth-child(2) { animation-delay: 0.08s; }
-.ks-account-popup-link:nth-child(3) { animation-delay: 0.12s; }
-.ks-account-popup-link:nth-child(4) { animation-delay: 0.16s; }
-.ks-account-popup-link:nth-child(5) { animation-delay: 0.20s; }
+.ks-account-popup-link:nth-child(1) { animation-delay: 0.03s; }
+.ks-account-popup-link:nth-child(2) { animation-delay: 0.06s; }
+.ks-account-popup-link:nth-child(3) { animation-delay: 0.09s; }
+.ks-account-popup-link:nth-child(4) { animation-delay: 0.12s; }
+.ks-account-popup-link:nth-child(5) { animation-delay: 0.15s; }
 
 @keyframes ks-acct-link-in {
   from { opacity: 0; transform: translateX(10px); }
@@ -419,40 +427,38 @@
 }
 
 .ks-account-popup-link:hover {
-  background: rgba(111, 88, 255, 0.10);
-  border-left-color: var(--color-primary);
+  background: rgba(30, 136, 229, 0.1);
+  border-left-color: #1E88E5;
+  color: #fff;
   transform: translateX(4px);
-  box-shadow: inset 0 0 12px rgba(111, 88, 255, 0.06);
 }
 
 .ks-account-popup-link:active {
   transform: scale(0.97) translateX(4px);
-  background: rgba(111, 88, 255, 0.16);
+  background: rgba(30, 136, 229, 0.16);
 }
 
 .ks-account-popup-logout {
   color: #ff6b6b;
-  margin-top: 4px;
-  border-top: 1px solid var(--glass-border);
-  padding-top: 0.65rem;
-  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  margin-top: 2px;
+  border-top: 1px solid rgba(30, 136, 229, 0.08);
+  padding-top: 0.7rem;
+  border-radius: 0;
 }
 
 .ks-account-popup-logout:hover {
   color: #ff4444;
-  background: rgba(255, 107, 107, 0.10);
+  background: rgba(255, 80, 80, 0.08);
   border-left-color: #ff6b6b;
-  box-shadow: inset 0 0 12px rgba(255, 107, 107, 0.06);
 }
 
 /* ── Locale switchers dans le popup compte ── */
 .ks-account-popup-locale {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
-  border-radius: var(--radius-sm);
-  border-bottom: 1px solid rgba(255,255,255,0.06);
+  gap: 10px;
+  padding: 0.5rem 1.2rem;
+  border-bottom: 1px solid rgba(30, 136, 229, 0.06);
 }
 
 .ks-account-popup-locale-label {
@@ -462,32 +468,36 @@
 
 .ks-account-popup-select {
   flex: 1;
-  background: rgba(111, 88, 255, 0.1);
-  border: 1px solid var(--glass-border);
+  background: #102544;
+  border: 1px solid rgba(30, 136, 229, 0.2);
   border-radius: 8px;
-  color: var(--color-text-primary);
+  color: rgba(255, 255, 255, 0.9);
   font-size: var(--font-size-sm);
   font-family: inherit;
-  padding: 5px 8px;
+  padding: 6px 28px 6px 10px;
   cursor: pointer;
   outline: none;
-  transition: border-color 0.2s, background 0.2s;
+  transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
   appearance: none;
   -webkit-appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239d92bb' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%231E88E5' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 8px center;
-  padding-right: 28px;
 }
 
 .ks-account-popup-select:hover {
-  border-color: var(--color-primary);
-  background-color: rgba(111, 88, 255, 0.18);
+  border-color: #1E88E5;
+  background: #13304F;
+}
+
+.ks-account-popup-select:focus {
+  border-color: #1E88E5;
+  box-shadow: 0 0 0 2px rgba(30, 136, 229, 0.18);
 }
 
 .ks-account-popup-select option {
-  background: var(--color-dark-blue-light);
-  color: var(--color-text-primary);
+  background: #08172C;
+  color: #fff;
 }
 
 /* ── Locale switchers dans le menu mobile ── */
@@ -531,8 +541,8 @@
 }
 
 @keyframes ks-account-pulse {
-  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(111, 88, 255, 0); }
-  50% { transform: scale(1.1); box-shadow: 0 0 8px 2px rgba(111, 88, 255, 0.3); }
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(30, 136, 229, 0); }
+  50% { transform: scale(1.1); box-shadow: 0 0 8px 2px rgba(30, 136, 229, 0.3); }
 }
 
 .ks-account-btn:hover {
@@ -542,7 +552,7 @@
 .ks-info-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(7, 5, 18, 0.6);
+  background: rgba(8, 23, 44, 0.65);
   backdrop-filter: blur(4px);
   z-index: 500;
   display: flex;
@@ -556,7 +566,12 @@
   max-height: 80vh;
   overflow-y: auto;
   padding: 1.2rem;
-  border-radius: var(--radius-lg);
+  border-radius: 16px;
+  background: #0B1F3A;
+  border: 1px solid rgba(30, 136, 229, 0.18);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(30, 136, 229, 0.06);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   animation: ks-popup-in 0.2s ease-out;
 }
 @keyframes ks-popup-in {
@@ -569,19 +584,22 @@
   align-items: center;
   gap: 0.5rem;
   margin-bottom: 0.8rem;
+  padding-bottom: 0.7rem;
+  border-bottom: 1px solid rgba(30, 136, 229, 0.1);
 }
-.ks-info-popup-head strong { font-size: var(--font-size-lg); flex: 1; }
-.ks-info-popup-head p { font-size: var(--font-size-xs); color: var(--color-text-secondary); flex: 1; }
+.ks-info-popup-head strong { font-size: var(--font-size-lg); flex: 1; color: #fff; }
+.ks-info-popup-head p { font-size: var(--font-size-xs); color: rgba(255, 255, 255, 0.5); flex: 1; }
 .ks-info-popup-close {
-  background: none;
-  border: none;
-  color: var(--color-text-secondary);
-  font-size: 1.1rem;
+  background: rgba(30, 136, 229, 0.08);
+  border: 1px solid rgba(30, 136, 229, 0.12);
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.85rem;
   cursor: pointer;
   padding: 4px 8px;
-  border-radius: var(--radius-sm);
+  border-radius: 8px;
+  transition: all 0.2s;
 }
-.ks-info-popup-close:hover { color: var(--color-text-primary); background: var(--glass-bg-hover); }
+.ks-info-popup-close:hover { color: #fff; background: rgba(30, 136, 229, 0.18); border-color: rgba(30, 136, 229, 0.3); }
 
 .ks-info-popup-links {
   display: flex;
@@ -591,14 +609,15 @@
 .ks-info-popup-link {
   display: block;
   padding: 0.5rem 0.6rem;
-  border-radius: var(--radius-sm);
-  color: var(--color-text-primary);
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.85);
   text-decoration: none;
   font-size: var(--font-size-sm);
-  transition: background var(--transition-fast);
+  transition: all 0.2s;
 }
 .ks-info-popup-link:hover {
-  background: var(--glass-bg-hover);
+  background: rgba(30, 136, 229, 0.1);
+  color: #fff;
   text-decoration: none;
 }
 
@@ -613,7 +632,7 @@
   border: none;
   margin: 0;
   padding: 0;
-  background: rgba(7, 5, 18, 0.4);
+  background: rgba(8, 23, 44, 0.45);
   z-index: 90;
   cursor: default;
 }
@@ -625,14 +644,15 @@
   width: 340px;
   max-height: 400px;
   overflow-y: auto;
-  background: var(--glass-bg);
-  backdrop-filter: blur(var(--glass-blur));
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-lg);
+  background: #0B1F3A;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(30, 136, 229, 0.18);
+  border-radius: 16px;
   z-index: 400;
   padding: 0;
   animation: ks-popup-in 0.18s ease-out;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(30, 136, 229, 0.06);
 }
 
 .ks-notif-dropdown-head {
@@ -640,11 +660,11 @@
   align-items: center;
   justify-content: space-between;
   padding: 0.75rem 1rem;
-  border-bottom: 1px solid var(--glass-border);
+  border-bottom: 1px solid rgba(30, 136, 229, 0.1);
 }
-.ks-notif-dropdown-head strong { font-size: var(--font-size-sm); }
+.ks-notif-dropdown-head strong { font-size: var(--font-size-sm); color: #fff; }
 .ks-notif-dropdown-count {
-  background: var(--color-primary);
+  background: #1E88E5;
   color: #fff;
   font-size: 10px;
   font-weight: 700;
@@ -663,30 +683,30 @@
   gap: 0.6rem;
   padding: 0.65rem 1rem;
   text-decoration: none;
-  color: var(--color-text-primary);
-  transition: background var(--transition-fast);
-  border-bottom: 1px solid rgba(255,255,255,0.04);
+  color: rgba(255, 255, 255, 0.85);
+  transition: background 0.2s;
+  border-bottom: 1px solid rgba(30, 136, 229, 0.06);
 }
 .ks-notif-dropdown-item:hover {
-  background: var(--glass-bg-hover);
+  background: rgba(30, 136, 229, 0.1);
   text-decoration: none;
 }
 
 .ks-notif-dropdown-icon { font-size: 1.2rem; flex-shrink: 0; margin-top: 2px; }
 .ks-notif-dropdown-text { flex: 1; min-width: 0; }
-.ks-notif-dropdown-label { display: block; font-size: var(--font-size-sm); font-weight: 600; }
-.ks-notif-dropdown-detail { display: block; font-size: var(--font-size-xs); color: var(--color-text-secondary); margin-top: 2px; }
-.ks-notif-dropdown-time { font-size: var(--font-size-xs); color: var(--color-text-secondary); flex-shrink: 0; white-space: nowrap; }
+.ks-notif-dropdown-label { display: block; font-size: var(--font-size-sm); font-weight: 600; color: #fff; }
+.ks-notif-dropdown-detail { display: block; font-size: var(--font-size-xs); color: rgba(255, 255, 255, 0.5); margin-top: 2px; }
+.ks-notif-dropdown-time { font-size: var(--font-size-xs); color: rgba(255, 255, 255, 0.4); flex-shrink: 0; white-space: nowrap; }
 
 .ks-notif-dropdown-empty {
   padding: 1.5rem 1rem;
   text-align: center;
-  color: var(--color-text-secondary);
+  color: rgba(255, 255, 255, 0.5);
   font-size: var(--font-size-sm);
 }
 
 .ks-notif-dropdown-footer {
-  border-top: 1px solid var(--glass-border);
+  border-top: 1px solid rgba(30, 136, 229, 0.1);
   padding: 0.55rem 1rem;
   text-align: center;
 }
@@ -694,12 +714,12 @@
   display: inline-block;
   font-size: var(--font-size-xs);
   font-weight: 600;
-  color: var(--color-primary);
+  color: #1E88E5;
   text-decoration: none;
-  transition: color var(--transition-fast);
+  transition: color 0.2s;
 }
 .ks-notif-dropdown-footer-link:hover {
-  color: var(--color-primary-hover);
+  color: #42A5F5;
   text-decoration: underline;
 }
 
@@ -839,9 +859,34 @@
 
 /* Light theme header */
 :root[data-theme="light"] .ks-header,
-:root[data-theme="light"] .ks-mobile-nav,
-:root[data-theme="light"] .ks-account-popup {
+:root[data-theme="light"] .ks-mobile-nav {
   background: rgba(237, 244, 255, 0.92);
+}
+:root[data-theme="light"] .ks-account-popup,
+:root[data-theme="light"] .ks-notif-dropdown,
+:root[data-theme="light"] .ks-info-popup {
+  background: #f0f4fa;
+  border-color: rgba(30, 136, 229, 0.15);
+}
+:root[data-theme="light"] .ks-account-popup-head strong,
+:root[data-theme="light"] .ks-notif-dropdown-head strong,
+:root[data-theme="light"] .ks-info-popup-head strong,
+:root[data-theme="light"] .ks-notif-dropdown-label { color: #0B1F3A; }
+:root[data-theme="light"] .ks-account-popup-head p,
+:root[data-theme="light"] .ks-notif-dropdown-detail,
+:root[data-theme="light"] .ks-notif-dropdown-time,
+:root[data-theme="light"] .ks-info-popup-head p { color: #4a5568; }
+:root[data-theme="light"] .ks-account-popup-link,
+:root[data-theme="light"] .ks-info-popup-link,
+:root[data-theme="light"] .ks-notif-dropdown-item { color: #1a2744; }
+:root[data-theme="light"] .ks-account-popup-select {
+  background: #e3ebf6;
+  border-color: rgba(30, 136, 229, 0.2);
+  color: #0B1F3A;
+}
+:root[data-theme="light"] .ks-account-popup-select option {
+  background: #f0f4fa;
+  color: #0B1F3A;
 }
 
 

@@ -288,7 +288,7 @@ export const Header = React.memo(function Header() {
         <>
           <div className="ks-account-overlay" onClick={() => setAccountOpen(false)} />
           <div
-            className="ks-account-popup glass-container"
+            className="ks-account-popup"
             style={(() => {
               const rect = accountRef.current?.getBoundingClientRect();
               return rect
@@ -359,7 +359,7 @@ export const Header = React.memo(function Header() {
 
       {infoOpen && createPortal(
         <div className="ks-info-overlay" onClick={() => setInfoOpen(false)}>
-          <div className="ks-info-popup glass-container" onClick={(e) => e.stopPropagation()}>
+          <div className="ks-info-popup" onClick={(e) => e.stopPropagation()}>
             <div className="ks-info-popup-head">
               <strong>Kin-Sell</strong>
               <p>{t('nav.quickNav')}</p>
