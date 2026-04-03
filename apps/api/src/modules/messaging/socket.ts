@@ -28,6 +28,8 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
     cors: { origin: corsOrigin, credentials: true },
     path: "/ws",
     transports: ["websocket", "polling"],
+    pingInterval: 25000,   // heartbeat toutes les 25s (détecte déconnexion mobile)
+    pingTimeout: 20000,    // 20s sans pong = déconnecté
   });
   ioInstance = io;
 

@@ -131,6 +131,35 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
     };
   }, [isLoggedIn]);
 
+  /* ── Visibility-based socket pause (économie batterie mobile) ── */
+  useEffect(() => {
+    const handleVisibility = () => {
+      const s = socketRef.current;
+      if (!s) return;
+      if (document.visibilityState === "hidden") {
+        // Déconnecter après 60s d'inactivité (pas immédiat pour les tabs rapides)
+        (s as any).__visPauseTimer = setTimeout(() => {
+          if (document.visibilityState === "hidden") s.disconnect();
+        }, 60_000);
+      } else {
+        clearTimeout((s as any).__visPauseTimer);
+        if (s.disconnected) s.connect();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, [isLoggedIn]);
+
+  /* ── Reconnexion réseau (offline → online) ── */
+  useEffect(() => {
+    const handleOnline = () => {
+      const s = socketRef.current;
+      if (s && s.disconnected) s.connect();
+    };
+    window.addEventListener("online", handleOnline);
+    return () => window.removeEventListener("online", handleOnline);
+  }, [isLoggedIn]);
+
   useEffect(() => {
     messagingActiveRef.current = messagingActive;
   }, [messagingActive]);

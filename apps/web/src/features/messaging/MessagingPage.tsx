@@ -669,6 +669,22 @@ export function MessagingPage() {
       if (state === "failed") attemptRestart();
     };
 
+    // ── Préférence codecs VP9 > H264 (meilleure compression) ──
+    for (const tr of pc.getTransceivers()) {
+      try {
+        if (tr.receiver?.track?.kind === "video" || tr.sender?.track?.kind === "video") {
+          const codecs = RTCRtpReceiver.getCapabilities?.("video")?.codecs;
+          if (codecs) {
+            const sorted = [...codecs].sort((a, b) => {
+              const prio = (c: { mimeType: string }) => /vp9/i.test(c.mimeType) ? 0 : /h264/i.test(c.mimeType) ? 1 : 2;
+              return prio(a) - prio(b);
+            });
+            tr.setCodecPreferences(sorted);
+          }
+        }
+      } catch { /* codec prefs non supportées */ }
+    }
+
     peerConnectionRef.current = pc;
     return pc;
   }, [emit, isSpeakerOn]);
@@ -725,9 +741,16 @@ export function MessagingPage() {
   }, []);
 
   const getCallMedia = useCallback(async (callType: "audio" | "video", facingMode: "user" | "environment" = "user") => {
+    // Adapter les contraintes caméra selon le type d'appareil
+    const isMob = /Mobi|Android|iPhone/i.test(navigator.userAgent);
+    const videoConstraints = callType === "video"
+      ? isMob
+        ? { width: { ideal: 720, max: 1280 }, height: { ideal: 480, max: 720 }, frameRate: { ideal: 24, max: 30 }, facingMode }
+        : { width: { ideal: 1280, max: 1920 }, height: { ideal: 720, max: 1080 }, frameRate: { ideal: 30, max: 30 }, facingMode }
+      : false;
     return navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1, sampleRate: 48000 },
-      video: callType === "video" ? { width: { ideal: 1280, max: 1920 }, height: { ideal: 720, max: 1080 }, frameRate: { ideal: 30, max: 30 }, facingMode } : false,
+      video: videoConstraints,
     });
   }, []);
 
@@ -818,7 +841,10 @@ export function MessagingPage() {
       const pc = createPeerConnection(remoteUserId);
       stream.getTracks().forEach((track) => pc.addTrack(track, stream));
       await optimizePeerSenders(pc);
-      await applyVideoProfile("hd");
+      // Sélection initiale basée sur le réseau
+      const net = (navigator as any).connection?.effectiveType as string | undefined;
+      const initProf = net === "2g" || net === "slow-2g" ? "data-saver" : net === "3g" ? "balanced" : "hd";
+      await applyVideoProfile(initProf);
       startQualityMonitor(pc);
       setCallState({ type: callType, conversationId: activeConv.id, remoteUserId, direction: "outgoing", status: "ringing" });
       emit("call:initiate", { conversationId: activeConv.id, targetUserId: remoteUserId, callType });
@@ -836,7 +862,10 @@ export function MessagingPage() {
       const pc = createPeerConnection(callState.remoteUserId);
       stream.getTracks().forEach((track) => pc.addTrack(track, stream));
       await optimizePeerSenders(pc);
-      await applyVideoProfile("hd");
+      // Sélection initiale basée sur le réseau
+      const net = (navigator as any).connection?.effectiveType as string | undefined;
+      const initProf = net === "2g" || net === "slow-2g" ? "data-saver" : net === "3g" ? "balanced" : "hd";
+      await applyVideoProfile(initProf);
       startQualityMonitor(pc);
       emit("call:accept", { conversationId: callState.conversationId, callerId: callState.remoteUserId });
       setCallState((prev) => prev ? { ...prev, type: acceptedType, status: "connected" } : null);

@@ -140,6 +140,7 @@ function LiveCreator({
         autoPlay
         muted
         playsInline
+        disablePictureInPicture
       />
 
       {!ready && !error && (
@@ -370,6 +371,8 @@ function LiveViewer({
           liveMaxLatencyDurationCount: 5,
           liveDurationInfinity: true,
           liveBackBufferLength: 0, // pas de buffer arrière (économie mémoire)
+          // Rattrapage live : accélérer légèrement si en retard
+          maxLiveSyncPlaybackRate: 1.2,
           // Timeouts adaptés réseau mobile
           fragLoadingTimeOut: 8000,   // 8s au lieu de 20s par défaut
           manifestLoadingTimeOut: 8000,
@@ -381,9 +384,12 @@ function LiveViewer({
           manifestLoadingRetryDelay: 500,
           levelLoadingRetryDelay: 500,
           fragLoadingRetryDelay: 500,
-          // Startup rapide
+          // Startup rapide + ABR optimisé
           startLevel: -1, // auto-select best level
           testBandwidth: true,
+          capLevelToPlayerSize: true,   // ne pas décoder plus grand que le viewport
+          abrBandWidthFactor: 0.9,     // down-switch plus prudent
+          abrBandWidthUpFactor: 0.7,   // up-switch plus réactif
         });
         hlsRef.current = hls;
         hls.loadSource(playbackUrl); hls.attachMedia(vid);
@@ -465,10 +471,10 @@ function LiveViewer({
       {/* Video surface */}
       <div className="lv-viewer-surface" onClick={handleTap}>
         {canPlay && (
-          <video ref={videoRef} className="lv-viewer-video" playsInline autoPlay muted={!sound} poster={liveData.thumbnailUrl ?? undefined} />
+          <video ref={videoRef} className="lv-viewer-video" playsInline autoPlay muted={!sound} poster={liveData.thumbnailUrl ?? undefined} disablePictureInPicture crossOrigin="anonymous" />
         )}
         {!canPlay && isHost && status !== 'ENDED' && (
-          <video ref={hostVideoRef} className="lv-viewer-video" autoPlay muted playsInline />
+          <video ref={hostVideoRef} className="lv-viewer-video" autoPlay muted playsInline disablePictureInPicture />
         )}
         {!canPlay && !isHost && liveData.thumbnailUrl && (
           <img src={liveData.thumbnailUrl} alt={liveData.title} className="lv-viewer-poster" />
