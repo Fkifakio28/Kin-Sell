@@ -205,9 +205,9 @@ export function DashboardMessaging() {
       return;
     }
     const direction = callState?.direction ?? "outgoing";
-    playCallSound(direction);
+    void playCallSound(direction);
 
-    const onNetworkChange = () => refreshCallSoundIfNeeded(direction);
+    const onNetworkChange = () => void refreshCallSoundIfNeeded(direction);
     window.addEventListener("online", onNetworkChange);
     window.addEventListener("offline", onNetworkChange);
 

@@ -354,10 +354,10 @@ export function MessagingPage() {
       return;
     }
     const direction = callState?.direction ?? "outgoing";
-    playCallSound(direction);
+    void playCallSound(direction);
 
     // Écouter changements réseau en cours de sonnerie
-    const onNetworkChange = () => refreshCallSoundIfNeeded(direction);
+    const onNetworkChange = () => void refreshCallSoundIfNeeded(direction);
     window.addEventListener("online", onNetworkChange);
     window.addEventListener("offline", onNetworkChange);
 

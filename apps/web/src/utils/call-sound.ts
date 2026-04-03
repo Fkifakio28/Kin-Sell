@@ -1,65 +1,109 @@
 /**
- * Call Sound Manager — Kin-Sell
+ * Call Sound Manager — Kin-Sell V2
  *
- * Gère la sélection et lecture de sonnerie selon la connectivité réseau.
+ * Gère la sélection et lecture de sonnerie selon la connectivité réseau RÉELLE.
  *
  * Règle métier :
- * - Online  (Wi-Fi / données mobiles avec accès réel) → kin_sell_ringtone_pro.wav
- * - Offline (aucun accès réseau réel)                 → kin_sell_ringtone.wav
- * - Erreur de détection                               → fallback kin_sell_ringtone.wav
+ * - Online  (accès internet vérifié par fetch réel) → kin_sell_ringtone_pro.wav
+ * - Offline (aucun accès réseau)                    → kin_sell_ringtone.wav
+ * - Unknown (état incertain / timeout)              → kin_sell_ringtone.wav (fallback sécurisé)
  *
- * Fonctionne pour appels entrants ET sortants.
+ * La détection réseau utilise 3 niveaux :
+ * 1. navigator.onLine (pré-filtre rapide, élimine les cas offline évidents)
+ * 2. Network Information API (type, downlink — si disponible)
+ * 3. Fetch HEAD réel vers l'API /health (seule preuve d'accès internet effectif)
+ *
+ * kin_sell_ringtone_pro ne sera JAMAIS joué sans confirmation d'accès internet réel.
  */
+
+export type NetworkStatus = "online" | "offline" | "unknown";
 
 const SOUND_OFFLINE = "/assets/sounds/kin_sell_ringtone.wav";
 const SOUND_ONLINE = "/assets/sounds/kin_sell_ringtone_pro.wav";
 
+const API_BASE = (import.meta as any).env?.VITE_API_URL ?? "/api";
+const CONNECTIVITY_TIMEOUT_MS = 3000;
+
 const LOG_PREFIX = "[CallSound]";
 
 /* ══════════════════════════════════════════════════════════
-   1. Détection de connectivité réseau
+   1. Détection de connectivité réseau RÉELLE
    ══════════════════════════════════════════════════════════ */
 
 /**
- * Détermine si l'appareil a un accès réseau réel.
+ * Vérifie l'état réel de la connectivité réseau en 3 niveaux.
  *
- * Combine `navigator.onLine` + Network Information API (si dispo)
- * pour un résultat plus fiable qu'un simple check booléen.
+ * Niveau 1 — navigator.onLine :
+ *   Si false → OFFLINE immédiat (fiable pour détecter l'absence totale de réseau).
+ *
+ * Niveau 2 — Network Information API :
+ *   Si connection.type === "none" ou downlink === 0 → OFFLINE.
+ *
+ * Niveau 3 — Fetch HEAD vers API /health :
+ *   Seule vérification qui prouve un accès internet réel.
+ *   Timeout de 3s. Succès (2xx) → ONLINE. Échec/timeout → UNKNOWN.
+ *
+ * Retourne : "online" | "offline" | "unknown"
+ * En cas d'erreur inattendue → "unknown"
  */
-export function checkNetworkStatus(): boolean {
+export async function checkRealNetworkStatus(): Promise<NetworkStatus> {
   try {
-    // Vérification de base
+    // ── Niveau 1 : navigator.onLine ──
     if (!navigator.onLine) {
-      console.debug(LOG_PREFIX, "navigator.onLine = false → OFFLINE");
-      return false;
+      console.debug(LOG_PREFIX, "Niveau 1 — navigator.onLine = false → OFFLINE");
+      return "offline";
     }
 
-    // Network Information API (Chrome, Edge, Android WebView)
+    // ── Niveau 2 : Network Information API (Chrome, Edge, Android WebView) ──
     const conn = (navigator as any).connection;
     if (conn) {
-      // "none" signifie aucune connexion active
       if (conn.type === "none") {
-        console.debug(LOG_PREFIX, "connection.type = none → OFFLINE");
-        return false;
+        console.debug(LOG_PREFIX, "Niveau 2 — connection.type = none → OFFLINE");
+        return "offline";
       }
-      // downlink = 0 → pas de bande passante réelle
       if (typeof conn.downlink === "number" && conn.downlink === 0) {
-        console.debug(LOG_PREFIX, "connection.downlink = 0 → OFFLINE");
-        return false;
+        console.debug(LOG_PREFIX, "Niveau 2 — connection.downlink = 0 → OFFLINE");
+        return "offline";
       }
-      // saveData mode → connexion très limitée, considérer comme "dégradée" mais online
       console.debug(
         LOG_PREFIX,
-        `connection: type=${conn.effectiveType}, downlink=${conn.downlink}Mbps, rtt=${conn.rtt}ms → ONLINE`,
+        `Niveau 2 — Network Info: effectiveType=${conn.effectiveType}, downlink=${conn.downlink}Mbps, rtt=${conn.rtt}ms`,
       );
-    } else {
-      console.debug(LOG_PREFIX, "navigator.onLine = true (pas de Network Info API) → ONLINE");
     }
 
-    return true;
+    // ── Niveau 3 : Fetch réel vers l'API ──
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), CONNECTIVITY_TIMEOUT_MS);
+
+    try {
+      const response = await fetch(`${API_BASE}/health`, {
+        method: "HEAD",
+        signal: controller.signal,
+        cache: "no-store",
+      });
+      clearTimeout(timeout);
+
+      if (response.ok) {
+        console.debug(LOG_PREFIX, "Niveau 3 — Fetch /health OK → ONLINE");
+        return "online";
+      }
+      console.debug(LOG_PREFIX, `Niveau 3 — Fetch /health status ${response.status} → UNKNOWN`);
+      return "unknown";
+    } catch (fetchErr) {
+      clearTimeout(timeout);
+      const isAbort = fetchErr instanceof DOMException && fetchErr.name === "AbortError";
+      console.debug(
+        LOG_PREFIX,
+        isAbort
+          ? `Niveau 3 — Fetch /health timeout (${CONNECTIVITY_TIMEOUT_MS}ms) → UNKNOWN`
+          : "Niveau 3 — Fetch /health échec réseau → UNKNOWN",
+        fetchErr,
+      );
+      return "unknown";
+    }
   } catch (err) {
-    console.warn(LOG_PREFIX, "Erreur détection réseau → fallback OFFLINE", err);
-    return false;
+    console.warn(LOG_PREFIX, "Erreur inattendue détection réseau → UNKNOWN", err);
+    return "unknown";
   }
 }
 
@@ -68,14 +112,15 @@ export function checkNetworkStatus(): boolean {
    ══════════════════════════════════════════════════════════ */
 
 /**
- * Retourne le chemin du fichier audio à jouer selon l'état réseau actuel.
+ * Retourne le chemin du fichier audio selon le statut réseau.
+ *
+ * - "online"  → kin_sell_ringtone_pro (expérience connectée / premium)
+ * - "offline" → kin_sell_ringtone     (expérience hors ligne / standard)
+ * - "unknown" → kin_sell_ringtone     (fallback sécurisé — jamais le son premium en cas de doute)
  */
-export function getCallSoundByNetworkStatus(): string {
-  const isOnline = checkNetworkStatus();
-  const sound = isOnline ? SOUND_ONLINE : SOUND_OFFLINE;
-
-  console.debug(LOG_PREFIX, `Réseau: ${isOnline ? "ONLINE" : "OFFLINE"} → son: ${sound}`);
-
+export function getCallRingtoneByNetworkStatus(status: NetworkStatus): string {
+  const sound = status === "online" ? SOUND_ONLINE : SOUND_OFFLINE;
+  console.debug(LOG_PREFIX, `Statut réseau: ${status} → son: ${sound}`);
   return sound;
 }
 
@@ -89,16 +134,25 @@ let _currentSrc: string | null = null;
 /**
  * Lance la sonnerie d'appel (entrant ou sortant).
  *
- * - Détermine le son selon la connectivité réseau au moment de l'appel.
- * - Loop activé pour que la sonnerie continue jusqu'à stopCallSound().
- * - Si la connectivité change, appeler cette fonction à nouveau pour switcher.
+ * 1. Vérifie la connectivité réseau réelle (async, max 3s)
+ * 2. Sélectionne le fichier audio approprié
+ * 3. Lance la lecture en boucle (loop, volume 0.85)
  *
- * @param direction  "incoming" | "outgoing" — pour le log uniquement
+ * Protections :
+ * - Si le même son est déjà en lecture → skip (pas de double lecture)
+ * - Si un autre son tourne → arrêt propre avant switch
+ * - Si la lecture est bloquée (autoplay policy) → log warning
+ *
+ * @param direction "incoming" | "outgoing" — pour les logs de debug
  */
-export function playCallSound(direction: "incoming" | "outgoing"): void {
-  const soundSrc = getCallSoundByNetworkStatus();
+export async function playCallSound(direction: "incoming" | "outgoing"): Promise<void> {
+  const status = await checkRealNetworkStatus();
+  const soundSrc = getCallRingtoneByNetworkStatus(status);
 
-  console.debug(LOG_PREFIX, `▶ Lecture sonnerie — direction: ${direction}, fichier: ${soundSrc}`);
+  console.debug(
+    LOG_PREFIX,
+    `▶ Lecture sonnerie — direction: ${direction}, réseau: ${status}, fichier: ${soundSrc}`,
+  );
 
   // Si le même son est déjà en cours, ne pas relancer
   if (_currentAudio && _currentSrc === soundSrc && !_currentAudio.paused) {
@@ -106,7 +160,7 @@ export function playCallSound(direction: "incoming" | "outgoing"): void {
     return;
   }
 
-  // Arrêter le son précédent s'il y en a un (changement de fichier)
+  // Arrêter le son précédent s'il y en a un
   stopCallSound();
 
   try {
@@ -114,7 +168,6 @@ export function playCallSound(direction: "incoming" | "outgoing"): void {
     audio.loop = true;
     audio.volume = 0.85;
 
-    // Tentative de lecture (peut échouer si pas d'interaction utilisateur)
     const playPromise = audio.play();
     if (playPromise) {
       playPromise.catch((err) => {
@@ -130,7 +183,7 @@ export function playCallSound(direction: "incoming" | "outgoing"): void {
 }
 
 /**
- * Arrête la sonnerie en cours.
+ * Arrête la sonnerie en cours et libère les ressources audio.
  */
 export function stopCallSound(): void {
   if (_currentAudio) {
@@ -146,15 +199,17 @@ export function stopCallSound(): void {
 }
 
 /**
- * Met à jour le son en cours si la connectivité a changé.
- * Appeler lors d'un event "online"/"offline" pendant un appel ringing.
+ * Revérifie la connectivité et change le son si nécessaire.
+ * À appeler sur événements "online"/"offline" pendant le ringing.
  */
-export function refreshCallSoundIfNeeded(direction: "incoming" | "outgoing"): void {
-  if (!_currentAudio) return; // Pas de sonnerie en cours
+export async function refreshCallSoundIfNeeded(direction: "incoming" | "outgoing"): Promise<void> {
+  if (!_currentAudio) return;
 
-  const newSrc = getCallSoundByNetworkStatus();
-  if (newSrc === _currentSrc) return; // Même son, rien à changer
+  const status = await checkRealNetworkStatus();
+  const newSrc = getCallRingtoneByNetworkStatus(status);
 
-  console.debug(LOG_PREFIX, `🔄 Changement réseau détecté — switch vers: ${newSrc}`);
-  playCallSound(direction);
+  if (newSrc === _currentSrc) return;
+
+  console.debug(LOG_PREFIX, `🔄 Changement réseau détecté — switch de ${_currentSrc} vers: ${newSrc}`);
+  await playCallSound(direction);
 }

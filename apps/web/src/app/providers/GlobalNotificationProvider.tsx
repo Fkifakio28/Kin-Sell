@@ -224,8 +224,8 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
 
     if ("vibrate" in navigator) navigator.vibrate([400, 200, 400, 200, 400]);
 
-    // Jouer la sonnerie d'appel entrant (WAV selon connectivité)
-    playCallSound("incoming");
+    // Jouer la sonnerie d'appel entrant (WAV selon connectivité réelle)
+    void playCallSound("incoming");
 
     incomingCallTimerRef.current = setTimeout(() => {
       setIncomingCall(null);
