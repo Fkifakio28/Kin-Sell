@@ -71,7 +71,8 @@ export const createSoKinPost = async (
   mediaUrls: string[] = [],
   location?: string,
   tags?: string[],
-  hashtags?: string[]
+  hashtags?: string[],
+  scheduledAt?: Date
 ) => {
   const normalizedMediaUrls = await normalizeImageInputs(mediaUrls, { folder: "sokin" });
 
@@ -83,6 +84,7 @@ export const createSoKinPost = async (
       location: location || null,
       tags: tags || [],
       hashtags: hashtags || [],
+      scheduledAt: scheduledAt || null,
     },
   });
 };
@@ -170,6 +172,7 @@ export const getPublicFeed = async (limit = 20, viewerUserId?: string, city?: st
   const posts = await prisma.soKinPost.findMany({
     where: {
       status: "ACTIVE",
+      OR: [{ scheduledAt: null }, { scheduledAt: { lte: new Date() } }],
       ...(andClauses.length > 0 ? { AND: andClauses } : {}),
       author: {
         role: { notIn: ["ADMIN", "SUPER_ADMIN"] },

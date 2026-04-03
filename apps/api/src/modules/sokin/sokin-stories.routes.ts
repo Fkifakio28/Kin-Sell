@@ -10,6 +10,7 @@ const createStorySchema = z.object({
   mediaType: z.enum(["IMAGE", "VIDEO", "TEXT"]).optional(),
   caption: z.string().max(180).optional(),
   bgColor: z.string().max(30).optional(),
+  scheduledAt: z.string().datetime().optional(),
 });
 
 const router = Router();

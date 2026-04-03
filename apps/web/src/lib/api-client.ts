@@ -1599,7 +1599,7 @@ export type SoKinStory = {
 export const sokin = {
   myPosts: () =>
     request<{ posts: SoKinApiPost[] }>('/sokin/posts/mine'),
-  createPost: (body: { text: string; mediaUrls?: string[]; location?: string; tags?: string[]; hashtags?: string[] }) =>
+  createPost: (body: { text: string; mediaUrls?: string[]; location?: string; tags?: string[]; hashtags?: string[]; scheduledAt?: string }) =>
     request<SoKinApiPost>('/sokin/posts', { method: 'POST', body }),
   archivePost: (id: string) =>
     request<SoKinApiPost>(`/sokin/posts/${encodeURIComponent(id)}/archive`, { method: 'PATCH' }),
@@ -1627,7 +1627,7 @@ export const sokin = {
     request<{ ok: boolean; shares: number }>(`/sokin/posts/${encodeURIComponent(id)}/share`, { method: 'POST' }),
   stories: () =>
     request<{ stories: SoKinStory[] }>('/sokin/stories'),
-  createStory: (body: { mediaUrl?: string; mediaType?: 'IMAGE' | 'VIDEO' | 'TEXT'; caption?: string; bgColor?: string }) =>
+  createStory: (body: { mediaUrl?: string; mediaType?: 'IMAGE' | 'VIDEO' | 'TEXT'; caption?: string; bgColor?: string; scheduledAt?: string }) =>
     request<SoKinStory>('/sokin/stories', { method: 'POST', body }),
   viewStory: (id: string) =>
     request<{ ok: boolean }>(`/sokin/stories/${encodeURIComponent(id)}/view`, { method: 'POST' }),

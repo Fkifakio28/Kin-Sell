@@ -27,6 +27,7 @@ const createPostSchema = z.object({
   location: z.string().max(100).optional(),
   tags: z.array(z.string()).max(10).optional(),
   hashtags: z.array(z.string()).max(20).optional(),
+  scheduledAt: z.string().datetime().optional(),
 });
 
 const router = Router();
@@ -106,7 +107,7 @@ router.post(
   "/posts",
   requireAuth,
   asyncHandler(async (req: AuthenticatedRequest, res) => {
-    const { text, mediaUrls = [], location, tags, hashtags } = createPostSchema.parse(req.body);
+    const { text, mediaUrls = [], location, tags, hashtags, scheduledAt } = createPostSchema.parse(req.body);
 
     // ── ContentGuard: modération IA avant publication ──
     const { analyzePost } = await import("./content-guard.service.js");
@@ -120,7 +121,7 @@ router.post(
       return;
     }
 
-    const post = await createSoKinPost(req.auth!.userId, text, mediaUrls, location, tags, hashtags);
+    const post = await createSoKinPost(req.auth!.userId, text, mediaUrls, location, tags, hashtags, scheduledAt ? new Date(scheduledAt) : undefined);
     emitToAll("sokin:post-created", {
       type: "SOKIN_POST_CREATED",
       postId: post.id,

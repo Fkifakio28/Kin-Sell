@@ -1,1802 +1,1030 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
-import { useLocation, useNavigate } from 'react-router-dom';
-import { formatPriceLabelToCdf } from '../../utils/currency';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../app/providers/AuthProvider';
 import { useLocaleCurrency } from '../../app/providers/LocaleCurrencyProvider';
 import { useMarketPreference } from '../../app/providers/MarketPreferenceProvider';
 import { getDashboardPath } from '../../utils/role-routing';
 import { prepareMediaUrl, prepareMediaUrls } from '../../utils/media-upload';
-import { useScrollRestore } from '../../utils/useScrollRestore';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { useSocket } from '../../hooks/useSocket';
-import { listings as listingsApi, orders as ordersApi, sokin as sokinApi, type MyListing, type SoKinApiFeedPost, type SoKinStory } from '../../lib/api-client';
-import type { SoKinReactionType as ApiReactionType } from '../../lib/api-client';
-import { useHoverPopup, ProfileHoverPopup, ArticleHoverPopup, type ProfileHoverData, type ArticleHoverData } from '../../components/HoverPopup';
-import './sokin.css';
+import { useScrollDirection } from '../../hooks/useScrollDirection';
+import {
+  sokin as sokinApi,
+  type SoKinApiFeedPost,
+  type SoKinStory,
+  type SoKinReactionType,
+} from '../../lib/api-client';
 import { AdBanner } from '../../components/AdBanner';
 import { SeoMeta } from '../../components/SeoMeta';
-import {
-  SOKIN_ANALYTICS_FALLBACK,
-  SOKIN_SUGGESTIONS,
-  SOKIN_TRENDS,
-  SOKIN_TRENDING_CATEGORIES,
-  SOKIN_VIRAL_POSTS,
-  type SoKinPost,
-} from './sokin-data';
-import type { SoKinReactionType } from './sokin-data';
+import './sokin.css';
 
-type VideoUiState = {
-  played: boolean;
-  controls: boolean;
-};
+/* ═══════════════════════════════════════════════════
+   HELPERS
+   ═══════════════════════════════════════════════════ */
 
-type SoKinNotification = {
-  id: string;
-  label: string;
-  detail: string;
-  href: string;
-  icon: string;
-  time: string;
-};
+function relTime(iso: string, t: (k: string) => string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const m = Math.floor(diff / 60_000);
+  if (m < 1) return t('msg.justNow');
+  if (m < 60) return `${m} min`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h} h`;
+  const d = Math.floor(h / 24);
+  if (d < 7) return `${d} j`;
+  return new Date(iso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+}
 
-type SoKinAnalyticsOverview = {
-  notifications: number;
-  unreadMessages: number;
-  postsToday: number;
-  activeUsers: number;
-  trends: typeof SOKIN_TRENDS;
-  trendingCategories: typeof SOKIN_TRENDING_CATEGORIES;
-  viralPosts: typeof SOKIN_VIRAL_POSTS;
-  suggestions: typeof SOKIN_SUGGESTIONS;
-};
-
-type StoryVisibility = 'PUBLIC' | 'FOLLOWERS' | 'PRIVATE' | 'CLIENTS';
-
-const PRODUCT_TAG_PREFIX = '__product__';
-
-const POSTS_PAGE_SIZE = 4;
-
-const INFO_ITEMS = [
-  { titleKey: "sokin.infoAbout", href: "/about" },
-  { titleKey: "sokin.infoTerms", href: "/terms" },
-  { titleKey: "sokin.infoGuide", href: "/guide" },
-  { titleKey: "sokin.infoHowItWorks", href: "/how-it-works" },
-  { titleKey: "sokin.infoPrivacy", href: "/privacy" },
-  { titleKey: "sokin.infoLegal", href: "/legal" },
-  { titleKey: "sokin.infoBlog", href: "/blog" },
-  { titleKey: "sokin.infoFaq", href: "/faq" },
-  { titleKey: "sokin.infoContact", href: "/contact" },
+const WAVE_BG_COLORS = [
+  '#241752', '#6f58ff', '#490c80', '#1a0e3a',
+  '#ff4444', '#ff8c00', '#00b894', '#0984e3',
+  '#e84393', '#fdcb6e',
 ];
 
-const buildContactUrl = (post: SoKinPost) => {
-  const base = `/messages?contact=${encodeURIComponent(post.author.handle)}`;
-  if (!post.author.isPrivate) {
-    return base;
-  }
+const MAX_SCHEDULE_DAYS = 30;
 
-  return `${base}&mode=limited&requestContact=1`;
-};
+/* ═══════════════════════════════════════════════════
+   SOKIN TOP BAR (mobile)
+   ═══════════════════════════════════════════════════ */
 
-function formatRelativeTime(iso: string, t: (k: string) => string, formatDate: (isoDate: string | Date) => string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(diff / 60_000);
-  if (mins < 1) return t('msg.justNow');
-  if (mins < 60) return `${mins} ${t('msg.minuteShort')}`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs} h`;
-  const days = Math.floor(hrs / 24);
-  if (days < 7) return `${days} j`;
-  return formatDate(iso);
+function SoKinTopBar({ t, cartCount }: { t: (k: string) => string; cartCount: number }) {
+  const nav = useNavigate();
+  return (
+    <header className="sk-topbar" role="banner">
+      <button className="sk-topbar-btn" type="button" onClick={() => nav(-1)} aria-label="Retour">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 5l-7 7 7 7" /></svg>
+      </button>
+      <button className="sk-topbar-logo" type="button" onClick={() => nav('/')} aria-label="Accueil Kin-Sell">
+        <img src="/assets/kin-sell/logo.png" alt="Kin-Sell" className="sk-topbar-logo-img" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+        <span className="sk-topbar-logo-text">So-Kin</span>
+      </button>
+      <button className="sk-topbar-btn" type="button" onClick={() => nav('/cart')} aria-label={t('nav.cartAria')}>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" /><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" /></svg>
+        {cartCount > 0 && <span className="sk-topbar-badge">{cartCount}</span>}
+      </button>
+    </header>
+  );
 }
 
-function formatStoryAge(iso: string, t: (k: string) => string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  const mins = Math.max(1, Math.floor(diff / 60_000));
-  if (mins < 60) return `${mins} ${t('msg.minuteShort')}`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs} h`;
-  return `${Math.floor(hrs / 24)} j`;
+/* ═══════════════════════════════════════════════════
+   CREATE ZONE
+   ═══════════════════════════════════════════════════ */
+
+function CreateZone({
+  avatarUrl,
+  displayName,
+  isLoggedIn,
+  onWave,
+  onCreer,
+}: {
+  avatarUrl: string;
+  displayName: string;
+  isLoggedIn: boolean;
+  onWave: () => void;
+  onCreer: () => void;
+}) {
+  const nav = useNavigate();
+  return (
+    <section className="sk-create" aria-label="Zone de création">
+      <div className="sk-create-row">
+        <div className="sk-create-author">
+          {avatarUrl ? (
+            <img src={avatarUrl} alt={displayName} className="sk-create-avatar" />
+          ) : (
+            <span className="sk-create-avatar sk-create-avatar--placeholder">👤</span>
+          )}
+          <span className="sk-create-name">{displayName}</span>
+        </div>
+        <div className="sk-create-actions">
+          <button className="sk-btn sk-btn--wave" type="button" onClick={() => isLoggedIn ? onWave() : nav('/login')}>
+            ⚡ Wave
+          </button>
+          <button className="sk-btn sk-btn--creer" type="button" onClick={() => isLoggedIn ? onCreer() : nav('/login')}>
+            ✏️ Créer
+          </button>
+        </div>
+      </div>
+    </section>
+  );
 }
 
-function extractLinkedProduct(tags: string[] | undefined) {
-  if (!tags || tags.length === 0) return null;
-  const get = (key: string) => tags.find((tag) => tag.startsWith(`${PRODUCT_TAG_PREFIX}${key}:`))?.slice(`${PRODUCT_TAG_PREFIX}${key}:`.length);
-  const id = get('id');
-  const title = get('title');
-  if (!id || !title) return null;
-  const price = get('price');
-  const city = get('city');
-  const type = get('type');
-  return {
-    id,
-    title,
-    price,
-    city,
-    type,
+/* ═══════════════════════════════════════════════════
+   WAVE STRIP (horizontal stories)
+   ═══════════════════════════════════════════════════ */
+
+function WaveStrip({
+  stories,
+  t,
+  onOpen,
+}: {
+  stories: SoKinStory[];
+  t: (k: string) => string;
+  onOpen: (idx: number) => void;
+}) {
+  if (stories.length === 0) return null;
+  return (
+    <section className="sk-waves" aria-label="Waves">
+      <div className="sk-waves-scroll">
+        {stories.slice(0, 20).map((s, i) => {
+          const name = s.author.profile?.displayName ?? 'User';
+          const hasMedia = Boolean(s.mediaUrl);
+          return (
+            <button
+              key={s.id}
+              type="button"
+              className={`sk-wave-card${s.viewedByMe ? ' sk-wave-card--seen' : ''}`}
+              onClick={() => onOpen(i)}
+            >
+              <div
+                className="sk-wave-card-bg"
+                style={hasMedia
+                  ? { backgroundImage: `linear-gradient(180deg, rgba(10,8,24,0.05), rgba(10,8,24,0.86)), url(${s.mediaUrl})` }
+                  : { background: s.bgColor ?? 'linear-gradient(145deg, rgba(111,88,255,0.85), rgba(36,23,82,0.96))' }
+                }
+              >
+                <span className="sk-wave-card-label">Wave</span>
+                <span className="sk-wave-card-time">{relTime(s.createdAt, t)}</span>
+                <div className="sk-wave-card-author">
+                  {s.author.profile?.avatarUrl
+                    ? <img src={s.author.profile.avatarUrl} alt={name} className="sk-wave-card-av" />
+                    : <span className="sk-wave-card-av">👤</span>
+                  }
+                  <strong>{name.length > 12 ? name.slice(0, 12) + '…' : name}</strong>
+                </div>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+/* ═══════════════════════════════════════════════════
+   POST CARD (Reddit-style)
+   ═══════════════════════════════════════════════════ */
+
+function PostCard({
+  post,
+  t,
+  isLoggedIn,
+  onReact,
+  onShare,
+}: {
+  post: SoKinApiFeedPost;
+  t: (k: string) => string;
+  isLoggedIn: boolean;
+  onReact: (postId: string, type: SoKinReactionType) => void;
+  onShare: (postId: string) => void;
+}) {
+  const nav = useNavigate();
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const cardRef = useRef<HTMLElement>(null);
+  const lastTapRef = useRef(0);
+  const longPressRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [liked, setLiked] = useState(post.myReaction === 'LIKE');
+  const [doubleTapAnim, setDoubleTapAnim] = useState(false);
+
+  const authorName = post.author.profile?.displayName ?? 'Utilisateur';
+  const authorHandle = post.author.profile?.username ? `@${post.author.profile.username}` : '';
+  const authorAvatar = post.author.profile?.avatarUrl ?? '';
+  const authorCity = post.author.profile?.city ?? 'Kinshasa';
+  const hasVideo = post.mediaUrls.some((u) => /\.(mp4|webm|mov)/i.test(u));
+  const hasImage = post.mediaUrls.length > 0 && !hasVideo;
+
+  // Autoplay video when visible
+  useEffect(() => {
+    const vid = videoRef.current;
+    const card = cardRef.current;
+    if (!vid || !card) return;
+    const obs = new IntersectionObserver(
+      ([e]) => { e.isIntersecting ? vid.play().catch(() => {}) : vid.pause(); },
+      { threshold: 0.6 },
+    );
+    obs.observe(card);
+    return () => obs.disconnect();
+  }, []);
+
+  // Double-tap to like
+  const handleBodyTap = () => {
+    const now = Date.now();
+    if (now - lastTapRef.current < 300) {
+      if (isLoggedIn) {
+        onReact(post.id, 'LIKE');
+        setLiked(true);
+        setDoubleTapAnim(true);
+        setTimeout(() => setDoubleTapAnim(false), 600);
+      }
+    }
+    lastTapRef.current = now;
   };
-}
 
-function buildProductTags(listing: MyListing | null): string[] {
-  if (!listing) return [];
-  return [
-    `${PRODUCT_TAG_PREFIX}id:${listing.id}`,
-    `${PRODUCT_TAG_PREFIX}title:${listing.title}`,
-    `${PRODUCT_TAG_PREFIX}price:${listing.priceUsdCents}`,
-    `${PRODUCT_TAG_PREFIX}city:${listing.city}`,
-    `${PRODUCT_TAG_PREFIX}type:${listing.type}`,
-  ];
-}
-
-function mapApiFeedPost(
-  p: SoKinApiFeedPost,
-  t: (k: string) => string,
-  formatDate: (isoDate: string | Date) => string,
-  formatMoneyFromUsdCents: (usdCents: number) => string
-): SoKinPost {
-  const username = p.author.profile?.username;
-  const displayName = p.author.profile?.displayName ?? t('home.defaultUser');
-  const shortId = p.authorId.slice(0, 8);
-  const linkedProduct = extractLinkedProduct(p.tags);
-  return {
-    id: p.id,
-    author: {
-      name: displayName,
-      handle: username ? `@${username}` : `@${shortId}`,
-      avatarUrl: p.author.profile?.avatarUrl ?? '',
-      kinId: username ? `#${username}` : `#${shortId}`,
-      city: p.author.profile?.city ?? 'Kinshasa',
-      isPrivate: false,
-    },
-    text: p.text,
-    timestampLabel: formatRelativeTime(p.createdAt, t, formatDate),
-    visibility: 'PUBLIC',
-    sponsored: false,
-    media: p.mediaUrls.map((src) => ({ kind: 'image' as const, src, label: '' })),
-    linkedCard: linkedProduct
-      ? {
-          kind: linkedProduct.type === 'SERVICE' ? 'service' : 'product',
-          title: linkedProduct.title,
-          subtitle: linkedProduct.city ?? 'Kinshasa',
-          priceLabel: linkedProduct.price ? formatMoneyFromUsdCents(Number(linkedProduct.price) || 0) : undefined,
-          actionLabel: 'Voir',
-          href: `/explorer?q=${encodeURIComponent(linkedProduct.title)}`,
-        }
-      : undefined,
-    likes: p.likes,
-    reactionCounts: (p.reactionCounts ?? {}) as Partial<Record<SoKinReactionType, number>>,
-    myReaction: (p.myReaction ?? null) as SoKinReactionType | null,
-    comments: p.comments,
-    shares: p.shares,
-    thread: [],
+  // Long-press speed up
+  const handleTouchStart = () => {
+    longPressRef.current = setTimeout(() => {
+      if (videoRef.current) videoRef.current.playbackRate = 2;
+    }, 500);
   };
+  const handleTouchEnd = () => {
+    if (longPressRef.current) clearTimeout(longPressRef.current);
+    if (videoRef.current) videoRef.current.playbackRate = 1;
+  };
+
+  // Tap to pause/play
+  const handleVideoTap = () => {
+    const vid = videoRef.current;
+    if (!vid) return;
+    vid.paused ? vid.play().catch(() => {}) : vid.pause();
+  };
+
+  const reactionEmoji = post.myReaction === 'LOVE' ? '❤️' : post.myReaction === 'HAHA' ? '😂' : post.myReaction === 'WOW' ? '😮' : post.myReaction === 'SAD' ? '😢' : post.myReaction === 'ANGRY' ? '😡' : '👍';
+
+  return (
+    <article ref={cardRef} className="sk-post" id={`sk-post-${post.id}`}>
+      {/* ── Header ── */}
+      <header className="sk-post-head">
+        <div className="sk-post-author" onClick={() => authorHandle && nav(`/user/${authorHandle.replace('@', '')}`)}>
+          {authorAvatar
+            ? <img src={authorAvatar} alt={authorName} className="sk-post-avatar" />
+            : <span className="sk-post-avatar sk-post-avatar--fallback">{authorName.charAt(0)}</span>
+          }
+          <div className="sk-post-author-info">
+            <strong>{authorName}</strong>
+            <span>{authorCity} · {relTime(post.createdAt, t)}</span>
+          </div>
+        </div>
+        <div className="sk-post-head-actions">
+          <button type="button" className="sk-post-action-btn" onClick={() => nav(`/messages?contact=${encodeURIComponent(authorHandle)}`)} title="Contacter">📱</button>
+          <button type="button" className="sk-post-action-btn" title="Favori">⭐</button>
+          <button type="button" className="sk-post-action-btn" title="Signaler">⚠️</button>
+        </div>
+      </header>
+
+      {/* ── Body ── */}
+      <div
+        className="sk-post-body"
+        onClick={handleBodyTap}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+      >
+        {post.text && <p className="sk-post-text">{post.text}</p>}
+
+        {hasVideo && (
+          <div className="sk-post-media" onClick={handleVideoTap}>
+            <video
+              ref={videoRef}
+              src={post.mediaUrls.find((u) => /\.(mp4|webm|mov)/i.test(u))}
+              loop
+              muted
+              playsInline
+              preload="metadata"
+              className="sk-post-video"
+            />
+          </div>
+        )}
+
+        {hasImage && !hasVideo && (
+          <div className="sk-post-media">
+            {post.mediaUrls.length === 1 ? (
+              <img src={post.mediaUrls[0]} alt="" className="sk-post-image" />
+            ) : (
+              <div className="sk-post-gallery">
+                {post.mediaUrls.map((url, i) => (
+                  <img key={i} src={url} alt="" className="sk-post-gallery-img" />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {doubleTapAnim && <span className="sk-post-heart-anim">❤️</span>}
+      </div>
+
+      {/* ── Footer ── */}
+      <footer className="sk-post-foot">
+        <div className="sk-post-reactions">
+          <button
+            type="button"
+            className={`sk-post-react-btn${post.myReaction ? ' sk-post-react-btn--active' : ''}`}
+            onClick={() => onReact(post.id, post.myReaction ?? 'LIKE')}
+          >
+            {reactionEmoji} {post.likes > 0 && post.likes}
+          </button>
+          <button
+            type="button"
+            className="sk-post-react-btn"
+            onClick={() => onReact(post.id, 'SAD')}
+            title="Je n'aime pas"
+          >
+            👎
+          </button>
+        </div>
+        <button type="button" className="sk-post-foot-btn" title="Écrire">
+          💬 {post.comments > 0 && post.comments}
+        </button>
+        <button
+          type="button"
+          className="sk-post-foot-btn"
+          onClick={() => onShare(post.id)}
+          title="Partager"
+        >
+          🔁 {post.shares > 0 && post.shares}
+        </button>
+      </footer>
+    </article>
+  );
 }
+
+/* ═══════════════════════════════════════════════════
+   POST FEED (infinite scroll, ads every 4)
+   ═══════════════════════════════════════════════════ */
+
+function PostFeed({
+  posts,
+  hasMore,
+  loading,
+  sentinelRef,
+  t,
+  isLoggedIn,
+  onReact,
+  onShare,
+}: {
+  posts: SoKinApiFeedPost[];
+  hasMore: boolean;
+  loading: boolean;
+  sentinelRef: React.RefObject<HTMLDivElement | null>;
+  t: (k: string) => string;
+  isLoggedIn: boolean;
+  onReact: (postId: string, type: SoKinReactionType) => void;
+  onShare: (postId: string) => void;
+}) {
+  const items: React.ReactNode[] = [];
+  posts.forEach((post, idx) => {
+    items.push(
+      <PostCard key={post.id} post={post} t={t} isLoggedIn={isLoggedIn} onReact={onReact} onShare={onShare} />,
+    );
+    if ((idx + 1) % 4 === 0) {
+      items.push(<AdBanner key={`ad-${idx}`} page="sokin" variant="slim" hideWhenEmpty />);
+    }
+  });
+
+  return (
+    <section className="sk-feed" aria-label="Fil d'annonces">
+      <h2 className="sk-feed-title">📢 Annonces</h2>
+      {loading && posts.length === 0 ? (
+        <div className="sk-feed-loading">
+          {[1, 2].map((i) => <div key={i} className="sk-skeleton" />)}
+        </div>
+      ) : posts.length === 0 ? (
+        <div className="sk-feed-empty">
+          <p>{t('sokin.noPostYet')}</p>
+        </div>
+      ) : (
+        items
+      )}
+      {hasMore && <div ref={sentinelRef} className="sk-sentinel" />}
+    </section>
+  );
+}
+
+/* ═══════════════════════════════════════════════════
+   CREATOR BOTTOM SHEET (Wave / Créer)
+   ═══════════════════════════════════════════════════ */
+
+function CreatorSheet({
+  mode,
+  isPublishing,
+  onClose,
+  onPublish,
+  t,
+}: {
+  mode: 'wave' | 'post';
+  isPublishing: boolean;
+  onClose: () => void;
+  onPublish: (data: {
+    text: string;
+    mediaFiles: File[];
+    location: string;
+    tags: string[];
+    hashtags: string[];
+    bgColor: string;
+    scheduledAt: string;
+  }) => void;
+  t: (k: string) => string;
+}) {
+  const [text, setText] = useState('');
+  const [mediaFiles, setMediaFiles] = useState<File[]>([]);
+  const [location, setLocation] = useState('');
+  const [tagInput, setTagInput] = useState('');
+  const [tags, setTags] = useState<string[]>([]);
+  const [hashInput, setHashInput] = useState('');
+  const [hashtags, setHashtags] = useState<string[]>([]);
+  const [bgColor, setBgColor] = useState('#241752');
+  const [scheduleDate, setScheduleDate] = useState('');
+  const [step, setStep] = useState<'content' | 'edit'>('content');
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const isTextOnly = mediaFiles.length === 0;
+
+  const addTag = () => {
+    const v = tagInput.trim();
+    if (v && !tags.includes(v)) setTags([...tags, v]);
+    setTagInput('');
+  };
+
+  const addHashtag = () => {
+    const v = hashInput.trim().replace('#', '');
+    if (v && !hashtags.includes(v)) setHashtags([...hashtags, v]);
+    setHashInput('');
+  };
+
+  const handleSubmit = () => {
+    if (!text.trim() && mediaFiles.length === 0) return;
+    onPublish({ text, mediaFiles, location, tags, hashtags, bgColor, scheduledAt: scheduleDate });
+  };
+
+  return (
+    <div className="sk-sheet-overlay" onClick={onClose}>
+      <div className="sk-sheet" onClick={(e) => e.stopPropagation()}>
+        <div className="sk-sheet-head">
+          <h3>{mode === 'wave' ? '⚡ Nouvelle Wave (24h)' : '✏️ Nouvelle Publication'}</h3>
+          <button type="button" className="sk-sheet-close" onClick={onClose}>✕</button>
+        </div>
+
+        {step === 'content' ? (
+          <div className="sk-sheet-body">
+            <textarea
+              className="sk-sheet-input"
+              placeholder={mode === 'wave' ? 'Quoi de neuf ? (disparaît en 24h)' : 'Écrivez votre publication…'}
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              rows={4}
+              maxLength={mode === 'wave' ? 180 : 500}
+            />
+            <span className="sk-sheet-char-count">{text.length}/{mode === 'wave' ? 180 : 500}</span>
+
+            {/* Media picker */}
+            <div className="sk-sheet-media-row">
+              <button type="button" className="sk-btn sk-btn--sm" onClick={() => fileRef.current?.click()}>
+                📷 Photo/Vidéo
+              </button>
+              {mediaFiles.length > 0 && (
+                <span className="sk-sheet-media-count">{mediaFiles.length} fichier(s)</span>
+              )}
+              <input
+                ref={fileRef}
+                type="file"
+                multiple
+                accept="image/*,video/*,.gif"
+                hidden
+                onChange={(e) => {
+                  if (e.target.files) setMediaFiles([...mediaFiles, ...Array.from(e.target.files)]);
+                }}
+              />
+            </div>
+
+            {/* Bg color for text-only waves */}
+            {mode === 'wave' && isTextOnly && (
+              <div className="sk-sheet-colors">
+                <span className="sk-sheet-label">Fond :</span>
+                {WAVE_BG_COLORS.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    className={`sk-color-dot${bgColor === c ? ' sk-color-dot--active' : ''}`}
+                    style={{ background: c }}
+                    onClick={() => setBgColor(c)}
+                  />
+                ))}
+              </div>
+            )}
+
+            <div className="sk-sheet-actions-row">
+              <button type="button" className="sk-btn sk-btn--outline" onClick={() => setStep('edit')}>
+                📍 Éditer détails
+              </button>
+              <button
+                type="button"
+                className="sk-btn sk-btn--primary"
+                onClick={handleSubmit}
+                disabled={isPublishing || (!text.trim() && mediaFiles.length === 0)}
+              >
+                {isPublishing ? '⏳' : '🚀'} {mode === 'wave' ? 'Publier Wave' : 'Publier'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="sk-sheet-body">
+            <label className="sk-sheet-label">📍 Localisation</label>
+            <input
+              type="text"
+              className="sk-sheet-field"
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+              placeholder="Gombe, Kinshasa"
+            />
+
+            <label className="sk-sheet-label">🏷️ Tags</label>
+            <div className="sk-sheet-tag-row">
+              <input
+                type="text"
+                className="sk-sheet-field sk-sheet-field--flex"
+                value={tagInput}
+                onChange={(e) => setTagInput(e.target.value)}
+                placeholder="Ajouter un tag"
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTag(); } }}
+              />
+              <button type="button" className="sk-btn sk-btn--sm" onClick={addTag}>+</button>
+            </div>
+            {tags.length > 0 && (
+              <div className="sk-sheet-chips">
+                {tags.map((tg) => (
+                  <span key={tg} className="sk-chip">
+                    {tg} <button type="button" onClick={() => setTags(tags.filter((x) => x !== tg))}>✕</button>
+                  </span>
+                ))}
+              </div>
+            )}
+
+            <label className="sk-sheet-label"># Hashtags</label>
+            <div className="sk-sheet-tag-row">
+              <input
+                type="text"
+                className="sk-sheet-field sk-sheet-field--flex"
+                value={hashInput}
+                onChange={(e) => setHashInput(e.target.value)}
+                placeholder="Sans le #"
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addHashtag(); } }}
+              />
+              <button type="button" className="sk-btn sk-btn--sm" onClick={addHashtag}>+</button>
+            </div>
+            {hashtags.length > 0 && (
+              <div className="sk-sheet-chips">
+                {hashtags.map((h) => (
+                  <span key={h} className="sk-chip">
+                    #{h} <button type="button" onClick={() => setHashtags(hashtags.filter((x) => x !== h))}>✕</button>
+                  </span>
+                ))}
+              </div>
+            )}
+
+            <label className="sk-sheet-label">📅 Programmer (max {MAX_SCHEDULE_DAYS}j)</label>
+            <input
+              type="datetime-local"
+              className="sk-sheet-field"
+              value={scheduleDate}
+              onChange={(e) => setScheduleDate(e.target.value)}
+              min={new Date().toISOString().slice(0, 16)}
+              max={new Date(Date.now() + MAX_SCHEDULE_DAYS * 86400_000).toISOString().slice(0, 16)}
+            />
+
+            <div className="sk-sheet-actions-row">
+              <button type="button" className="sk-btn sk-btn--outline" onClick={() => setStep('content')}>
+                ← Retour
+              </button>
+              <button
+                type="button"
+                className="sk-btn sk-btn--primary"
+                onClick={handleSubmit}
+                disabled={isPublishing || (!text.trim() && mediaFiles.length === 0)}
+              >
+                {isPublishing ? '⏳' : '🚀'} {scheduleDate ? 'Programmer' : mode === 'wave' ? 'Publier Wave' : 'Publier'}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════
+   STORY VIEWER (fullscreen)
+   ═══════════════════════════════════════════════════ */
+
+function StoryViewer({
+  stories,
+  startIndex,
+  t,
+  onClose,
+  isLoggedIn,
+}: {
+  stories: SoKinStory[];
+  startIndex: number;
+  t: (k: string) => string;
+  onClose: () => void;
+  isLoggedIn: boolean;
+}) {
+  const [index, setIndex] = useState(startIndex);
+  const [paused, setPaused] = useState(false);
+  const touchRef = useRef<{ x: number; y: number } | null>(null);
+  const story = stories[index];
+  if (!story) return null;
+
+  const name = story.author.profile?.displayName ?? 'Utilisateur';
+
+  // Auto-advance for non-video
+  useEffect(() => {
+    if (story.mediaType === 'VIDEO' || paused) return;
+    const timer = setTimeout(() => {
+      if (index < stories.length - 1) setIndex(index + 1);
+      else onClose();
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [index, paused, story.mediaType, stories.length, onClose]);
+
+  // Mark as viewed
+  useEffect(() => {
+    if (isLoggedIn && !story.viewedByMe) {
+      void sokinApi.viewStory(story.id).catch(() => {});
+    }
+  }, [story.id, story.viewedByMe, isLoggedIn]);
+
+  return (
+    <div className="sk-story-overlay" onClick={onClose}>
+      <div
+        className="sk-story-viewer"
+        onClick={(e) => e.stopPropagation()}
+        onMouseDown={() => setPaused(true)}
+        onMouseUp={() => setPaused(false)}
+        onTouchStart={(e) => {
+          setPaused(true);
+          const t = e.changedTouches[0];
+          touchRef.current = { x: t.clientX, y: t.clientY };
+        }}
+        onTouchEnd={(e) => {
+          setPaused(false);
+          const start = touchRef.current;
+          const t = e.changedTouches[0];
+          if (!start) return;
+          const dx = t.clientX - start.x;
+          const dy = t.clientY - start.y;
+          if (dy > 90) { onClose(); return; }
+          if (dx > 80) setIndex((n) => Math.max(0, n - 1));
+          if (dx < -80) setIndex((n) => Math.min(stories.length - 1, n + 1));
+        }}
+        style={story.mediaType === 'TEXT' ? { background: story.bgColor ?? '#241752' } : undefined}
+      >
+        {/* Progress bars */}
+        <div className="sk-story-progress">
+          {stories.map((s, i) => (
+            <span key={s.id} className={`sk-story-bar${i === index ? ' active' : ''}${i < index ? ' done' : ''}`} />
+          ))}
+        </div>
+
+        {/* Header */}
+        <div className="sk-story-head">
+          <div className="sk-story-author">
+            {story.author.profile?.avatarUrl
+              ? <img src={story.author.profile.avatarUrl} alt={name} />
+              : <span>👤</span>
+            }
+            <div>
+              <strong>{name}</strong>
+              <span>{relTime(story.createdAt, t)} · {story.viewCount} vues</span>
+            </div>
+          </div>
+          <button type="button" className="sk-story-close" onClick={onClose}>✕</button>
+        </div>
+
+        {/* Stage */}
+        <div className="sk-story-stage">
+          {story.mediaType !== 'TEXT' && story.mediaUrl ? (
+            story.mediaType === 'VIDEO'
+              ? <video src={story.mediaUrl} controls autoPlay playsInline />
+              : <img src={story.mediaUrl} alt="Wave" />
+          ) : (
+            <div className="sk-story-text-stage">
+              <p>{story.caption ?? ''}</p>
+            </div>
+          )}
+        </div>
+
+        {story.mediaType !== 'TEXT' && story.caption && (
+          <p className="sk-story-caption">{story.caption}</p>
+        )}
+
+        {/* Nav hotspots */}
+        <button type="button" className="sk-story-hot sk-story-hot--prev" disabled={index <= 0} onClick={() => setIndex((n) => Math.max(0, n - 1))} aria-label="Précédente" />
+        <button type="button" className="sk-story-hot sk-story-hot--next" disabled={index >= stories.length - 1} onClick={() => setIndex((n) => Math.min(stories.length - 1, n + 1))} aria-label="Suivante" />
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════
+   BOTTOM NAV (So-Kin variant: Live au centre)
+   ═══════════════════════════════════════════════════ */
+
+function SoKinBottomNav({
+  hidden,
+  notifCount,
+  t,
+}: {
+  hidden: boolean;
+  notifCount: number;
+  t: (k: string) => string;
+}) {
+  const nav = useNavigate();
+  const { user } = useAuth();
+  const dashPath = getDashboardPath(user?.role);
+
+  return (
+    <nav className={`sk-bottomnav${hidden ? ' sk-bottomnav--hidden' : ''}`} aria-label="Navigation So-Kin">
+      <button className="sk-bnav-item" type="button" onClick={() => nav('/')}>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z" /></svg>
+        <span>Accueil</span>
+      </button>
+
+      <button className="sk-bnav-item" type="button" onClick={() => nav('/cart')}>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" /><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" /></svg>
+        <span>{t('nav.cart')}</span>
+      </button>
+
+      {/* Centre: LIVE button */}
+      <button className="sk-bnav-live" type="button" onClick={() => nav('/sokin/live')} aria-label="So-Kin Live">
+        <span className="sk-bnav-live-dot" />
+        <span className="sk-bnav-live-text">Live</span>
+      </button>
+
+      <button className="sk-bnav-item" type="button" onClick={() => { sessionStorage.setItem('ud-section', 'notifications'); nav(dashPath); }}>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" /></svg>
+        {notifCount > 0 && <span className="sk-bnav-badge">{notifCount}</span>}
+        <span>{t('nav.notifications')}</span>
+      </button>
+
+      <button className="sk-bnav-item" type="button" onClick={() => nav(dashPath)}>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
+        <span>Compte</span>
+      </button>
+    </nav>
+  );
+}
+
+/* ═══════════════════════════════════════════════════
+   MAIN: SoKinPage
+   ═══════════════════════════════════════════════════ */
 
 export function SoKinPage() {
-  const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
-  const composerSectionRef = useRef<HTMLElement | null>(null);
-  const feedBoxRef = useRef<HTMLDivElement | null>(null);
-  const accountMenuRef = useRef<HTMLDivElement | null>(null);
-  const notifBtnRef = useRef<HTMLDivElement | null>(null);
-  const storyPhotoInputRef = useRef<HTMLInputElement | null>(null);
-  const storySelfieInputRef = useRef<HTMLInputElement | null>(null);
-  const storyVideoInputRef = useRef<HTMLInputElement | null>(null);
-  const storyGalleryInputRef = useRef<HTMLInputElement | null>(null);
-  const [videoUiByKey, setVideoUiByKey] = useState<Record<string, VideoUiState>>({});
-  const [visibleCount, setVisibleCount] = useState(POSTS_PAGE_SIZE);
-  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
-  const [notifOpen, setNotifOpen] = useState(false);
-  const [isInfoOpen, setIsInfoOpen] = useState(false);
-  const [sokinNotifications, setSokinNotifications] = useState<SoKinNotification[]>([]);
-  const [cartItemsCount, setCartItemsCount] = useState(0);
-  const [activeCommentsPost, setActiveCommentsPost] = useState<SoKinPost | null>(null);
-  const [analytics, setAnalytics] = useState<SoKinAnalyticsOverview>(SOKIN_ANALYTICS_FALLBACK);
-  const [posts, setPosts] = useState<SoKinPost[]>([]);
-  const [feedSearch, setFeedSearch] = useState('');
-  
-  /* ── Composer State ── */
-  const [composerText, setComposerText] = useState('');
-  const [composerLocation, setComposerLocation] = useState('');
-  const [composerTags, setComposerTags] = useState<string[]>([]);
-  const [composerHashtags, setComposerHashtags] = useState<string[]>([]);
-  const [composerMediaFiles, setComposerMediaFiles] = useState<File[]>([]);
-  const [showMediaPopup, setShowMediaPopup] = useState(false);
-  const [showEditorPopup, setShowEditorPopup] = useState(false);
-  const [showPreviewPopup, setShowPreviewPopup] = useState(false);
-  const [isPublishing, setIsPublishing] = useState(false);
-  const [reactionPickerPostId, setReactionPickerPostId] = useState<string | null>(null);
-  const [reactionBusy, setReactionBusy] = useState<string | null>(null);
-  const [shareBusyPostId, setShareBusyPostId] = useState<string | null>(null);
-  const [highlightedPostId, setHighlightedPostId] = useState<string | null>(null);
-  const [stories, setStories] = useState<Awaited<ReturnType<typeof sokinApi.stories>>["stories"]>([]);
-  const [storyViewerOpen, setStoryViewerOpen] = useState(false);
-  const [storyViewerIndex, setStoryViewerIndex] = useState(0);
-  const [storyViewerPaused, setStoryViewerPaused] = useState(false);
-  const [showStoryComposer, setShowStoryComposer] = useState(false);
-  const [storyText, setStoryText] = useState('');
-  const [storyBgColor, setStoryBgColor] = useState('#241752');
-  const [storyFile, setStoryFile] = useState<File | null>(null);
-  const [storyPreviewUrl, setStoryPreviewUrl] = useState<string | null>(null);
-  const [storyVisibility, setStoryVisibility] = useState<StoryVisibility>('PUBLIC');
-  const [storyAllowReplies, setStoryAllowReplies] = useState(true);
-  const [storyAllowReactions, setStoryAllowReactions] = useState(true);
-  const [storyProductName, setStoryProductName] = useState('');
-  const [storyEnableProductCta, setStoryEnableProductCta] = useState(false);
-  const [myListings, setMyListings] = useState<MyListing[]>([]);
-  const [loadingMyListings, setLoadingMyListings] = useState(false);
-  const [selectedPostListingId, setSelectedPostListingId] = useState('');
-  const [selectedStoryListingId, setSelectedStoryListingId] = useState('');
-  const storyTouchStartRef = useRef<{ x: number; y: number } | null>(null);
-  const highlightTimeoutRef = useRef<number | null>(null);
-  const location = useLocation();
   const navigate = useNavigate();
-  const { isLoggedIn, user, logout } = useAuth();
-  const { t, formatDate, formatMoneyFromUsdCents } = useLocaleCurrency();
+  const { isLoggedIn, user } = useAuth();
+  const { t } = useLocaleCurrency();
   const { effectiveCountry, getCountryConfig } = useMarketPreference();
   const defaultCity = getCountryConfig(effectiveCountry).defaultCity;
   const { on, off } = useSocket();
   const isMobile = useIsMobile();
-  const dashboardPath = getDashboardPath(user?.role);
-  const sharedPostId = useMemo(() => new URLSearchParams(location.search).get('post')?.trim() || null, [location.search]);
-  const profileHover = useHoverPopup<ProfileHoverData>();
-  const articleHover = useHoverPopup<ArticleHoverData>();
-  useScrollRestore();
+  const scrollDir = useScrollDirection();
 
-  const loadPublicFeed = useCallback(async () => {
-    try {
-      const data = await sokinApi.publicFeed({ limit: sharedPostId ? 50 : 20, city: defaultCity, country: effectiveCountry });
-      setPosts(data.posts.map((post) => mapApiFeedPost(post, t, formatDate, formatMoneyFromUsdCents)));
-    } catch {
-      // Fil vide si l'API est indisponible
-    }
-  }, [defaultCity, effectiveCountry, sharedPostId, t, formatDate, formatMoneyFromUsdCents]);
+  // ── State ──
+  const [posts, setPosts] = useState<SoKinApiFeedPost[]>([]);
+  const [stories, setStories] = useState<SoKinStory[]>([]);
+  const [loadingFeed, setLoadingFeed] = useState(true);
+  const [hasMore, setHasMore] = useState(true);
+  const loadingRef = useRef(false);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  const [cartCount, setCartCount] = useState(0);
+  const [notifCount, setNotifCount] = useState(0);
+
+  // Creator state
+  const [creatorMode, setCreatorMode] = useState<'wave' | 'post' | null>(null);
+  const [isPublishing, setIsPublishing] = useState(false);
+
+  // Story viewer
+  const [storyViewerOpen, setStoryViewerOpen] = useState(false);
+  const [storyViewerIndex, setStoryViewerIndex] = useState(0);
+
+  // ── Data loading ──
+  const loadFeed = useCallback(
+    async (reset = false) => {
+      if (loadingRef.current && !reset) return;
+      loadingRef.current = true;
+      try {
+        const res = await sokinApi.publicFeed({ limit: 12, city: defaultCity, country: effectiveCountry });
+        if (reset) {
+          setPosts(res.posts);
+        } else {
+          setPosts((prev) => {
+            const ids = new Set(prev.map((p) => p.id));
+            return [...prev, ...res.posts.filter((p) => !ids.has(p.id))];
+          });
+        }
+        if (res.posts.length < 12) setHasMore(false);
+      } catch { /* */ }
+      finally { setLoadingFeed(false); loadingRef.current = false; }
+    },
+    [defaultCity, effectiveCountry],
+  );
 
   const loadStories = useCallback(async () => {
     try {
       const data = await sokinApi.stories();
       setStories(data.stories);
-    } catch {
-      setStories([]);
-    }
+    } catch { setStories([]); }
   }, []);
 
-  const loadSokinNotifications = useCallback(async () => {
-    if (!isLoggedIn) {
-      setSokinNotifications([]);
-      return;
-    }
-
-    const notifs: SoKinNotification[] = [];
-    try {
-      const [buyerData, sellerData] = await Promise.all([
-        ordersApi.buyerOrders({ limit: 5, inProgressOnly: true }).catch(() => null),
-        ordersApi.sellerOrders({ limit: 5, inProgressOnly: true }).catch(() => null),
-      ]);
-      if (buyerData) {
-        for (const o of buyerData.orders) {
-          const statusLabel = o.status === 'SHIPPED' ? t('nav.shipped') : o.status === 'CONFIRMED' ? t('nav.confirmed') : t('nav.inProgress');
-          notifs.push({
-            id: `buy-${o.id}`,
-            label: `${t('nav.orderStatus')} ${statusLabel}`,
-            detail: `#${o.id.slice(0, 8).toUpperCase()} — ${o.itemsCount} ${o.itemsCount > 1 ? t('nav.articles') : t('nav.article')}`,
-            href: dashboardPath,
-            icon: '📦',
-            time: formatDate(o.createdAt),
-          });
-        }
-      }
-      if (sellerData) {
-        for (const o of sellerData.orders) {
-          notifs.push({
-            id: `sell-${o.id}`,
-            label: t('nav.newOrderReceived'),
-            detail: `#${o.id.slice(0, 8).toUpperCase()} de ${o.buyer.displayName}`,
-            href: dashboardPath,
-            icon: '🛒',
-            time: formatDate(o.createdAt),
-          });
-        }
-      }
-    } catch {
-      // ignore
-    }
-    setSokinNotifications(notifs);
-  }, [isLoggedIn, dashboardPath, t, formatDate]);
-
-  useEffect(() => {
-    const handleOutsideClick = (event: MouseEvent) => {
-      if (accountMenuRef.current && !accountMenuRef.current.contains(event.target as Node)) {
-        setAccountMenuOpen(false);
-      }
-      if (notifBtnRef.current && !notifBtnRef.current.contains(event.target as Node)) {
-        setNotifOpen(false);
-      }
-    };
-
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setAccountMenuOpen(false);
-        setNotifOpen(false);
-        setIsInfoOpen(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleOutsideClick);
-    window.addEventListener('keydown', handleEscape);
-
-    return () => {
-      document.removeEventListener('mousedown', handleOutsideClick);
-      window.removeEventListener('keydown', handleEscape);
-    };
-  }, []);
-
-  /* ── Chargement du fil public depuis l'API ── */
-  useEffect(() => {
-    void loadPublicFeed();
-  }, [loadPublicFeed]);
-
+  useEffect(() => { setLoadingFeed(true); void loadFeed(true); }, [loadFeed]);
   useEffect(() => {
     void loadStories();
     const timer = setInterval(loadStories, 45_000);
-    return () => {
-      clearInterval(timer);
-    };
+    return () => clearInterval(timer);
   }, [loadStories]);
 
+  // Socket listeners
   useEffect(() => {
-    const handlePostCreated = (payload: {
-      type: 'SOKIN_POST_CREATED';
-      postId: string;
-      authorId: string;
-      createdAt: string;
-      sourceUserId: string;
-    }) => {
-      if (payload.sourceUserId === user?.id) return;
-      void loadPublicFeed();
+    const handlePost = () => void loadFeed(true);
+    const handleStory = () => void loadStories();
+    const handleShare = (p: { postId: string; shares: number }) => {
+      setPosts((prev) => prev.map((post) => post.id === p.postId ? { ...post, shares: p.shares } : post));
     };
+    on('sokin:post-created', handlePost);
+    on('sokin:story-created', handleStory);
+    on('sokin:post-shared', handleShare);
+    return () => { off('sokin:post-created', handlePost); off('sokin:story-created', handleStory); off('sokin:post-shared', handleShare); };
+  }, [on, off, loadFeed, loadStories]);
 
-    const handleStoryCreated = (payload: {
-      type: 'SOKIN_STORY_CREATED';
-      storyId: string;
-      authorId: string;
-      createdAt: string;
-      sourceUserId: string;
-    }) => {
-      if (payload.sourceUserId === user?.id) return;
-      void loadStories();
-    };
-
-    const handlePostShared = (payload: {
-      type: 'SOKIN_POST_SHARED';
-      postId: string;
-      shares: number;
-      sourceUserId: string;
-      updatedAt: string;
-    }) => {
-      setPosts((prev) => prev.map((post) => (post.id === payload.postId ? { ...post, shares: payload.shares } : post)));
-    };
-
-    on('sokin:post-created', handlePostCreated);
-    on('sokin:story-created', handleStoryCreated);
-    on('sokin:post-shared', handlePostShared);
-
-    return () => {
-      off('sokin:post-created', handlePostCreated);
-      off('sokin:story-created', handleStoryCreated);
-      off('sokin:post-shared', handlePostShared);
-    };
-  }, [on, off, user?.id, loadPublicFeed, loadStories]);
-
+  // Infinite scroll observer
   useEffect(() => {
-    if (!sharedPostId || posts.length === 0) return;
+    if (!sentinelRef.current || !hasMore) return;
+    const obs = new IntersectionObserver(
+      ([e]) => { if (e.isIntersecting && !loadingRef.current) void loadFeed(); },
+      { rootMargin: '200px' },
+    );
+    obs.observe(sentinelRef.current);
+    return () => obs.disconnect();
+  }, [hasMore, loadFeed]);
 
-    const target = document.getElementById(`sokin-post-${sharedPostId}`);
-    if (!target) return;
-
-    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    setHighlightedPostId(sharedPostId);
-
-    if (highlightTimeoutRef.current) {
-      window.clearTimeout(highlightTimeoutRef.current);
-    }
-    highlightTimeoutRef.current = window.setTimeout(() => {
-      setHighlightedPostId((current) => (current === sharedPostId ? null : current));
-      highlightTimeoutRef.current = null;
-    }, 4200);
-  }, [sharedPostId, posts]);
-
+  // Cart count
   useEffect(() => {
-    if (!sharedPostId) return;
-    if (posts.some((post) => post.id === sharedPostId)) return;
-
-    let cancelled = false;
-    const loadSharedPost = async () => {
+    if (!isLoggedIn) { setCartCount(0); return; }
+    let c = false;
+    (async () => {
       try {
-        const data = await sokinApi.publicPost(sharedPostId);
-        if (cancelled) return;
-        setPosts((prev) => {
-          if (prev.some((post) => post.id === sharedPostId)) {
-            return prev;
-          }
-          return [mapApiFeedPost(data.post, t, formatDate, formatMoneyFromUsdCents), ...prev];
-        });
-      } catch {
-        // Ignore si le post n'est plus public ou a disparu.
-      }
-    };
-
-    void loadSharedPost();
-    return () => {
-      cancelled = true;
-    };
-  }, [sharedPostId, posts, t, formatDate, formatMoneyFromUsdCents]);
-
-  useEffect(() => {
-    return () => {
-      if (highlightTimeoutRef.current) {
-        window.clearTimeout(highlightTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  const visiblePosts = useMemo(() => {
-    const q = feedSearch.trim().toLowerCase();
-    const filtered = q
-      ? posts.filter((p) =>
-          p.text.toLowerCase().includes(q) ||
-          p.author.name.toLowerCase().includes(q) ||
-          p.author.city.toLowerCase().includes(q)
-        )
-      : posts;
-    return filtered.slice(0, visibleCount);
-  }, [posts, visibleCount, feedSearch]);
-
-  const hasMorePosts = visibleCount < posts.length;
-
-  useEffect(() => {
-    const feedElement = feedBoxRef.current;
-    if (!feedElement) {
-      return;
-    }
-
-    const onFeedScroll = () => {
-      const nearBottom =
-        feedElement.scrollTop + feedElement.clientHeight >= feedElement.scrollHeight - 180;
-      if (nearBottom && hasMorePosts) {
-        setVisibleCount((prev) => prev + POSTS_PAGE_SIZE);
-      }
-    };
-
-    feedElement.addEventListener('scroll', onFeedScroll, { passive: true });
-    return () => feedElement.removeEventListener('scroll', onFeedScroll);
-  }, [hasMorePosts]);
-
-  useEffect(() => {
-    const controller = new AbortController();
-
-    const loadAnalytics = async () => {
-      try {
-        const apiBaseUrl = import.meta.env.VITE_API_URL ?? '/api';
-        const response = await fetch(`${apiBaseUrl}/analytics/sokin/overview`, {
-          signal: controller.signal,
-        });
-
-        if (!response.ok) {
-          return;
-        }
-
-        const payload = (await response.json()) as Partial<SoKinAnalyticsOverview>;
-        setAnalytics((prev) => ({
-          ...prev,
-          ...payload,
-          trends: payload.trends ?? prev.trends,
-          trendingCategories: payload.trendingCategories ?? prev.trendingCategories,
-          viralPosts: payload.viralPosts ?? prev.viralPosts,
-          suggestions: payload.suggestions ?? prev.suggestions,
-        }));
-      } catch {
-        // Keep fallback while analytics backend is not configured.
-      }
-    };
-
-    loadAnalytics();
-
-    return () => controller.abort();
-  }, []);
-
-  useEffect(() => {
-    void loadSokinNotifications();
-  }, [loadSokinNotifications]);
-
-  useEffect(() => {
-    const handleOrderChanged = () => {
-      void loadSokinNotifications();
-    };
-
-    const handleNegotiationChanged = () => {
-      void loadSokinNotifications();
-    };
-
-    on('order:status-updated', handleOrderChanged);
-    on('order:delivery-confirmed', handleOrderChanged);
-    on('negotiation:updated', handleNegotiationChanged);
-
-    return () => {
-      off('order:status-updated', handleOrderChanged);
-      off('order:delivery-confirmed', handleOrderChanged);
-      off('negotiation:updated', handleNegotiationChanged);
-    };
-  }, [on, off, loadSokinNotifications]);
-
-  useEffect(() => {
-    if (!isLoggedIn) {
-      setMyListings([]);
-      setSelectedPostListingId('');
-      setSelectedStoryListingId('');
-      return;
-    }
-    let cancelled = false;
-    const loadMyListings = async () => {
-      setLoadingMyListings(true);
-      try {
-        const data = await listingsApi.mine({ status: 'ACTIVE', page: 1, limit: 100 });
-        if (cancelled) return;
-        setMyListings(data.listings ?? []);
-      } catch {
-        if (!cancelled) setMyListings([]);
-      } finally {
-        if (!cancelled) setLoadingMyListings(false);
-      }
-    };
-    void loadMyListings();
-    return () => {
-      cancelled = true;
-    };
+        const { orders } = await import('../../lib/api-client');
+        const cart = await orders.buyerCart().catch(() => null);
+        if (!c) setCartCount(cart?.itemsCount ?? 0);
+      } catch { if (!c) setCartCount(0); }
+    })();
+    return () => { c = true; };
   }, [isLoggedIn]);
 
-  useEffect(() => {
-    if (!storyFile) {
-      setStoryPreviewUrl(null);
-      return;
-    }
-    const objectUrl = URL.createObjectURL(storyFile);
-    setStoryPreviewUrl(objectUrl);
-    return () => URL.revokeObjectURL(objectUrl);
-  }, [storyFile]);
-
-  useEffect(() => {
-    if (!isLoggedIn) {
-      setCartItemsCount(0);
-      return;
-    }
-
-    let cancelled = false;
-    const loadCartCount = async () => {
-      try {
-        const cart = await ordersApi.buyerCart().catch(() => null);
-        if (!cancelled) setCartItemsCount(cart?.itemsCount ?? 0);
-      } catch {
-        if (!cancelled) setCartItemsCount(0);
-      }
-    };
-
-    void loadCartCount();
-    return () => { cancelled = true; };
-  }, [isLoggedIn]);
-
-  const handleVideoTileClick = (videoKey: string) => {
-    const current = videoUiByKey[videoKey] ?? { played: false, controls: false };
-    const videoElement = videoRefs.current[videoKey];
-
-    if (!current.played) {
-      if (videoElement) {
-        videoElement.play().catch(() => {
-          // Ignore autoplay restrictions; user can click again.
-        });
-      }
-      setVideoUiByKey((prev) => ({
-        ...prev,
-        [videoKey]: { played: true, controls: false },
-      }));
-      return;
-    }
-
-    if (!current.controls) {
-      setVideoUiByKey((prev) => ({
-        ...prev,
-        [videoKey]: { played: true, controls: true },
-      }));
-    }
-  };
-
-  const openCommentsModal = (post: SoKinPost) => {
-    setActiveCommentsPost(post);
-  };
-
-  const closeCommentsModal = () => {
-    setActiveCommentsPost(null);
-  };
-
-  const handlePost = async () => {
-    const text = composerText.trim();
-    if (!text || isPublishing || !isLoggedIn) return;
-    setIsPublishing(true);
-    try {
-      const selectedListing = myListings.find((listing) => listing.id === selectedPostListingId) ?? null;
-      const productTags = buildProductTags(selectedListing);
-      const productLine = selectedListing ? `\n\n🛒 ${selectedListing.title} · ${formatMoneyFromUsdCents(selectedListing.priceUsdCents)}` : '';
-      const mediaUrls = composerMediaFiles.length > 0
-        ? await prepareMediaUrls(composerMediaFiles)
-        : undefined;
-      const newPost = await sokinApi.createPost({
-        text: `${text}${productLine}`,
-        mediaUrls,
-        location: composerLocation || undefined,
-        tags: [...composerTags, ...productTags].length > 0 ? [...composerTags, ...productTags] : undefined,
-        hashtags: composerHashtags.length > 0 ? composerHashtags : undefined,
-      });
-      const mapped = mapApiFeedPost({
-        ...newPost,
-        author: {
-          id: newPost.authorId,
-          profile: {
-            username: user?.profile.username ?? null,
-            displayName: user?.profile.displayName ?? 'Moi',
-            avatarUrl: user?.profile.avatarUrl ?? null,
-            city: user?.profile.city ?? null,
-          },
-        },
-        reactionCounts: {},
-        myReaction: null,
-      }, t, formatDate, formatMoneyFromUsdCents);
-      setPosts((prev) => [mapped, ...prev]);
-      /* Reset composer */
-      setComposerText('');
-      setComposerLocation('');
-      setComposerTags([]);
-      setComposerHashtags([]);
-      setComposerMediaFiles([]);
-      setSelectedPostListingId('');
-      setShowPreviewPopup(false);
-    } catch {
-      // Erreur : l'utilisateur peut réessayer
-    } finally {
-      setIsPublishing(false);
-    }
-  };
-
+  // ── Handlers ──
   const handleReaction = async (postId: string, type: SoKinReactionType) => {
-    if (!isLoggedIn || reactionBusy === postId) return;
-    setReactionBusy(postId);
-    setReactionPickerPostId(null);
-    try {
-      setPosts((prev) => prev.map((p) => {
-        if (p.id !== postId) return p;
-        const prevCounts = { ...p.reactionCounts };
-        const prevMine = p.myReaction;
-        if (prevMine) {
-          prevCounts[prevMine] = Math.max(0, (prevCounts[prevMine] ?? 1) - 1);
-          if (prevCounts[prevMine] === 0) delete prevCounts[prevMine];
-        }
-        if (prevMine === type) {
-          return { ...p, reactionCounts: prevCounts, myReaction: null, likes: Math.max(0, p.likes - 1) };
-        }
-        prevCounts[type] = (prevCounts[type] ?? 0) + 1;
-        return { ...p, reactionCounts: prevCounts, myReaction: type, likes: (prevMine ? p.likes : p.likes + 1) };
-      }));
-      const currentPost = posts.find((p) => p.id === postId);
-      if (currentPost?.myReaction === type) {
-        await sokinApi.unreactToPost(postId);
-      } else {
-        await sokinApi.reactToPost(postId, type as ApiReactionType);
-      }
-    } catch {
-      const data = await sokinApi.publicFeed({ limit: 20, city: defaultCity, country: effectiveCountry }).catch(() => null);
-      if (data) setPosts(data.posts.map((post) => mapApiFeedPost(post, t, formatDate, formatMoneyFromUsdCents)));
-    } finally {
-      setReactionBusy(null);
-    }
-  };
-
-  const handleOpenStory = async (index: number) => {
-    const story = stories[index];
-    if (!story) return;
-    setStoryViewerIndex(index);
-    setStoryViewerOpen(true);
-    if (isLoggedIn && !story.viewedByMe) {
-      void sokinApi.viewStory(story.id).catch(() => {});
-      setStories((prev) => prev.map((s) => (s.id === story.id ? { ...s, viewedByMe: true, viewCount: s.viewCount + 1 } : s)));
-    }
-  };
-
-  const handleCreateStory = async () => {
     if (!isLoggedIn) return;
-    const text = storyText.trim();
-    if (!text && !storyFile) return;
+    const post = posts.find((p) => p.id === postId);
     try {
-      const selectedListing = myListings.find((listing) => listing.id === selectedStoryListingId) ?? null;
-      const mediaUrl = storyFile ? await prepareMediaUrl(storyFile) : undefined;
-      const mediaType = storyFile ? (storyFile.type.startsWith('video/') ? 'VIDEO' : 'IMAGE') : 'TEXT';
-      const effectiveProductName = selectedListing?.title || storyProductName.trim();
-      const caption = [
-        text,
-        storyEnableProductCta && effectiveProductName
-          ? `🛒 ${effectiveProductName}${selectedListing ? ` · ${formatMoneyFromUsdCents(selectedListing.priceUsdCents)}` : ''}`
-          : '',
-      ]
-        .filter(Boolean)
-        .join('\n');
-      const created = await sokinApi.createStory({
-        mediaUrl,
-        mediaType,
-        caption: caption || undefined,
-        bgColor: mediaType === 'TEXT' ? storyBgColor : undefined,
-      });
-      setStories((prev) => [created, ...prev]);
-      setShowStoryComposer(false);
-      setStoryText('');
-      setStoryFile(null);
-      setStoryVisibility('PUBLIC');
-      setStoryAllowReplies(true);
-      setStoryAllowReactions(true);
-      setStoryProductName('');
-      setSelectedStoryListingId('');
-      setStoryEnableProductCta(false);
-    } catch {
-      // Ignore - l'utilisateur peut réessayer
-    }
+      if (post?.myReaction === type) {
+        await sokinApi.unreactToPost(postId);
+        setPosts((prev) => prev.map((p) => p.id === postId ? { ...p, myReaction: null, likes: Math.max(0, p.likes - 1) } : p));
+      } else {
+        await sokinApi.reactToPost(postId, type);
+        setPosts((prev) => prev.map((p) => p.id === postId ? { ...p, myReaction: type, likes: p.likes + (p.myReaction ? 0 : 1) } : p));
+      }
+    } catch { /* */ }
   };
 
-  const handleSharePost = async (postId: string) => {
-    if (!isLoggedIn || shareBusyPostId === postId) return;
-
-    const currentShareCount = posts.find((post) => post.id === postId)?.shares ?? 0;
-    setShareBusyPostId(postId);
-    setPosts((prev) => prev.map((post) => (post.id === postId ? { ...post, shares: post.shares + 1 } : post)));
-
+  const handleShare = async (postId: string) => {
+    if (!isLoggedIn) return;
     const shareUrl = `${window.location.origin}/sokin?post=${encodeURIComponent(postId)}`;
-    const currentPost = posts.find((post) => post.id === postId);
-    const shareData = {
-      title: 'So-Kin',
-      text: currentPost?.text?.trim().slice(0, 120) || 'Regarde cette publication sur So-Kin',
-      url: shareUrl,
-    };
-
     try {
       if (navigator.share) {
-        await navigator.share(shareData);
+        await navigator.share({ title: 'So-Kin', url: shareUrl });
       } else if (navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(shareUrl);
       }
-
-      const result = await sokinApi.sharePost(postId);
-      setPosts((prev) => prev.map((post) => (post.id === postId ? { ...post, shares: result.shares } : post)));
-    } catch {
-      setPosts((prev) => prev.map((post) => (post.id === postId ? { ...post, shares: currentShareCount } : post)));
-    } finally {
-      setShareBusyPostId(null);
-    }
+      const res = await sokinApi.sharePost(postId);
+      setPosts((prev) => prev.map((p) => p.id === postId ? { ...p, shares: res.shares } : p));
+    } catch { /* */ }
   };
 
-  const currentStory = storyViewerOpen ? stories[storyViewerIndex] : null;
+  const handlePublish = async (data: {
+    text: string;
+    mediaFiles: File[];
+    location: string;
+    tags: string[];
+    hashtags: string[];
+    bgColor: string;
+    scheduledAt: string;
+  }) => {
+    if (isPublishing || !isLoggedIn) return;
+    setIsPublishing(true);
+    try {
+      const scheduledAtIso = data.scheduledAt ? new Date(data.scheduledAt).toISOString() : undefined;
 
-  useEffect(() => {
-    if (!storyViewerOpen || !currentStory || currentStory.mediaType === 'VIDEO' || storyViewerPaused) {
-      return;
-    }
-    const timer = window.setTimeout(() => {
-      setStoryViewerIndex((prev) => {
-        if (prev >= stories.length - 1) {
-          setStoryViewerOpen(false);
-          return prev;
+      if (creatorMode === 'wave') {
+        // Create as story (Wave = 24h)
+        const mediaUrl = data.mediaFiles.length > 0 ? await prepareMediaUrl(data.mediaFiles[0]) : undefined;
+        const mediaType = data.mediaFiles.length > 0
+          ? (data.mediaFiles[0].type.startsWith('video/') ? 'VIDEO' : 'IMAGE')
+          : 'TEXT';
+        const created = await sokinApi.createStory({
+          mediaUrl,
+          mediaType,
+          caption: data.text || undefined,
+          bgColor: mediaType === 'TEXT' ? data.bgColor : undefined,
+          scheduledAt: scheduledAtIso,
+        });
+        setStories((prev) => [created, ...prev]);
+      } else {
+        // Create as post (permanent)
+        const mediaUrls = data.mediaFiles.length > 0 ? await prepareMediaUrls(data.mediaFiles) : undefined;
+        const newPost = await sokinApi.createPost({
+          text: data.text,
+          mediaUrls,
+          location: data.location || undefined,
+          tags: data.tags.length > 0 ? data.tags : undefined,
+          hashtags: data.hashtags.length > 0 ? data.hashtags : undefined,
+          scheduledAt: scheduledAtIso,
+        });
+        // Add to feed immediately (only if not scheduled)
+        if (!scheduledAtIso) {
+          setPosts((prev) => [{
+            ...newPost,
+            author: {
+              id: newPost.authorId,
+              profile: {
+                username: user?.profile.username ?? null,
+                displayName: user?.profile.displayName ?? 'Moi',
+                avatarUrl: user?.profile.avatarUrl ?? null,
+                city: user?.profile.city ?? null,
+              },
+            },
+            reactionCounts: {},
+            myReaction: null,
+          }, ...prev]);
         }
-        return prev + 1;
-      });
-    }, 5000);
-    return () => window.clearTimeout(timer);
-  }, [currentStory, storyViewerOpen, storyViewerPaused, stories.length]);
-
-  const openStoryCapture = (mode: 'photo' | 'selfie' | 'video' | 'gallery') => {
-    setShowStoryComposer(true);
-    const map = {
-      photo: storyPhotoInputRef,
-      selfie: storySelfieInputRef,
-      video: storyVideoInputRef,
-      gallery: storyGalleryInputRef,
-    };
-    window.setTimeout(() => map[mode].current?.click(), 30);
+      }
+      setCreatorMode(null);
+    } catch { /* */ }
+    finally { setIsPublishing(false); }
   };
 
-  const currentUserName = user?.profile.displayName ?? 'Vous';
-  const currentUserAvatar = user?.profile.avatarUrl ?? '';
-  const selectedPostListing = myListings.find((listing) => listing.id === selectedPostListingId) ?? null;
-  const selectedStoryListing = myListings.find((listing) => listing.id === selectedStoryListingId) ?? null;
-
-  const waveCards = stories.slice(0, 12);
-
-  const renderWaveCard = (story: SoKinStory, index: number) => {
-    const authorName = story.author.profile?.displayName ?? 'Utilisateur';
-    const hasMedia = Boolean(story.mediaUrl);
-    return (
-      <button
-        key={story.id}
-        type="button"
-        className={`sokin-wave-card${story.viewedByMe ? ' viewed' : ''}`}
-        onClick={() => void handleOpenStory(index)}
-      >
-        <div
-          className="sokin-wave-card-media"
-          style={hasMedia ? { backgroundImage: `linear-gradient(180deg, rgba(10, 8, 24, 0.05), rgba(10, 8, 24, 0.86)), url(${story.mediaUrl})` } : { background: story.bgColor ?? 'linear-gradient(145deg, rgba(111, 88, 255, 0.85), rgba(36, 23, 82, 0.96))' }}
-        >
-          <span className="sokin-wave-card-badge">Wave</span>
-          <span className="sokin-wave-card-time">{formatStoryAge(story.createdAt, t)}</span>
-          <span className="sokin-wave-card-avatar-wrap">
-            {story.author.profile?.avatarUrl ? (
-              <img src={story.author.profile.avatarUrl} alt={authorName} className="sokin-wave-card-avatar" />
-            ) : (
-              <span className="sokin-wave-card-avatar sokin-wave-card-avatar-fallback">👤</span>
-            )}
-          </span>
-          <div className="sokin-wave-card-copy">
-            <strong>{authorName}</strong>
-            <span>{story.caption?.trim() ? story.caption.slice(0, 48) : 'Ouvrir la Wave'}</span>
-          </div>
-        </div>
-      </button>
-    );
+  const openStoryViewer = async (index: number) => {
+    setStoryViewerIndex(index);
+    setStoryViewerOpen(true);
   };
+
+  const currentName = user?.profile.displayName ?? 'Vous';
+  const currentAvatar = user?.profile.avatarUrl ?? '';
 
   return (
     <>
       <SeoMeta
         title="So-Kin — Le réseau social de Kinshasa"
         description="Partagez vos actualités, suivez vos contacts et découvrez les lives et tendances sur So-Kin, le réseau social de Kin-Sell."
-        canonical="https://kin-sell.com/so-kin"
+        canonical="https://kin-sell.com/sokin"
       />
-      {isMobile ? (
-        <header className="sokin-mobile-header" role="banner">
-          <button className="sokin-mobile-icon-btn" type="button" onClick={() => navigate(-1)} aria-label="Retour">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M19 12H5M12 5l-7 7 7 7" />
-            </svg>
-          </button>
 
-          <button className="sokin-mobile-logo" type="button" onClick={() => navigate('/')} aria-label="Kin-Sell — Accueil">
-            <img
-              src="/assets/kin-sell/logo.png"
-              alt="Kin-Sell"
-              className="sokin-mobile-logo-img"
-              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-            />
-            <span className="sokin-mobile-logo-text">Kin-Sell</span>
-          </button>
+      <div className="sk-page">
+        <SoKinTopBar t={t} cartCount={cartCount} />
 
-          <button className="sokin-mobile-icon-btn" type="button" onClick={() => navigate('/cart')} aria-label={t('nav.cartAria')}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" />
-              <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
-            </svg>
-            {cartItemsCount > 0 ? <span className="sokin-mobile-badge">{cartItemsCount}</span> : null}
-          </button>
-        </header>
-      ) : null}
+        <CreateZone
+          avatarUrl={currentAvatar}
+          displayName={currentName}
+          isLoggedIn={isLoggedIn}
+          onWave={() => setCreatorMode('wave')}
+          onCreer={() => setCreatorMode('post')}
+        />
 
-      <section className="sokin-shell animate-fade-in">
-      <aside className="sokin-left-nav" aria-label="Navigation So-Kin">
-        <button type="button" className="sokin-nav-item" onClick={() => navigate('/')}>{t('sokin.home')}</button>
-        <button type="button" className="sokin-nav-item active" onClick={() => navigate('/sokin')}>{t('sokin.sokinHome')}</button>
-        {isLoggedIn ? (
-          <button type="button" className="sokin-nav-item" onClick={() => navigate(`/user/${user?.profile.username}/sokin`)}>{t('sokin.myPosts')}</button>
-        ) : null}
-        <button type="button" className="sokin-nav-item" onClick={() => navigate('/sokin/profiles')}>{t('sokin.profiles')}</button>
-        <button type="button" className="sokin-nav-item" onClick={() => navigate('/sokin/market')}>{t('sokin.market')}</button>
-        <button type="button" className="sokin-nav-item sokin-nav-live" onClick={() => navigate('/sokin/live')}>🔴 Live</button>
-        <button type="button" className="sokin-nav-item" onClick={() => navigate('/explorer')}>{t('sokin.goExplorer')}</button>
+        <WaveStrip stories={stories} t={t} onOpen={openStoryViewer} />
 
-        <section className="sokin-left-ad" aria-label="Publicité navigation So-Kin" style={{ display: 'none' }} />
-      </aside>
+        <PostFeed
+          posts={posts}
+          hasMore={hasMore}
+          loading={loadingFeed}
+          sentinelRef={sentinelRef}
+          t={t}
+          isLoggedIn={isLoggedIn}
+          onReact={handleReaction}
+          onShare={handleShare}
+        />
 
-      <main className="sokin-main">
-        <header className="sokin-topbar" aria-label="Barre So-Kin">
-          <div className="sokin-logo-word" aria-label="Logo So-Kin">
-            {['S', 'O', '-', 'K', 'I', 'N'].map((letter, index) => (
-              <span key={`logo-${index}`} className="sokin-logo-tile">{letter}</span>
-            ))}
-          </div>
+        <div className="sk-bottom-spacer" aria-hidden="true" />
 
-          <div className="sokin-top-search-wrap">
-            <input
-              type="search"
-              className="sokin-top-search"
-              placeholder={t('sokin.searchPlaceholder')}
-              value={feedSearch}
-              onChange={(e) => setFeedSearch(e.target.value)}
-            />
-          </div>
-
-          <div className="sokin-top-actions">
-            <div className="sokin-notif-wrap" ref={notifBtnRef}>
-              <button
-                className="sokin-top-icon-btn"
-                title={t('sokin.notifications')}
-                type="button"
-                onClick={() => setNotifOpen((prev) => !prev)}
-              >
-                🔔
-                {sokinNotifications.length > 0 ? <span className="sokin-top-badge">{sokinNotifications.length}</span> : null}
-              </button>
-
-              {notifOpen && (
-                <div className="sokin-notif-dropdown" role="menu">
-                  <div className="sokin-notif-dropdown-head">
-                    <strong>{t('sokin.notifications')}</strong>
-                    <span className="sokin-notif-dropdown-count">{sokinNotifications.length}</span>
-                  </div>
-                  {sokinNotifications.length > 0 ? (
-                    <div className="sokin-notif-dropdown-list">
-                      {sokinNotifications.map((n) => (
-                        <button
-                          type="button"
-                          key={n.id}
-                          className="sokin-notif-dropdown-item"
-                          role="menuitem"
-                          onClick={() => {
-                            setNotifOpen(false);
-                            if (n.id.startsWith('buy-')) sessionStorage.setItem('ud-section', 'purchases');
-                            if (n.id.startsWith('sell-')) sessionStorage.setItem('ud-section', 'sales');
-                            navigate(n.href);
-                          }}
-                        >
-                          <span className="sokin-notif-dropdown-icon">{n.icon}</span>
-                          <div className="sokin-notif-dropdown-text">
-                            <span className="sokin-notif-dropdown-label">{n.label}</span>
-                            <span className="sokin-notif-dropdown-detail">{n.detail}</span>
-                          </div>
-                          <span className="sokin-notif-dropdown-time">{n.time}</span>
-                        </button>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="sokin-notif-dropdown-empty">{t('sokin.noNotifications')}</p>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <button type="button" className="ks-help-btn" title={t('sokin.helpInfo')} aria-label={t('sokin.helpInfo')} onClick={() => setIsInfoOpen(true)}>
-              <span>?</span>
-            </button>
-
-            <button type="button" className="sokin-top-icon-btn" title={t('sokin.messaging')} onClick={() => { sessionStorage.setItem('ud-section', 'messages'); navigate(dashboardPath); }}>
-              💬
-            </button>
-
-            <button type="button" className="sokin-top-icon-btn" title={t('nav.cartAria')} onClick={() => navigate('/cart')}>
-              🛒
-              {cartItemsCount > 0 ? <span className="sokin-top-badge">{cartItemsCount}</span> : null}
-            </button>
-
-            <div className="sokin-account-wrap" ref={accountMenuRef}>
-              <button
-                className="sokin-top-icon-btn sokin-top-icon-btn--account"
-                type="button"
-                title={t('sokin.account')}
-                onClick={() => setAccountMenuOpen((prev) => !prev)}
-              >
-                {isLoggedIn && user?.profile.avatarUrl ? (
-                  <img src={user.profile.avatarUrl} alt={t('sokin.myAccount')} className="sokin-top-avatar" />
-                ) : (
-                  <span>👤</span>
-                )}
-              </button>
-
-              {accountMenuOpen ? (
-                <div className="sokin-account-menu">
-                  {isLoggedIn ? (
-                    <>
-                      <button type="button" onClick={() => { navigate(dashboardPath); setAccountMenuOpen(false); }}>{t('sokin.myAccount')}</button>
-                      <button type="button" onClick={() => { sessionStorage.setItem('ud-section', 'messages'); navigate(dashboardPath); setAccountMenuOpen(false); }}>{t('sokin.messaging')}</button>
-                      <button type="button" onClick={() => { navigate('/cart'); setAccountMenuOpen(false); }}>{t('nav.cartAria')}</button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          void logout();
-                          setAccountMenuOpen(false);
-                        }}
-                      >
-                        {t('sokin.disconnect')}
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <button type="button" onClick={() => { navigate('/login'); setAccountMenuOpen(false); }}>{t('sokin.login')}</button>
-                      <button type="button" onClick={() => { navigate('/register'); setAccountMenuOpen(false); }}>{t('sokin.createAccount')}</button>
-                    </>
-                  )}
-                </div>
-              ) : null}
-            </div>
-          </div>
-        </header>
-
-        {accountMenuOpen ? <button className="sokin-account-overlay" onClick={() => setAccountMenuOpen(false)} aria-label={t('sokin.closeMenuAccount')} type="button" /> : null}
-
-        {notifOpen ? <button className="sokin-notif-overlay" onClick={() => setNotifOpen(false)} aria-label={t('sokin.closeNotifications')} type="button" /> : null}
-
-        <section className="sokin-composer" aria-label={t('sokin.createPost')} ref={composerSectionRef}>
-          <div className="sokin-composer-head">
-            <div className="sokin-composer-headline">
-              <span className="sokin-composer-kicker">Studio So-Kin</span>
-              <h2>{t('sokin.compose')}</h2>
-              <p>Un seul flux pour publier un post, préparer une Wave, ajouter un produit et visualiser le rendu avant diffusion.</p>
-            </div>
-            <div className="sokin-composer-head-actions">
-              <button className="sokin-quick-btn" type="button" onClick={() => isLoggedIn ? setShowStoryComposer(true) : navigate('/login')} disabled={isPublishing}>
-                Wave rapide
-              </button>
-              <button className="sokin-quick-btn" type="button" onClick={() => setShowPreviewPopup(true)} disabled={!isLoggedIn || isPublishing || composerText.trim().length === 0}>
-                Aperçu live
-              </button>
-            </div>
-          </div>
-
-          <div className="sokin-composer-surface">
-            <div className="sokin-composer-author-pill">
-              {currentUserAvatar ? <img src={currentUserAvatar} alt={currentUserName} className="sokin-composer-author-avatar" /> : <span className="sokin-composer-author-avatar sokin-composer-author-avatar-fallback">👤</span>}
-              <div>
-                <strong>{currentUserName}</strong>
-                <span>Feed public Kinshasa, publication rapide, CTA produit prêt.</span>
-              </div>
-            </div>
-
-            <textarea
-              className="sokin-composer-input"
-              placeholder={t('sokin.placeholder')}
-              rows={5}
-              value={composerText}
-              onChange={(e) => setComposerText(e.target.value)}
-              disabled={!isLoggedIn || isPublishing}
-            />
-          </div>
-
-          {composerMediaFiles.length > 0 && (
-            <div className="sokin-media-preview">
-              <p>{composerMediaFiles.length} fichier(s) sélectionné(s)</p>
-              <button type="button" onClick={() => setComposerMediaFiles([])}>Effacer</button>
-            </div>
-          )}
-
-          {/* Tags/Hashtags preview */}
-          {(composerTags.length > 0 || composerHashtags.length > 0 || composerLocation) && (
-            <div className="sokin-metadata-preview">
-              {composerLocation && <span className="sokin-meta-tag">📍 {composerLocation}</span>}
-              {composerTags.map((tag) => <span key={tag} className="sokin-meta-tag">🏷️ {tag}</span>)}
-              {composerHashtags.map((ht) => <span key={ht} className="sokin-meta-tag">#{ht}</span>)}
-            </div>
-          )}
-
-          {selectedPostListing ? (
-            <div className="sokin-linked-card" aria-label="Produit relié à la publication">
-              <div className="sokin-linked-meta">
-                <span className="sokin-linked-kind">{selectedPostListing.type === 'SERVICE' ? 'Service' : 'Produit'}</span>
-                <h3>{selectedPostListing.title}</h3>
-                <p>{selectedPostListing.city}</p>
-                <strong>{formatMoneyFromUsdCents(selectedPostListing.priceUsdCents)}</strong>
-              </div>
-              <button type="button" className="sokin-linked-action" onClick={() => navigate(`/explorer?q=${encodeURIComponent(selectedPostListing.title)}`)}>
-                Voir produit
-              </button>
-            </div>
-          ) : null}
-
-          <div className="sokin-composer-actions">
-            <button
-              className="sokin-quick-btn"
-              type="button"
-              onClick={() => setShowMediaPopup(true)}
-              disabled={!isLoggedIn || isPublishing}
-            >
-              Média
-            </button>
-
-            <button
-              className="sokin-quick-btn"
-              type="button"
-              onClick={() => setShowEditorPopup(true)}
-              disabled={!isLoggedIn || isPublishing}
-            >
-              Éditer
-            </button>
-
-            <button
-              className="sokin-quick-btn"
-              type="button"
-              onClick={() => isLoggedIn ? setShowStoryComposer(true) : navigate('/login')}
-              disabled={!isLoggedIn || isPublishing}
-            >
-              Publier en Wave
-            </button>
-
-            <button
-              className="sokin-secondary-btn"
-              type="button"
-              onClick={() => setShowPreviewPopup(true)}
-              disabled={!isLoggedIn || isPublishing || composerText.trim().length === 0}
-            >
-              Aperçu
-            </button>
-
-            <button
-              className="sokin-primary-btn"
-              type="button"
-              onClick={handlePost}
-              disabled={!isLoggedIn || isPublishing || composerText.trim().length === 0}
-              title={isLoggedIn ? t('sokin.publish') : t('sokin.loginToPost')}
-            >
-              {isPublishing ? '⏳' : '🚀'} Publier
-            </button>
-          </div>
-        </section>
-
-        {/* Media Popup */}
-        {showMediaPopup && (
-          <div className="sokin-modal-overlay" onClick={() => setShowMediaPopup(false)}>
-            <div className="sokin-modal-box" onClick={(e) => e.stopPropagation()}>
-              <button type="button" className="sokin-modal-close" onClick={() => setShowMediaPopup(false)}>✕</button>
-              <h3>Ajouter média</h3>
-              <p className="sokin-modal-intro">Prépare un carousel social ou une publication plus commerce avec visuels, vidéo et ordre de lecture clair.</p>
-              <input
-                type="file"
-                multiple
-                accept="image/*,video/*"
-                onChange={(e) => {
-                  if (e.target.files) {
-                    setComposerMediaFiles([...composerMediaFiles, ...Array.from(e.target.files)]);
-                  }
-                }}
-              />
-              <p>{composerMediaFiles.length} fichier(s)</p>
-              <button type="button" onClick={() => { setComposerMediaFiles([]); setShowMediaPopup(false); }}>Confirmer</button>
-            </div>
-          </div>
+        {isMobile && (
+          <SoKinBottomNav hidden={scrollDir === 'down'} notifCount={notifCount} t={t} />
         )}
+      </div>
 
-        {/* Editor Popup */}
-        {showEditorPopup && (
-          <div className="sokin-modal-overlay" onClick={() => setShowEditorPopup(false)}>
-            <div className="sokin-modal-box" onClick={(e) => e.stopPropagation()}>
-              <button type="button" className="sokin-modal-close" onClick={() => setShowEditorPopup(false)}>✕</button>
-              <h3>Édition du contenu</h3>
-              <p className="sokin-modal-intro">Structure ta publication avec localisation, tags, hashtags et signal commercial réutilisable dans le feed.</p>
-              
-              <label>Localisation (📍)</label>
-              <input
-                type="text"
-                value={composerLocation}
-                onChange={(e) => setComposerLocation(e.target.value)}
-                placeholder="ex: Gombe, Kinshasa"
-              />
-
-              <label>Tags (🏷️)</label>
-              <input
-                type="text"
-                placeholder="ex: Produit, Service (séparés par virgules)"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    const val = (e.target as HTMLInputElement).value.trim();
-                    if (val) {
-                      setComposerTags([...composerTags, val]);
-                      (e.target as HTMLInputElement).value = '';
-                    }
-                  }
-                }}
-              />
-              <div>{composerTags.map((t) => <span key={t} className="sokin-tag-chip">{t} <button type="button" onClick={() => setComposerTags(composerTags.filter((x) => x !== t))}>✕</button></span>)}</div>
-
-              <label>Produit Kin-Sell (🛒)</label>
-              <select value={selectedPostListingId} onChange={(e) => setSelectedPostListingId(e.target.value)}>
-                <option value="">Aucun produit lié</option>
-                {myListings.map((listing) => (
-                  <option key={listing.id} value={listing.id}>{listing.title} · {formatMoneyFromUsdCents(listing.priceUsdCents)}</option>
-                ))}
-              </select>
-              {loadingMyListings ? <p className="sokin-modal-intro">Chargement de vos produits…</p> : null}
-
-              <label>Hashtags (🌐#)</label>
-              <input
-                type="text"
-                placeholder="ex: KinshsaMarket, Business (sans #)"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    const val = (e.target as HTMLInputElement).value.trim();
-                    if (val) {
-                      setComposerHashtags([...composerHashtags, val]);
-                      (e.target as HTMLInputElement).value = '';
-                    }
-                  }
-                }}
-              />
-              <div>{composerHashtags.map((h) => <span key={h} className="sokin-tag-chip">#{h} <button type="button" onClick={() => setComposerHashtags(composerHashtags.filter((x) => x !== h))}>✕</button></span>)}</div>
-
-              <button type="button" onClick={() => setShowEditorPopup(false)}>Fermer</button>
-            </div>
-          </div>
-        )}
-
-        {/* Preview Popup */}
-        {showPreviewPopup && (
-          <div className="sokin-modal-overlay" onClick={() => setShowPreviewPopup(false)}>
-            <div className="sokin-modal-box" onClick={(e) => e.stopPropagation()}>
-              <button type="button" className="sokin-modal-close" onClick={() => setShowPreviewPopup(false)}>✕</button>
-              <h3>Aperçu de votre publication</h3>
-              <p className="sokin-modal-intro">Vérifie le rendu avant diffusion dans le feed. La version Wave se prépare depuis le bouton dédié.</p>
-              
-              <article className="sokin-preview-post" style={{ borderRadius: '18px', padding: '18px', background: 'rgba(35, 24, 72, 0.4)' }}>
-                <header style={{ marginBottom: '12px' }}>
-                  <img src={user?.profile.avatarUrl || ''} alt={user?.profile.displayName} style={{ width: '40px', height: '40px', borderRadius: '50%' }} />
-                  <div>
-                    <strong>{user?.profile.displayName}</strong>
-                    <p style={{ fontSize: '0.9em', color: 'rgba(255,255,255,0.6)' }}>@{user?.profile.username}</p>
-                  </div>
-                </header>
-
-                <p style={{ marginBottom: '12px', lineHeight: '1.6' }}>{composerText}</p>
-
-                {composerMediaFiles.length > 0 && (
-                  <div style={{ marginBottom: '12px', background: 'rgba(0,0,0,0.2)', padding: '8px', borderRadius: '4px' }}>
-                    <p>[{composerMediaFiles.length} média(s)]</p>
-                  </div>
-                )}
-
-                {(composerLocation || composerTags.length > 0 || composerHashtags.length > 0) && (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                    {composerLocation && <span style={{ background: 'rgba(111, 88, 255, 0.2)', padding: '4px 8px', borderRadius: '4px', fontSize: '0.9em' }}>📍 {composerLocation}</span>}
-                    {composerTags.map((t) => <span key={t} style={{ background: 'rgba(111, 88, 255, 0.2)', padding: '4px 8px', borderRadius: '4px', fontSize: '0.9em' }}>🏷️ {t}</span>)}
-                    {composerHashtags.map((h) => <span key={h} style={{ background: 'rgba(111, 88, 255, 0.2)', padding: '4px 8px', borderRadius: '4px', fontSize: '0.9em' }}>#{h}</span>)}
-                  </div>
-                )}
-              </article>
-
-              <div className="sokin-popup-confirm-row" style={{ marginTop: '16px' }}>
-                <button type="button" onClick={() => setShowPreviewPopup(false)}>Modifier</button>
-                <button type="button" onClick={() => { handlePost(); }}>✓ Confirmer et publier</button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        <section className="sokin-feed-box" aria-label={t('sokin.announcements')}>
-          <div className="sokin-feed-box-head">
-            <h2>{t('sokin.announcements')}</h2>
-            <span>{analytics.postsToday} {t('sokin.today')} · {analytics.activeUsers} {t('sokin.active')}</span>
-          </div>
-
-          <div className="sokin-feed" ref={feedBoxRef} aria-label="Fil So-Kin">
-          {visiblePosts.length === 0 ? (
-            <div className="sokin-empty-feed">
-              <p>{t('sokin.noPostYet')}</p>
-              <p>{t('sokin.beFirst')}</p>
-            </div>
-          ) : null}
-          {visiblePosts.map((post) => (
-            <article key={post.id} id={`sokin-post-${post.id}`} className={`sokin-post${post.sponsored ? ' sponsored' : ''}${highlightedPostId === post.id ? ' sokin-post--highlighted' : ''}`}>
-              {post.sponsored ? <span className="sokin-sponsored-badge">{t('sokin.sponsoredTag')}</span> : null}
-
-              <header className="sokin-post-head">
-                <div className="sokin-author-wrap"
-                  onMouseEnter={(e) => profileHover.handleMouseEnter({ avatarUrl: post.author.avatarUrl, name: post.author.name, username: post.author.handle?.replace('@', ''), kinId: post.author.kinId, publicPageUrl: post.author.isPrivate ? null : (post.author.handle ? `/user/${post.author.handle.replace('@', '')}` : null) }, e)}
-                  onMouseLeave={profileHover.handleMouseLeave}
-                >
-                  <img className="sokin-avatar" src={post.author.avatarUrl} alt={post.author.name} />
-
-                  <div>
-                    <div className="sokin-author-line">
-                      <span className="sokin-author">{post.author.name}</span>
-                      <span className="sokin-author-handle">{post.author.handle}</span>
-                      <span className="sokin-author-type">{post.author.kinId}</span>
-                    </div>
-
-                    <span className="sokin-author-meta">
-                      {post.author.city} · {post.timestampLabel} · {post.visibility === 'PUBLIC' ? t('sokin.public') : t('sokin.contacts')}
-                    </span>
-                  </div>
-                </div>
-              </header>
-
-              <p className="sokin-post-text">{post.text}</p>
-
-              {post.media.length > 0 ? (
-                <div className="sokin-media-scroll">
-                  {post.media.map((media, index) => {
-                    const key = `${post.id}-${index}`;
-
-                    return (
-                      <div className="sokin-media-tile" key={key}>
-                        {media.kind === 'video' ? (
-                          <button
-                            className="sokin-video-wrap"
-                            type="button"
-                            onClick={() => handleVideoTileClick(key)}
-                          >
-                            <video
-                              ref={(node) => {
-                                videoRefs.current[key] = node;
-                              }}
-                              controls={videoUiByKey[key]?.controls === true}
-                              preload="metadata"
-                            >
-                              <source src={media.src} type="video/mp4" />
-                            </video>
-
-                            {videoUiByKey[key]?.played !== true ? (
-                              <span className="sokin-video-overlay">{t('sokin.clickToPlay')}</span>
-                            ) : videoUiByKey[key]?.controls !== true ? (
-                              <span className="sokin-video-overlay">{t('sokin.secondClick')}</span>
-                            ) : null}
-                          </button>
-                        ) : (
-                          <img src={media.src} alt={media.label} />
-                        )}
-                        <span className="sokin-media-label">{media.label}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : null}
-
-              {post.linkedCard ? (
-                <section className="sokin-linked-card" aria-label="Aperçu lié"
-                  onMouseEnter={(e) => articleHover.handleMouseEnter({ title: post.linkedCard!.title, description: post.linkedCard!.subtitle, price: post.linkedCard!.priceLabel || 'Prix libre', sellerName: post.author.name }, e)}
-                  onMouseLeave={articleHover.handleMouseLeave}
-                >
-                  <div className="sokin-linked-meta">
-                    <span className="sokin-linked-kind">{post.linkedCard.kind}</span>
-                    <h3>{post.linkedCard.title}</h3>
-                    <p>{post.linkedCard.subtitle}</p>
-                    {post.linkedCard.priceLabel ? <strong>{formatPriceLabelToCdf(post.linkedCard.priceLabel)}</strong> : null}
-                  </div>
-
-                  <button type="button" className="sokin-linked-action" onClick={() => navigate(post.linkedCard!.href)}>
-                    {post.linkedCard.actionLabel}
-                  </button>
-                </section>
-              ) : null}
-
-              <footer className="sokin-post-actions">
-                {/* ── Reaction picker style Facebook ── */}
-                <div className="sokin-reaction-wrap" onMouseLeave={() => setReactionPickerPostId(null)}>
-                  <button
-                    className={`sokin-action-btn sokin-action-btn--react${post.myReaction ? ' sokin-action-btn--reacted' : ''}`}
-                    type="button"
-                    aria-label="Réagir"
-                    onMouseEnter={() => setReactionPickerPostId(post.id)}
-                    onClick={() => handleReaction(post.id, post.myReaction ?? 'LIKE')}
-                  >
-                    {post.myReaction === 'LOVE' ? '❤️' : post.myReaction === 'HAHA' ? '😂' : post.myReaction === 'WOW' ? '😮' : post.myReaction === 'SAD' ? '😢' : post.myReaction === 'ANGRY' ? '😡' : '👍'}
-                    {' '}{post.likes > 0 ? post.likes : ''}
-                  </button>
-                  {reactionPickerPostId === post.id && (
-                    <div className="sokin-reaction-picker" role="toolbar" aria-label="Choisir une réaction">
-                      {(['LIKE', 'LOVE', 'HAHA', 'WOW', 'SAD', 'ANGRY'] as const).map((type) => {
-                        const emoji = type === 'LIKE' ? '👍' : type === 'LOVE' ? '❤️' : type === 'HAHA' ? '😂' : type === 'WOW' ? '😮' : type === 'SAD' ? '😢' : '😡';
-                        const label = type === 'LIKE' ? 'J\'aime' : type === 'LOVE' ? 'J\'adore' : type === 'HAHA' ? 'Haha' : type === 'WOW' ? 'Wow' : type === 'SAD' ? 'Triste' : 'En colère';
-                        return (
-                          <button
-                            key={type}
-                            className={`sokin-reaction-btn${post.myReaction === type ? ' sokin-reaction-btn--active' : ''}`}
-                            type="button"
-                            title={label}
-                            onClick={() => handleReaction(post.id, type)}
-                          >
-                            {emoji}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-                <button
-                  className="sokin-action-btn"
-                  type="button"
-                  aria-label="Commentaires"
-                  onClick={() => openCommentsModal(post)}
-                >
-                  💬 {post.comments}
-                </button>
-                <button
-                  className="sokin-action-btn"
-                  type="button"
-                  aria-label="Partages"
-                  onClick={() => void handleSharePost(post.id)}
-                  disabled={shareBusyPostId === post.id}
-                >
-                  🔁 {post.shares}
-                </button>
-                <button type="button" className="sokin-contact-btn" onClick={() => navigate(buildContactUrl(post))} aria-label="Contacter">📩</button>
-              </footer>
-
-              {post.author.isPrivate ? (
-                <p className="sokin-private-note">
-                  {t('sokin.privateNote')}
-                </p>
-              ) : null}
-
-            </article>
-          ))}
-
-          {hasMorePosts ? <div className="sokin-loading">{t('sokin.progressiveLoading')}</div> : null}
-          </div>
-        </section>
-
-      </main>
-
-      <aside className="sokin-side" aria-label={t('sokin.trendsSuggestions')}>
-        <AdBanner page="sokin" variant="sidebar" />
-
-        <section className="sokin-side-card">
-          <h2 className="sokin-side-title">{t('sokin.trendsSide')}</h2>
-          <ul className="sokin-side-list">
-            {analytics.trends.map((item) => (
-              <li key={item.label}>
-                <strong>{item.label}</strong>
-                <span>{item.volume}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-
-        <section className="sokin-side-card">
-          <h2 className="sokin-side-title">{t('sokin.categoriesTrending')}</h2>
-          <ul className="sokin-side-list">
-            {analytics.trendingCategories.map((item) => (
-              <li key={item.label}>
-                <strong>{item.label}</strong>
-                <span>{item.volume}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-
-        <section className="sokin-side-card">
-          <h2 className="sokin-side-title">{t('sokin.viralPosts')}</h2>
-          <ul className="sokin-side-list">
-            {analytics.viralPosts.map((item) => (
-              <li key={item.label}>
-                <strong>{item.label}</strong>
-                <span>{item.volume}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-
-        <section className="sokin-side-card">
-          <h2 className="sokin-side-title">{t('sokin.suggestionsSide')}</h2>
-          <ul className="sokin-side-list sokin-suggestion-list">
-            {analytics.suggestions.map((item) => (
-              <li key={item.name}
-                onMouseEnter={(e) => profileHover.handleMouseEnter({ avatarUrl: null, name: item.name, username: null, kinId: null, publicPageUrl: item.href }, e)}
-                onMouseLeave={profileHover.handleMouseLeave}
-              >
-                <div>
-                  <strong>{item.name}</strong>
-                  <small>{item.type} · {item.metric}</small>
-                </div>
-                <button type="button" onClick={() => navigate(item.href)}>{t('sokin.follow')}</button>
-              </li>
-            ))}
-          </ul>
-        </section>
-      </aside>
-
-      <button className="sokin-fab" type="button" aria-label={t('sokin.fabLabel')}>+</button>
-
-      {activeCommentsPost ? (
-        <div className="sokin-comments-modal-backdrop" role="dialog" aria-modal="true" aria-label={t('sokin.comments')}>
-          <section className="sokin-comments-modal">
-            <header className="sokin-comments-modal-head">
-              <h3>{t('sokin.comments')}</h3>
-              <div className="sokin-comments-modal-head-actions">
-                <button type="button" className="sokin-comment-add-btn" title={t('sokin.leaveComment')}>✍️</button>
-                <button type="button" className="sokin-comment-close-btn" onClick={closeCommentsModal} aria-label={t('sokin.close')}>✕</button>
-              </div>
-            </header>
-
-            <div className="sokin-comments-meta">
-              <strong>{activeCommentsPost.author.name}</strong>
-              <span>{activeCommentsPost.comments} {t('sokin.commentsCount')}</span>
-            </div>
-
-            <div className="sokin-comments-modal-list">
-              {activeCommentsPost.thread.length === 0 ? (
-                <p className="sokin-comments-empty">{t('sokin.noComments')}</p>
-              ) : (
-                activeCommentsPost.thread.map((comment) => (
-                  <article key={comment.id} className="sokin-comment">
-                    <div className="sokin-comment-top">
-                      <span>{comment.author}</span>
-                      <small>{comment.kinId}</small>
-                    </div>
-                    <p>{comment.text}</p>
-                    <div className="sokin-comment-actions-row">
-                      <button type="button" className="sokin-comment-like" aria-label={t('sokin.likeComment')}>❤️ {comment.likes}</button>
-                      <button type="button" className="sokin-comment-dislike" aria-label={t('sokin.dislikeComment')}>👎 {Math.max(0, Math.floor(comment.likes / 4))}</button>
-                      <button type="button" className="sokin-comment-reply" aria-label={t('sokin.replyComment')}>💬</button>
-                    </div>
-
-                    {comment.replies && comment.replies.length > 0 ? (
-                      <div className="sokin-comment-replies">
-                        {comment.replies.map((reply) => (
-                          <article key={reply.id} className="sokin-comment reply">
-                            <div className="sokin-comment-top">
-                              <span>{reply.author}</span>
-                              <small>{reply.kinId}</small>
-                            </div>
-                            <p>{reply.text}</p>
-                            <div className="sokin-comment-actions-row">
-                              <button type="button" className="sokin-comment-like" aria-label={t('sokin.likeReply')}>❤️ {reply.likes}</button>
-                              <button type="button" className="sokin-comment-dislike" aria-label={t('sokin.dislikeReply')}>👎 {Math.max(0, Math.floor(reply.likes / 4))}</button>
-                              <button type="button" className="sokin-comment-reply" aria-label={t('sokin.replyReply')}>💬</button>
-                            </div>
-                          </article>
-                        ))}
-                      </div>
-                    ) : null}
-                  </article>
-                ))
-              )}
-            </div>
-          </section>
-        </div>
-      ) : null}
-
-      <ProfileHoverPopup popup={profileHover.popup} />
-      <ArticleHoverPopup popup={articleHover.popup} />
-
-      {isInfoOpen && createPortal(
-        <div className="ks-info-overlay" onClick={() => setIsInfoOpen(false)}>
-          <div className="ks-info-popup glass-container" onClick={(e) => e.stopPropagation()}>
-            <div className="ks-info-popup-head">
-              <strong>Kin-Sell</strong>
-              <p>{t('sokin.quickNav')}</p>
-              <button type="button" className="ks-info-popup-close" onClick={() => setIsInfoOpen(false)}>✕</button>
-            </div>
-            <nav className="ks-info-popup-links">
-              {INFO_ITEMS.map((item) => (
-                <button
-                  type="button"
-                  key={item.href}
-                  onClick={() => { navigate(item.href); setIsInfoOpen(false); }}
-                  className="ks-info-popup-link"
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', width: '100%' }}
-                >
-                  {t(item.titleKey)}
-                </button>
-              ))}
-            </nav>
-          </div>
-        </div>,
-        document.body
+      {/* Creator bottom sheet */}
+      {creatorMode && (
+        <CreatorSheet
+          mode={creatorMode}
+          isPublishing={isPublishing}
+          onClose={() => setCreatorMode(null)}
+          onPublish={handlePublish}
+          t={t}
+        />
       )}
-      </section>
 
-      {isMobile ? (
-        <>
-          <div className="sokin-mobile-bottom-spacer" aria-hidden="true" />
-          <nav className="sokin-mobile-bottom-nav" aria-label="Navigation mobile So-Kin">
-            <button className="sokin-mobile-nav-item" type="button" onClick={() => navigate('/')}>
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z" />
-              </svg>
-              <span>Accueil</span>
-            </button>
-
-            <button className="sokin-mobile-nav-item" type="button" onClick={() => navigate('/sokin/live')}>
-              <span style={{ fontSize: '18px' }}>🔴</span>
-              <span>Live</span>
-            </button>
-
-            <button className="sokin-mobile-nav-fab" type="button" onClick={() => {
-              navigate(isLoggedIn ? '/sokin/live?create=1' : '/login');
-            }} aria-label="Lancer un live">
-              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
-                <line x1="12" y1="5" x2="12" y2="19" />
-                <line x1="5" y1="12" x2="19" y2="12" />
-              </svg>
-            </button>
-
-            <button className="sokin-mobile-nav-item" type="button" onClick={() => {
-              sessionStorage.setItem('ud-section', 'notifications');
-              navigate(dashboardPath);
-            }}>
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-                <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-              </svg>
-              {sokinNotifications.length > 0 ? <span className="sokin-mobile-badge">{sokinNotifications.length}</span> : null}
-              <span>Notifs</span>
-            </button>
-
-            <button className="sokin-mobile-nav-item" type="button" onClick={() => navigate(dashboardPath)}>
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                <circle cx="12" cy="7" r="4" />
-              </svg>
-              <span>Compte</span>
-            </button>
-          </nav>
-        </>
-      ) : null}
-
-      <input ref={storyPhotoInputRef} type="file" accept="image/*" capture="environment" hidden onChange={(e) => setStoryFile(e.target.files?.[0] ?? null)} />
-      <input ref={storySelfieInputRef} type="file" accept="image/*" capture="user" hidden onChange={(e) => setStoryFile(e.target.files?.[0] ?? null)} />
-      <input ref={storyVideoInputRef} type="file" accept="video/*" capture="environment" hidden onChange={(e) => setStoryFile(e.target.files?.[0] ?? null)} />
-      <input ref={storyGalleryInputRef} type="file" accept="image/*,video/*" hidden onChange={(e) => setStoryFile(e.target.files?.[0] ?? null)} />
-
-      {showStoryComposer ? (
-        <div className="sokin-story-modal" onClick={() => setShowStoryComposer(false)}>
-          <div className="sokin-story-modal-card" onClick={(e) => e.stopPropagation()}>
-            <div className="sokin-wave-composer-head">
-              <div>
-                <span className="sokin-composer-kicker">Wave Studio</span>
-                <h3>Créer une Wave</h3>
-              </div>
-              <button type="button" className="sokin-modal-close" onClick={() => setShowStoryComposer(false)}>✕</button>
-            </div>
-
-            <div className="sokin-wave-capture-grid">
-              <button type="button" className="sokin-wave-capture-btn" onClick={() => openStoryCapture('photo')}>📷 Photo</button>
-              <button type="button" className="sokin-wave-capture-btn" onClick={() => openStoryCapture('video')}>🎥 Vidéo</button>
-              <button type="button" className="sokin-wave-capture-btn" onClick={() => openStoryCapture('gallery')}>🖼️ Galerie</button>
-              <button type="button" className="sokin-wave-capture-btn" onClick={() => openStoryCapture('selfie')}>🔄 Selfie</button>
-            </div>
-
-            <div className="sokin-wave-composer-layout">
-              <div className="sokin-wave-composer-preview" style={!storyPreviewUrl ? { background: storyBgColor } : undefined}>
-                {storyPreviewUrl ? (
-                  storyFile?.type.startsWith('video/') ? <video src={storyPreviewUrl} autoPlay muted loop controls /> : <img src={storyPreviewUrl} alt="Aperçu Wave" />
-                ) : (
-                  <div className="sokin-wave-composer-placeholder">
-                    <strong>Caméra instantanée</strong>
-                    <span>Photo au tap, vidéo au choix, galerie et selfie disponibles selon l’appareil.</span>
-                  </div>
-                )}
-                {storyText.trim() ? <p className="sokin-wave-composer-caption">{storyText}</p> : null}
-              </div>
-
-              <div className="sokin-wave-composer-form">
-                <textarea value={storyText} onChange={(e) => setStoryText(e.target.value)} placeholder="Quoi montrer, vendre ou annoncer ?" maxLength={180} />
-
-                {!storyFile ? (
-                  <label className="sokin-wave-color-field">
-                    <span>Couleur de fond</span>
-                    <input type="color" value={storyBgColor} onChange={(e) => setStoryBgColor(e.target.value)} />
-                  </label>
-                ) : null}
-
-                <label>
-                  <span>Produit à mettre en avant</span>
-                  <input type="text" value={storyProductName} onChange={(e) => setStoryProductName(e.target.value)} placeholder="Nom du produit ou offre" />
-                </label>
-
-                <label>
-                  <span>Visibilité</span>
-                  <select value={storyVisibility} onChange={(e) => setStoryVisibility(e.target.value as StoryVisibility)}>
-                    <option value="PUBLIC">Public</option>
-                    <option value="FOLLOWERS">Abonnés</option>
-                    <option value="PRIVATE">Privé</option>
-                    <option value="CLIENTS">Clients uniquement</option>
-                  </select>
-                </label>
-
-                <div className="sokin-wave-toggle-list">
-                  <label><input type="checkbox" checked={storyAllowReplies} onChange={(e) => setStoryAllowReplies(e.target.checked)} /> Réponses autorisées</label>
-                  <label><input type="checkbox" checked={storyAllowReactions} onChange={(e) => setStoryAllowReactions(e.target.checked)} /> Réactions actives</label>
-                  <label><input type="checkbox" checked={storyEnableProductCta} onChange={(e) => setStoryEnableProductCta(e.target.checked)} /> Bouton Voir produit</label>
-                </div>
-
-                <label>
-                  <span>Produit Kin-Sell (réel)</span>
-                  <select value={selectedStoryListingId} onChange={(e) => {
-                    setSelectedStoryListingId(e.target.value);
-                    const picked = myListings.find((listing) => listing.id === e.target.value);
-                    if (picked) setStoryProductName(picked.title);
-                  }}>
-                    <option value="">Aucun produit lié</option>
-                    {myListings.map((listing) => (
-                      <option key={listing.id} value={listing.id}>{listing.title} · {formatMoneyFromUsdCents(listing.priceUsdCents)}</option>
-                    ))}
-                  </select>
-                </label>
-
-                <div className="sokin-wave-meta-preview">
-                  <span>24h</span>
-                  <span>{storyVisibility === 'CLIENTS' ? 'Clients seulement' : storyVisibility === 'FOLLOWERS' ? 'Abonnés' : storyVisibility === 'PRIVATE' ? 'Privé' : 'Public'}</span>
-                  {storyEnableProductCta && (selectedStoryListing?.title || storyProductName.trim()) ? <span>🛒 {selectedStoryListing?.title || storyProductName.trim()}</span> : null}
-                </div>
-              </div>
-            </div>
-
-            <div className="sokin-story-modal-actions">
-              <button type="button" onClick={() => setShowStoryComposer(false)}>Annuler</button>
-              <button type="button" onClick={() => void handleCreateStory()}>Publier</button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {storyViewerOpen && currentStory ? (
-        <div className="sokin-story-modal" onClick={() => setStoryViewerOpen(false)}>
-          <div
-            className="sokin-story-viewer"
-            onClick={(e) => e.stopPropagation()}
-            onMouseDown={() => setStoryViewerPaused(true)}
-            onMouseUp={() => setStoryViewerPaused(false)}
-            onMouseLeave={() => setStoryViewerPaused(false)}
-            onTouchStart={(e) => {
-              setStoryViewerPaused(true);
-              const touch = e.changedTouches[0];
-              storyTouchStartRef.current = { x: touch.clientX, y: touch.clientY };
-            }}
-            onTouchEnd={(e) => {
-              setStoryViewerPaused(false);
-              const start = storyTouchStartRef.current;
-              const touch = e.changedTouches[0];
-              if (!start) return;
-              const dx = touch.clientX - start.x;
-              const dy = touch.clientY - start.y;
-              if (dy > 90) {
-                setStoryViewerOpen(false);
-                return;
-              }
-              if (dx > 80) {
-                setStoryViewerIndex((n) => Math.max(0, n - 1));
-                return;
-              }
-              if (dx < -80) {
-                setStoryViewerIndex((n) => Math.min(stories.length - 1, n + 1));
-              }
-            }}
-            style={{ background: currentStory.mediaType === 'TEXT' ? (currentStory.bgColor ?? '#241752') : undefined }}
-          >
-            <div className="sokin-story-progress">
-              {stories.map((story, index) => (
-                <span key={story.id} className={`sokin-story-progress-bar${index === storyViewerIndex ? ' active' : ''}${index < storyViewerIndex ? ' done' : ''}`} />
-              ))}
-            </div>
-
-            <div className="sokin-story-viewer-head">
-              <div className="sokin-story-viewer-author">
-                {currentStory.author.profile?.avatarUrl ? <img src={currentStory.author.profile.avatarUrl} alt={currentStory.author.profile.displayName} /> : <span>👤</span>}
-                <div>
-                  <strong>{currentStory.author.profile?.displayName ?? 'Utilisateur'}</strong>
-                  <span>{formatStoryAge(currentStory.createdAt, t)} · {currentStory.viewCount} vues</span>
-                </div>
-              </div>
-              <button type="button" className="sokin-story-viewer-close" onClick={() => setStoryViewerOpen(false)}>✕</button>
-            </div>
-
-            <div className="sokin-story-stage">
-              {currentStory.mediaType !== 'TEXT' && currentStory.mediaUrl ? (
-                currentStory.mediaType === 'VIDEO' ? <video src={currentStory.mediaUrl} controls autoPlay playsInline /> : <img src={currentStory.mediaUrl} alt="Wave" />
-              ) : (
-                <div className="sokin-story-text-stage">
-                  <p>{currentStory.caption ?? 'Wave textuelle'}</p>
-                </div>
-              )}
-
-              <button type="button" className="sokin-story-hotspot sokin-story-hotspot--prev" disabled={storyViewerIndex <= 0} onClick={() => setStoryViewerIndex((n) => Math.max(0, n - 1))} aria-label="Wave précédente" />
-              <button type="button" className="sokin-story-hotspot sokin-story-hotspot--next" disabled={storyViewerIndex >= stories.length - 1} onClick={() => setStoryViewerIndex((n) => Math.min(stories.length - 1, n + 1))} aria-label="Wave suivante" />
-            </div>
-
-            {currentStory.mediaType !== 'TEXT' && currentStory.caption ? <p>{currentStory.caption}</p> : null}
-
-            <div className="sokin-story-nav">
-              <button type="button" disabled={storyViewerIndex <= 0} onClick={() => setStoryViewerIndex((n) => Math.max(0, n - 1))}>Précédente</button>
-              <button type="button" disabled={storyViewerIndex >= stories.length - 1} onClick={() => setStoryViewerIndex((n) => Math.min(stories.length - 1, n + 1))}>Suivante</button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      {/* Story viewer */}
+      {storyViewerOpen && (
+        <StoryViewer
+          stories={stories}
+          startIndex={storyViewerIndex}
+          t={t}
+          onClose={() => setStoryViewerOpen(false)}
+          isLoggedIn={isLoggedIn}
+        />
+      )}
     </>
   );
 }

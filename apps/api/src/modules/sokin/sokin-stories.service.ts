@@ -10,9 +10,11 @@ export const createStory = async (
     mediaType?: "IMAGE" | "VIDEO" | "TEXT";
     caption?: string;
     bgColor?: string;
+    scheduledAt?: string;
   }
 ) => {
-  const expiresAt = new Date(Date.now() + STORY_DURATION_MS);
+  const effectiveStart = data.scheduledAt ? new Date(data.scheduledAt) : new Date();
+  const expiresAt = new Date(effectiveStart.getTime() + STORY_DURATION_MS);
   return prisma.soKinStory.create({
     data: {
       authorId,
@@ -20,6 +22,7 @@ export const createStory = async (
       mediaType: data.mediaType ?? "IMAGE",
       caption: data.caption ?? null,
       bgColor: data.bgColor ?? null,
+      scheduledAt: data.scheduledAt ? new Date(data.scheduledAt) : null,
       expiresAt,
     },
     include: {
@@ -44,6 +47,7 @@ export const getFeedStories = async (viewerUserId?: string) => {
   const stories = await prisma.soKinStory.findMany({
     where: {
       expiresAt: { gt: now },
+      OR: [{ scheduledAt: null }, { scheduledAt: { lte: now } }],
       author: {
         accountStatus: "ACTIVE",
         role: { notIn: ["ADMIN", "SUPER_ADMIN"] },

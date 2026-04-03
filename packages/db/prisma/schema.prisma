@@ -1204,6 +1204,7 @@ model SoKinPost {
   moderatedBy     String?
   moderatedAt     DateTime?
   moderationNote  String?
+  scheduledAt     DateTime?
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 
@@ -1731,6 +1732,7 @@ model SoKinStory {
   mediaType   SoKinStoryMediaType @default(IMAGE)
   caption     String?
   bgColor     String?             // Pour les stories texte
+  scheduledAt DateTime?
   viewCount   Int                 @default(0)
   expiresAt   DateTime            // Auto-expiration 24h après création
   createdAt   DateTime            @default(now())
