@@ -399,6 +399,23 @@ export const auth = {
 
   submitAppeal: (message: string) =>
     request<{ ok: boolean }>("/account/appeal", { method: "POST", body: { message } }),
+
+  // ── Password Recovery ──
+  requestPasswordReset: (email: string) =>
+    request<{ ok: boolean; verificationId?: string; message: string; previewCode?: string }>("/account/password-reset/request", { method: "POST", body: { email } }),
+  confirmPasswordReset: (body: { verificationId: string; code: string; newPassword: string }) =>
+    request<{ ok: boolean }>("/account/password-reset/confirm", { method: "POST", body }),
+
+  // ── Email Verification ──
+  requestEmailVerification: (email: string) =>
+    request<{ verificationId: string; expiresAt: string; previewCode?: string }>("/account/verifications/email/request", { method: "POST", body: { email } }),
+  confirmEmailVerification: (body: { verificationId: string; code: string }) =>
+    request<{ success: boolean }>("/account/verifications/email/confirm", { method: "POST", body }),
+
+  revokeSession: (sessionId: string) =>
+    request<{ success: boolean }>(`/account/sessions/${sessionId}`, { method: "DELETE" }),
+  revokeAllOtherSessions: () =>
+    request<{ success: boolean }>("/account/sessions", { method: "DELETE" }),
 };
 
 // ── Users ──

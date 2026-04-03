@@ -355,13 +355,9 @@ export function LoginPage() {
               <input type="checkbox" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} />
               <span>{t("auth.rememberMe")}</span>
             </label>
-            <button
-              type="button"
-              className="auth-link-button"
-              onClick={() => { setSocialMessage(null); setErrorMessage(t("auth.forgotPasswordMsg")); }}
-            >
+            <a href="/forgot-password" className="auth-link-button">
               {t("auth.forgotPassword")}
-            </button>
+            </a>
           </div>
 
           {errorMessage ? <div className="auth-error">{errorMessage}</div> : null}

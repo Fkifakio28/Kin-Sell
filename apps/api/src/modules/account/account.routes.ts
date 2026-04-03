@@ -329,4 +329,36 @@ router.post(
   })
 );
 
+// ═══════════════════════════════════════════════════════
+// PASSWORD RECOVERY
+// ═══════════════════════════════════════════════════════
+
+const passwordResetRequestSchema = z.object({
+  email: z.string().email()
+});
+
+const passwordResetConfirmSchema = z.object({
+  verificationId: z.string().min(8),
+  code: z.string().regex(/^\d{6}$/),
+  newPassword: z.string().min(8).max(120)
+});
+
+router.post(
+  "/password-reset/request",
+  asyncHandler(async (request, response) => {
+    const { email } = passwordResetRequestSchema.parse(request.body);
+    const result = await accountService.requestPasswordReset(email);
+    response.json(result);
+  })
+);
+
+router.post(
+  "/password-reset/confirm",
+  asyncHandler(async (request, response) => {
+    const { verificationId, code, newPassword } = passwordResetConfirmSchema.parse(request.body);
+    const result = await accountService.confirmPasswordReset(verificationId, code, newPassword);
+    response.json(result);
+  })
+);
+
 export default router;

@@ -5,10 +5,11 @@ import { Capacitor } from "@capacitor/core";
 import { AuthShell } from "./AuthShell";
 import { useAuth } from "../../app/providers/AuthProvider";
 import { useLocaleCurrency } from "../../app/providers/LocaleCurrencyProvider";
-import { ApiError } from "../../lib/api-client";
+import { ApiError, auth as authApi } from "../../lib/api-client";
 import { TurnstileWidget } from "../../components/TurnstileWidget";
 
 type ProfileType = "user" | "business";
+type RegisterTab = "email" | "telephone";
 
 const rememberedRoleKey = "kin-sell.auth.role";
 
@@ -32,8 +33,9 @@ function getRedirectPath(role: string): string {
 
 export function RegisterPage() {
   const navigate = useNavigate();
-  const { register, isLoggedIn, isLoading, user } = useAuth();
+  const { register, isLoggedIn, isLoading, user, refreshUser } = useAuth();
   const { t } = useLocaleCurrency();
+  const [tab, setTab] = useState<RegisterTab>("email");
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -45,6 +47,15 @@ export function RegisterPage() {
   const [socialMessage, setSocialMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [cfToken, setCfToken] = useState("");
+
+  // Phone registration state
+  const [phone, setPhone] = useState("");
+  const [phoneDisplayName, setPhoneDisplayName] = useState("");
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpCode, setOtpCode] = useState("");
+  const [otpVerificationId, setOtpVerificationId] = useState("");
+  const [otpResendAt, setOtpResendAt] = useState(0);
+  const [otpCountdown, setOtpCountdown] = useState(0);
 
   const handleTurnstileToken = useCallback((token: string) => setCfToken(token), []);
 
@@ -60,6 +71,17 @@ export function RegisterPage() {
       : t("auth.registerHelperUser");
   }, [profileType, t]);
 
+  useEffect(() => {
+    if (otpResendAt <= 0) return;
+    const tick = () => {
+      const remaining = Math.max(0, Math.ceil((otpResendAt - Date.now()) / 1000));
+      setOtpCountdown(remaining);
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [otpResendAt]);
+
   const handleSocialClick = async (provider: "google" | "facebook") => {
     setErrorMessage(null);
     if (provider === "google") {
@@ -73,6 +95,61 @@ export function RegisterPage() {
       return;
     }
     setSocialMessage(t("auth.socialRegisterReady").replace("{provider}", "Facebook"));
+  };
+
+  const handleSendOtp = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setErrorMessage(null);
+    if (!phone.trim()) { setErrorMessage(t("auth.phoneRequired")); return; }
+    if (!phoneDisplayName.trim()) { setErrorMessage("Nom d'affichage requis."); return; }
+    setIsSubmitting(true);
+    try {
+      const res = await authApi.requestOtp({ phone: phone.trim() });
+      setOtpVerificationId(res.verificationId);
+      setOtpSent(true);
+      setOtpResendAt(Date.now() + res.resendAfterSeconds * 1000);
+      if (res.previewCode) setSocialMessage(`[DEV] Code OTP : ${res.previewCode}`);
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error, t));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleVerifyOtp = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setErrorMessage(null);
+    if (otpCode.length !== 6) { setErrorMessage(t("auth.code6digits")); return; }
+    setIsSubmitting(true);
+    try {
+      const result = await authApi.verifyOtp({
+        verificationId: otpVerificationId,
+        code: otpCode,
+        phone: phone.trim(),
+        displayName: phoneDisplayName.trim(),
+        accountType: profileType === "business" ? "BUSINESS" : "USER",
+      });
+      localStorage.setItem(rememberedRoleKey, profileType);
+      await refreshUser();
+      navigate(getRedirectPath(result.user.role), { replace: true });
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error, t));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    setErrorMessage(null);
+    setSocialMessage(null);
+    try {
+      const res = await authApi.requestOtp({ phone: phone.trim() });
+      setOtpVerificationId(res.verificationId);
+      setOtpResendAt(Date.now() + res.resendAfterSeconds * 1000);
+      if (res.previewCode) setSocialMessage(`[DEV] Code : ${res.previewCode}`);
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error, t));
+    }
   };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -114,79 +191,181 @@ export function RegisterPage() {
       socialMessage={socialMessage}
       onSocialClick={handleSocialClick}
     >
-      <form className="auth-form" onSubmit={handleSubmit}>
-        <div className="auth-helper-text">{helperText}</div>
-
-        <div className="auth-field-group">
-          <label htmlFor="register-display-name" className="auth-label">{t("auth.displayNameLabel")}</label>
-          <input
-            id="register-display-name"
-            type="text"
-            className="auth-input"
-            placeholder={t("auth.displayNamePlaceholder")}
-            value={displayName}
-            onChange={(event) => setDisplayName(event.target.value)}
-            autoComplete="name"
-            required
-          />
-        </div>
-
-        <div className="auth-field-group">
-          <label htmlFor="register-email" className="auth-label">{t("auth.emailLabel")}</label>
-          <input
-            id="register-email"
-            type="email"
-            className="auth-input"
-            placeholder={t("auth.emailPlaceholder")}
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            autoComplete="email"
-            required
-          />
-        </div>
-
-        <div className="auth-field-grid">
-          <div className="auth-field-group">
-            <label htmlFor="register-password" className="auth-label">{t("auth.passwordLabel")}</label>
-            <input
-              id="register-password"
-              type="password"
-              className="auth-input"
-              placeholder={t("auth.passwordHint")}
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              autoComplete="new-password"
-              required
-            />
-          </div>
-          <div className="auth-field-group">
-            <label htmlFor="register-confirm-password" className="auth-label">{t("auth.confirmLabel")}</label>
-            <input
-              id="register-confirm-password"
-              type="password"
-              className="auth-input"
-              placeholder={t("auth.confirmPlaceholder")}
-              value={confirmPassword}
-              onChange={(event) => setConfirmPassword(event.target.value)}
-              autoComplete="new-password"
-              required
-            />
-          </div>
-        </div>
-
-        {errorMessage ? <div className="auth-error">{errorMessage}</div> : null}
-
-        <TurnstileWidget onToken={handleTurnstileToken} />
-
-        <button type="submit" className="auth-submit-button" disabled={isSubmitting || isLoading}>
-          {isSubmitting ? t("auth.creating") : t("auth.createAccount")}
+      <div className="auth-tabs" role="tablist">
+        <button type="button" role="tab" aria-selected={tab === "email"}
+          className={`auth-tab${tab === "email" ? " auth-tab--active" : ""}`}
+          onClick={() => { setTab("email"); setErrorMessage(null); setOtpSent(false); setOtpCode(""); }}>
+          {t("auth.tabEmail")}
         </button>
+        <button type="button" role="tab" aria-selected={tab === "telephone"}
+          className={`auth-tab${tab === "telephone" ? " auth-tab--active" : ""}`}
+          onClick={() => { setTab("telephone"); setErrorMessage(null); }}>
+          {t("auth.tabPhone")}
+        </button>
+      </div>
 
-        <div className="auth-actions-row">
-          <a href="/login" className="auth-secondary-link">{t("auth.alreadyHaveAccount")}</a>
-          <a href="/explorer" className="auth-secondary-link auth-secondary-link--muted">{t("auth.continueVisitor")}</a>
-        </div>
-      </form>
+      {tab === "email" && (
+        <form className="auth-form" onSubmit={handleSubmit}>
+          <div className="auth-helper-text">{helperText}</div>
+
+          <div className="auth-field-group">
+            <label htmlFor="register-display-name" className="auth-label">{t("auth.displayNameLabel")}</label>
+            <input
+              id="register-display-name"
+              type="text"
+              className="auth-input"
+              placeholder={t("auth.displayNamePlaceholder")}
+              value={displayName}
+              onChange={(event) => setDisplayName(event.target.value)}
+              autoComplete="name"
+              required
+            />
+          </div>
+
+          <div className="auth-field-group">
+            <label htmlFor="register-email" className="auth-label">{t("auth.emailLabel")}</label>
+            <input
+              id="register-email"
+              type="email"
+              className="auth-input"
+              placeholder={t("auth.emailPlaceholder")}
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              autoComplete="email"
+              required
+            />
+          </div>
+
+          <div className="auth-field-grid">
+            <div className="auth-field-group">
+              <label htmlFor="register-password" className="auth-label">{t("auth.passwordLabel")}</label>
+              <input
+                id="register-password"
+                type="password"
+                className="auth-input"
+                placeholder={t("auth.passwordHint")}
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                autoComplete="new-password"
+                required
+              />
+            </div>
+            <div className="auth-field-group">
+              <label htmlFor="register-confirm-password" className="auth-label">{t("auth.confirmLabel")}</label>
+              <input
+                id="register-confirm-password"
+                type="password"
+                className="auth-input"
+                placeholder={t("auth.confirmPlaceholder")}
+                value={confirmPassword}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+                autoComplete="new-password"
+                required
+              />
+            </div>
+          </div>
+
+          {errorMessage ? <div className="auth-error">{errorMessage}</div> : null}
+
+          <TurnstileWidget onToken={handleTurnstileToken} />
+
+          <button type="submit" className="auth-submit-button" disabled={isSubmitting || isLoading}>
+            {isSubmitting ? t("auth.creating") : t("auth.createAccount")}
+          </button>
+
+          <div className="auth-actions-row">
+            <a href="/login" className="auth-secondary-link">{t("auth.alreadyHaveAccount")}</a>
+            <a href="/explorer" className="auth-secondary-link auth-secondary-link--muted">{t("auth.continueVisitor")}</a>
+          </div>
+        </form>
+      )}
+
+      {tab === "telephone" && !otpSent && (
+        <form className="auth-form" onSubmit={handleSendOtp}>
+          <div className="auth-helper-text">
+            Créez votre compte avec votre numéro de téléphone. Un code SMS sera envoyé pour vérification.
+          </div>
+
+          <div className="auth-field-group">
+            <label htmlFor="register-phone-name" className="auth-label">{t("auth.displayNameLabel")}</label>
+            <input
+              id="register-phone-name"
+              type="text"
+              className="auth-input"
+              placeholder={t("auth.displayNamePlaceholder")}
+              value={phoneDisplayName}
+              onChange={(e) => setPhoneDisplayName(e.target.value)}
+              autoComplete="name"
+              required
+            />
+          </div>
+
+          <div className="auth-field-group">
+            <label htmlFor="register-phone" className="auth-label">{t("auth.phoneLabel")}</label>
+            <input
+              id="register-phone"
+              type="tel"
+              className="auth-input"
+              placeholder="+243 8XX XXX XXXX"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              autoComplete="tel"
+              required
+            />
+          </div>
+
+          {errorMessage ? <div className="auth-error">{errorMessage}</div> : null}
+
+          <button type="submit" className="auth-submit-button" disabled={isSubmitting}>
+            {isSubmitting ? t("auth.sendingOtp") : t("auth.receiveCode")}
+          </button>
+
+          <div className="auth-actions-row">
+            <a href="/login" className="auth-secondary-link">{t("auth.alreadyHaveAccount")}</a>
+            <a href="/explorer" className="auth-secondary-link auth-secondary-link--muted">{t("auth.continueVisitor")}</a>
+          </div>
+        </form>
+      )}
+
+      {tab === "telephone" && otpSent && (
+        <form className="auth-form" onSubmit={handleVerifyOtp}>
+          <div className="auth-helper-text">
+            {t("auth.codeSentTo")} <strong>{phone}</strong>. {t("auth.checkSms")}
+          </div>
+
+          <div className="auth-field-group">
+            <label htmlFor="register-otp" className="auth-label">{t("auth.otpLabel")}</label>
+            <input
+              id="register-otp"
+              type="text"
+              inputMode="numeric"
+              className="auth-input auth-input--otp"
+              placeholder="000000"
+              maxLength={6}
+              value={otpCode}
+              onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+              autoComplete="one-time-code"
+              required
+            />
+          </div>
+
+          {errorMessage ? <div className="auth-error">{errorMessage}</div> : null}
+
+          <button type="submit" className="auth-submit-button" disabled={isSubmitting || otpCode.length !== 6}>
+            {isSubmitting ? t("auth.verifying") : t("auth.confirmCode")}
+          </button>
+
+          <div className="auth-row auth-row--between" style={{ marginTop: 8 }}>
+            <button type="button" className="auth-link-button"
+              onClick={() => { setOtpSent(false); setOtpCode(""); setErrorMessage(null); }}>
+              {t("auth.changeNumber")}
+            </button>
+            <button type="button" className="auth-link-button" disabled={otpCountdown > 0} onClick={handleResendOtp}>
+              {otpCountdown > 0 ? `${t("auth.resendIn")} (${otpCountdown}s)` : t("auth.resendCode")}
+            </button>
+          </div>
+        </form>
+      )}
     </AuthShell>
   );
 }

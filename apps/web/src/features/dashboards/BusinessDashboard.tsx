@@ -131,6 +131,24 @@ export function BusinessDashboard() {
   const [bzDeleteBusy, setBzDeleteBusy] = useState(false);
   const [bzDeleteError, setBzDeleteError] = useState<string | null>(null);
 
+  // ── Sécurité: TOTP 2FA ──
+  const [bzTotpEnabled, setBzTotpEnabled] = useState(false);
+  const [bzTotpSetupUri, setBzTotpSetupUri] = useState<string | null>(null);
+  const [bzTotpSetupSecret, setBzTotpSetupSecret] = useState<string | null>(null);
+  const [bzTotpSetupCode, setBzTotpSetupCode] = useState('');
+  const [bzTotpDisablePassword, setBzTotpDisablePassword] = useState('');
+  const [bzTotpStep, setBzTotpStep] = useState<'idle' | 'setup' | 'disable'>('idle');
+  const [bzTotpBusy, setBzTotpBusy] = useState(false);
+  const [bzTotpMessage, setBzTotpMessage] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+  const [bzTotpQrDataUrl, setBzTotpQrDataUrl] = useState<string | null>(null);
+  const [bzSessionsCount, setBzSessionsCount] = useState<number | null>(null);
+  // ── Email verification ──
+  const [bzEmailVerifStep, setBzEmailVerifStep] = useState<'idle' | 'sent' | 'done'>('idle');
+  const [bzEmailVerifId, setBzEmailVerifId] = useState('');
+  const [bzEmailVerifCode, setBzEmailVerifCode] = useState('');
+  const [bzEmailVerifBusy, setBzEmailVerifBusy] = useState(false);
+  const [bzEmailVerifMsg, setBzEmailVerifMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+
   // ─── Page publique ───────────────────────────────────────
   const [pageSaving, setPageSaving] = useState(false);
   const [pageMsg, setPageMsg] = useState<string | null>(null);
@@ -582,6 +600,89 @@ export function BusinessDashboard() {
     } finally {
       setSettingsSaving(false);
     }
+  };
+
+  // ── Sécurité: TOTP handlers ──
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    let cancelled = false;
+    const loadSecData = async () => {
+      try {
+        const [totpRes, sessRes] = await Promise.all([authApi.totpStatus(), authApi.sessions()]);
+        if (!cancelled) {
+          setBzTotpEnabled(totpRes.totpEnabled);
+          setBzSessionsCount(sessRes.sessions.length);
+        }
+      } catch { /* skip */ }
+    };
+    void loadSecData();
+    return () => { cancelled = true; };
+  }, [isLoggedIn]);
+
+  const handleBzTotpSetup = async () => {
+    setBzTotpBusy(true); setBzTotpMessage(null);
+    try {
+      const res = await authApi.totpSetup();
+      const QRCode = await import('qrcode');
+      const dataUrl = await QRCode.toDataURL(res.uri, { width: 200, margin: 1, color: { dark: '#ffffff', light: '#0d0720' } });
+      setBzTotpQrDataUrl(dataUrl);
+      setBzTotpSetupUri(res.uri);
+      setBzTotpSetupSecret(res.secret);
+      setBzTotpStep('setup');
+    } catch (err) {
+      setBzTotpMessage({ type: 'err', text: err instanceof Error ? err.message : 'Erreur configuration 2FA.' });
+    } finally { setBzTotpBusy(false); }
+  };
+
+  const handleBzTotpEnable = async () => {
+    if (bzTotpSetupCode.length !== 6) { setBzTotpMessage({ type: 'err', text: 'Code 6 chiffres requis.' }); return; }
+    setBzTotpBusy(true); setBzTotpMessage(null);
+    try {
+      await authApi.totpEnable(bzTotpSetupCode);
+      setBzTotpEnabled(true); setBzTotpStep('idle');
+      setBzTotpSetupUri(null); setBzTotpSetupSecret(null); setBzTotpQrDataUrl(null); setBzTotpSetupCode('');
+      setBzTotpMessage({ type: 'ok', text: '✅ 2FA activé avec succès !' });
+    } catch (err) {
+      setBzTotpMessage({ type: 'err', text: err instanceof Error ? err.message : 'Code invalide.' });
+    } finally { setBzTotpBusy(false); }
+  };
+
+  const handleBzTotpDisable = async () => {
+    if (!bzTotpDisablePassword) { setBzTotpMessage({ type: 'err', text: 'Mot de passe requis.' }); return; }
+    setBzTotpBusy(true); setBzTotpMessage(null);
+    try {
+      await authApi.totpDisable(bzTotpDisablePassword);
+      setBzTotpEnabled(false); setBzTotpStep('idle'); setBzTotpDisablePassword('');
+      setBzTotpMessage({ type: 'ok', text: '🔓 2FA désactivé.' });
+    } catch (err) {
+      setBzTotpMessage({ type: 'err', text: err instanceof Error ? err.message : 'Mot de passe incorrect.' });
+    } finally { setBzTotpBusy(false); }
+  };
+
+  const handleBzSendEmailVerification = async () => {
+    if (!user?.email) { setBzEmailVerifMsg({ type: 'err', text: 'Aucun email sur ce compte.' }); return; }
+    setBzEmailVerifBusy(true); setBzEmailVerifMsg(null);
+    try {
+      const res = await authApi.requestEmailVerification(user.email);
+      setBzEmailVerifId(res.verificationId);
+      setBzEmailVerifStep('sent');
+      setBzEmailVerifMsg({ type: 'ok', text: 'Code envoyé ! Vérifiez votre boîte mail.' });
+    } catch (err) {
+      setBzEmailVerifMsg({ type: 'err', text: err instanceof Error ? err.message : 'Erreur.' });
+    } finally { setBzEmailVerifBusy(false); }
+  };
+
+  const handleBzConfirmEmailVerification = async () => {
+    if (bzEmailVerifCode.length !== 6) { setBzEmailVerifMsg({ type: 'err', text: 'Code 6 chiffres requis.' }); return; }
+    setBzEmailVerifBusy(true); setBzEmailVerifMsg(null);
+    try {
+      await authApi.confirmEmailVerification({ verificationId: bzEmailVerifId, code: bzEmailVerifCode });
+      setBzEmailVerifStep('done');
+      setBzEmailVerifMsg({ type: 'ok', text: '✅ Email vérifié !' });
+      await refreshUser();
+    } catch (err) {
+      setBzEmailVerifMsg({ type: 'err', text: err instanceof Error ? err.message : 'Code invalide.' });
+    } finally { setBzEmailVerifBusy(false); }
   };
 
   // ─── Page publique ───────────────────────────────────────
@@ -2141,6 +2242,127 @@ export function BusinessDashboard() {
                   </button>
                 </div>
               </form>
+            </section>
+
+            {/* ── Section: Sécurité du compte ── */}
+            <section className="ud-glass-panel bz-glass-panel">
+              <div className="ud-settings-section-head">
+                <span className="ud-settings-section-icon">🔒</span>
+                <h3 className="ud-settings-section-title">Sécurité du compte</h3>
+              </div>
+              <div className="ud-settings-security-grid">
+                {/* Email */}
+                <div className="ud-settings-security-item">
+                  <div className="ud-settings-security-info">
+                    <strong>Email vérifié</strong>
+                    <span className={user?.emailVerified ? 'ud-settings-verified' : 'ud-settings-unverified'}>{user?.emailVerified ? '✅ Oui' : '❌ Non'}</span>
+                  </div>
+                  {user && !user.emailVerified && user.email && bzEmailVerifStep === 'idle' && (
+                    <button type="button" className="ud-quick-btn ud-quick-btn--primary" style={{ marginTop: 6, fontSize: '0.82rem' }} onClick={() => void handleBzSendEmailVerification()} disabled={bzEmailVerifBusy}>
+                      {bzEmailVerifBusy ? '...' : '📧 Vérifier mon email'}
+                    </button>
+                  )}
+                  {bzEmailVerifStep === 'sent' && (
+                    <div style={{ marginTop: 8, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                      <input type="text" inputMode="numeric" maxLength={6} placeholder="000000" value={bzEmailVerifCode}
+                        onChange={(e) => setBzEmailVerifCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                        style={{ width: 100, padding: '6px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: 'var(--ud-text-1, #fff)', fontFamily: 'monospace', fontSize: '1rem', textAlign: 'center' }}
+                      />
+                      <button type="button" className="ud-quick-btn ud-quick-btn--primary" style={{ fontSize: '0.82rem' }} onClick={() => void handleBzConfirmEmailVerification()} disabled={bzEmailVerifBusy || bzEmailVerifCode.length !== 6}>
+                        {bzEmailVerifBusy ? '...' : '✓ Confirmer'}
+                      </button>
+                      <button type="button" className="ud-quick-btn" style={{ fontSize: '0.82rem' }} onClick={() => { setBzEmailVerifStep('idle'); setBzEmailVerifCode(''); setBzEmailVerifMsg(null); }}>
+                        Annuler
+                      </button>
+                    </div>
+                  )}
+                  {bzEmailVerifMsg && <p style={{ fontSize: '0.8rem', marginTop: 4, color: bzEmailVerifMsg.type === 'ok' ? '#7ef5c4' : '#ff6b6b' }}>{bzEmailVerifMsg.text}</p>}
+                </div>
+                {/* Phone */}
+                <div className="ud-settings-security-item">
+                  <div className="ud-settings-security-info">
+                    <strong>Téléphone vérifié</strong>
+                    <span className={user?.phoneVerified ? 'ud-settings-verified' : 'ud-settings-unverified'}>{user?.phoneVerified ? '✅ Oui' : '❌ Non'}</span>
+                  </div>
+                </div>
+                {/* Sessions */}
+                <div className="ud-settings-security-item">
+                  <div className="ud-settings-security-info">
+                    <strong>Sessions actives</strong>
+                    <span style={{ color: 'var(--ud-text-2, #aaa)' }}>{bzSessionsCount ?? '—'}</span>
+                  </div>
+                </div>
+                {/* TOTP 2FA */}
+                <div className="ud-settings-security-item ud-settings-security-item--full">
+                  <div className="ud-settings-security-info">
+                    <strong>Authentification 2FA (TOTP)</strong>
+                    <span className={bzTotpEnabled ? 'ud-settings-verified' : 'ud-settings-unverified'}>
+                      {bzTotpEnabled ? '✅ Activé' : '❌ Désactivé'}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+                    {!bzTotpEnabled && bzTotpStep === 'idle' && (
+                      <button type="button" className="ud-quick-btn ud-quick-btn--primary" onClick={() => void handleBzTotpSetup()} disabled={bzTotpBusy}>
+                        {bzTotpBusy ? '...' : '🔐 Configurer 2FA'}
+                      </button>
+                    )}
+                    {bzTotpEnabled && bzTotpStep === 'idle' && (
+                      <button type="button" className="ud-quick-btn" style={{ color: 'var(--color-error, #ff6b6b)' }} onClick={() => { setBzTotpStep('disable'); setBzTotpMessage(null); }} disabled={bzTotpBusy}>
+                        🔓 Désactiver 2FA
+                      </button>
+                    )}
+                  </div>
+
+                  {bzTotpStep === 'setup' && (
+                    <div style={{ marginTop: 16, padding: 16, background: 'rgba(111,88,255,0.08)', borderRadius: 12, border: '1px solid rgba(111,88,255,0.2)' }}>
+                      <p style={{ margin: '0 0 12px', fontSize: '0.88rem', color: 'var(--ud-text-2, #aaa)' }}>
+                        Scannez ce QR code avec Google Authenticator ou une app similaire :
+                      </p>
+                      {bzTotpQrDataUrl && <img src={bzTotpQrDataUrl} alt="QR code 2FA" style={{ display: 'block', margin: '0 auto 12px', borderRadius: 8 }} />}
+                      {bzTotpSetupSecret && (
+                        <div style={{ margin: '0 0 12px', padding: '10px 14px', background: 'rgba(255,255,255,0.06)', borderRadius: 8, border: '1px dashed rgba(255,255,255,0.2)', textAlign: 'center' }}>
+                          <p style={{ margin: '0 0 4px', fontSize: '0.78rem', color: 'var(--ud-text-2, #aaa)' }}>Clé manuelle :</p>
+                          <code style={{ fontSize: '0.95rem', letterSpacing: '0.15em', color: '#a78bfa', fontWeight: 600, wordBreak: 'break-all', userSelect: 'all' }}>{bzTotpSetupSecret}</code>
+                        </div>
+                      )}
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <input type="text" inputMode="numeric" maxLength={6} placeholder="000000" value={bzTotpSetupCode}
+                          onChange={(e) => setBzTotpSetupCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                          style={{ flex: 1, minWidth: 100, padding: '8px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: 'var(--ud-text-1, #fff)', fontFamily: 'monospace', fontSize: '1.2rem', textAlign: 'center', letterSpacing: '0.2em' }}
+                        />
+                        <button type="button" className="ud-quick-btn ud-quick-btn--primary" onClick={() => void handleBzTotpEnable()} disabled={bzTotpBusy || bzTotpSetupCode.length !== 6}>
+                          {bzTotpBusy ? '...' : '✓ Activer'}
+                        </button>
+                        <button type="button" className="ud-quick-btn" onClick={() => { setBzTotpStep('idle'); setBzTotpSetupUri(null); setBzTotpSetupSecret(null); setBzTotpQrDataUrl(null); setBzTotpSetupCode(''); setBzTotpMessage(null); }}>
+                          Annuler
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {bzTotpStep === 'disable' && (
+                    <div style={{ marginTop: 16, padding: 16, background: 'rgba(255,107,107,0.08)', borderRadius: 12, border: '1px solid rgba(255,107,107,0.2)' }}>
+                      <p style={{ margin: '0 0 12px', fontSize: '0.88rem', color: 'var(--ud-text-2, #aaa)' }}>Entrez votre mot de passe pour désactiver la 2FA :</p>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <input type="password" placeholder="Mot de passe" value={bzTotpDisablePassword}
+                          onChange={(e) => setBzTotpDisablePassword(e.target.value)}
+                          style={{ flex: 1, minWidth: 160, padding: '8px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: 'var(--ud-text-1, #fff)' }}
+                        />
+                        <button type="button" className="ud-quick-btn" style={{ color: 'var(--color-error, #ff6b6b)' }} onClick={() => void handleBzTotpDisable()} disabled={bzTotpBusy}>
+                          {bzTotpBusy ? '...' : 'Confirmer'}
+                        </button>
+                        <button type="button" className="ud-quick-btn" onClick={() => { setBzTotpStep('idle'); setBzTotpDisablePassword(''); setBzTotpMessage(null); }}>
+                          Annuler
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {bzTotpMessage && (
+                    <p style={{ marginTop: 8, fontSize: '0.85rem', color: bzTotpMessage.type === 'ok' ? '#7ef5c4' : '#ff6b6b' }}>{bzTotpMessage.text}</p>
+                  )}
+                </div>
+              </div>
             </section>
 
             {/* ── Zone sensible ── */}

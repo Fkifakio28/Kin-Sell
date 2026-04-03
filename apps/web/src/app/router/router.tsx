@@ -12,6 +12,7 @@ const SoKinMarketPage = lazy(() => import("../../features/sokin/SoKinMarketPage"
 const SoKinLivePage = lazy(() => import("../../features/sokin/SoKinLivePage").then(m => ({ default: m.SoKinLivePage })));
 const LoginPage = lazy(() => import("../../features/auth/LoginPage").then(m => ({ default: m.LoginPage })));
 const RegisterPage = lazy(() => import("../../features/auth/RegisterPage").then(m => ({ default: m.RegisterPage })));
+const ForgotPasswordPage = lazy(() => import("../../features/auth/ForgotPasswordPage").then(m => ({ default: m.ForgotPasswordPage })));
 const AuthCallbackPage = lazy(() => import("../../features/auth/AuthCallbackPage").then(m => ({ default: m.AuthCallbackPage })));
 const SuspendedPage = lazy(() => import("../../features/auth/SuspendedPage").then(m => ({ default: m.SuspendedPage })));
 const OfflinePage = lazy(() => import("../../features/offline/OfflinePage").then(m => ({ default: m.OfflinePage })));
@@ -51,6 +52,7 @@ export const router = createBrowserRouter([
       { path: "/", element: <HomeEntry /> },
       { path: "/login", element: <LoginPage /> },
       { path: "/register", element: <RegisterPage /> },
+      { path: "/forgot-password", element: <ForgotPasswordPage /> },
       { path: "/auth/callback", element: <AuthCallbackPage /> },
       { path: "/suspended", element: <SuspendedPage /> },
       { path: "/offline", element: <OfflinePage /> },

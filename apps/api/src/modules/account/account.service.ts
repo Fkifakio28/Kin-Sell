@@ -1078,3 +1078,110 @@ export const submitSuspensionAppeal = async (userId: string, message: string) =>
 
   return { ok: true };
 };
+
+// ═══════════════════════════════════════════════════════════════
+// PASSWORD RECOVERY (reset via email OTP)
+// ═══════════════════════════════════════════════════════════════
+
+export const requestPasswordReset = async (email: string) => {
+  const normalizedEmail = normalizeEmail(email);
+
+  const identity = await prisma.userIdentity.findUnique({
+    where: {
+      provider_providerSubject: {
+        provider: AuthProvider.EMAIL,
+        providerSubject: normalizedEmail,
+      },
+    },
+    include: { user: true },
+  });
+
+  if (!identity) {
+    // Ne pas révéler si l'email existe ou non
+    return { ok: true, message: "Si ce compte existe, un code a été envoyé." };
+  }
+
+  if (!identity.user.passwordHash) {
+    return { ok: true, message: "Si ce compte existe, un code a été envoyé." };
+  }
+
+  const code = randomOtp();
+  const expiresAt = new Date(Date.now() + env.OTP_TTL_SECONDS * 1000);
+
+  const verification = await prisma.verificationCode.create({
+    data: {
+      userId: identity.userId,
+      destination: normalizedEmail,
+      provider: AuthProvider.EMAIL,
+      purpose: VerificationPurpose.PASSWORD_RESET,
+      codeHash: hashCode(code),
+      maxAttempts: env.OTP_MAX_ATTEMPTS,
+      expiresAt,
+    },
+  });
+
+  await sendOtpEmail(normalizedEmail, code);
+
+  return {
+    ok: true,
+    verificationId: verification.id,
+    message: "Si ce compte existe, un code a été envoyé.",
+    previewCode: env.NODE_ENV === "development" ? code : undefined,
+  };
+};
+
+export const confirmPasswordReset = async (
+  verificationId: string,
+  code: string,
+  newPassword: string
+) => {
+  const verification = await prisma.verificationCode.findUnique({
+    where: { id: verificationId },
+  });
+
+  if (!verification) throw new HttpError(404, "Vérification introuvable");
+  if (verification.purpose !== VerificationPurpose.PASSWORD_RESET) {
+    throw new HttpError(400, "Type de vérification invalide");
+  }
+  if (verification.consumedAt) throw new HttpError(400, "Code déjà utilisé");
+  if (verification.expiresAt <= new Date()) throw new HttpError(400, "Code expiré");
+  if (verification.attempts >= verification.maxAttempts) {
+    throw new HttpError(429, "Trop de tentatives");
+  }
+
+  if (hashCode(code) !== verification.codeHash) {
+    await prisma.verificationCode.update({
+      where: { id: verification.id },
+      data: { attempts: { increment: 1 } },
+    });
+    throw new HttpError(401, "Code invalide");
+  }
+
+  const userId = verification.userId;
+  if (!userId) throw new HttpError(400, "Vérification non liée à un compte");
+
+  const newHash = await hashPassword(newPassword);
+
+  await prisma.$transaction(async (tx) => {
+    await tx.verificationCode.update({
+      where: { id: verification.id },
+      data: { consumedAt: new Date() },
+    });
+
+    await tx.user.update({
+      where: { id: userId },
+      data: { passwordHash: newHash },
+    });
+
+    await tx.auditLog.create({
+      data: {
+        actorUserId: userId,
+        action: "AUTH_PASSWORD_RESET",
+        entityType: "USER",
+        entityId: userId,
+      },
+    });
+  });
+
+  return { ok: true };
+};
