@@ -1,8 +1,6 @@
-import { useEffect, useRef, useCallback, useState } from "react";
-import { io, type Socket } from "socket.io-client";
-import { getToken, type ChatMessage } from "../lib/api-client";
-
-const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:4000";
+import { useCallback } from "react";
+import { useSocketContext } from "../app/providers/SocketProvider";
+import type { ChatMessage } from "../lib/api-client";
 
 type SocketEvents = {
   "message:new": (data: { message: ChatMessage }) => void;
@@ -89,68 +87,32 @@ type SocketEvents = {
   "webrtc:ice-candidate": (data: { fromUserId: string; candidate: RTCIceCandidateInit }) => void;
 };
 
+/**
+ * Shared socket hook — uses the singleton from SocketProvider.
+ * No duplicate connections: all components share this single socket.
+ */
 export function useSocket() {
-  const socketRef = useRef<Socket | null>(null);
-  const [isConnected, setIsConnected] = useState(false);
-  const listenersRef = useRef<Map<string, Set<(...args: unknown[]) => void>>>(new Map());
-
-  useEffect(() => {
-    const token = getToken();
-    if (!token) return;
-
-    const socket = io(API_BASE, {
-      path: "/ws",
-      auth: { token },
-      transports: ["websocket", "polling"],
-      reconnection: true,
-      reconnectionAttempts: 20,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 10000,
-      randomizationFactor: 0.15,
-    });
-
-    socketRef.current = socket;
-
-    socket.on("connect", () => setIsConnected(true));
-    socket.on("disconnect", () => setIsConnected(false));
-
-    return () => {
-      socket.disconnect();
-      socketRef.current = null;
-      setIsConnected(false);
-    };
-  }, []);
-
-  /* ── Disconnect propre sur fermeture d'onglet ── */
-  useEffect(() => {
-    const handler = () => { socketRef.current?.disconnect(); };
-    window.addEventListener("beforeunload", handler);
-    window.addEventListener("pagehide", handler);
-    return () => { window.removeEventListener("beforeunload", handler); window.removeEventListener("pagehide", handler); };
-  }, []);
+  const { socketRef, isConnected, emit: rawEmit, on: rawOn, off: rawOff } = useSocketContext();
 
   const emit = useCallback(
     (event: string, data?: unknown, callback?: (res: unknown) => void) => {
-      socketRef.current?.emit(event, data, callback);
+      rawEmit(event, data, callback);
     },
-    []
+    [rawEmit],
   );
 
   const on = useCallback(
     <K extends keyof SocketEvents>(event: K, handler: SocketEvents[K]) => {
-      socketRef.current?.on(event as string, handler as (...args: unknown[]) => void);
-      if (!listenersRef.current.has(event)) listenersRef.current.set(event, new Set());
-      listenersRef.current.get(event)!.add(handler as (...args: unknown[]) => void);
+      rawOn(event as string, handler as (...args: unknown[]) => void);
     },
-    []
+    [rawOn],
   );
 
   const off = useCallback(
     <K extends keyof SocketEvents>(event: K, handler: SocketEvents[K]) => {
-      socketRef.current?.off(event as string, handler as (...args: unknown[]) => void);
-      listenersRef.current.get(event)?.delete(handler as (...args: unknown[]) => void);
+      rawOff(event as string, handler as (...args: unknown[]) => void);
     },
-    []
+    [rawOff],
   );
 
   return { socket: socketRef, emit, on, off, isConnected };

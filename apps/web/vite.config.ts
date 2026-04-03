@@ -167,6 +167,22 @@ export default defineConfig({
     chunkSizeWarningLimit: 500,
     rollupOptions: {
       output: {
+        // Hash-versioned filenames for cache busting
+        entryFileNames: "assets/[name]-[hash].js",
+        chunkFileNames: "assets/chunk-[name]-[hash].js",
+        assetFileNames: (assetInfo) => {
+          const name = assetInfo.name ?? "";
+          if (/\.(png|jpe?g|gif|svg|webp|avif|ico)$/i.test(name)) {
+            return "assets/images/[name]-[hash][extname]";
+          }
+          if (/\.(woff2?|ttf|eot)$/i.test(name)) {
+            return "assets/fonts/[name]-[hash][extname]";
+          }
+          if (name.endsWith(".css")) {
+            return "assets/css/[name]-[hash][extname]";
+          }
+          return "assets/[name]-[hash][extname]";
+        },
         manualChunks: {
           // Libs React isolées dans un chunk stable pour cache navigateur long
           "vendor-react": ["react", "react-dom", "react-router-dom"],
@@ -192,7 +208,14 @@ export default defineConfig({
         "./src/main.tsx",
         "./src/App.tsx",
         "./src/app/providers/AuthProvider.tsx",
+        "./src/app/providers/SocketProvider.tsx",
+        "./src/app/providers/GlobalNotificationProvider.tsx",
         "./src/components/Header.tsx",
+        "./src/components/Footer.tsx",
+        "./src/features/home/HomePage.tsx",
+        "./src/features/explorer/ExplorerPage.tsx",
+        "./src/features/sokin/SoKinPage.tsx",
+        "./src/features/auth/LoginPage.tsx",
       ],
     },
   },

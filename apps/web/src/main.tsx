@@ -9,6 +9,7 @@ import { AuthProvider } from "./app/providers/AuthProvider";
 import { GlobalNotificationProvider } from "./app/providers/GlobalNotificationProvider";
 import { LocaleCurrencyProvider } from "./app/providers/LocaleCurrencyProvider";
 import { MarketPreferenceProvider } from "./app/providers/MarketPreferenceProvider";
+import { SocketProvider } from "./app/providers/SocketProvider";
 import "./styles/index.css";
 
 // ── Native platform setup ──
@@ -52,9 +53,11 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
       <MarketPreferenceProvider>
         <LocaleCurrencyProvider>
           <AuthProvider>
-            <GlobalNotificationProvider>
-              <App />
-            </GlobalNotificationProvider>
+            <SocketProvider>
+              <GlobalNotificationProvider>
+                <App />
+              </GlobalNotificationProvider>
+            </SocketProvider>
           </AuthProvider>
         </LocaleCurrencyProvider>
       </MarketPreferenceProvider>

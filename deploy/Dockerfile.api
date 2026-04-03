@@ -22,14 +22,18 @@ RUN npx prisma generate --schema=packages/db/prisma/schema.prisma
 FROM base AS runner
 ENV NODE_ENV=production
 
+RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
+
 COPY --from=prisma /app/node_modules ./node_modules
 COPY --from=prisma /app/packages/db ./packages/db
 COPY apps/api ./apps/api
 
 WORKDIR /app/apps/api
 
+USER nodejs
+
 EXPOSE 4000
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
   CMD wget -qO- http://localhost:4000/health || exit 1
 
-CMD ["node", "--import", "tsx", "src/index.ts"]
+CMD ["node", "--max-old-space-size=512", "--import", "tsx", "src/index.ts"]

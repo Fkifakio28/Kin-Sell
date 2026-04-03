@@ -380,6 +380,8 @@ model Subscription {
   @@index([scope, status])
   @@index([userId, status])
   @@index([businessId, status])
+  @@index([userId, status, endsAt])
+  @@index([businessId, status, endsAt])
 }
 
 model SubscriptionAddon {
@@ -499,6 +501,8 @@ model Listing {
   @@index([businessId])
   @@index([isPublished])
   @@index([status])
+  @@index([createdAt])
+  @@index([city, isPublished, createdAt])
 }
 
 model Cart {
@@ -564,6 +568,7 @@ model Order {
   @@index([buyerUserId, status, createdAt])
   @@index([sellerUserId, status, createdAt])
   @@index([sellerBusinessId, status, createdAt])
+  @@index([status, createdAt])
   @@index([createdAt])
 }
 
@@ -1216,6 +1221,7 @@ model SoKinPost {
   @@index([authorId])
   @@index([status])
   @@index([createdAt])
+  @@index([status, createdAt])
 }
 
 // ══════════════════════════════════════════

@@ -27,7 +27,7 @@ const USEFUL_LINKS = [
   { labelKey: "nav.contact",                href: "/contact" },
 ];
 
-export function Footer() {
+export const Footer = React.memo(function Footer() {
   const { theme, toggleTheme } = useTheme();
   const { language, setLanguage, currency, setCurrency, t } = useLocaleCurrency();
   const { countries, selectedCountry, effectiveCountry, selectionMode, setSelectedCountry, setSelectionMode } = useMarketPreference();
@@ -174,4 +174,4 @@ export function Footer() {
       </div>
     </footer>
   );
-}
+});

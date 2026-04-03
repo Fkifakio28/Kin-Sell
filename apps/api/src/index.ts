@@ -1,5 +1,6 @@
 import cors from "cors";
 import compression from "compression";
+import crypto from "node:crypto";
 import express from "express";
 import helmet from "helmet";
 import { createServer } from "node:http";
@@ -76,6 +77,23 @@ app.use((req, res, next) => {
   next();
 });
 
+// ── ETag middleware for 304 Not Modified responses ──
+app.use((_req, res, next) => {
+  const originalJson = res.json.bind(res);
+  res.json = function (data: unknown) {
+    if (res.statusCode >= 200 && res.statusCode < 300) {
+      const body = JSON.stringify(data);
+      const etag = `"${crypto.createHash("md5").update(body).digest("hex").slice(0, 16)}"`;
+      res.set("ETag", etag);
+      if (_req.get("If-None-Match") === etag) {
+        return res.status(304).end();
+      }
+    }
+    return originalJson(data);
+  };
+  next();
+});
+
 // Serve uploaded files statically
 app.use("/uploads", express.static(path.resolve(process.cwd(), "uploads")));
 
@@ -84,11 +102,13 @@ let _healthCache: { data: unknown; expiresAt: number } | null = null;
 app.get("/health", async (_req, res) => {
   const now = Date.now();
   if (_healthCache && now < _healthCache.expiresAt) {
+    res.set("Cache-Control", "public, max-age=30");
     return res.json(_healthCache.data);
   }
   try {
     await prisma.$queryRaw`SELECT 1`;
     _healthCache = { data: { status: "ok", service: "kinsell-api", db: "connected", uptime: Math.floor(process.uptime()) }, expiresAt: now + 30_000 };
+    res.set("Cache-Control", "public, max-age=30");
     res.json(_healthCache.data);
   } catch {
     _healthCache = null;

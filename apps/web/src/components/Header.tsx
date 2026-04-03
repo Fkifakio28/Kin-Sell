@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState } from "react";
+﻿import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../app/providers/AuthProvider";
@@ -37,7 +37,7 @@ function getAccountInitial(user: { profile: { username: string | null; displayNa
   return source.trim().charAt(0).toUpperCase();
 }
 
-export function Header() {
+export const Header = React.memo(function Header() {
   const { isLoggedIn, user, logout, isLoading } = useAuth();
   const { t, language, setLanguage, currency, setCurrency } = useLocaleCurrency();
   const [accountOpen, setAccountOpen] = useState(false);
@@ -395,4 +395,4 @@ export function Header() {
       )}
     </>
   );
-}
+});

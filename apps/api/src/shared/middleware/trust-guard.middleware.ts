@@ -36,10 +36,14 @@ export function requireNoRestriction(...types: RestrictionType[]) {
     // FULL_READONLY blocks everything — always check it
     const allTypes = types.includes("FULL_READONLY") ? types : [...types, "FULL_READONLY" as RestrictionType];
 
-    for (const type of allTypes) {
-      const restricted = await hasRestriction(authReq.auth.userId, type);
-      if (restricted) {
-        throw new HttpError(403, RESTRICTION_MESSAGES[type]);
+    // Parallel checks instead of sequential loop (N queries → 1 round-trip)
+    const results = await Promise.all(
+      allTypes.map((type) => hasRestriction(authReq.auth!.userId, type)),
+    );
+
+    for (let i = 0; i < allTypes.length; i++) {
+      if (results[i]) {
+        throw new HttpError(403, RESTRICTION_MESSAGES[allTypes[i]]);
       }
     }
 

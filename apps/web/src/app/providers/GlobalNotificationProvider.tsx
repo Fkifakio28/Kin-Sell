@@ -1,8 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { io, type Socket } from "socket.io-client";
 import { useAuth } from "./AuthProvider";
-import { getToken } from "../../lib/api-client";
+import { useSocketContext } from "./SocketProvider";
 import { isPushSupported, subscribeToPush, onServiceWorkerMessage, registerServiceWorker } from "../../utils/push-notifications";
 import "../../styles/global-notifications.css";
 
@@ -101,64 +100,8 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
   const [messagingActive, setMessagingActive] = useState(false);
   const messagingActiveRef = useRef(false);
 
-  /* ── Socket (own connection, independent of DashboardMessaging) ── */
-  const socketRef = useRef<Socket | null>(null);
-
-  useEffect(() => {
-    if (!isLoggedIn) {
-      socketRef.current?.disconnect();
-      socketRef.current = null;
-      return;
-    }
-    const token = getToken();
-    if (!token) return;
-
-    const socket = io(API_BASE, {
-      path: "/ws",
-      auth: { token },
-      transports: ["websocket", "polling"],
-      reconnection: true,
-      reconnectionAttempts: 20,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 10000,
-      randomizationFactor: 0.15,
-    });
-    socketRef.current = socket;
-
-    return () => {
-      socket.disconnect();
-      socketRef.current = null;
-    };
-  }, [isLoggedIn]);
-
-  /* ── Visibility-based socket pause (économie batterie mobile) ── */
-  useEffect(() => {
-    const handleVisibility = () => {
-      const s = socketRef.current;
-      if (!s) return;
-      if (document.visibilityState === "hidden") {
-        // Déconnecter après 60s d'inactivité (pas immédiat pour les tabs rapides)
-        (s as any).__visPauseTimer = setTimeout(() => {
-          if (document.visibilityState === "hidden") s.disconnect();
-        }, 60_000);
-      } else {
-        clearTimeout((s as any).__visPauseTimer);
-        if (s.disconnected) s.connect();
-      }
-    };
-    document.addEventListener("visibilitychange", handleVisibility);
-    return () => document.removeEventListener("visibilitychange", handleVisibility);
-  }, [isLoggedIn]);
-
-  /* ── Reconnexion réseau (offline → online) ── */
-  useEffect(() => {
-    const handleOnline = () => {
-      const s = socketRef.current;
-      if (s && s.disconnected) s.connect();
-    };
-    window.addEventListener("online", handleOnline);
-    return () => window.removeEventListener("online", handleOnline);
-  }, [isLoggedIn]);
+  /* ── Shared socket from SocketProvider (NO duplicate connection) ── */
+  const { socketRef } = useSocketContext();
 
   useEffect(() => {
     messagingActiveRef.current = messagingActive;

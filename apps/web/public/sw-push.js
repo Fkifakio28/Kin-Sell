@@ -35,6 +35,14 @@ function resolveTargetPath(data) {
   }
 }
 
+/* ── Push deduplication cache ── */
+const _pushDedup = new Map(); // hash → timestamp
+const PUSH_DEDUP_TTL = 2000; // 2s window
+
+function hashPush(data) {
+  return `${data?.type || "x"}-${data?.orderId || data?.negotiationId || data?.conversationId || data?.postId || ""}`;
+}
+
 /* ── Push event ── */
 self.addEventListener("push", (event) => {
   if (!event.data) return;
@@ -46,6 +54,16 @@ self.addEventListener("push", (event) => {
   const { title = "Kin-Sell", body = "", icon, badge, tag, data, actions } = payload;
   const payloadData = data || {};
   const payloadType = payloadData.type || "system";
+
+  // Deduplication — drop duplicate pushes within 2s window
+  const h = hashPush(payloadData);
+  const now = Date.now();
+  if (_pushDedup.has(h) && now - _pushDedup.get(h) < PUSH_DEDUP_TTL) return;
+  _pushDedup.set(h, now);
+  // Cleanup old entries
+  if (_pushDedup.size > 50) {
+    for (const [k, ts] of _pushDedup) { if (now - ts > PUSH_DEDUP_TTL * 3) _pushDedup.delete(k); }
+  }
 
   const targetPath = payloadData.url || resolveTargetPath(payloadData);
   const dataWithUrl = { ...payloadData, url: targetPath };
@@ -65,13 +83,13 @@ self.addEventListener("push", (event) => {
 
   event.waitUntil((async () => {
     const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
-    const visibleClients = clients.filter((client) => client.visibilityState === "visible");
-
-    for (const client of visibleClients) {
-      client.postMessage({ type: "PUSH_RECEIVED", payload: { title, body, data: dataWithUrl } });
-    }
+    const visibleClients = clients.filter((c) => c.visibilityState === "visible");
 
     if (visibleClients.length > 0) {
+      // Parallel postMessage to all visible tabs
+      visibleClients.forEach((c) => {
+        c.postMessage({ type: "PUSH_RECEIVED", payload: { title, body, data: dataWithUrl } });
+      });
       return;
     }
 
