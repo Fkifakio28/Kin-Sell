@@ -7,6 +7,7 @@ import {
   getPriceRecommendation,
   refreshMarketStatsFromListings,
 } from "./market-intelligence.service.js";
+import { getAllRatesFromUsd, getCurrencyRate, invalidateCurrencyCache } from "../../shared/market/currency.service.js";
 
 const router = Router();
 
@@ -54,6 +55,41 @@ router.post(
   asyncHandler(async (req: Request, res: Response) => {
     const results = await refreshMarketStatsFromListings(req.params.cityName);
     res.json({ refreshed: results.length, stats: results });
+  })
+);
+
+// ══════════════════════════════════════════════
+// Currency Rates — Conversion de devises
+// ══════════════════════════════════════════════
+
+// GET /market/rates — tous les taux depuis USD (public, pas besoin d'auth)
+router.get(
+  "/rates",
+  asyncHandler(async (_req: Request, res: Response) => {
+    const rates = await getAllRatesFromUsd();
+    res.setHeader("Cache-Control", "public, max-age=3600"); // Cache HTTP 1h
+    res.json({ base: "USD", rates });
+  })
+);
+
+// GET /market/rates/:from/:to — taux entre deux devises
+router.get(
+  "/rates/:from/:to",
+  asyncHandler(async (req: Request, res: Response) => {
+    const { from, to } = req.params;
+    const rate = await getCurrencyRate(from.toUpperCase(), to.toUpperCase());
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    res.json({ from: from.toUpperCase(), to: to.toUpperCase(), rate });
+  })
+);
+
+// POST /market/rates/invalidate — force le rafraîchissement du cache (admin)
+router.post(
+  "/rates/invalidate",
+  requireAuth,
+  asyncHandler(async (_req: Request, res: Response) => {
+    invalidateCurrencyCache();
+    res.json({ ok: true, message: "Cache des taux de change invalidé." });
   })
 );
 

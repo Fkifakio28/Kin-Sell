@@ -1,8 +1,8 @@
-﻿import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+﻿import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useMarketPreference } from "./MarketPreferenceProvider";
 
-export type AppLanguage = "fr" | "en" | "ln";
-export type AppCurrency = "CDF" | "USD" | "EUR" | "XAF" | "AOA" | "XOF" | "MAD";
+export type AppLanguage = "fr" | "en" | "ln" | "ar";
+export type AppCurrency = "CDF" | "USD" | "EUR" | "XAF" | "AOA" | "XOF" | "GNF" | "MAD";
 
 type LocaleCurrencyContextValue = {
   language: AppLanguage;
@@ -15,15 +15,24 @@ type LocaleCurrencyContextValue = {
   formatPriceLabelFromUsdCents: (usdCents: number) => string;
 };
 
-const USD_TO_CDF = 2850;
-const USD_TO_EUR = 0.92;
-const USD_TO_XAF = 605;
-const USD_TO_AOA = 905;
-const USD_TO_XOF = 605;
-const USD_TO_MAD = 9.9;
+/* ── Taux de conversion par défaut (fallback si API indisponible) ── */
+const DEFAULT_RATES: Record<string, number> = {
+  CDF: 2850,
+  EUR: 0.92,
+  XAF: 605,
+  AOA: 905,
+  XOF: 605,
+  GNF: 8600,
+  MAD: 9.9,
+};
 
 const STORAGE_LANGUAGE = "ks-language";
 const STORAGE_CURRENCY = "ks-currency";
+const STORAGE_RATES = "ks-currency-rates";
+const STORAGE_RATES_TS = "ks-currency-rates-ts";
+const RATES_TTL_MS = 60 * 60 * 1000; // 1h
+
+import { ar as arDict } from "../i18n/ar";
 
 const DICT: Record<AppLanguage, Record<string, string>> = {
   fr: {
@@ -4954,26 +4963,28 @@ const DICT: Record<AppLanguage, Record<string, string>> = {
     "user.maintenancePlaceholder": "Esika ya suivi / entretien",
     "user.executionPlaceholder": "Esika oyo service ekosalema",
   },
+  ar: arDict,
 };
 
 const LocaleCurrencyContext = createContext<LocaleCurrencyContextValue | null>(null);
 
 function readInitialLanguage(): AppLanguage {
   const value = localStorage.getItem(STORAGE_LANGUAGE);
-  if (value === "fr" || value === "en" || value === "ln") return value;
+  if (value === "fr" || value === "en" || value === "ln" || value === "ar") return value;
   if (value === "cd") return "ln";
   return "fr";
 }
 
 function readInitialCurrency(): AppCurrency {
   const value = localStorage.getItem(STORAGE_CURRENCY);
-  if (value === "CDF" || value === "USD" || value === "EUR" || value === "XAF" || value === "AOA" || value === "XOF" || value === "MAD") return value;
+  if (value === "CDF" || value === "USD" || value === "EUR" || value === "XAF" || value === "AOA" || value === "XOF" || value === "GNF" || value === "MAD") return value;
   if (value === "fc") return "CDF";
   if (value === "usd") return "USD";
   if (value === "eur") return "EUR";
   if (value === "xaf") return "XAF";
   if (value === "aoa") return "AOA";
   if (value === "xof") return "XOF";
+  if (value === "gnf") return "GNF";
   if (value === "mad") return "MAD";
   return "CDF";
 }
@@ -4982,6 +4993,32 @@ export function LocaleCurrencyProvider({ children }: { children: React.ReactNode
   const { effectiveCountry, getCountryConfig } = useMarketPreference();
   const [language, setLanguageState] = useState<AppLanguage>(() => readInitialLanguage());
   const [currency, setCurrencyState] = useState<AppCurrency>(() => readInitialCurrency());
+  const [rates, setRates] = useState<Record<string, number>>(() => {
+    try {
+      const cached = localStorage.getItem(STORAGE_RATES);
+      const ts = Number(localStorage.getItem(STORAGE_RATES_TS) ?? "0");
+      if (cached && Date.now() - ts < RATES_TTL_MS) return JSON.parse(cached);
+    } catch { /* ignore */ }
+    return DEFAULT_RATES;
+  });
+  const fetchedRef = useRef(false);
+
+  // Fetch taux dynamiques depuis l'API au montage
+  useEffect(() => {
+    if (fetchedRef.current) return;
+    fetchedRef.current = true;
+    const API_BASE = (import.meta as any).env?.VITE_API_URL ?? "/api";
+    fetch(`${API_BASE}/market/rates`, { cache: "no-cache" })
+      .then((r) => r.ok ? r.json() : null)
+      .then((data: { rates?: Record<string, number> } | null) => {
+        if (data?.rates) {
+          setRates(data.rates);
+          localStorage.setItem(STORAGE_RATES, JSON.stringify(data.rates));
+          localStorage.setItem(STORAGE_RATES_TS, String(Date.now()));
+        }
+      })
+      .catch(() => { /* keep fallback */ });
+  }, []);
 
   useEffect(() => {
     const hasLanguage = Boolean(localStorage.getItem(STORAGE_LANGUAGE));
@@ -4990,33 +5027,28 @@ export function LocaleCurrencyProvider({ children }: { children: React.ReactNode
 
     const country = getCountryConfig(effectiveCountry);
     if (!hasLanguage) {
-      const suggestedLanguage: AppLanguage = country.defaultContentLanguage === "en"
-        ? "en"
-        : country.defaultContentLanguage === "ln"
-          ? "ln"
-          : "fr";
+      const suggestedLanguage: AppLanguage =
+        country.defaultContentLanguage === "en" ? "en"
+        : country.defaultContentLanguage === "ln" ? "ln"
+        : country.defaultContentLanguage === "ar" ? "ar"
+        : "fr";
       setLanguageState(suggestedLanguage);
       localStorage.setItem(STORAGE_LANGUAGE, suggestedLanguage);
     }
 
     if (!hasCurrency) {
+      const dc = country.defaultCurrency;
       const suggestedCurrency: AppCurrency =
-        country.defaultCurrency === "USD" ||
-        country.defaultCurrency === "EUR" ||
-        country.defaultCurrency === "CDF" ||
-        country.defaultCurrency === "XAF" ||
-        country.defaultCurrency === "AOA" ||
-        country.defaultCurrency === "XOF" ||
-        country.defaultCurrency === "MAD"
-          ? country.defaultCurrency
-          : "CDF";
+        (dc === "USD" || dc === "EUR" || dc === "CDF" || dc === "XAF" ||
+         dc === "AOA" || dc === "XOF" || dc === "GNF" || dc === "MAD")
+          ? dc : "CDF";
       setCurrencyState(suggestedCurrency);
       localStorage.setItem(STORAGE_CURRENCY, suggestedCurrency);
     }
   }, [effectiveCountry, getCountryConfig]);
 
   const value = useMemo<LocaleCurrencyContextValue>(() => {
-    const t = (key: string) => DICT[language][key] ?? DICT.fr[key] ?? key;
+    const t = (key: string) => DICT[language]?.[key] ?? DICT.fr[key] ?? key;
 
     const setLanguage = (lang: AppLanguage) => {
       setLanguageState(lang);
@@ -5028,91 +5060,51 @@ export function LocaleCurrencyProvider({ children }: { children: React.ReactNode
       localStorage.setItem(STORAGE_CURRENCY, nextCurrency);
     };
 
+    const getRate = (code: string): number => rates[code] ?? DEFAULT_RATES[code] ?? 1;
+
     const formatMoneyFromUsdCents = (usdCents: number): string => {
       const usd = usdCents / 100;
-      const locale = language === "fr" ? "fr-FR" : "en-US";
+      const locale = language === "ar" ? "ar-MA" : language === "fr" || language === "ln" ? "fr-FR" : "en-US";
 
       if (currency === "USD") {
-        return new Intl.NumberFormat(locale, {
-          style: "currency",
-          currency: "USD",
-          maximumFractionDigits: 2,
-        }).format(usd);
+        return new Intl.NumberFormat(locale, { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(usd);
       }
 
-      if (currency === "EUR") {
-        return new Intl.NumberFormat(locale, {
-          style: "currency",
-          currency: "EUR",
-          maximumFractionDigits: 2,
-        }).format(usd * USD_TO_EUR);
+      // Devises avec centimes (EUR, MAD)
+      if (currency === "EUR" || currency === "MAD") {
+        return new Intl.NumberFormat(locale, { style: "currency", currency, maximumFractionDigits: 2 }).format(usd * getRate(currency));
       }
 
-      if (currency === "XAF") {
-        return new Intl.NumberFormat(locale, {
-          style: "currency",
-          currency: "XAF",
-          maximumFractionDigits: 0,
-        }).format(usd * USD_TO_XAF);
+      // Devises sans centimes (CDF, XAF, AOA, XOF, GNF)
+      if (currency === "CDF" || currency === "XAF" || currency === "AOA" || currency === "XOF" || currency === "GNF") {
+        const converted = Math.round(usd * getRate(currency));
+        // CDF : affichage spécial "FC"
+        if (currency === "CDF") {
+          return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(converted)} FC`;
+        }
+        return new Intl.NumberFormat(locale, { style: "currency", currency, maximumFractionDigits: 0 }).format(converted);
       }
 
-      if (currency === "AOA") {
-        return new Intl.NumberFormat(locale, {
-          style: "currency",
-          currency: "AOA",
-          maximumFractionDigits: 0,
-        }).format(usd * USD_TO_AOA);
-      }
-
-      if (currency === "XOF") {
-        return new Intl.NumberFormat(locale, {
-          style: "currency",
-          currency: "XOF",
-          maximumFractionDigits: 0,
-        }).format(usd * USD_TO_XOF);
-      }
-
-      if (currency === "MAD") {
-        return new Intl.NumberFormat(locale, {
-          style: "currency",
-          currency: "MAD",
-          maximumFractionDigits: 2,
-        }).format(usd * USD_TO_MAD);
-      }
-
-      return `${new Intl.NumberFormat(language === "en" ? "en-US" : "fr-CD", {
-        maximumFractionDigits: 0,
-      }).format(Math.round(usd * USD_TO_CDF))} FC`;
+      // Fallback CDF
+      return `${new Intl.NumberFormat("fr-CD", { maximumFractionDigits: 0 }).format(Math.round(usd * getRate("CDF")))} FC`;
     };
 
     const formatDate = (isoDate: string | Date) => {
       const date = typeof isoDate === "string" ? new Date(isoDate) : isoDate;
-      const locale = language === "en" ? "en-US" : language === "ln" ? "fr-CD" : "fr-FR";
-      return new Intl.DateTimeFormat(locale, {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-      }).format(date);
+      const loc = language === "en" ? "en-US" : language === "ar" ? "ar-MA" : language === "ln" ? "fr-CD" : "fr-FR";
+      return new Intl.DateTimeFormat(loc, { day: "2-digit", month: "short", year: "numeric" }).format(date);
     };
 
     const formatPriceLabelFromUsdCents = (usdCents: number) => {
-      if (usdCents <= 0) {
-        return t("common.freePrice");
-      }
+      if (usdCents <= 0) return t("common.freePrice");
       return formatMoneyFromUsdCents(usdCents);
     };
 
     return {
-      language,
-      setLanguage,
-      currency,
-      setCurrency,
-      t,
-      formatMoneyFromUsdCents,
-      formatDate,
-      formatPriceLabelFromUsdCents,
+      language, setLanguage, currency, setCurrency, t,
+      formatMoneyFromUsdCents, formatDate, formatPriceLabelFromUsdCents,
     };
-  }, [currency, language]);
+  }, [currency, language, rates]);
 
   return <LocaleCurrencyContext.Provider value={value}>{children}</LocaleCurrencyContext.Provider>;
 }

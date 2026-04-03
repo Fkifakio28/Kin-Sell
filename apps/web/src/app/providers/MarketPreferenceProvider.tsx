@@ -26,7 +26,7 @@ const STORAGE_SELECTION_MODE = "ks-market-selection-mode";
 const MarketPreferenceContext = createContext<MarketPreferenceContextValue | null>(null);
 
 function isMarketCountryCode(value: string): value is MarketCountryCode {
-  return ["CD", "GA", "CG", "AO", "CI", "GQ", "SN", "MA"].includes(value);
+  return ["CD", "GA", "CG", "AO", "CI", "GN", "SN", "MA"].includes(value);
 }
 
 function detectCountryFromBrowser(): MarketCountryCode {
@@ -44,7 +44,7 @@ function detectCountryFromBrowser(): MarketCountryCode {
   if (tz.includes("Libreville")) return "GA";
   if (tz.includes("Luanda")) return "AO";
   if (tz.includes("Abidjan")) return "CI";
-  if (tz.includes("Malabo")) return "GQ";
+  if (tz.includes("Conakry")) return "GN";
   if (tz.includes("Dakar")) return "SN";
   if (tz.includes("Casablanca")) return "MA";
 

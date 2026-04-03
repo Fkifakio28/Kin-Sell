@@ -339,12 +339,14 @@ model VerificationCode {
 }
 
 model UserPreference {
-  id                String   @id @default(cuid())
-  userId            String   @unique
-  locale            String   @default("fr")
-  currency          String   @default("CDF")
-  theme             String   @default("dark")
-  onlineStatusVisible Boolean @default(true)
+  id                String       @id @default(cuid())
+  userId            String       @unique
+  locale            String       @default("fr")
+  currency          String       @default("CDF")
+  countryCode       CountryCode? // Pays préféré de l'utilisateur
+  discoveryMode     String       @default("local_first") // local_first | local_only | all
+  theme             String       @default("dark")
+  onlineStatusVisible Boolean    @default(true)
   marketingEmails   Boolean  @default(false)
   marketingSms      Boolean  @default(false)
   pushEnabled       Boolean  @default(true)
@@ -465,6 +467,13 @@ model MobileMoneyPayment {
   @@index([status, expiresAt])
 }
 
+enum ListingScope {
+  LOCAL         // Ville seule
+  NATIONAL      // Pays entier
+  REGIONAL      // Région (Afrique centrale, ouest, nord)
+  INTERNATIONAL // Tous pays
+}
+
 model Listing {
   id                 String        @id @default(cuid())
   type               ListingType
@@ -473,11 +482,16 @@ model Listing {
   description        String?
   category           String
   city               String
+  country            String?         // Nom du pays (ex: "Maroc", "Sénégal")
+  countryCode        CountryCode?    // Code pays formel
   latitude           Float
   longitude          Float
   imageUrl           String?
   mediaUrls          String[]      @default([])
   priceUsdCents      Int           @default(0)
+  priceCurrency      String        @default("USD") // Devise d'origine de l'annonce (ISO 4217)
+  priceOriginal      Int           @default(0)      // Prix dans la devise d'origine (en centimes)
+  scope              ListingScope  @default(NATIONAL) // Portée de visibilité
   stockQuantity      Int?
   serviceDurationMin Int?
   serviceLocation    String?
@@ -497,11 +511,14 @@ model Listing {
 
   @@index([type])
   @@index([city])
+  @@index([country])
+  @@index([countryCode])
   @@index([ownerUserId])
   @@index([businessId])
   @@index([isPublished])
   @@index([status])
   @@index([createdAt])
+  @@index([countryCode, isPublished, createdAt])
   @@index([city, isPublished, createdAt])
 }
 
@@ -1485,7 +1502,7 @@ enum CountryCode {
   CG // Congo-Brazzaville
   AO // Angola
   CI // Côte d'Ivoire
-  GQ // Guinée Équatoriale
+  GN // Guinée Conakry
   SN // Sénégal
   MA // Maroc
 }
@@ -1494,6 +1511,7 @@ enum Language {
   FR // Français
   EN // English
   LN // Lingala
+  AR // العربية (Arabe)
 }
 
 model MarketCountry {

@@ -50,23 +50,7 @@ export type SearchListingsInput = {
   limit: number;
 };
 
-const COUNTRY_ALIASES: Record<string, string[]> = {
-  CD: ["CD", "RDC", "RD Congo", "DRC", "Democratic Republic of the Congo"],
-  GA: ["GA", "Gabon"],
-  CG: ["CG", "Congo", "Congo-Brazzaville", "Republic of the Congo"],
-  AO: ["AO", "Angola"],
-  CI: ["CI", "Cote d'Ivoire", "Cote d Ivoire", "Ivory Coast"],
-  GQ: ["GQ", "Guinee equatoriale", "Equatorial Guinea"],
-  SN: ["SN", "Senegal"],
-  MA: ["MA", "Maroc", "Morocco"],
-};
-
-function resolveCountryTerms(country?: string): string[] {
-  if (!country) return [];
-  const normalized = country.trim().toUpperCase();
-  const aliases = COUNTRY_ALIASES[normalized] ?? [country.trim()];
-  return aliases.filter((term) => term.trim().length > 0);
-}
+import { resolveCountryTerms } from "../../shared/geo/country-aliases.js";
 
 type GeoPoint = {
   lat: number;
