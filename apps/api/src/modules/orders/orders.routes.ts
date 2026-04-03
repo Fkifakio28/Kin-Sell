@@ -6,7 +6,7 @@ import { asyncHandler } from "../../shared/utils/async-handler.js";
 import { Role } from "../../types/roles.js";
 import * as ordersService from "./orders.service.js";
 import { sendPushToUser } from "../notifications/push.service.js";
-import { emitToUsers } from "../messaging/socket.js";
+import { emitToUsers, emitToUser } from "../messaging/socket.js";
 import * as momoService from "../mobile-money/mobile-money.service.js";
 
 const pagingSchema = z.object({
@@ -93,7 +93,7 @@ router.post(
   asyncHandler(async (request: AuthenticatedRequest, response) => {
     const payload = checkoutSchema.parse(request.body ?? {});
     const data = await ordersService.checkoutBuyerCart(request.auth!.userId, payload.notes);
-    // Push notify sellers about new orders
+    // Push + Socket notify sellers about new orders
     for (const order of data.orders ?? []) {
       if (order.seller?.userId && order.seller.userId !== request.auth!.userId) {
         void sendPushToUser(order.seller.userId, {
@@ -102,7 +102,28 @@ router.post(
           tag: `order-${order.id}`,
           data: { type: "order", orderId: order.id },
         });
+        emitToUser(order.seller.userId, "order:created", {
+          type: "ORDER_CREATED",
+          orderId: order.id,
+          buyerUserId: request.auth!.userId,
+          sellerUserId: order.seller.userId,
+          itemsCount: order.itemsCount ?? 1,
+          totalUsdCents: order.totalUsdCents ?? 0,
+          createdAt: new Date().toISOString(),
+        });
       }
+    }
+    // Ack to buyer: emit order:created for each order
+    for (const order of data.orders ?? []) {
+      emitToUser(request.auth!.userId, "order:created", {
+        type: "ORDER_CREATED",
+        orderId: order.id,
+        buyerUserId: request.auth!.userId,
+        sellerUserId: order.seller?.userId ?? "",
+        itemsCount: order.itemsCount ?? 1,
+        totalUsdCents: order.totalUsdCents ?? 0,
+        createdAt: new Date().toISOString(),
+      });
     }
     response.status(201).json(data);
   })
@@ -130,7 +151,7 @@ router.post(
       });
       momoPayments.push(momoResult);
 
-      // Push notify sellers
+      // Push + Socket notify sellers
       if (order.seller?.userId && order.seller.userId !== request.auth!.userId) {
         void sendPushToUser(order.seller.userId, {
           title: "🛒 Nouvelle commande !",
@@ -138,7 +159,26 @@ router.post(
           tag: `order-${order.id}`,
           data: { type: "order", orderId: order.id },
         });
+        emitToUser(order.seller.userId, "order:created", {
+          type: "ORDER_CREATED",
+          orderId: order.id,
+          buyerUserId: request.auth!.userId,
+          sellerUserId: order.seller.userId,
+          itemsCount: order.itemsCount ?? 1,
+          totalUsdCents: order.totalUsdCents ?? 0,
+          createdAt: new Date().toISOString(),
+        });
       }
+      // Ack to buyer
+      emitToUser(request.auth!.userId, "order:created", {
+        type: "ORDER_CREATED",
+        orderId: order.id,
+        buyerUserId: request.auth!.userId,
+        sellerUserId: order.seller?.userId ?? "",
+        itemsCount: order.itemsCount ?? 1,
+        totalUsdCents: order.totalUsdCents ?? 0,
+        createdAt: new Date().toISOString(),
+      });
     }
 
     response.status(201).json({ ...data, mobileMoneyPayments: momoPayments });

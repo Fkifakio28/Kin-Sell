@@ -3,6 +3,7 @@ import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
 import { randomBytes } from "crypto";
 import { sendPushToUser } from "../notifications/push.service.js";
+import { emitToUsers, emitToUser } from "../messaging/socket.js";
 
 const NEGOTIATION_TTL_MS = 48 * 60 * 60 * 1000; // 48 heures
 const GROUPED_TTL_MS = 72 * 60 * 60 * 1000; // 72 heures pour groupé
@@ -320,6 +321,21 @@ export const respondToNegotiation = async (userId: string, negotiationId: string
           tag: `order-${order.id}`,
           data: { type: "order", orderId: order.id },
         });
+
+        // Socket: emit order:created to both buyer and seller
+        const orderCreatedPayload = {
+          type: "ORDER_CREATED" as const,
+          orderId: order.id,
+          buyerUserId: negotiation.buyerUserId,
+          sellerUserId: cartItem.listing.ownerUserId,
+          itemsCount: 1,
+          totalUsdCents: lineTotalUsdCents,
+          fromNegotiation: true,
+          negotiationId,
+          createdAt: new Date().toISOString(),
+        };
+        emitToUser(negotiation.buyerUserId, "order:created", orderCreatedPayload);
+        emitToUser(cartItem.listing.ownerUserId, "order:created", orderCreatedPayload);
       }
     } catch {
       // Silently continue — the negotiation is still accepted even if auto-order fails
@@ -483,7 +499,7 @@ export const expireStaleNegotiations = async () => {
       status: { in: [NegotiationStatus.PENDING, NegotiationStatus.COUNTERED] },
       expiresAt: { lt: new Date() }
     },
-    select: { id: true, originalPriceUsdCents: true }
+    select: { id: true, originalPriceUsdCents: true, buyerUserId: true, sellerUserId: true }
   });
 
   if (staleNegotiations.length === 0) return { expired: 0 };
@@ -504,6 +520,15 @@ export const expireStaleNegotiations = async () => {
     await prisma.cartItem.updateMany({
       where: { negotiationId: neg.id },
       data: { negotiationId: null, unitPriceUsdCents: neg.originalPriceUsdCents }
+    });
+
+    // Socket: notify both parties of expiration
+    emitToUsers([neg.buyerUserId, neg.sellerUserId], "negotiation:expired", {
+      type: "NEGOTIATION_EXPIRED",
+      negotiationId: neg.id,
+      buyerUserId: neg.buyerUserId,
+      sellerUserId: neg.sellerUserId,
+      expiredAt: new Date().toISOString(),
     });
   }
 

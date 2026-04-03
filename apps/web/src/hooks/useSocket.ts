@@ -18,6 +18,17 @@ type SocketEvents = {
   "call:accepted": (data: { conversationId: string; accepterId: string }) => void;
   "call:rejected": (data: { conversationId: string; rejecterId: string }) => void;
   "call:ended": (data: { conversationId: string; enderId: string }) => void;
+  "order:created": (data: {
+    type: "ORDER_CREATED";
+    orderId: string;
+    buyerUserId: string;
+    sellerUserId: string;
+    itemsCount: number;
+    totalUsdCents: number;
+    fromNegotiation?: boolean;
+    negotiationId?: string;
+    createdAt: string;
+  }) => void;
   "order:status-updated": (data: {
     type: "ORDER_STATUS_UPDATED";
     orderId: string;
@@ -44,6 +55,13 @@ type SocketEvents = {
     sellerUserId: string;
     sourceUserId: string;
     updatedAt: string;
+  }) => void;
+  "negotiation:expired": (data: {
+    type: "NEGOTIATION_EXPIRED";
+    negotiationId: string;
+    buyerUserId: string;
+    sellerUserId: string;
+    expiredAt: string;
   }) => void;
   "sokin:post-created": (data: {
     type: "SOKIN_POST_CREATED";

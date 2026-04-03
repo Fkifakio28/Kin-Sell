@@ -71,6 +71,9 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
       }
     })();
 
+    /* ── Join user-specific room (for targeted order/negotiation/notification events) ── */
+    void socket.join(`user:${userId}`);
+
     /* ── Join conversation rooms ── */
     void messagingService.getUserConversations(userId).then((conversations: { id: string }[]) => {
       for (const conv of conversations) {
@@ -346,15 +349,16 @@ export function getOnlineUserIds(): string[] {
   return Array.from(onlineUsers.keys()).filter((id) => onlineVisibility.get(id) ?? true);
 }
 
+export function emitToUser<TPayload>(userId: string, event: string, payload: TPayload) {
+  if (!ioInstance || !userId) return;
+  ioInstance.to(`user:${userId}`).emit(event, payload);
+}
+
 export function emitToUsers<TPayload>(userIds: string[], event: string, payload: TPayload) {
   if (!ioInstance) return;
   const uniqueUserIds = Array.from(new Set(userIds.filter(Boolean)));
   for (const uid of uniqueUserIds) {
-    const sockets = onlineUsers.get(uid);
-    if (!sockets) continue;
-    for (const sid of sockets) {
-      ioInstance.to(sid).emit(event, payload);
-    }
+    ioInstance.to(`user:${uid}`).emit(event, payload);
   }
 }
 

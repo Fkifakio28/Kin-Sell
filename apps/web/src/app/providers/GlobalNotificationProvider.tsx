@@ -400,12 +400,107 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
       presentIncomingCall(data);
     };
 
+    const handleOrderCreated = (data: { type: string; orderId: string; buyerUserId: string; sellerUserId: string; itemsCount?: number; fromNegotiation?: boolean; createdAt: string }) => {
+      if (data.buyerUserId === user?.id && !data.fromNegotiation) return; // buyer already knows from checkout
+      const isSeller = data.sellerUserId === user?.id;
+      const toast: MessageToast = {
+        id: `order-created-${data.orderId}-${Date.now()}`,
+        kind: "order",
+        title: isSeller ? "🛒 Nouvelle commande !" : "✅ Commande créée",
+        content: isSeller
+          ? `Nouvelle commande de ${data.itemsCount ?? 1} article(s)`
+          : data.fromNegotiation ? "Commande créée suite au marchandage accepté" : "Votre commande a été créée",
+        icon: "📦",
+        targetUrl: "/account?tab=commandes",
+        timestamp: Date.now(),
+      };
+      setToasts((p) => [toast, ...p].slice(0, 4));
+      setTimeout(() => setToasts((p) => p.filter((t) => t.id !== toast.id)), 6000);
+      playMessageSound();
+    };
+
+    const handleOrderStatusUpdated = (data: { orderId: string; status: string; sourceUserId: string }) => {
+      if (data.sourceUserId === user?.id) return;
+      const statusLabels: Record<string, string> = { CONFIRMED: "confirmée", PROCESSING: "en traitement", SHIPPED: "expédiée", CANCELED: "annulée" };
+      const label = statusLabels[data.status] ?? data.status;
+      const toast: MessageToast = {
+        id: `order-status-${data.orderId}-${Date.now()}`,
+        kind: "order",
+        title: `📦 Commande ${label}`,
+        content: `Commande #${data.orderId.slice(-6)} — ${label}`,
+        icon: "📦",
+        targetUrl: "/account?tab=commandes",
+        timestamp: Date.now(),
+      };
+      setToasts((p) => [toast, ...p].slice(0, 4));
+      setTimeout(() => setToasts((p) => p.filter((t) => t.id !== toast.id)), 6000);
+      playMessageSound();
+    };
+
+    const handleDeliveryConfirmed = (data: { orderId: string; sourceUserId: string }) => {
+      if (data.sourceUserId === user?.id) return;
+      const toast: MessageToast = {
+        id: `order-delivered-${data.orderId}-${Date.now()}`,
+        kind: "order",
+        title: "✅ Livraison confirmée",
+        content: `Commande #${data.orderId.slice(-6)} validée par l'acheteur`,
+        icon: "📦",
+        targetUrl: "/account?tab=commandes",
+        timestamp: Date.now(),
+      };
+      setToasts((p) => [toast, ...p].slice(0, 4));
+      setTimeout(() => setToasts((p) => p.filter((t) => t.id !== toast.id)), 6000);
+      playMessageSound();
+    };
+
+    const handleNegotiationUpdated = (data: { action: string; negotiationId: string; sourceUserId: string }) => {
+      if (data.sourceUserId === user?.id) return;
+      const actionLabels: Record<string, string> = { CREATED: "Nouvelle offre", RESPONDED: "Réponse reçue", CANCELED: "Annulée", JOINED: "Nouveau membre", BUNDLE_CREATED: "Offre lot" };
+      const label = actionLabels[data.action] ?? data.action;
+      const toast: MessageToast = {
+        id: `nego-${data.negotiationId}-${Date.now()}`,
+        kind: "negotiation",
+        title: "🤝 " + label,
+        content: `Marchandage #${data.negotiationId.slice(-6)} — ${label}`,
+        icon: "🤝",
+        targetUrl: "/account?tab=commandes",
+        timestamp: Date.now(),
+      };
+      setToasts((p) => [toast, ...p].slice(0, 4));
+      setTimeout(() => setToasts((p) => p.filter((t) => t.id !== toast.id)), 6000);
+      playMessageSound();
+    };
+
+    const handleNegotiationExpired = (data: { negotiationId: string }) => {
+      const toast: MessageToast = {
+        id: `nego-expired-${data.negotiationId}-${Date.now()}`,
+        kind: "negotiation",
+        title: "⏰ Marchandage expiré",
+        content: `Marchandage #${data.negotiationId.slice(-6)} a expiré`,
+        icon: "🤝",
+        targetUrl: "/account?tab=commandes",
+        timestamp: Date.now(),
+      };
+      setToasts((p) => [toast, ...p].slice(0, 4));
+      setTimeout(() => setToasts((p) => p.filter((t) => t.id !== toast.id)), 6000);
+    };
+
     socket.on("message:new", handleNewMessage);
     socket.on("call:incoming", handleIncomingCall);
+    socket.on("order:created", handleOrderCreated);
+    socket.on("order:status-updated", handleOrderStatusUpdated);
+    socket.on("order:delivery-confirmed", handleDeliveryConfirmed);
+    socket.on("negotiation:updated", handleNegotiationUpdated);
+    socket.on("negotiation:expired", handleNegotiationExpired);
 
     return () => {
       socket.off("message:new", handleNewMessage);
       socket.off("call:incoming", handleIncomingCall);
+      socket.off("order:created", handleOrderCreated);
+      socket.off("order:status-updated", handleOrderStatusUpdated);
+      socket.off("order:delivery-confirmed", handleDeliveryConfirmed);
+      socket.off("negotiation:updated", handleNegotiationUpdated);
+      socket.off("negotiation:expired", handleNegotiationExpired);
     };
   }, [isLoggedIn, user?.id, playMessageSound, presentIncomingCall]);
 
