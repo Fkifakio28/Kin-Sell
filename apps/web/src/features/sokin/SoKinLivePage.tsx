@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../app/providers/AuthProvider';
 import { useLocaleCurrency } from '../../app/providers/LocaleCurrencyProvider';
 import { useScrollDirection } from '../../hooks/useScrollDirection';
+import { useIsMobile } from '../../hooks/useIsMobile';
 import { useSocket } from '../../hooks/useSocket';
 import {
   sokinLive,
@@ -12,6 +13,7 @@ import {
   type MyListing,
 } from '../../lib/api-client';
 import { getDashboardPath } from '../../utils/role-routing';
+import { Header } from '../../components/Header';
 import Hls from 'hls.js';
 import './sokin-live.css';
 
@@ -591,43 +593,36 @@ function LiveFeed({
 }
 
 /* ═══════════════════════════════════════════════════
-   FAB — floating action button (même pattern Home/Explorer)
+   BOTTOM NAV — mobile + tablette uniquement
+   5 items : Home / Panier / (+) Go Live / Notifs / Compte
    ═══════════════════════════════════════════════════ */
 
-function LiveFAB({ visible }: { visible: boolean }) {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const navigate = useNavigate();
-  const { isLoggedIn, user } = useAuth();
-
-  const go = (path: string) => {
-    setMenuOpen(false);
-    void navigate(isLoggedIn ? path : '/login');
-  };
+function LiveBottomNav({ visible, onGoLive }: { visible: boolean; onGoLive: () => void }) {
+  const { user } = useAuth();
+  const dashPath = getDashboardPath(user?.role);
 
   return (
-    <>
-      <button
-        type="button"
-        className={`lv-fab${visible ? '' : ' lv-fab--hidden'}${menuOpen ? ' lv-fab--open' : ''}`}
-        onClick={() => setMenuOpen((o) => !o)}
-        aria-label="Créer"
-        aria-expanded={menuOpen}
-      >
-        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    <nav className={`lv-bnav${visible ? '' : ' lv-bnav--hidden'}`} aria-label="Navigation">
+      <a href="/" className="lv-bnav-item">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+        <span>Accueil</span>
+      </a>
+      <a href="/cart" className="lv-bnav-item">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+        <span>Panier</span>
+      </a>
+      <button type="button" className="lv-bnav-fab" onClick={onGoLive} aria-label="Lancer un live">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
       </button>
-      {menuOpen && (
-        <>
-          <div className="lv-fab-overlay" onClick={() => setMenuOpen(false)} />
-          <div className="lv-fab-menu">
-            <div className="lv-fab-menu-handle" />
-            <p className="lv-fab-menu-title">Publier ou ajouter</p>
-            <button className="lv-fab-menu-item" onClick={() => go('/sokin')}>📢 Publier sur SoKin</button>
-            <button className="lv-fab-menu-item" onClick={() => go(`${getDashboardPath(user?.role)}?section=sell&create=produit`)}>🛍️ Ajouter un produit</button>
-            <button className="lv-fab-menu-item" onClick={() => go(`${getDashboardPath(user?.role)}?section=sell&create=service`)}>🔧 Ajouter un service</button>
-          </div>
-        </>
-      )}
-    </>
+      <button type="button" className="lv-bnav-item" onClick={() => { sessionStorage.setItem('ud-section', 'notifications'); window.location.href = dashPath; }}>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        <span>Notifs</span>
+      </button>
+      <a href={dashPath} className="lv-bnav-item">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        <span>Compte</span>
+      </a>
+    </nav>
   );
 }
 
@@ -642,6 +637,7 @@ export function SoKinLivePage() {
   const { t } = useLocaleCurrency();
   const scrollDir = useScrollDirection();
   const barsVisible = scrollDir === 'up';
+  const isMobileOrTablet = useIsMobile(1023);
 
   type View = 'browse' | 'watch' | 'create';
   const [view, setView] = useState<View>('browse');
@@ -747,60 +743,121 @@ export function SoKinLivePage() {
   const currentInitial = (user?.profile?.displayName ?? 'K').charAt(0).toUpperCase();
 
   return (
-    <div className="lv-page">
-      {/* Bloc 1: Title */}
-      <div className={`lv-title-section${barsVisible ? '' : ' lv-title-section--hidden'}`}>
-        <h1 className="lv-title">🔴 So-Kin Live</h1>
-      </div>
+    <div className={`lv-page${isMobileOrTablet ? '' : ' lv-page--desktop'}`}>
+      {/* Header PC (desktop only) */}
+      {!isMobileOrTablet && <Header />}
 
-      {/* Bloc 2: Start + suggestions */}
-      <div className={`lv-start-section${barsVisible ? '' : ' lv-start-section--hidden'}`}>
-        {/* Left: user avatar + create button */}
-        <div className="lv-start-user">
-          <div className="lv-start-avatar-wrap">
-            {currentAvatar
-              ? <img src={currentAvatar} alt="" className="lv-start-avatar" />
-              : <div className="lv-start-avatar lv-start-avatar--ph">{currentInitial}</div>}
-            <button
-              type="button"
-              className="lv-start-plus"
-              onClick={() => isLoggedIn ? setView('create') : navigate('/login')}
-              aria-label="Lancer un live"
-            >
-              +
-            </button>
+      {isMobileOrTablet ? (
+        /* ===== MOBILE + TABLET LAYOUT ===== */
+        <>
+          {/* Bloc 1: Title */}
+          <div className={`lv-title-section${barsVisible ? '' : ' lv-title-section--hidden'}`}>
+            <h1 className="lv-title">🔴 So-Kin Live</h1>
           </div>
-        </div>
 
-        {/* Center-right: live avatars strip */}
-        <div className="lv-live-strip">
-          {liveNowAvatars.length > 0 ? (
-            liveNowAvatars.map((l) => {
-              const p = l.host?.profile;
-              return (
-                <button key={l.id} type="button" className="lv-live-avatar-btn" onClick={() => void handleOpenLive(l)}>
-                  <div className="lv-live-ring">
-                    {p?.avatarUrl
-                      ? <img src={p.avatarUrl} alt={p.displayName} className="lv-live-ring-img" />
-                      : <span className="lv-live-ring-ph">{(p?.displayName ?? 'L').charAt(0)}</span>}
-                  </div>
-                  <span className="lv-live-avatar-name">{p?.displayName ?? 'Live'}</span>
+          {/* Bloc 2: Start + suggestions */}
+          <div className={`lv-start-section${barsVisible ? '' : ' lv-start-section--hidden'}`}>
+            <div className="lv-start-user">
+              <div className="lv-start-avatar-wrap">
+                {currentAvatar
+                  ? <img src={currentAvatar} alt="" className="lv-start-avatar" />
+                  : <div className="lv-start-avatar lv-start-avatar--ph">{currentInitial}</div>}
+                <button
+                  type="button"
+                  className="lv-start-plus"
+                  onClick={() => isLoggedIn ? setView('create') : navigate('/login')}
+                  aria-label="Lancer un live"
+                >
+                  +
                 </button>
-              );
-            })
-          ) : (
-            <p className="lv-live-strip-empty">Aucun live en direct</p>
-          )}
+              </div>
+            </div>
+
+            <div className="lv-live-strip">
+              {liveNowAvatars.length > 0 ? (
+                liveNowAvatars.map((l) => {
+                  const p = l.host?.profile;
+                  return (
+                    <button key={l.id} type="button" className="lv-live-avatar-btn" onClick={() => void handleOpenLive(l)}>
+                      <div className="lv-live-ring">
+                        {p?.avatarUrl
+                          ? <img src={p.avatarUrl} alt={p.displayName} className="lv-live-ring-img" />
+                          : <span className="lv-live-ring-ph">{(p?.displayName ?? 'L').charAt(0)}</span>}
+                      </div>
+                      <span className="lv-live-avatar-name">{p?.displayName ?? 'Live'}</span>
+                    </button>
+                  );
+                })
+              ) : (
+                <p className="lv-live-strip-empty">Aucun live en direct</p>
+              )}
+            </div>
+          </div>
+
+          {/* Bloc 3: Feed */}
+          <div className={`lv-feed-section${barsVisible ? '' : ' lv-feed-section--fullscreen'}`}>
+            <LiveFeed lives={activeLives} onOpen={(l) => void handleOpenLive(l)} />
+          </div>
+
+          {/* Bottom Nav (mobile/tablet) */}
+          <LiveBottomNav visible={barsVisible} onGoLive={() => isLoggedIn ? setView('create') : navigate('/login')} />
+        </>
+      ) : (
+        /* ===== DESKTOP LAYOUT: 2 colonnes ===== */
+        <div className="lv-desktop-body">
+          {/* Sidebar gauche */}
+          <aside className="lv-desktop-sidebar">
+            <div className="lv-sidebar-profile">
+              <div className="lv-sidebar-avatar-wrap">
+                {currentAvatar
+                  ? <img src={currentAvatar} alt="" className="lv-sidebar-avatar" />
+                  : <div className="lv-sidebar-avatar lv-sidebar-avatar--ph">{currentInitial}</div>}
+              </div>
+              <p className="lv-sidebar-name">{user?.profile?.displayName ?? 'Utilisateur'}</p>
+              <button
+                type="button"
+                className="lv-sidebar-go-live"
+                onClick={() => isLoggedIn ? setView('create') : navigate('/login')}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Lancer un live
+              </button>
+            </div>
+
+            <div className="lv-sidebar-suggestions">
+              <h3 className="lv-sidebar-heading">🔴 En direct</h3>
+              {liveNowAvatars.length > 0 ? (
+                liveNowAvatars.map((l) => {
+                  const p = l.host?.profile;
+                  return (
+                    <button key={l.id} type="button" className="lv-sidebar-live-item" onClick={() => void handleOpenLive(l)}>
+                      <div className="lv-sidebar-live-ring">
+                        {p?.avatarUrl
+                          ? <img src={p.avatarUrl} alt={p.displayName} className="lv-sidebar-live-ring-img" />
+                          : <span className="lv-sidebar-live-ring-ph">{(p?.displayName ?? 'L').charAt(0)}</span>}
+                      </div>
+                      <div className="lv-sidebar-live-info">
+                        <span className="lv-sidebar-live-name">{p?.displayName ?? 'Live'}</span>
+                        <span className="lv-sidebar-live-viewers">{l.viewerCount} spectateur{l.viewerCount !== 1 ? 's' : ''}</span>
+                      </div>
+                    </button>
+                  );
+                })
+              ) : (
+                <p className="lv-sidebar-empty">Aucun live en direct</p>
+              )}
+            </div>
+          </aside>
+
+          {/* Feed principal */}
+          <main className="lv-desktop-feed">
+            <div className="lv-title-section">
+              <h1 className="lv-title">🔴 So-Kin Live</h1>
+            </div>
+            <LiveFeed lives={activeLives} onOpen={(l) => void handleOpenLive(l)} />
+          </main>
         </div>
-      </div>
-
-      {/* Bloc 3: Feed */}
-      <div className={`lv-feed-section${barsVisible ? '' : ' lv-feed-section--fullscreen'}`}>
-        <LiveFeed lives={activeLives} onOpen={(l) => void handleOpenLive(l)} />
-      </div>
-
-      {/* FAB */}
-      <LiveFAB visible={barsVisible} />
+      )}
     </div>
   );
 }
