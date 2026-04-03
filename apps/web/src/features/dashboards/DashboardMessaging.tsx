@@ -9,6 +9,7 @@ import {
 import { useSocket } from "../../hooks/useSocket";
 import { createOptimizedAudioRecorder, createUploadFile, prepareMediaUrl } from "../../utils/media-upload";
 import { useGlobalNotification } from "../../app/providers/GlobalNotificationProvider";
+import { playCallSound, stopCallSound, refreshCallSoundIfNeeded } from "../../utils/call-sound";
 import "./dashboard-messaging.css";
 
 /* ── Emoji data ── */
@@ -168,7 +169,6 @@ export function DashboardMessaging() {
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animFrameRef = useRef<number>(0);
   const audioContextRef = useRef<AudioContext | null>(null);
-  const ringtoneIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const [callState, setCallState] = useState<null | { type: "audio" | "video"; conversationId: string; remoteUserId: string; direction: "incoming" | "outgoing"; status: "ringing" | "connected" | "ended" }>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
@@ -197,14 +197,25 @@ export function DashboardMessaging() {
     messaging.callLogs().then((r) => setCallLogs(r.callLogs)).catch(() => {}).finally(() => setLoadingCallLogs(false));
   }, [sidebarTab, isLoggedIn]);
 
-  /* ── Ringtone ── */
+  /* ── Ringtone (WAV files selon connectivité réseau) ── */
   useEffect(() => {
     const isRinging = callState?.status === "ringing";
-    if (!isRinging) { if (ringtoneIntervalRef.current) { clearInterval(ringtoneIntervalRef.current); ringtoneIntervalRef.current = null; } return; }
-    const playTone = () => { try { const ctx = new AudioContext(); const osc = ctx.createOscillator(); const g = ctx.createGain(); osc.connect(g); g.connect(ctx.destination); osc.frequency.value = callState?.direction === "incoming" ? 440 : 480; g.gain.setValueAtTime(0.15, ctx.currentTime); g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6); osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.6); setTimeout(() => ctx.close(), 700); } catch {} };
-    playTone();
-    ringtoneIntervalRef.current = setInterval(playTone, 2000);
-    return () => { if (ringtoneIntervalRef.current) clearInterval(ringtoneIntervalRef.current); };
+    if (!isRinging) {
+      stopCallSound();
+      return;
+    }
+    const direction = callState?.direction ?? "outgoing";
+    playCallSound(direction);
+
+    const onNetworkChange = () => refreshCallSoundIfNeeded(direction);
+    window.addEventListener("online", onNetworkChange);
+    window.addEventListener("offline", onNetworkChange);
+
+    return () => {
+      stopCallSound();
+      window.removeEventListener("online", onNetworkChange);
+      window.removeEventListener("offline", onNetworkChange);
+    };
   }, [callState?.status, callState?.direction]);
 
   /* ── Load conversations ── */

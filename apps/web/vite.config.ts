@@ -120,6 +120,7 @@ export default defineConfig({
           "**/*.jpeg",
           "**/*.webp",
           "**/*.gif",
+          "**/*.wav",
         ],
 
         // Claim immédiatement le client dès activation

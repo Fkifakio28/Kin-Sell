@@ -14,6 +14,7 @@ import { useLocaleCurrency } from "../../app/providers/LocaleCurrencyProvider";
 import { createOptimizedAudioRecorder, createUploadFile, prepareMediaUrl } from "../../utils/media-upload";
 import { useGlobalNotification } from "../../app/providers/GlobalNotificationProvider";
 import { getDashboardPath } from "../../utils/role-routing";
+import { playCallSound, stopCallSound, refreshCallSoundIfNeeded } from "../../utils/call-sound";
 import "./messaging.css";
 
 /* ═══════════════════════════════════════════
@@ -300,7 +301,6 @@ export function MessagingPage() {
   const localFacingModeRef = useRef<"user" | "environment">("user");
   const qualityPoorStreakRef = useRef(0);
   const qualityGoodStreakRef = useRef(0);
-  const ringtoneIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const iceRestartAttemptRef = useRef(0);
 
   /* ── MessageGuard ── */
@@ -346,29 +346,26 @@ export function MessagingPage() {
     return () => setMessagingActive(false);
   }, [setMessagingActive]);
 
-  /* ── Ringtone ── */
+  /* ── Ringtone (WAV files selon connectivité réseau) ── */
   useEffect(() => {
     const isRinging = callState?.status === "ringing";
     if (!isRinging) {
-      if (ringtoneIntervalRef.current) { clearInterval(ringtoneIntervalRef.current); ringtoneIntervalRef.current = null; }
+      stopCallSound();
       return;
     }
-    const playTone = () => {
-      try {
-        const ctx = new AudioContext();
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.connect(gain); gain.connect(ctx.destination);
-        osc.frequency.value = callState?.direction === "incoming" ? 440 : 480;
-        gain.gain.setValueAtTime(0.15, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
-        osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.6);
-        setTimeout(() => ctx.close(), 700);
-      } catch { /* audio policy */ }
+    const direction = callState?.direction ?? "outgoing";
+    playCallSound(direction);
+
+    // Écouter changements réseau en cours de sonnerie
+    const onNetworkChange = () => refreshCallSoundIfNeeded(direction);
+    window.addEventListener("online", onNetworkChange);
+    window.addEventListener("offline", onNetworkChange);
+
+    return () => {
+      stopCallSound();
+      window.removeEventListener("online", onNetworkChange);
+      window.removeEventListener("offline", onNetworkChange);
     };
-    playTone();
-    ringtoneIntervalRef.current = setInterval(playTone, 2000);
-    return () => { if (ringtoneIntervalRef.current) clearInterval(ringtoneIntervalRef.current); };
   }, [callState?.status, callState?.direction]);
 
   /* ── Vibration on incoming ringing ── */

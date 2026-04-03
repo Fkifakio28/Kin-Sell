@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { useAuth } from "./AuthProvider";
 import { useSocketContext } from "./SocketProvider";
 import { isPushSupported, subscribeToPush, onServiceWorkerMessage, registerServiceWorker } from "../../utils/push-notifications";
+import { playCallSound, stopCallSound, refreshCallSoundIfNeeded } from "../../utils/call-sound";
 import "../../styles/global-notifications.css";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:4000";
@@ -223,7 +224,13 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
 
     if ("vibrate" in navigator) navigator.vibrate([400, 200, 400, 200, 400]);
 
-    incomingCallTimerRef.current = setTimeout(() => setIncomingCall(null), 45_000);
+    // Jouer la sonnerie d'appel entrant (WAV selon connectivité)
+    playCallSound("incoming");
+
+    incomingCallTimerRef.current = setTimeout(() => {
+      setIncomingCall(null);
+      stopCallSound();
+    }, 45_000);
   }, []);
 
   /* ── Listen for SW messages (notification clicks) ── */
@@ -236,7 +243,13 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
         return;
       }
       if (swMsg.type === "CALL_DISMISSED" && swMsg.data?.conversationId) {
-        setIncomingCall((prev) => (prev?.conversationId === swMsg.data?.conversationId ? null : prev));
+        setIncomingCall((prev) => {
+          if (prev?.conversationId === swMsg.data?.conversationId) {
+            stopCallSound();
+            return null;
+          }
+          return prev;
+        });
         return;
       }
       if (swMsg.type === "PUSH_RECEIVED" && swMsg.payload?.data?.type) {
@@ -307,6 +320,7 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
   const acceptGlobalCall = useCallback((preferredCallType?: "audio" | "video") => {
     if (!incomingCall) return;
     if (incomingCallTimerRef.current) clearTimeout(incomingCallTimerRef.current);
+    stopCallSound();
     const { conversationId, callerId, callType } = incomingCall;
     const resolvedCallType = preferredCallType ?? callType;
     setIncomingCall(null);
@@ -320,6 +334,7 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
   const rejectGlobalCall = useCallback(() => {
     if (!incomingCall) return;
     if (incomingCallTimerRef.current) clearTimeout(incomingCallTimerRef.current);
+    stopCallSound();
     socketRef.current?.emit("call:reject", {
       conversationId: incomingCall.conversationId,
       callerId: incomingCall.callerId,
@@ -379,6 +394,7 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
       setIncomingCall((prev) => {
         if (!prev || prev.conversationId !== data.conversationId) return prev;
         if (incomingCallTimerRef.current) { clearTimeout(incomingCallTimerRef.current); incomingCallTimerRef.current = null; }
+        stopCallSound();
         return null;
       });
     };
