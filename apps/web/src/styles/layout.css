@@ -986,64 +986,83 @@
 .ks-rlc-selector {
   display: flex;
   flex-direction: column;
-  gap: var(--space-sm, 8px);
+  gap: 10px;
+  background: #0B1F3A;
+  border: 1px solid rgba(30, 136, 229, 0.2);
+  border-radius: 12px;
+  padding: 14px;
 }
 
 .ks-rlc-group {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
 }
 
 .ks-rlc-label {
-  font-size: var(--font-size-xs, 11px);
-  color: var(--color-text-tertiary);
-  font-weight: var(--font-weight-medium, 500);
-  letter-spacing: 0.02em;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.55);
+  font-weight: 500;
+  letter-spacing: 0.03em;
 }
 
 .ks-rlc-select {
   width: 100%;
-  padding: 8px 28px 8px 10px;
-  background: rgba(111, 88, 255, 0.1);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-sm, 8px);
-  color: var(--color-text-primary);
-  font-size: var(--font-size-sm);
+  padding: 9px 32px 9px 12px;
+  background: #102544;
+  border: 1px solid rgba(30, 136, 229, 0.25);
+  border-radius: 8px;
+  color: #fff;
+  font-size: 13px;
   font-family: inherit;
   cursor: pointer;
   transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
   appearance: none;
   -webkit-appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239d92bb' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%231E88E5' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
-  background-position: right 8px center;
+  background-position: right 10px center;
   outline: none;
 }
 
 .ks-rlc-select:hover {
-  border-color: var(--color-primary);
-  background: rgba(111, 88, 255, 0.18);
+  border-color: #1E88E5;
+  background: #13304F;
 }
 
 .ks-rlc-select:focus {
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 2px rgba(111, 88, 255, 0.25);
+  border-color: #1E88E5;
+  box-shadow: 0 0 0 2px rgba(30, 136, 229, 0.2);
 }
 
 .ks-rlc-select option {
-  background: var(--color-dark-blue-light, #1a1333);
-  color: var(--color-text-primary);
+  background: #08172C;
+  color: #fff;
 }
 
-/* Mobile drawer variant */
+/* ── Variante footer desktop : compact ── */
+.ks-footer .ks-rlc-selector {
+  padding: 12px;
+  gap: 8px;
+}
+
+.ks-footer .ks-rlc-select {
+  padding: 7px 28px 7px 10px;
+  font-size: 12px;
+}
+
+/* ── Variante mobile drawer ── */
 .ks-mobile-rlc {
-  padding: 10px 0;
+  margin: 6px 0;
 }
 
-.ks-mobile-rlc .ks-rlc-select {
-  padding: 10px 28px 10px 12px;
-  font-size: 14px;
+.hm-drawer .ks-rlc-selector {
+  border-radius: 10px;
+  margin: 0;
+}
+
+.ex-drawer .ks-rlc-selector {
+  margin: 0 12px 12px;
   border-radius: 10px;
 }
 

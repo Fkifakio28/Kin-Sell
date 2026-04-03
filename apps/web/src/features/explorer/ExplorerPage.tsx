@@ -19,6 +19,7 @@ import { useScrollDirection } from '../../hooks/useScrollDirection';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { getDashboardPath } from '../../utils/role-routing';
 import { ExplorerPageDesktop } from './ExplorerPageDesktop';
+import { RegionLanguageCurrencySelector } from '../../components/RegionLanguageCurrencySelector';
 
 const PREVIEW_PAGE_SIZE = 4;
 const MODAL_PAGE_SIZE = 8;
@@ -114,6 +115,7 @@ function ExDrawer({ open, onClose, t, isLoggedIn, user, logout }: {
             <Link to={getDashboardPath(user?.role)} className="ex-drawer-link" onClick={onClose}>👤 Mon compte</Link>
           )}
         </nav>
+        <RegionLanguageCurrencySelector />
         <div className="ex-drawer-footer">
           {isLoggedIn ? (
             <button className="ex-drawer-logout" onClick={handleLogout}>🚪 {t('common.logout')}</button>

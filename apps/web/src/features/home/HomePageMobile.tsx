@@ -16,8 +16,6 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../app/providers/AuthProvider";
 import {
   useLocaleCurrency,
-  type AppCurrency,
-  type AppLanguage,
 } from "../../app/providers/LocaleCurrencyProvider";
 import { useMarketPreference } from "../../app/providers/MarketPreferenceProvider";
 import { getDashboardPath } from "../../utils/role-routing";
@@ -30,6 +28,7 @@ import {
 } from "../../lib/api-client";
 import { NegotiatePopup } from "../negotiations/NegotiatePopup";
 import { AdBanner } from "../../components/AdBanner";
+import { RegionLanguageCurrencySelector } from "../../components/RegionLanguageCurrencySelector";
 import {
   useLockedCategories,
   isCategoryLocked,
@@ -62,22 +61,6 @@ const DRAWER_LINKS = {
     { icon: "\u2696\uFE0F", labelKey: "home.terms", href: "/terms" },
   ],
 };
-
-const LANGUAGE_OPTIONS: Array<{ code: AppLanguage; label: string }> = [
-  { code: "fr", label: "Francais" },
-  { code: "en", label: "English" },
-  { code: "ln", label: "Lingala" },
-];
-
-const CURRENCY_OPTIONS: Array<{ code: AppCurrency; label: string }> = [
-  { code: "CDF", label: "CDF (FC)" },
-  { code: "USD", label: "USD ($)" },
-  { code: "EUR", label: "EUR (\u20AC)" },
-  { code: "XAF", label: "XAF (FCFA)" },
-  { code: "XOF", label: "XOF (CFA)" },
-  { code: "AOA", label: "AOA (Kz)" },
-  { code: "MAD", label: "MAD (DH)" },
-];
 
 /* ────────────── Hook: scroll direction ────────────── */
 
@@ -124,15 +107,9 @@ function SideDrawer({
   logout: () => Promise<void>;
 }) {
   const navigate = useNavigate();
-  const { language, setLanguage, currency, setCurrency } = useLocaleCurrency();
   const {
-    countries,
     detectedCountry,
-    selectedCountry,
     effectiveCountry,
-    selectionMode,
-    setSelectionMode,
-    setSelectedCountry,
     getCountryConfig,
   } = useMarketPreference();
   const displayName =
@@ -232,45 +209,7 @@ function SideDrawer({
           <p className="hm-drawer-section-title">
             {t("home.drawerMarketPrefs")}
           </p>
-          <label className="hm-drawer-pref-label" htmlFor="hm-country-mode">
-            {t("home.marketMode")}
-          </label>
-          <select
-            id="hm-country-mode"
-            className="hm-drawer-pref-select"
-            value={selectionMode}
-            onChange={(e) =>
-              setSelectionMode(
-                e.target.value === "manual" ? "manual" : "auto",
-              )
-            }
-          >
-            <option value="auto">{t("home.marketModeAuto")}</option>
-            <option value="manual">{t("home.marketModeManual")}</option>
-          </select>
-
-          <label
-            className="hm-drawer-pref-label"
-            htmlFor="hm-country-select"
-          >
-            {t("home.marketCountry")}
-          </label>
-          <select
-            id="hm-country-select"
-            className="hm-drawer-pref-select"
-            value={
-              selectionMode === "manual" ? selectedCountry : effectiveCountry
-            }
-            onChange={(e) =>
-              setSelectedCountry(e.target.value as typeof selectedCountry)
-            }
-          >
-            {countries.map((c) => (
-              <option key={c.code} value={c.code}>
-                {c.name}
-              </option>
-            ))}
-          </select>
+          <RegionLanguageCurrencySelector />
           <p className="hm-drawer-pref-hint">
             {t("home.marketDetected").replace(
               "{country}",
@@ -282,44 +221,6 @@ function SideDrawer({
               .replace("{country}", activeCountry.name)
               .replace("{region}", activeCountry.region)}
           </p>
-
-          <label
-            className="hm-drawer-pref-label"
-            htmlFor="hm-language-select"
-          >
-            {t("footer.language")}
-          </label>
-          <select
-            id="hm-language-select"
-            className="hm-drawer-pref-select"
-            value={language}
-            onChange={(e) => setLanguage(e.target.value as AppLanguage)}
-          >
-            {LANGUAGE_OPTIONS.map((o) => (
-              <option key={o.code} value={o.code}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-
-          <label
-            className="hm-drawer-pref-label"
-            htmlFor="hm-currency-select"
-          >
-            {t("footer.currency")}
-          </label>
-          <select
-            id="hm-currency-select"
-            className="hm-drawer-pref-select"
-            value={currency}
-            onChange={(e) => setCurrency(e.target.value as AppCurrency)}
-          >
-            {CURRENCY_OPTIONS.map((o) => (
-              <option key={o.code} value={o.code}>
-                {o.label}
-              </option>
-            ))}
-          </select>
         </div>
 
         <nav className="hm-drawer-nav" aria-label={t("nav.ariaMain")}>
