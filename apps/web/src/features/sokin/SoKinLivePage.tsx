@@ -11,6 +11,7 @@ import {
   type SoKinLiveChatMsg,
   type MyListing,
 } from '../../lib/api-client';
+import { getDashboardPath } from '../../utils/role-routing';
 import Hls from 'hls.js';
 import './sokin-live.css';
 
@@ -590,26 +591,43 @@ function LiveFeed({
 }
 
 /* ═══════════════════════════════════════════════════
-   FAB — floating action button
+   FAB — floating action button (même pattern Home/Explorer)
    ═══════════════════════════════════════════════════ */
 
-function LiveFAB({
-  visible,
-  onClick,
-}: {
-  visible: boolean;
-  onClick: () => void;
-}) {
+function LiveFAB({ visible }: { visible: boolean }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const navigate = useNavigate();
+  const { isLoggedIn, user } = useAuth();
+
+  const go = (path: string) => {
+    setMenuOpen(false);
+    void navigate(isLoggedIn ? path : '/login');
+  };
+
   return (
-    <button
-      type="button"
-      className={`lv-fab${visible ? '' : ' lv-fab--hidden'}`}
-      onClick={onClick}
-      aria-label="Lancer un live"
-    >
-      <span className="lv-fab-dot" />
-      <span>Go Live</span>
-    </button>
+    <>
+      <button
+        type="button"
+        className={`lv-fab${visible ? '' : ' lv-fab--hidden'}${menuOpen ? ' lv-fab--open' : ''}`}
+        onClick={() => setMenuOpen((o) => !o)}
+        aria-label="Créer"
+        aria-expanded={menuOpen}
+      >
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      </button>
+      {menuOpen && (
+        <>
+          <div className="lv-fab-overlay" onClick={() => setMenuOpen(false)} />
+          <div className="lv-fab-menu">
+            <div className="lv-fab-menu-handle" />
+            <p className="lv-fab-menu-title">Publier ou ajouter</p>
+            <button className="lv-fab-menu-item" onClick={() => go('/sokin')}>📢 Publier sur SoKin</button>
+            <button className="lv-fab-menu-item" onClick={() => go(`${getDashboardPath(user?.role)}?section=sell&create=produit`)}>🛍️ Ajouter un produit</button>
+            <button className="lv-fab-menu-item" onClick={() => go(`${getDashboardPath(user?.role)}?section=sell&create=service`)}>🔧 Ajouter un service</button>
+          </div>
+        </>
+      )}
+    </>
   );
 }
 
@@ -782,10 +800,7 @@ export function SoKinLivePage() {
       </div>
 
       {/* FAB */}
-      <LiveFAB
-        visible={barsVisible}
-        onClick={() => isLoggedIn ? setView('create') : navigate('/login')}
-      />
+      <LiveFAB visible={barsVisible} />
     </div>
   );
 }
