@@ -15,5 +15,8 @@
     "db:generate": "npm run generate -w packages/db",
     "db:migrate": "npm run migrate -w packages/db",
     "db:seed": "npm run seed -w packages/db"
+  },
+  "devDependencies": {
+    "sharp": "^0.34.5"
   }
 }

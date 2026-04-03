@@ -11,12 +11,38 @@ import { LocaleCurrencyProvider } from "./app/providers/LocaleCurrencyProvider";
 import { MarketPreferenceProvider } from "./app/providers/MarketPreferenceProvider";
 import "./styles/index.css";
 
+// ── Native platform setup ──
 if (Capacitor.isNativePlatform()) {
+  // Deep-link handler: intercept OAuth callback
   CapacitorApp.addListener("appUrlOpen", async ({ url }: URLOpenListenerEvent) => {
-    if (!url || !url.startsWith("com.kinsell.app://auth/callback")) return;
-    const query = url.includes("?") ? url.slice(url.indexOf("?")) : "";
-    await Browser.close().catch(() => undefined);
-    window.location.href = `/auth/callback${query}`;
+    if (!url) return;
+
+    // OAuth deep-link callback
+    if (url.startsWith("com.kinsell.app://auth/callback")) {
+      const query = url.includes("?") ? url.slice(url.indexOf("?")) : "";
+      await Browser.close().catch(() => undefined);
+      window.location.href = `/auth/callback${query}`;
+      return;
+    }
+
+    // HTTPS deep-links (App Links) — navigate within the app
+    try {
+      const parsed = new URL(url);
+      if (parsed.hostname === "kin-sell.com") {
+        window.location.href = parsed.pathname + parsed.search + parsed.hash;
+      }
+    } catch {
+      // Ignore malformed URLs
+    }
+  });
+
+  // Handle back button on Android
+  CapacitorApp.addListener("backButton", ({ canGoBack }) => {
+    if (canGoBack) {
+      window.history.back();
+    } else {
+      CapacitorApp.exitApp();
+    }
   });
 }
 
