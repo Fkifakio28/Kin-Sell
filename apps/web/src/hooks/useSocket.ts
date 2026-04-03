@@ -121,6 +121,14 @@ export function useSocket() {
     };
   }, []);
 
+  /* ── Disconnect propre sur fermeture d'onglet ── */
+  useEffect(() => {
+    const handler = () => { socketRef.current?.disconnect(); };
+    window.addEventListener("beforeunload", handler);
+    window.addEventListener("pagehide", handler);
+    return () => { window.removeEventListener("beforeunload", handler); window.removeEventListener("pagehide", handler); };
+  }, []);
+
   const emit = useCallback(
     (event: string, data?: unknown, callback?: (res: unknown) => void) => {
       socketRef.current?.emit(event, data, callback);

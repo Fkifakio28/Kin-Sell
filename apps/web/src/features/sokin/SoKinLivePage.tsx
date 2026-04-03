@@ -257,6 +257,7 @@ function LiveViewer({
   // Video refs
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
+  const stallTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const hostVideoRef = useRef<HTMLVideoElement>(null);
   const hostStreamRef = useRef<MediaStream | null>(null);
 
@@ -392,24 +393,38 @@ function LiveViewer({
           abrBandWidthUpFactor: 0.7,   // up-switch plus réactif
         });
         hlsRef.current = hls;
+        let hlsNetRetries = 0;
+        let hlsMediaRetries = 0;
+        const HLS_MAX_NET_RETRIES = 4;
+        const HLS_MAX_MEDIA_RETRIES = 2;
         hls.loadSource(playbackUrl); hls.attachMedia(vid);
-        hls.on(Hls.Events.MANIFEST_PARSED, () => void tryPlay());
-        // Auto-recovery sur erreurs réseau
+        hls.on(Hls.Events.MANIFEST_PARSED, () => { hlsNetRetries = 0; hlsMediaRetries = 0; void tryPlay(); });
+        // Auto-recovery sur erreurs réseau avec limite de tentatives
         hls.on(Hls.Events.ERROR, (_event, data) => {
           if (data.fatal) {
             if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
-              hls.startLoad(); // re-try
+              if (hlsNetRetries < HLS_MAX_NET_RETRIES) { hlsNetRetries++; hls.startLoad(); }
+              else { hls.destroy(); hlsRef.current = null; }
             } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
-              hls.recoverMediaError();
+              if (hlsMediaRetries < HLS_MAX_MEDIA_RETRIES) { hlsMediaRetries++; hls.recoverMediaError(); }
+              else { hls.destroy(); hlsRef.current = null; }
             }
           }
         });
+        // Détection de stall : si le buffer n'avance pas pendant 4s, relancer
+        let lastBuffEnd = 0;
+        stallTimerRef.current = setInterval(() => {
+          if (!vid.buffered.length) return;
+          const end = vid.buffered.end(vid.buffered.length - 1);
+          if (end === lastBuffEnd && !vid.paused && hls) { hls.startLoad(); }
+          lastBuffEnd = end;
+        }, 4000);
       }
     } else {
       hlsRef.current?.destroy(); hlsRef.current = null;
       vid.src = playbackUrl; vid.load(); void tryPlay();
     }
-    return () => { hlsRef.current?.destroy(); hlsRef.current = null; };
+    return () => { if (stallTimerRef.current) { clearInterval(stallTimerRef.current); stallTimerRef.current = null; } hlsRef.current?.destroy(); hlsRef.current = null; };
   }, [canPlay, playbackUrl, sound]);
 
   // Hearts

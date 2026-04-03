@@ -462,6 +462,40 @@ export function DashboardMessaging() {
   const rejectCall = useCallback(() => { if (!callState) return; emit("call:reject", { conversationId: callState.conversationId, callerId: callState.remoteUserId }); cleanupCall(); setCallState(null); }, [callState, emit, cleanupCall]);
   const endCall = useCallback(() => { if (!callState) return; emit("call:end", { conversationId: callState.conversationId, targetUserId: callState.remoteUserId }); cleanupCall(); setCallState(null); }, [callState, emit, cleanupCall]);
 
+  /* ── beforeunload: nettoyer appel actif si tab fermé ── */
+  const callStateRef = useRef(callState);
+  callStateRef.current = callState;
+  useEffect(() => {
+    const handler = () => {
+      const cs = callStateRef.current;
+      if (cs) {
+        if (cs.status === "connected" || cs.status === "ringing") {
+          emit("call:end", { conversationId: cs.conversationId, targetUserId: cs.remoteUserId });
+        }
+        cleanupCall();
+      }
+    };
+    window.addEventListener("beforeunload", handler);
+    window.addEventListener("pagehide", handler);
+    return () => { window.removeEventListener("beforeunload", handler); window.removeEventListener("pagehide", handler); };
+  }, [emit, cleanupCall]);
+
+  /* ── Réaction au changement réseau en cours d'appel ── */
+  useEffect(() => {
+    if (!callState || callState.status !== "connected" || callState.type !== "video") return;
+    const conn = (navigator as any).connection;
+    if (!conn) return;
+    const handleNetChange = () => {
+      const net = conn.effectiveType as string | undefined;
+      if (net === "2g" || net === "slow-2g" || net === "3g") {
+        const sender = peerConnectionRef.current?.getSenders().find((s) => s.track?.kind === "video");
+        if (sender) { try { const p = sender.getParameters(); p.encodings = [{ ...(p.encodings?.[0] ?? {}), maxBitrate: net === "3g" ? 900_000 : 450_000, maxFramerate: net === "3g" ? 24 : 15, scaleResolutionDownBy: net === "3g" ? 1.2 : 1.6 }]; void sender.setParameters(p); } catch { /* */ } }
+      }
+    };
+    conn.addEventListener("change", handleNetChange);
+    return () => conn.removeEventListener("change", handleNetChange);
+  }, [callState?.status, callState?.type]);
+
   /* ── Typing ── */
   const handleTyping = useCallback(() => {
     if (!activeConv) return;

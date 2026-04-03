@@ -52,7 +52,15 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
     /* ── Track online status ── */
     const wasOffline = !onlineUsers.has(userId) || (onlineUsers.get(userId)?.size ?? 0) === 0;
     if (!onlineUsers.has(userId)) onlineUsers.set(userId, new Set());
-    onlineUsers.get(userId)!.add(socket.id);
+
+    // ── Limite max 5 connexions simultanées par utilisateur ──
+    const userSockets = onlineUsers.get(userId)!;
+    if (userSockets.size >= 5) {
+      // Déconnecter la plus ancienne socket pour laisser la place
+      const oldest = userSockets.values().next().value;
+      if (oldest) { ioInstance?.sockets.sockets.get(oldest)?.disconnect(true); userSockets.delete(oldest); }
+    }
+    userSockets.add(socket.id);
 
     const pendingOffline = pendingOfflineTimers.get(userId);
     if (pendingOffline) {
@@ -100,6 +108,17 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
     /* ── Send message via socket ── */
     socket.on("message:send", async (data: { conversationId: string; content?: string; type?: string; mediaUrl?: string; fileName?: string; replyToId?: string }, callback?: (res: unknown) => void) => {
       try {
+        // ── Validation des entrées ──
+        if (!data || typeof data.conversationId !== "string" || data.conversationId.length < 10 || data.conversationId.length > 50) {
+          if (callback) callback({ ok: false, error: "conversationId invalide" }); return;
+        }
+        if (data.content !== undefined && (typeof data.content !== "string" || data.content.length > 5000)) {
+          if (callback) callback({ ok: false, error: "Contenu invalide (max 5000 caractères)" }); return;
+        }
+        if (data.type && !["TEXT", "IMAGE", "AUDIO", "VIDEO", "FILE"].includes(data.type)) {
+          if (callback) callback({ ok: false, error: "Type de message invalide" }); return;
+        }
+
         // ── Rate limit: max SOCKET_MSG_MAX messages per window ──
         const now = Date.now();
         let rate = socketMessageRates.get(userId);

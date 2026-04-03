@@ -884,6 +884,38 @@ export function MessagingPage() {
     cleanupCall(); setCallState(null);
   }, [callState, emit, cleanupCall]);
 
+  /* ── beforeunload: nettoyer appel actif si tab fermé ── */
+  const callStateRef = useRef(callState);
+  callStateRef.current = callState;
+  useEffect(() => {
+    const handler = () => {
+      const cs = callStateRef.current;
+      if (cs) {
+        if (cs.status === "connected" || cs.status === "ringing") {
+          emit("call:end", { conversationId: cs.conversationId, targetUserId: cs.remoteUserId });
+        }
+        cleanupCall();
+      }
+    };
+    window.addEventListener("beforeunload", handler);
+    window.addEventListener("pagehide", handler);
+    return () => { window.removeEventListener("beforeunload", handler); window.removeEventListener("pagehide", handler); };
+  }, [emit, cleanupCall]);
+
+  /* ── Réaction au changement réseau en cours d'appel ── */
+  useEffect(() => {
+    if (!callState || callState.status !== "connected" || callState.type !== "video") return;
+    const conn = (navigator as any).connection;
+    if (!conn) return;
+    const handleNetChange = () => {
+      const net = conn.effectiveType as string | undefined;
+      const prof = net === "2g" || net === "slow-2g" ? "data-saver" : net === "3g" ? "balanced" : "hd";
+      void applyVideoProfile(prof);
+    };
+    conn.addEventListener("change", handleNetChange);
+    return () => conn.removeEventListener("change", handleNetChange);
+  }, [callState?.status, callState?.type, applyVideoProfile]);
+
   /* ── Global call accept/reject events ── */
   useEffect(() => {
     const handleGlobalAccept = (event: Event) => {
