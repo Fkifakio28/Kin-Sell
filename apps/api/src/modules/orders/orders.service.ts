@@ -345,7 +345,15 @@ export const removeCartItem = async (userId: string, itemId: string) => {
   return getBuyerCart(userId);
 };
 
-export const checkoutBuyerCart = async (userId: string, notes?: string) => {
+export const checkoutBuyerCart = async (userId: string, notes?: string, delivery?: {
+  deliveryAddress?: string;
+  deliveryCity?: string;
+  deliveryCountry?: string;
+  deliveryLatitude?: number;
+  deliveryLongitude?: number;
+  deliveryPlaceId?: string;
+  deliveryFormattedAddress?: string;
+}) => {
   const cart = await prisma.cart.findFirst({
     where: { buyerUserId: userId, status: CartStatus.OPEN },
     include: {
@@ -426,6 +434,13 @@ export const checkoutBuyerCart = async (userId: string, notes?: string) => {
           totalUsdCents,
           notes,
           validationCode,
+          deliveryAddress: delivery?.deliveryAddress,
+          deliveryCity: delivery?.deliveryCity,
+          deliveryCountry: delivery?.deliveryCountry,
+          deliveryLatitude: delivery?.deliveryLatitude,
+          deliveryLongitude: delivery?.deliveryLongitude,
+          deliveryPlaceId: delivery?.deliveryPlaceId,
+          deliveryFormattedAddress: delivery?.deliveryFormattedAddress,
           items: {
             create: groupItems.map((item) => ({
               listingId: item.listing.id,

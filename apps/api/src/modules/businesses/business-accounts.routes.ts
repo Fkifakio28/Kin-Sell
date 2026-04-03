@@ -10,15 +10,34 @@ const createSchema = z.object({
   legalName: z.string().min(2).max(150),
   publicName: z.string().min(2).max(150),
   description: z.string().max(800).optional(),
-  city: z.string().min(2).max(80).optional()
+  city: z.string().min(2).max(80).optional(),
+  country: z.string().max(80).optional(),
+  countryCode: z.string().length(2).optional(),
 });
+
+const locationVisibilitySchema = z.enum([
+  "EXACT_PUBLIC", "DISTRICT_PUBLIC", "CITY_PUBLIC",
+  "REGION_PUBLIC", "COUNTRY_PUBLIC", "EXACT_PRIVATE",
+]);
 
 const updateSchema = z.object({
   legalName: z.string().min(2).max(150).optional(),
   publicName: z.string().min(2).max(150).optional(),
   description: z.string().max(800).optional(),
   city: z.string().min(2).max(80).optional(),
+  country: z.string().max(80).optional(),
+  countryCode: z.string().length(2).optional(),
+  region: z.string().max(120).optional(),
+  district: z.string().max(120).optional(),
+  postalCode: z.string().max(20).optional(),
   address: z.string().max(200).optional(),
+  formattedAddress: z.string().max(300).optional(),
+  latitude: z.number().min(-90).max(90).optional(),
+  longitude: z.number().min(-180).max(180).optional(),
+  placeId: z.string().max(300).optional(),
+  locationVisibility: locationVisibilitySchema.optional(),
+  serviceRadiusKm: z.number().int().min(1).max(500).nullable().optional(),
+  deliveryZones: z.array(z.string().max(120)).max(20).optional(),
   coverImage: z.string().refine(isAcceptedImageInput, "Image invalide").optional(),
   logo: z.string().refine(isAcceptedImageInput, "Image invalide").optional(),
   publicDescription: z.string().max(800).optional(),

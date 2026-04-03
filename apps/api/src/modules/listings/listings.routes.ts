@@ -11,14 +11,27 @@ import { getOrCreateDMConversation, sendMessage } from "../messaging/messaging.s
 const listingTypeSchema = z.enum(["PRODUIT", "SERVICE"]);
 const listingStatusSchema = z.enum(["ACTIVE", "INACTIVE", "ARCHIVED", "DELETED"]);
 
+const locationVisibilitySchema = z.enum([
+  "EXACT_PUBLIC", "DISTRICT_PUBLIC", "CITY_PUBLIC",
+  "REGION_PUBLIC", "COUNTRY_PUBLIC", "EXACT_PRIVATE",
+]);
+
 const createSchema = z.object({
   type: listingTypeSchema,
   title: z.string().min(2).max(140),
   description: z.string().max(1200).optional(),
   category: z.string().min(2).max(80),
   city: z.string().min(2).max(80),
+  country: z.string().max(80).optional(),
+  countryCode: z.string().length(2).optional(),
+  region: z.string().max(120).optional(),
+  district: z.string().max(120).optional(),
+  formattedAddress: z.string().max(300).optional(),
   latitude: z.number().min(-90).max(90),
   longitude: z.number().min(-180).max(180),
+  placeId: z.string().max(300).optional(),
+  locationVisibility: locationVisibilitySchema.optional(),
+  serviceRadiusKm: z.number().int().min(1).max(500).optional(),
   imageUrl: z.string().optional(),
   mediaUrls: z.array(z.string()).optional(),
   priceUsdCents: z.number().int().min(0).optional(),
@@ -33,8 +46,16 @@ const updateSchema = z.object({
   description: z.string().max(1200).optional(),
   category: z.string().min(2).max(80).optional(),
   city: z.string().min(2).max(80).optional(),
+  country: z.string().max(80).optional(),
+  countryCode: z.string().length(2).optional(),
+  region: z.string().max(120).optional(),
+  district: z.string().max(120).optional(),
+  formattedAddress: z.string().max(300).optional(),
   latitude: z.number().min(-90).max(90).optional(),
   longitude: z.number().min(-180).max(180).optional(),
+  placeId: z.string().max(300).optional(),
+  locationVisibility: locationVisibilitySchema.optional(),
+  serviceRadiusKm: z.number().int().min(1).max(500).nullable().optional(),
   imageUrl: z.string().optional(),
   mediaUrls: z.array(z.string()).optional(),
   priceUsdCents: z.number().int().min(0).optional(),

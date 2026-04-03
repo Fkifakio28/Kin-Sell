@@ -1,10 +1,12 @@
 /**
- * Routes Géolocalisation — Google Maps
+ * Routes Géolocalisation — Google Maps (multi-pays)
  *
- * GET  /geo/autocomplete?input=...       → Suggestions de lieux
- * GET  /geo/place/:placeId               → Détails d'un lieu (lat/lng)
- * GET  /geo/geocode?address=...          → Adresse → coordonnées
- * GET  /geo/reverse?lat=...&lng=...      → Coordonnées → adresse
+ * GET  /geo/autocomplete?input=...&country=...  → Suggestions de lieux
+ * GET  /geo/place/:placeId                      → Détails basiques (rétro-compat)
+ * GET  /geo/place/:placeId/structured           → Détails complets (StructuredLocation)
+ * GET  /geo/geocode?address=...&region=...      → Adresse → coordonnées
+ * GET  /geo/reverse?lat=...&lng=...             → Coordonnées → adresse
+ * GET  /geo/reverse-structured?lat=...&lng=...  → Coordonnées → StructuredLocation
  */
 
 import { Router } from "express";
@@ -17,10 +19,12 @@ const router = Router();
 const autocompleteSchema = z.object({
   input: z.string().min(2).max(200),
   sessionToken: z.string().optional(),
+  country: z.string().min(2).max(2).optional(), // ISO 3166-1 alpha-2
 });
 
 const geocodeSchema = z.object({
   address: z.string().min(2).max(300),
+  region: z.string().min(2).max(2).optional(),
 });
 
 const reverseSchema = z.object({
@@ -29,19 +33,19 @@ const reverseSchema = z.object({
 });
 
 /**
- * Autocomplete de lieux (biaisé RDC / Kinshasa).
+ * Autocomplete de lieux — multi-pays Afrique.
  */
 router.get(
   "/autocomplete",
   asyncHandler(async (request, response) => {
-    const { input, sessionToken } = autocompleteSchema.parse(request.query);
-    const predictions = await geocodingService.autocomplete(input, sessionToken);
+    const { input, sessionToken, country } = autocompleteSchema.parse(request.query);
+    const predictions = await geocodingService.autocomplete(input, sessionToken, country);
     response.json({ predictions });
   })
 );
 
 /**
- * Détails d'un lieu → coordonnées GPS.
+ * Détails d'un lieu → coordonnées GPS (rétro-compatibilité).
  */
 router.get(
   "/place/:placeId",
@@ -54,13 +58,26 @@ router.get(
 );
 
 /**
+ * Détails d'un lieu → StructuredLocation complète.
+ */
+router.get(
+  "/place/:placeId/structured",
+  asyncHandler(async (request, response) => {
+    const placeId = request.params.placeId;
+    const sessionToken = (request.query.sessionToken as string) || undefined;
+    const details = await geocodingService.getPlaceDetailsStructured(placeId, sessionToken);
+    response.json(details);
+  })
+);
+
+/**
  * Géocodage : adresse texte → coordonnées.
  */
 router.get(
   "/geocode",
   asyncHandler(async (request, response) => {
-    const { address } = geocodeSchema.parse(request.query);
-    const result = await geocodingService.geocodeAddress(address);
+    const { address, region } = geocodeSchema.parse(request.query);
+    const result = await geocodingService.geocodeAddress(address, region);
     response.json(result);
   })
 );
@@ -73,6 +90,18 @@ router.get(
   asyncHandler(async (request, response) => {
     const { lat, lng } = reverseSchema.parse(request.query);
     const result = await geocodingService.reverseGeocode(lat, lng);
+    response.json(result);
+  })
+);
+
+/**
+ * Géocodage inversé structuré : coordonnées → StructuredLocation complète.
+ */
+router.get(
+  "/reverse-structured",
+  asyncHandler(async (request, response) => {
+    const { lat, lng } = reverseSchema.parse(request.query);
+    const result = await geocodingService.reverseGeocodeStructured(lat, lng);
     response.json(result);
   })
 );

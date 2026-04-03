@@ -15,6 +15,8 @@ import {
 import { OrderValidationQrModal } from '../../components/OrderValidationQrModal';
 import { useSocket } from '../../hooks/useSocket';
 import LocationPicker from '../../components/LocationPicker';
+import VisibilitySelector from '../../components/VisibilitySelector';
+import type { StructuredLocation, LocationVisibility } from '../../lib/api-client';
 import './dashboard.css';
 
 type BizSection =
@@ -119,6 +121,9 @@ export function BusinessDashboard() {
     legalName: '', publicName: '', description: '', city: '',
     avatar: '', address: '',
     shopPhoto1: '', shopPhoto2: '', shopPhoto3: '',
+    country: '', countryCode: '', region: '', district: '', postalCode: '', formattedAddress: '',
+    latitude: null as number | null, longitude: null as number | null, placeId: '',
+    locationVisibility: 'DISTRICT_PUBLIC' as LocationVisibility, serviceRadiusKm: '', deliveryZones: '' ,
   });
   // Suppression de compte
   const [bzDeleteStep, setBzDeleteStep] = useState<'idle' | 'confirm' | 'reason' | 'done'>('idle');
@@ -129,7 +134,7 @@ export function BusinessDashboard() {
   // ─── Page publique ───────────────────────────────────────
   const [pageSaving, setPageSaving] = useState(false);
   const [pageMsg, setPageMsg] = useState<string | null>(null);
-  const [pageForm, setPageForm] = useState({ publicName: '', publicDescription: '', city: '', address: '', logo: '', coverImage: '' });
+  const [pageForm, setPageForm] = useState({ publicName: '', publicDescription: '', city: '', address: '', logo: '', coverImage: '', country: '', countryCode: '', region: '', district: '', formattedAddress: '', latitude: null as number | null, longitude: null as number | null, placeId: '', locationVisibility: 'DISTRICT_PUBLIC' as LocationVisibility });
 
   // ─── Points forts (stockés en localStorage) ──────────────
   type Quality = { id: string; icon: string; name: string; description: string };
@@ -141,7 +146,7 @@ export function BusinessDashboard() {
 
   // ─── Créer listing ───────────────────────────────────────
   const [createMode, setCreateMode] = useState<'produit' | 'service' | null>(null);
-  const [createForm, setCreateForm] = useState({ title: '', category: '', city: 'Kinshasa', priceCdf: '', stock: '', description: '', isNegotiable: true, latitude: -4.3216965, longitude: 15.3124553 });
+  const [createForm, setCreateForm] = useState({ title: '', category: '', city: 'Kinshasa', priceCdf: '', stock: '', description: '', isNegotiable: true, latitude: -4.3216965, longitude: 15.3124553, country: 'RDC', countryCode: 'CD', region: '', district: '', formattedAddress: '', placeId: '', locationVisibility: 'CITY_PUBLIC' as LocationVisibility, serviceRadiusKm: '' });
   const [createBusy, setCreateBusy] = useState(false);
   const [createMsg, setCreateMsg] = useState<string | null>(null);
 
@@ -403,6 +408,18 @@ export function BusinessDashboard() {
       shopPhoto1: '',
       shopPhoto2: '',
       shopPhoto3: '',
+      country: (business.shop as any)?.country ?? '',
+      countryCode: (business.shop as any)?.countryCode ?? '',
+      region: (business.shop as any)?.region ?? '',
+      district: (business.shop as any)?.district ?? '',
+      postalCode: (business.shop as any)?.postalCode ?? '',
+      formattedAddress: (business.shop as any)?.formattedAddress ?? '',
+      latitude: (business.shop as any)?.latitude ?? null,
+      longitude: (business.shop as any)?.longitude ?? null,
+      placeId: (business.shop as any)?.placeId ?? '',
+      locationVisibility: (business.shop as any)?.locationVisibility ?? 'DISTRICT_PUBLIC',
+      serviceRadiusKm: (business.shop as any)?.serviceRadiusKm?.toString() ?? '',
+      deliveryZones: (business.shop as any)?.deliveryZones?.join(', ') ?? '',
     });
     setPageForm({
       publicName: business.publicName ?? '',
@@ -411,6 +428,15 @@ export function BusinessDashboard() {
       address: business.shop?.address ?? '',
       logo: business.shop?.logo ?? '',
       coverImage: business.shop?.coverImage ?? '',
+      country: (business.shop as any)?.country ?? '',
+      countryCode: (business.shop as any)?.countryCode ?? '',
+      region: (business.shop as any)?.region ?? '',
+      district: (business.shop as any)?.district ?? '',
+      formattedAddress: (business.shop as any)?.formattedAddress ?? '',
+      latitude: (business.shop as any)?.latitude ?? null,
+      longitude: (business.shop as any)?.longitude ?? null,
+      placeId: (business.shop as any)?.placeId ?? '',
+      locationVisibility: (business.shop as any)?.locationVisibility ?? 'DISTRICT_PUBLIC',
     });
     // ── Charger points forts & photos boutique depuis localStorage ──
     try {
@@ -472,10 +498,18 @@ export function BusinessDashboard() {
         latitude: createForm.latitude,
         longitude: createForm.longitude,
         isNegotiable: createForm.isNegotiable,
+        country: createForm.country || undefined,
+        countryCode: createForm.countryCode || undefined,
+        region: createForm.region || undefined,
+        district: createForm.district || undefined,
+        formattedAddress: createForm.formattedAddress || undefined,
+        placeId: createForm.placeId || undefined,
+        locationVisibility: createForm.locationVisibility || undefined,
+        serviceRadiusKm: createForm.serviceRadiusKm ? parseInt(createForm.serviceRadiusKm) : undefined,
       });
       invalidateCache('/listings/mine');
       setCreateMsg(t('biz.listingSuccess'));
-      setCreateForm({ title: '', category: '', city: 'Kinshasa', priceCdf: '', stock: '', description: '', isNegotiable: true, latitude: -4.3216965, longitude: 15.3124553 });
+      setCreateForm({ title: '', category: '', city: 'Kinshasa', priceCdf: '', stock: '', description: '', isNegotiable: true, latitude: -4.3216965, longitude: 15.3124553, country: 'RDC', countryCode: 'CD', region: '', district: '', formattedAddress: '', placeId: '', locationVisibility: 'CITY_PUBLIC', serviceRadiusKm: '' });
       setCreateMode(null);
       const [lRes, sRes] = await Promise.allSettled([listings.mine({ limit: 50 }), listings.mineStats()]);
       if (lRes.status === 'fulfilled') setMyListings(lRes.value.listings);
@@ -527,6 +561,18 @@ export function BusinessDashboard() {
         city: settingsForm.city.trim() || undefined,
         address: settingsForm.address.trim() || undefined,
         logo: settingsForm.avatar.trim() || undefined,
+        country: settingsForm.country.trim() || undefined,
+        countryCode: settingsForm.countryCode.trim() || undefined,
+        region: settingsForm.region.trim() || undefined,
+        district: settingsForm.district.trim() || undefined,
+        postalCode: settingsForm.postalCode.trim() || undefined,
+        formattedAddress: settingsForm.formattedAddress.trim() || undefined,
+        latitude: settingsForm.latitude ?? undefined,
+        longitude: settingsForm.longitude ?? undefined,
+        placeId: settingsForm.placeId.trim() || undefined,
+        locationVisibility: settingsForm.locationVisibility || undefined,
+        serviceRadiusKm: settingsForm.serviceRadiusKm ? parseInt(settingsForm.serviceRadiusKm) : undefined,
+        deliveryZones: settingsForm.deliveryZones ? settingsForm.deliveryZones.split(',').map(z => z.trim()).filter(Boolean) : undefined,
       });
       setBusiness(updated);
       await refreshUser();
@@ -552,6 +598,15 @@ export function BusinessDashboard() {
         address: pageForm.address.trim() || undefined,
         logo: pageForm.logo.trim() || undefined,
         coverImage: pageForm.coverImage.trim() || undefined,
+        country: pageForm.country.trim() || undefined,
+        countryCode: pageForm.countryCode.trim() || undefined,
+        region: pageForm.region.trim() || undefined,
+        district: pageForm.district.trim() || undefined,
+        formattedAddress: pageForm.formattedAddress.trim() || undefined,
+        latitude: pageForm.latitude ?? undefined,
+        longitude: pageForm.longitude ?? undefined,
+        placeId: pageForm.placeId.trim() || undefined,
+        locationVisibility: pageForm.locationVisibility || undefined,
       });
       setBusiness(updated);
       setPageMsg(t('biz.pageSaved'));
@@ -747,14 +802,10 @@ export function BusinessDashboard() {
 
               <label className="bz-setup-field">
                 <span>{t('biz.city')}</span>
-                <input
-                  type="text"
-                  value={form.city}
-                  onChange={(event) => setForm((current) => ({ ...current, city: event.target.value }))}
+                <LocationPicker
+                  value={{ lat: 0, lng: 0, address: form.city }}
+                  onChange={({ address, city }) => setForm((current) => ({ ...current, city: city || address }))}
                   placeholder={t('biz.cityPh')}
-                  minLength={2}
-                  maxLength={80}
-                  required
                 />
               </label>
 
@@ -1099,12 +1150,21 @@ export function BusinessDashboard() {
                   </label>
                   <label className="bz-setup-field">
                     <span>{t('biz.cityLabel')}</span>
-                    <input type="text" value={pageForm.city} onChange={e => setPageForm(f => ({ ...f, city: e.target.value }))} placeholder="Kinshasa" maxLength={80} />
+                    <LocationPicker
+                      value={pageForm.latitude && pageForm.longitude ? { lat: pageForm.latitude, lng: pageForm.longitude, address: pageForm.city || pageForm.formattedAddress } : undefined}
+                      onChange={({ address, city }) => setPageForm(f => ({ ...f, city: city || address }))}
+                      onStructuredChange={(loc) => setPageForm(f => ({ ...f, city: loc.city || loc.formattedAddress, address: loc.formattedAddress || f.address, country: loc.country || '', countryCode: loc.countryCode || '', region: loc.region || '', district: loc.district || '', formattedAddress: loc.formattedAddress || '', latitude: loc.latitude, longitude: loc.longitude, placeId: loc.placeId || '' }))}
+                      placeholder="Kinshasa"
+                    />
                   </label>
                   <label className="bz-setup-field">
                     <span>{t('biz.addressLabel')}</span>
-                    <input type="text" value={pageForm.address} onChange={e => setPageForm(f => ({ ...f, address: e.target.value }))} placeholder={t('biz.addressPh')} maxLength={200} />
+                    <input type="text" value={pageForm.address} readOnly style={{ opacity: 0.6 }} placeholder={t('biz.addressPh')} />
                   </label>
+                  <div className="bz-setup-field">
+                    <span>🔒 Visibilité</span>
+                    <VisibilitySelector value={pageForm.locationVisibility} onChange={(v: LocationVisibility) => setPageForm(f => ({ ...f, locationVisibility: v }))} />
+                  </div>
                   <div className="bz-setup-field">
                     <span>{t('biz.logoLabel')}</span>
                     {pageForm.logo ? (
@@ -1248,7 +1308,8 @@ export function BusinessDashboard() {
                   <div className="bz-setup-grid">
                     <label className="bz-setup-field"><span>{t('biz.titleLabel')} *</span><input type="text" required minLength={2} maxLength={200} value={createForm.title} onChange={e => setCreateForm(f => ({ ...f, title: e.target.value }))} placeholder={t('biz.titleProductPh')} /></label>
                     <label className="bz-setup-field"><span>{t('biz.categoryLabel')} *</span><input type="text" required value={createForm.category} onChange={e => setCreateForm(f => ({ ...f, category: e.target.value }))} placeholder={t('biz.categoryPh')} /></label>
-                    <label className="bz-setup-field"><span>{t('biz.cityLabel')} *</span><LocationPicker value={{ lat: createForm.latitude, lng: createForm.longitude, address: createForm.city }} onChange={({ address, city, lat, lng }) => setCreateForm(f => ({ ...f, city: city || address, latitude: lat, longitude: lng }))} placeholder="Kinshasa" /></label>
+                    <label className="bz-setup-field"><span>{t('biz.cityLabel')} *</span><LocationPicker value={{ lat: createForm.latitude, lng: createForm.longitude, address: createForm.city }} onChange={({ address, city, lat, lng }) => setCreateForm(f => ({ ...f, city: city || address, latitude: lat, longitude: lng }))} onStructuredChange={(loc) => setCreateForm(f => ({ ...f, city: loc.city || loc.formattedAddress, latitude: loc.latitude ?? f.latitude, longitude: loc.longitude ?? f.longitude, country: loc.country || f.country, countryCode: loc.countryCode || f.countryCode, region: loc.region || '', district: loc.district || '', formattedAddress: loc.formattedAddress || '', placeId: loc.placeId || '' }))} placeholder="Kinshasa" /></label>
+                    <label className="bz-setup-field"><span>🔒 Visibilité</span><VisibilitySelector value={createForm.locationVisibility} onChange={(v: LocationVisibility) => setCreateForm(f => ({ ...f, locationVisibility: v }))} /></label>
                     <label className="bz-setup-field"><span>{t('biz.priceCdf')} *</span><input type="number" required min={0} value={createForm.priceCdf} onChange={e => setCreateForm(f => ({ ...f, priceCdf: e.target.value }))} placeholder={t('biz.pricePh')} /></label>
                     <label className="bz-setup-field"><span>{t('biz.stockLabel')}</span><input type="number" min={0} value={createForm.stock} onChange={e => setCreateForm(f => ({ ...f, stock: e.target.value }))} placeholder={t('biz.stockPh')} /></label>
                     <label className="bz-setup-field bz-setup-field--full"><span>{t('biz.descriptionLabel')}</span><textarea rows={3} value={createForm.description} onChange={e => setCreateForm(f => ({ ...f, description: e.target.value }))} placeholder={t('biz.descProductPh')} /></label>
@@ -1304,7 +1365,9 @@ export function BusinessDashboard() {
                   <div className="bz-setup-grid">
                     <label className="bz-setup-field"><span>{t('biz.titleLabel')} *</span><input type="text" required minLength={2} maxLength={200} value={createForm.title} onChange={e => setCreateForm(f => ({ ...f, title: e.target.value }))} placeholder={t('biz.titleServicePh')} /></label>
                     <label className="bz-setup-field"><span>{t('biz.categoryLabel')} *</span><input type="text" required value={createForm.category} onChange={e => setCreateForm(f => ({ ...f, category: e.target.value }))} placeholder={t('biz.categoryServicePh')} /></label>
-                    <label className="bz-setup-field"><span>{t('biz.cityLabel')} *</span><LocationPicker value={{ lat: createForm.latitude, lng: createForm.longitude, address: createForm.city }} onChange={({ address, city, lat, lng }) => setCreateForm(f => ({ ...f, city: city || address, latitude: lat, longitude: lng }))} placeholder="Kinshasa" /></label>
+                    <label className="bz-setup-field"><span>{t('biz.cityLabel')} *</span><LocationPicker value={{ lat: createForm.latitude, lng: createForm.longitude, address: createForm.city }} onChange={({ address, city, lat, lng }) => setCreateForm(f => ({ ...f, city: city || address, latitude: lat, longitude: lng }))} onStructuredChange={(loc) => setCreateForm(f => ({ ...f, city: loc.city || loc.formattedAddress, latitude: loc.latitude ?? f.latitude, longitude: loc.longitude ?? f.longitude, country: loc.country || f.country, countryCode: loc.countryCode || f.countryCode, region: loc.region || '', district: loc.district || '', formattedAddress: loc.formattedAddress || '', placeId: loc.placeId || '' }))} placeholder="Kinshasa" /></label>
+                    <label className="bz-setup-field"><span>🔒 Visibilité</span><VisibilitySelector value={createForm.locationVisibility} onChange={(v: LocationVisibility) => setCreateForm(f => ({ ...f, locationVisibility: v }))} /></label>
+                    <label className="bz-setup-field"><span>📍 Rayon (km)</span><input type="number" min={0} max={500} value={createForm.serviceRadiusKm} onChange={e => setCreateForm(f => ({ ...f, serviceRadiusKm: e.target.value }))} placeholder="Ex: 25" /></label>
                     <label className="bz-setup-field"><span>{t('biz.rateCdf')} *</span><input type="number" required min={0} value={createForm.priceCdf} onChange={e => setCreateForm(f => ({ ...f, priceCdf: e.target.value }))} placeholder={t('biz.ratePh')} /></label>
                     <label className="bz-setup-field bz-setup-field--full"><span>{t('biz.descriptionLabel')}</span><textarea rows={3} value={createForm.description} onChange={e => setCreateForm(f => ({ ...f, description: e.target.value }))} placeholder={t('biz.descServicePh')} /></label>
                     <label className="bz-setup-field" style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}><input type="checkbox" checked={createForm.isNegotiable} onChange={e => setCreateForm(f => ({ ...f, isNegotiable: e.target.checked }))} /><span>{t('negotiation.allowPrice')}</span></label>
@@ -2039,11 +2102,28 @@ export function BusinessDashboard() {
                   </label>
                   <label className="bz-setup-field">
                     <span>{t('biz.cityLabel')}</span>
-                    <input type="text" value={settingsForm.city} onChange={e => setSettingsForm(f => ({ ...f, city: e.target.value }))} maxLength={80} placeholder="Kinshasa" />
+                    <LocationPicker
+                      value={settingsForm.latitude && settingsForm.longitude ? { lat: settingsForm.latitude, lng: settingsForm.longitude, address: settingsForm.city || settingsForm.formattedAddress } : undefined}
+                      onChange={({ address, city }) => setSettingsForm(f => ({ ...f, city: city || address }))}
+                      onStructuredChange={(loc) => setSettingsForm(f => ({ ...f, city: loc.city || loc.formattedAddress, address: loc.formattedAddress || f.address, country: loc.country || '', countryCode: loc.countryCode || '', region: loc.region || '', district: loc.district || '', postalCode: loc.postalCode || '', formattedAddress: loc.formattedAddress || '', latitude: loc.latitude, longitude: loc.longitude, placeId: loc.placeId || '' }))}
+                      placeholder="Kinshasa"
+                    />
                   </label>
                   <label className="bz-setup-field">
                     <span>{t('biz.addressShop')}</span>
-                    <input type="text" value={settingsForm.address} onChange={e => setSettingsForm(f => ({ ...f, address: e.target.value }))} maxLength={200} placeholder={t('biz.addressPh')} />
+                    <input type="text" value={settingsForm.address} readOnly style={{ opacity: 0.6 }} placeholder={t('biz.addressPh')} />
+                  </label>
+                  <div className="bz-setup-field">
+                    <span>🔒 Visibilité</span>
+                    <VisibilitySelector value={settingsForm.locationVisibility} onChange={(v: LocationVisibility) => setSettingsForm(f => ({ ...f, locationVisibility: v }))} />
+                  </div>
+                  <label className="bz-setup-field">
+                    <span>📍 Rayon de service (km)</span>
+                    <input type="number" min={0} max={500} value={settingsForm.serviceRadiusKm} onChange={e => setSettingsForm(f => ({ ...f, serviceRadiusKm: e.target.value }))} placeholder="Ex: 25" />
+                  </label>
+                  <label className="bz-setup-field">
+                    <span>🚚 Zones de livraison</span>
+                    <input type="text" value={settingsForm.deliveryZones} onChange={e => setSettingsForm(f => ({ ...f, deliveryZones: e.target.value }))} placeholder="Gombe, Lingwala, Kintambo" />
                   </label>
                   <label className="bz-setup-field bz-setup-field--full">
                     <span>{t('biz.internalDesc')}</span>

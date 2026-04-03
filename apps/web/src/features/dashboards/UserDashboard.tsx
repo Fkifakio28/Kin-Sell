@@ -33,6 +33,8 @@ import { prepareMediaUrls } from '../../utils/media-upload';
 import { AdBanner } from '../../components/AdBanner';
 import { OrderValidationQrModal } from '../../components/OrderValidationQrModal';
 import LocationPicker from '../../components/LocationPicker';
+import VisibilitySelector from '../../components/VisibilitySelector';
+import type { StructuredLocation, LocationVisibility } from '../../lib/api-client';
 import { extractValidationCodeFromQrPayload } from '../../utils/order-validation';
 import { useSocket } from '../../hooks/useSocket';
 import './dashboard.css';
@@ -102,10 +104,18 @@ type SettingsForm = {
   phone: string;
   birthDate: string;
   country: string;
+  countryCode: string;
   city: string;
+  region: string;
+  district: string;
   address1: string;
   address2: string;
   address3: string;
+  formattedAddress: string;
+  latitude: number | null;
+  longitude: number | null;
+  placeId: string;
+  locationVisibility: LocationVisibility;
   onlineStatusVisible: boolean;
 };
 
@@ -301,10 +311,18 @@ export function UserDashboard() {
     phone: '',
     birthDate: '',
     country: '',
+    countryCode: '',
     city: '',
+    region: '',
+    district: '',
     address1: '',
     address2: '',
     address3: '',
+    formattedAddress: '',
+    latitude: null,
+    longitude: null,
+    placeId: '',
+    locationVisibility: 'CITY_PUBLIC',
     onlineStatusVisible: true,
   });
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
@@ -326,8 +344,16 @@ export function UserDashboard() {
     description: '',
     category: '',
     city: '',
+    country: '',
+    countryCode: '',
+    region: '',
+    district: '',
+    formattedAddress: '',
     latitude: '-4.325',
     longitude: '15.322',
+    placeId: '',
+    locationVisibility: 'CITY_PUBLIC' as LocationVisibility,
+    serviceRadiusKm: '',
     imageUrl: '',
     priceUsdCents: '0',
     stockQuantity: '',
@@ -360,6 +386,7 @@ export function UserDashboard() {
   const [ppDisplayName, setPpDisplayName] = useState('');
   const [ppCity, setPpCity] = useState('');
   const [ppCountry, setPpCountry] = useState('');
+  const [ppLocationVisibility, setPpLocationVisibility] = useState<LocationVisibility>('CITY_PUBLIC');
   const [ppShowAddress, setPpShowAddress] = useState(true);
   const [ppShowListings, setPpShowListings] = useState(true);
   const [ppShowStats, setPpShowStats] = useState(true);
@@ -841,6 +868,8 @@ export function UserDashboard() {
   const resetArticleForm = () => {
     setArticleForm({
       type: 'PRODUIT', title: '', description: '', category: '', city: '',
+      country: '', countryCode: '', region: '', district: '', formattedAddress: '', placeId: '',
+      locationVisibility: 'CITY_PUBLIC', serviceRadiusKm: '',
       latitude: '-4.325', longitude: '15.322', imageUrl: '', priceUsdCents: '0', stockQuantity: '',
       serviceDurationMin: '', serviceLocation: '',
     });
@@ -871,8 +900,16 @@ export function UserDashboard() {
         description: articleForm.description.trim() || undefined,
         category: articleForm.category.trim() || t('user.uncategorized'),
         city: articleForm.city.trim(),
+        country: articleForm.country.trim() || undefined,
+        countryCode: articleForm.countryCode || undefined,
+        region: articleForm.region.trim() || undefined,
+        district: articleForm.district.trim() || undefined,
+        formattedAddress: articleForm.formattedAddress.trim() || undefined,
         latitude: Number(articleForm.latitude),
         longitude: Number(articleForm.longitude),
+        placeId: articleForm.placeId || undefined,
+        locationVisibility: articleForm.locationVisibility,
+        serviceRadiusKm: articleForm.serviceRadiusKm ? Number(articleForm.serviceRadiusKm) : undefined,
         imageUrl: mediaUrls[0] || undefined,
         mediaUrls,
         priceUsdCents: Number(articleForm.priceUsdCents) || 0,
@@ -998,6 +1035,14 @@ export function UserDashboard() {
       description: article.description ?? '',
       category: article.category,
       city: article.city,
+      country: (article as any).country ?? '',
+      countryCode: (article as any).countryCode ?? '',
+      region: (article as any).region ?? '',
+      district: (article as any).district ?? '',
+      formattedAddress: (article as any).formattedAddress ?? '',
+      placeId: (article as any).placeId ?? '',
+      locationVisibility: (article as any).locationVisibility ?? 'CITY_PUBLIC',
+      serviceRadiusKm: (article as any).serviceRadiusKm?.toString() ?? '',
       latitude: String(article.latitude),
       longitude: String(article.longitude),
       imageUrl: article.imageUrl ?? '',
@@ -1255,8 +1300,16 @@ export function UserDashboard() {
         phone: settingsForm.phone.trim() || undefined,
         birthDate: settingsForm.birthDate || undefined,
         country: settingsForm.country.trim() || undefined,
+        countryCode: settingsForm.countryCode || undefined,
         city: settingsForm.city.trim() || undefined,
+        region: settingsForm.region.trim() || undefined,
+        district: settingsForm.district.trim() || undefined,
         addressLine1: settingsForm.address1.trim() || undefined,
+        formattedAddress: settingsForm.formattedAddress.trim() || undefined,
+        latitude: settingsForm.latitude ?? undefined,
+        longitude: settingsForm.longitude ?? undefined,
+        placeId: settingsForm.placeId || undefined,
+        locationVisibility: settingsForm.locationVisibility,
         onlineStatusVisible: settingsForm.onlineStatusVisible,
       });
       await refreshUser();
@@ -3013,6 +3066,7 @@ export function UserDashboard() {
                           qualification: ppQualification || undefined,
                           experience: ppExperience || undefined,
                           workHours: ppWorkHours || undefined,
+                          locationVisibility: ppLocationVisibility || undefined,
                         });
                         setPpSaveMsg(`✅ ${t('user.ppSaved')}`);
                         setTimeout(() => setPpSaveMsg(null), 3000);
@@ -3077,15 +3131,34 @@ export function UserDashboard() {
                     <span className="ud-pp-section-icon">📍</span>
                     <h3 className="ud-pp-section-title">{t('user.ppLocationTitle')}</h3>
                   </div>
-                  <div className="ud-pp-field-row">
-                    <div className="ud-pp-field-group" style={{ flex: 1 }}>
+                  <div className="ud-pp-field-row" style={{ flexDirection: 'column', gap: 10 }}>
+                    <div className="ud-pp-field-group" style={{ width: '100%' }}>
                       <label className="ud-pp-field-label">{t('user.ppCityLabel')}</label>
-                      <input type="text" className="ud-input" value={ppCity} onChange={(e) => setPpCity(e.target.value)} placeholder="Ex: Kinshasa, Gombe" />
+                      <LocationPicker
+                        value={ppCity ? { lat: 0, lng: 0, address: ppCity } : undefined}
+                        onChange={({ city, address }) => { setPpCity(city || address); }}
+                        onStructuredChange={(loc) => {
+                          setPpCity(loc.city || loc.formattedAddress);
+                          setPpCountry(loc.country || '');
+                        }}
+                        placeholder="Ex: Kinshasa, Gombe"
+                      />
                     </div>
-                    <div className="ud-pp-field-group" style={{ flex: 1 }}>
-                      <label className="ud-pp-field-label">{t('user.ppCountryLabel')}</label>
-                      <input type="text" className="ud-input" value={ppCountry} onChange={(e) => setPpCountry(e.target.value)} placeholder="Ex: RDC" />
+                    <div className="ud-pp-field-row">
+                      <div className="ud-pp-field-group" style={{ flex: 1 }}>
+                        <label className="ud-pp-field-label">{t('user.ppCityLabel')}</label>
+                        <input type="text" className="ud-input" value={ppCity} readOnly style={{ opacity: 0.6 }} />
+                      </div>
+                      <div className="ud-pp-field-group" style={{ flex: 1 }}>
+                        <label className="ud-pp-field-label">{t('user.ppCountryLabel')}</label>
+                        <input type="text" className="ud-input" value={ppCountry} readOnly style={{ opacity: 0.6 }} />
+                      </div>
                     </div>
+                    <VisibilitySelector
+                      value={ppLocationVisibility}
+                      onChange={(v) => setPpLocationVisibility(v)}
+                      hideExact
+                    />
                   </div>
                 </section>
 
@@ -3335,18 +3408,46 @@ export function UserDashboard() {
                   <h3 className="ud-settings-section-title">{t('user.settingsLocTitle')}</h3>
                 </div>
                 <div className="ud-settings-fields">
+                  <label className="ud-settings-field ud-settings-field--wide">
+                    <span className="ud-settings-field-label">{t('user.settingsAddress')}</span>
+                    <LocationPicker
+                      value={settingsForm.latitude != null ? { lat: settingsForm.latitude, lng: settingsForm.longitude!, address: settingsForm.formattedAddress || settingsForm.city } : undefined}
+                      onChange={({ address, city, lat, lng }) => {
+                        setSettingsForm((prev) => ({ ...prev, city: city || address, latitude: lat, longitude: lng }));
+                      }}
+                      onStructuredChange={(loc) => {
+                        setSettingsForm((prev) => ({
+                          ...prev,
+                          city: loc.city || prev.city,
+                          country: loc.country || prev.country,
+                          countryCode: loc.countryCode || prev.countryCode,
+                          region: loc.region || '',
+                          district: loc.district || '',
+                          formattedAddress: loc.formattedAddress,
+                          latitude: loc.latitude,
+                          longitude: loc.longitude,
+                          placeId: loc.placeId || '',
+                          address1: loc.formattedAddress,
+                        }));
+                      }}
+                      placeholder={t('user.settingsAddressPlaceholder')}
+                    />
+                  </label>
                   <label className="ud-settings-field">
                     <span className="ud-settings-field-label">{t('user.settingsCountry')}</span>
-                    <input className="ud-input" value={settingsForm.country} onChange={(e) => setSettingsForm((prev) => ({ ...prev, country: e.target.value }))} />
+                    <input className="ud-input" value={settingsForm.country} readOnly style={{ opacity: 0.6 }} />
                   </label>
                   <label className="ud-settings-field">
                     <span className="ud-settings-field-label">{t('user.settingsCity')}</span>
-                    <input className="ud-input" value={settingsForm.city} onChange={(e) => setSettingsForm((prev) => ({ ...prev, city: e.target.value }))} />
+                    <input className="ud-input" value={settingsForm.city} readOnly style={{ opacity: 0.6 }} />
                   </label>
-                  <label className="ud-settings-field ud-settings-field--wide">
-                    <span className="ud-settings-field-label">{t('user.settingsAddress')}</span>
-                    <input className="ud-input" value={settingsForm.address1} onChange={(e) => setSettingsForm((prev) => ({ ...prev, address1: e.target.value }))} placeholder={t('user.settingsAddressPlaceholder')} />
-                  </label>
+                  <div className="ud-settings-field ud-settings-field--wide" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <VisibilitySelector
+                      value={settingsForm.locationVisibility}
+                      onChange={(v) => setSettingsForm((prev) => ({ ...prev, locationVisibility: v }))}
+                      hideExact
+                    />
+                  </div>
                 </div>
               </section>
 
@@ -4055,8 +4156,44 @@ export function UserDashboard() {
                             longitude: String(lng),
                           }));
                         }}
+                        onStructuredChange={(loc) => {
+                          setArticleForm(p => ({
+                            ...p,
+                            city: loc.city || loc.formattedAddress,
+                            country: loc.country || '',
+                            countryCode: loc.countryCode || '',
+                            region: loc.region || '',
+                            district: loc.district || '',
+                            formattedAddress: loc.formattedAddress,
+                            latitude: String(loc.latitude),
+                            longitude: String(loc.longitude),
+                            placeId: loc.placeId || '',
+                          }));
+                        }}
                         placeholder="Ex: Kinshasa, Gombe"
                       />
+                      {articleForm.type === 'SERVICE' && (
+                        <div style={{ marginTop: 8 }}>
+                          <label className="ud-publish-field-label" style={{ fontSize: 12 }}>Rayon d'intervention (km)</label>
+                          <input
+                            className="ud-input"
+                            type="number"
+                            min={1}
+                            max={500}
+                            value={articleForm.serviceRadiusKm}
+                            onChange={(e) => setArticleForm(p => ({ ...p, serviceRadiusKm: e.target.value }))}
+                            placeholder="Ex: 25"
+                            style={{ maxWidth: 130 }}
+                          />
+                        </div>
+                      )}
+                      <div style={{ marginTop: 8 }}>
+                        <VisibilitySelector
+                          value={articleForm.locationVisibility}
+                          onChange={(v) => setArticleForm(p => ({ ...p, locationVisibility: v }))}
+                          hideExact
+                        />
+                      </div>
                       {settingsForm.city && articleForm.city !== settingsForm.city && (
                         <button
                           type="button"

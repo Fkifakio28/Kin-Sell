@@ -30,7 +30,14 @@ const updateCartItemSchema = z.object({
 });
 
 const checkoutSchema = z.object({
-  notes: z.string().min(2).max(400).optional()
+  notes: z.string().min(2).max(400).optional(),
+  deliveryAddress: z.string().max(300).optional(),
+  deliveryCity: z.string().max(80).optional(),
+  deliveryCountry: z.string().max(80).optional(),
+  deliveryLatitude: z.number().min(-90).max(90).optional(),
+  deliveryLongitude: z.number().min(-180).max(180).optional(),
+  deliveryPlaceId: z.string().max(300).optional(),
+  deliveryFormattedAddress: z.string().max(300).optional(),
 });
 
 const momoCheckoutSchema = z.object({
@@ -92,7 +99,15 @@ router.post(
   requireRoles(Role.USER, Role.BUSINESS),
   asyncHandler(async (request: AuthenticatedRequest, response) => {
     const payload = checkoutSchema.parse(request.body ?? {});
-    const data = await ordersService.checkoutBuyerCart(request.auth!.userId, payload.notes);
+    const data = await ordersService.checkoutBuyerCart(request.auth!.userId, payload.notes, {
+      deliveryAddress: payload.deliveryAddress,
+      deliveryCity: payload.deliveryCity,
+      deliveryCountry: payload.deliveryCountry,
+      deliveryLatitude: payload.deliveryLatitude,
+      deliveryLongitude: payload.deliveryLongitude,
+      deliveryPlaceId: payload.deliveryPlaceId,
+      deliveryFormattedAddress: payload.deliveryFormattedAddress,
+    });
     // Push + Socket notify sellers about new orders
     for (const order of data.orders ?? []) {
       if (order.seller?.userId && order.seller.userId !== request.auth!.userId) {

@@ -8,6 +8,8 @@ import { NegotiationRespondPopup } from "../negotiations/NegotiationRespondPopup
 import { NegotiatePopup } from "../negotiations/NegotiatePopup";
 import { BundleNegotiatePopup, type BundleListingItem } from "../negotiations/BundleNegotiatePopup";
 import { useLockedCategories, isCategoryLocked } from "../../hooks/useLockedCategories";
+import LocationPicker from "../../components/LocationPicker";
+import type { StructuredLocation } from "../../lib/api-client";
 import "./cart.css";
 
 export function CartPage() {
@@ -40,7 +42,13 @@ export function CartPage() {
     serviceMaintenanceAddress: "",
     serviceExecutionAddress: "",
     paymentMethod: "MPESA" as "CARD" | "PAYPAL" | "MPESA" | "ORANGE_MONEY" | "CASH_ON_DELIVERY",
-    additionalNote: ""
+    additionalNote: "",
+    deliveryCity: "",
+    deliveryCountry: "",
+    deliveryLatitude: null as number | null,
+    deliveryLongitude: null as number | null,
+    deliveryPlaceId: "",
+    deliveryFormattedAddress: "",
   });
 
   const reloadCart = useCallback(async () => {
@@ -190,14 +198,17 @@ export function CartPage() {
     }
   }, [busy]);
 
-  const handleCheckout = useCallback(async (notes?: string) => {
+  const handleCheckout = useCallback(async (notes?: string, deliveryData?: { deliveryAddress?: string; deliveryCity?: string; deliveryCountry?: string; deliveryLatitude?: number; deliveryLongitude?: number; deliveryPlaceId?: string; deliveryFormattedAddress?: string }) => {
     if (checkoutBusy || !cart || cart.items.length === 0) return;
     setCheckoutBusy(true);
     setError(null);
     setSuccess(null);
     try {
       const payloadNotes = [notes, checkoutNotes.trim()].filter(Boolean).join(" | ");
-      const result = await orders.checkoutBuyerCart(payloadNotes ? { notes: payloadNotes } : undefined);
+      const result = await orders.checkoutBuyerCart({
+        ...(payloadNotes ? { notes: payloadNotes } : {}),
+        ...deliveryData,
+      });
       setSuccess(result.message || t('cart.orderSuccess'));
       setCart(null);
       setCheckoutNotes("");
@@ -207,7 +218,13 @@ export function CartPage() {
         serviceMaintenanceAddress: "",
         serviceExecutionAddress: "",
         paymentMethod: "MPESA",
-        additionalNote: ""
+        additionalNote: "",
+        deliveryCity: "",
+        deliveryCountry: "",
+        deliveryLatitude: null,
+        deliveryLongitude: null,
+        deliveryPlaceId: "",
+        deliveryFormattedAddress: "",
       });
       // Redirect to purchases tab after 2s
       setTimeout(() => navigate("/account?tab=purchases"), 2000);
@@ -256,7 +273,15 @@ export function CartPage() {
       `buyerNote=${checkoutForm.additionalNote.trim() || '-'}`,
     ].join(" | ");
 
-    await handleCheckout(notesPayload);
+    await handleCheckout(notesPayload, {
+      deliveryAddress: checkoutForm.deliveryAddress.trim() || undefined,
+      deliveryCity: checkoutForm.deliveryCity.trim() || undefined,
+      deliveryCountry: checkoutForm.deliveryCountry.trim() || undefined,
+      deliveryLatitude: checkoutForm.deliveryLatitude ?? undefined,
+      deliveryLongitude: checkoutForm.deliveryLongitude ?? undefined,
+      deliveryPlaceId: checkoutForm.deliveryPlaceId.trim() || undefined,
+      deliveryFormattedAddress: checkoutForm.deliveryFormattedAddress.trim() || undefined,
+    });
   }, [cart, checkoutForm, handleCheckout]);
 
   const handleViewNegotiation = useCallback(async (negotiationId: string) => {
@@ -745,20 +770,39 @@ export function CartPage() {
 
             {hasProductItems && (
               <label className="cart-checkout-modal-field">
-                <span>Adresse de livraison (produits)</span>
-                <textarea rows={2} value={checkoutForm.deliveryAddress} onChange={(e) => setCheckoutForm((prev) => ({ ...prev, deliveryAddress: e.target.value }))} />
+                <span>📍 Adresse de livraison (produits)</span>
+                <LocationPicker
+                  onChange={({ address, city }) => setCheckoutForm((prev) => ({ ...prev, deliveryAddress: address, deliveryCity: city || '' }))}
+                  onStructuredChange={(loc) => setCheckoutForm((prev) => ({
+                    ...prev,
+                    deliveryAddress: loc.formattedAddress || prev.deliveryAddress,
+                    deliveryCity: loc.city || '',
+                    deliveryCountry: loc.country || '',
+                    deliveryLatitude: loc.latitude,
+                    deliveryLongitude: loc.longitude,
+                    deliveryPlaceId: loc.placeId || '',
+                    deliveryFormattedAddress: loc.formattedAddress || '',
+                  }))}
+                  placeholder="Ex: Avenue Lumumba N°12, Gombe"
+                />
               </label>
             )}
 
             {hasServiceItems && (
               <>
                 <label className="cart-checkout-modal-field">
-                  <span>Adresse d'entretien (services)</span>
-                  <textarea rows={2} value={checkoutForm.serviceMaintenanceAddress} onChange={(e) => setCheckoutForm((prev) => ({ ...prev, serviceMaintenanceAddress: e.target.value }))} />
+                  <span>📍 Adresse d'entretien (services)</span>
+                  <LocationPicker
+                    onChange={({ address }) => setCheckoutForm((prev) => ({ ...prev, serviceMaintenanceAddress: address }))}
+                    placeholder="Adresse d'entretien"
+                  />
                 </label>
                 <label className="cart-checkout-modal-field">
-                  <span>Adresse de prestation (services)</span>
-                  <textarea rows={2} value={checkoutForm.serviceExecutionAddress} onChange={(e) => setCheckoutForm((prev) => ({ ...prev, serviceExecutionAddress: e.target.value }))} />
+                  <span>📍 Adresse de prestation (services)</span>
+                  <LocationPicker
+                    onChange={({ address }) => setCheckoutForm((prev) => ({ ...prev, serviceExecutionAddress: address }))}
+                    placeholder="Adresse de prestation"
+                  />
                 </label>
               </>
             )}

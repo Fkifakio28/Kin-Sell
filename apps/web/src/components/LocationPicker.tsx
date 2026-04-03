@@ -1,15 +1,23 @@
 /**
  * LocationPicker — Sélection d'adresse avec autocomplétion Google Maps
  *
- * Usage:
+ * Usage basique:
  *   <LocationPicker
  *     value={{ lat: -4.325, lng: 15.322, address: "Kinshasa" }}
  *     onChange={({ lat, lng, address, city }) => { ... }}
  *   />
+ *
+ * Usage structuré (multi-pays):
+ *   <LocationPicker
+ *     value={{ lat: -4.325, lng: 15.322, address: "Kinshasa" }}
+ *     onChange={...}
+ *     onStructuredChange={(loc) => { ... }}
+ *     countryHint="cd"
+ *   />
  */
 
 import { useState, useRef, useCallback, useEffect } from "react";
-import { geo, type PlacePrediction } from "../lib/api-client";
+import { geo, type PlacePrediction, type StructuredLocation } from "../lib/api-client";
 import "./location-picker.css";
 
 export type LocationValue = {
@@ -22,10 +30,14 @@ export type LocationValue = {
 type Props = {
   value?: LocationValue;
   onChange: (value: LocationValue) => void;
+  /** Callback structuré complet (country, region, district, placeId, etc.) */
+  onStructuredChange?: (location: StructuredLocation) => void;
+  /** Code pays ISO pour biaiser l'autocomplete (ex: "cd", "ma") */
+  countryHint?: string;
   placeholder?: string;
 };
 
-export default function LocationPicker({ value, onChange, placeholder }: Props) {
+export default function LocationPicker({ value, onChange, onStructuredChange, countryHint, placeholder }: Props) {
   const [query, setQuery] = useState(value?.address ?? "");
   const [predictions, setPredictions] = useState<PlacePrediction[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -59,7 +71,7 @@ export default function LocationPicker({ value, onChange, placeholder }: Props) 
     debounceRef.current = setTimeout(async () => {
       setLoading(true);
       try {
-        const result = await geo.autocomplete(input, sessionTokenRef.current);
+        const result = await geo.autocomplete(input, sessionTokenRef.current, countryHint);
         setPredictions(result.predictions);
         setShowDropdown(result.predictions.length > 0);
       } catch {
@@ -68,7 +80,7 @@ export default function LocationPicker({ value, onChange, placeholder }: Props) 
         setLoading(false);
       }
     }, 300);
-  }, []);
+  }, [countryHint]);
 
   const handleSelect = useCallback(async (prediction: PlacePrediction) => {
     setShowDropdown(false);
@@ -76,13 +88,25 @@ export default function LocationPicker({ value, onChange, placeholder }: Props) 
     setLoading(true);
 
     try {
-      const details = await geo.placeDetails(prediction.placeId, sessionTokenRef.current);
-      onChange({
-        lat: details.latitude,
-        lng: details.longitude,
-        address: details.formattedAddress,
-        city: details.city ?? undefined,
-      });
+      // Si onStructuredChange, récupérer la structure complète
+      if (onStructuredChange) {
+        const structured = await geo.placeDetailsStructured(prediction.placeId, sessionTokenRef.current);
+        onStructuredChange(structured);
+        onChange({
+          lat: structured.latitude,
+          lng: structured.longitude,
+          address: structured.formattedAddress,
+          city: structured.city ?? undefined,
+        });
+      } else {
+        const details = await geo.placeDetails(prediction.placeId, sessionTokenRef.current);
+        onChange({
+          lat: details.latitude,
+          lng: details.longitude,
+          address: details.formattedAddress,
+          city: details.city ?? undefined,
+        });
+      }
       // Nouveau session token après sélection
       sessionTokenRef.current = crypto.randomUUID();
     } catch {
@@ -90,7 +114,7 @@ export default function LocationPicker({ value, onChange, placeholder }: Props) 
     } finally {
       setLoading(false);
     }
-  }, [onChange]);
+  }, [onChange, onStructuredChange]);
 
   // Géolocalisation du navigateur
   const handleGeolocate = useCallback(() => {
@@ -100,14 +124,26 @@ export default function LocationPicker({ value, onChange, placeholder }: Props) 
     navigator.geolocation.getCurrentPosition(
       async (position) => {
         try {
-          const result = await geo.reverse(position.coords.latitude, position.coords.longitude);
-          setQuery(result.formattedAddress);
-          onChange({
-            lat: result.latitude,
-            lng: result.longitude,
-            address: result.formattedAddress,
-            city: result.city ?? undefined,
-          });
+          if (onStructuredChange) {
+            const structured = await geo.reverseStructured(position.coords.latitude, position.coords.longitude);
+            setQuery(structured.formattedAddress);
+            onStructuredChange(structured);
+            onChange({
+              lat: structured.latitude,
+              lng: structured.longitude,
+              address: structured.formattedAddress,
+              city: structured.city ?? undefined,
+            });
+          } else {
+            const result = await geo.reverse(position.coords.latitude, position.coords.longitude);
+            setQuery(result.formattedAddress);
+            onChange({
+              lat: result.latitude,
+              lng: result.longitude,
+              address: result.formattedAddress,
+              city: result.city ?? undefined,
+            });
+          }
         } catch {
           // Position récupérée mais pas de reverse geocoding
           onChange({
@@ -122,7 +158,7 @@ export default function LocationPicker({ value, onChange, placeholder }: Props) 
       () => setGeoLoading(false),
       { enableHighAccuracy: true, timeout: 10000 }
     );
-  }, [onChange]);
+  }, [onChange, onStructuredChange]);
 
   return (
     <div className="location-picker" ref={wrapperRef}>

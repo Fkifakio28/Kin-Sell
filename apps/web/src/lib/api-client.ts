@@ -356,6 +356,15 @@ export const auth = {
     accountType?: "USER" | "BUSINESS";
     email?: string;
     phone?: string;
+    countryCode?: string;
+    region?: string;
+    district?: string;
+    postalCode?: string;
+    formattedAddress?: string;
+    latitude?: number;
+    longitude?: number;
+    placeId?: string;
+    locationVisibility?: LocationVisibility;
   }) => request<AccountUser>("/account/profile/complete", { method: "PATCH", body }),
   sessions: () => request<{ sessions: Array<{
     id: string;
@@ -403,6 +412,14 @@ export type UpdateProfilePayload = {
   qualification?: string;
   experience?: string;
   workHours?: string;
+  countryCode?: string;
+  region?: string;
+  district?: string;
+  formattedAddress?: string;
+  latitude?: number;
+  longitude?: number;
+  placeId?: string;
+  locationVisibility?: LocationVisibility;
 };
 
 export const users = {
@@ -773,7 +790,7 @@ export const orders = {
     invalidateCache("/orders/buyer/cart");
     return result;
   },
-  checkoutBuyerCart: async (body?: { notes?: string }) => {
+  checkoutBuyerCart: async (body?: { notes?: string; deliveryAddress?: string; deliveryCity?: string; deliveryCountry?: string; deliveryLatitude?: number; deliveryLongitude?: number; deliveryPlaceId?: string; deliveryFormattedAddress?: string }) => {
     const result = await request<{ message: string; orders: OrderSummary[] }>("/orders/buyer/checkout", { method: "POST", body });
     invalidateCache("/orders/");
     return result;
@@ -1835,19 +1852,47 @@ export type GeocodingResult = {
   country: string | null;
 };
 
+export type StructuredLocation = {
+  latitude: number;
+  longitude: number;
+  formattedAddress: string;
+  placeId: string | null;
+  country: string | null;
+  countryCode: string | null;
+  region: string | null;
+  city: string | null;
+  district: string | null;
+  postalCode: string | null;
+  mapSource: "google_maps" | "manual" | "gps";
+};
+
+export type LocationVisibility =
+  | "EXACT_PUBLIC"
+  | "DISTRICT_PUBLIC"
+  | "CITY_PUBLIC"
+  | "REGION_PUBLIC"
+  | "COUNTRY_PUBLIC"
+  | "EXACT_PRIVATE";
+
 export const geo = {
-  autocomplete: (input: string, sessionToken?: string) =>
+  autocomplete: (input: string, sessionToken?: string, country?: string) =>
     request<{ predictions: PlacePrediction[] }>("/geo/autocomplete", {
-      params: { input, ...(sessionToken ? { sessionToken } : {}) },
+      params: { input, ...(sessionToken ? { sessionToken } : {}), ...(country ? { country } : {}) },
     }),
   placeDetails: (placeId: string, sessionToken?: string) =>
     request<GeocodingResult>(`/geo/place/${encodeURIComponent(placeId)}`, {
       params: sessionToken ? { sessionToken } : undefined,
     }),
-  geocode: (address: string) =>
-    request<GeocodingResult>("/geo/geocode", { params: { address } }),
+  placeDetailsStructured: (placeId: string, sessionToken?: string) =>
+    request<StructuredLocation>(`/geo/place/${encodeURIComponent(placeId)}/structured`, {
+      params: sessionToken ? { sessionToken } : undefined,
+    }),
+  geocode: (address: string, region?: string) =>
+    request<GeocodingResult>("/geo/geocode", { params: { address, ...(region ? { region } : {}) } }),
   reverse: (lat: number, lng: number) =>
     request<GeocodingResult>("/geo/reverse", { params: { lat, lng } }),
+  reverseStructured: (lat: number, lng: number) =>
+    request<StructuredLocation>("/geo/reverse-structured", { params: { lat, lng } }),
 };
 
 // ── IA Marchand (Negotiation AI) ──

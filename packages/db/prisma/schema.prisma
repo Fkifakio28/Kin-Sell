@@ -244,6 +244,15 @@ model UserProfile {
   addressLine1       String?
   city               String?
   country            String?
+  countryCode        CountryCode?
+  region             String?
+  district           String?
+  postalCode         String?
+  formattedAddress   String?
+  latitude           Float?
+  longitude          Float?
+  placeId            String?
+  locationVisibility LocationVisibility @default(CITY_PUBLIC)
   bio                String?
   domain             String?
   qualification      String?
@@ -474,6 +483,15 @@ enum ListingScope {
   INTERNATIONAL // Tous pays
 }
 
+enum LocationVisibility {
+  EXACT_PUBLIC     // Adresse exacte visible (opt-in business)
+  DISTRICT_PUBLIC  // Commune/quartier visible
+  CITY_PUBLIC      // Ville seule (défaut user)
+  REGION_PUBLIC    // Région/province seule
+  COUNTRY_PUBLIC   // Pays seul
+  EXACT_PRIVATE    // Rien affiché publiquement
+}
+
 model Listing {
   id                 String        @id @default(cuid())
   type               ListingType
@@ -482,16 +500,22 @@ model Listing {
   description        String?
   category           String
   city               String
-  country            String?         // Nom du pays (ex: "Maroc", "Sénégal")
-  countryCode        CountryCode?    // Code pays formel
+  country            String?            // Nom du pays (ex: "Maroc", "Sénégal")
+  countryCode        CountryCode?       // Code pays formel
+  region             String?
+  district           String?
+  formattedAddress   String?
   latitude           Float
   longitude          Float
+  placeId            String?
+  locationVisibility LocationVisibility @default(CITY_PUBLIC)
+  serviceRadiusKm    Int?               // Rayon d'intervention pour services
   imageUrl           String?
-  mediaUrls          String[]      @default([])
-  priceUsdCents      Int           @default(0)
-  priceCurrency      String        @default("USD") // Devise d'origine de l'annonce (ISO 4217)
-  priceOriginal      Int           @default(0)      // Prix dans la devise d'origine (en centimes)
-  scope              ListingScope  @default(NATIONAL) // Portée de visibilité
+  mediaUrls          String[]           @default([])
+  priceUsdCents      Int                @default(0)
+  priceCurrency      String             @default("USD")
+  priceOriginal      Int                @default(0)
+  scope              ListingScope       @default(NATIONAL)
   stockQuantity      Int?
   serviceDurationMin Int?
   serviceLocation    String?
@@ -560,16 +584,23 @@ model CartItem {
 }
 
 model Order {
-  id               String      @id @default(cuid())
-  buyerUserId      String
-  sellerUserId     String
-  sellerBusinessId String?
-  cartId           String?
-  status           OrderStatus @default(PENDING)
-  currency         String      @default("USD")
-  totalUsdCents    Int
-  notes            String?
-  validationCode   String?
+  id                       String      @id @default(cuid())
+  buyerUserId              String
+  sellerUserId             String
+  sellerBusinessId         String?
+  cartId                   String?
+  status                   OrderStatus @default(PENDING)
+  currency                 String      @default("USD")
+  totalUsdCents            Int
+  notes                    String?
+  deliveryAddress          String?
+  deliveryCity             String?
+  deliveryCountry          String?
+  deliveryLatitude         Float?
+  deliveryLongitude        Float?
+  deliveryPlaceId          String?
+  deliveryFormattedAddress String?
+  validationCode           String?
   confirmedAt      DateTime?
   deliveredAt      DateTime?
   canceledAt       DateTime?
@@ -610,16 +641,28 @@ model OrderItem {
 }
 
 model BusinessShop {
-  id                String   @id @default(cuid())
-  businessId        String   @unique
-  coverImage        String?
-  logo              String?
-  publicDescription String?
-  city              String?
-  address           String?
-  active            Boolean  @default(true)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id                  String             @id @default(cuid())
+  businessId          String             @unique
+  coverImage          String?
+  logo                String?
+  publicDescription   String?
+  city                String?
+  country             String?
+  countryCode         CountryCode?
+  region              String?
+  district            String?
+  postalCode          String?
+  address             String?
+  formattedAddress    String?
+  latitude            Float?
+  longitude           Float?
+  placeId             String?
+  locationVisibility  LocationVisibility @default(DISTRICT_PUBLIC)
+  serviceRadiusKm     Int?
+  deliveryZones       String[]           @default([])
+  active              Boolean            @default(true)
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
 
   business BusinessAccount @relation(fields: [businessId], references: [id], onDelete: Cascade)
 }
