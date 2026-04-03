@@ -16,6 +16,7 @@ import {
 } from '../../lib/api-client';
 import { AdBanner } from '../../components/AdBanner';
 import { SeoMeta } from '../../components/SeoMeta';
+import { SoKinPageDesktop } from './SoKinPageDesktop';
 import './sokin.css';
 
 /* ═══════════════════════════════════════════════════
@@ -764,6 +765,12 @@ function SoKinBottomNav({
    ═══════════════════════════════════════════════════ */
 
 export function SoKinPage() {
+  const isMobileOrTablet = useIsMobile(1023);
+  if (!isMobileOrTablet) return <SoKinPageDesktop />;
+  return <SoKinPageMobile />;
+}
+
+function SoKinPageMobile() {
   const navigate = useNavigate();
   const { isLoggedIn, user } = useAuth();
   const { t } = useLocaleCurrency();

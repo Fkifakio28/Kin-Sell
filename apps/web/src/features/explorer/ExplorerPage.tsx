@@ -16,7 +16,9 @@ import { AdBanner } from '../../components/AdBanner';
 import MapView from '../../components/MapView';
 import { SeoMeta } from '../../components/SeoMeta';
 import { useScrollDirection } from '../../hooks/useScrollDirection';
+import { useIsMobile } from '../../hooks/useIsMobile';
 import { getDashboardPath } from '../../utils/role-routing';
+import { ExplorerPageDesktop } from './ExplorerPageDesktop';
 
 const PREVIEW_PAGE_SIZE = 4;
 const MODAL_PAGE_SIZE = 8;
@@ -257,6 +259,13 @@ function ExPager({ pageCount, current, onChange }: {
    ═══════════════════════════════════════ */
 
 export function ExplorerPage() {
+  const isMobileOrTablet = useIsMobile(1023);
+  if (!isMobileOrTablet) return <ExplorerPageDesktop />;
+  return <ExplorerPageMobile />;
+}
+
+function ExplorerPageMobile() {
+  /* Mobile + Tablette → layout actuel inchangé */
   const { t, formatPriceLabelFromUsdCents } = useLocaleCurrency();
   const { effectiveCountry, getCountryConfig } = useMarketPreference();
   const lockedCats = useLockedCategories();
