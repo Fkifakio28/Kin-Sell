@@ -374,6 +374,19 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
       presentIncomingCall(data);
     };
 
+    /* ── Clear incoming call overlay when caller cancels, call is accepted, or rejected ── */
+    const clearIncomingCallFor = (data: { conversationId: string }) => {
+      setIncomingCall((prev) => {
+        if (!prev || prev.conversationId !== data.conversationId) return prev;
+        if (incomingCallTimerRef.current) { clearTimeout(incomingCallTimerRef.current); incomingCallTimerRef.current = null; }
+        return null;
+      });
+    };
+
+    const handleCallEnded = (data: { conversationId: string }) => clearIncomingCallFor(data);
+    const handleCallAccepted = (data: { conversationId: string }) => clearIncomingCallFor(data);
+    const handleCallRejected = (data: { conversationId: string }) => clearIncomingCallFor(data);
+
     const handleOrderCreated = (data: { type: string; orderId: string; buyerUserId: string; sellerUserId: string; itemsCount?: number; fromNegotiation?: boolean; createdAt: string }) => {
       if (data.buyerUserId === user?.id && !data.fromNegotiation) return; // buyer already knows from checkout
       const isSeller = data.sellerUserId === user?.id;
@@ -461,6 +474,9 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
 
     socket.on("message:new", handleNewMessage);
     socket.on("call:incoming", handleIncomingCall);
+    socket.on("call:ended", handleCallEnded);
+    socket.on("call:accepted", handleCallAccepted);
+    socket.on("call:rejected", handleCallRejected);
     socket.on("order:created", handleOrderCreated);
     socket.on("order:status-updated", handleOrderStatusUpdated);
     socket.on("order:delivery-confirmed", handleDeliveryConfirmed);
@@ -470,6 +486,9 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
     return () => {
       socket.off("message:new", handleNewMessage);
       socket.off("call:incoming", handleIncomingCall);
+      socket.off("call:ended", handleCallEnded);
+      socket.off("call:accepted", handleCallAccepted);
+      socket.off("call:rejected", handleCallRejected);
       socket.off("order:created", handleOrderCreated);
       socket.off("order:status-updated", handleOrderStatusUpdated);
       socket.off("order:delivery-confirmed", handleDeliveryConfirmed);
