@@ -490,7 +490,15 @@ function SuggestionsSection({
     let cancelled = false;
     (async () => {
       try {
-        const results = await listingsApi.latest({ limit: 12, city: cityHint, country: countryHint });
+        let results = await listingsApi.latest({ limit: 12, city: cityHint, country: countryHint });
+        // Fallback: country only
+        if (results.length === 0 && countryHint) {
+          results = await listingsApi.latest({ limit: 12, country: countryHint });
+        }
+        // Fallback: no geo filter
+        if (results.length === 0) {
+          results = await listingsApi.latest({ limit: 12 });
+        }
         if (!cancelled) setItems(results);
       } catch {
         if (!cancelled) setItems([]);
@@ -558,12 +566,16 @@ function ListingsSection({
   t,
   onNegotiate,
   lockedCats,
+  cityHint,
+  countryHint,
 }: {
   formatMoney: (c: number) => string;
   formatLabel: (c: number) => string;
   t: (k: string) => string;
   onNegotiate: (l: PublicListing) => void;
   lockedCats: string[];
+  cityHint?: string;
+  countryHint?: string;
 }) {
   const [activeTab, setActiveTab] = useState<"PRODUIT" | "SERVICE">("PRODUIT");
   const [listings, setListings] = useState<PublicListing[]>([]);
@@ -574,10 +586,21 @@ function ListingsSection({
     setLoading(true);
     (async () => {
       try {
-        const results = await listingsApi.latest({
+        // Try with city + country
+        let results = await listingsApi.latest({
           type: activeTab,
           limit: 10,
+          city: cityHint,
+          country: countryHint,
         });
+        // Fallback: country only (no city)
+        if (results.length === 0 && countryHint) {
+          results = await listingsApi.latest({ type: activeTab, limit: 10, country: countryHint });
+        }
+        // Fallback: no geo filter
+        if (results.length === 0) {
+          results = await listingsApi.latest({ type: activeTab, limit: 10 });
+        }
         if (!cancelled) setListings(results);
       } catch {
         if (!cancelled) setListings([]);
@@ -588,7 +611,7 @@ function ListingsSection({
     return () => {
       cancelled = true;
     };
-  }, [activeTab]);
+  }, [activeTab, cityHint, countryHint]);
 
   return (
     <section
@@ -1314,6 +1337,8 @@ export function HomePageMobile() {
           t={t}
           onNegotiate={setNegotiateListing}
           lockedCats={lockedCats}
+          cityHint={defaultCity}
+          countryHint={effectiveCountry}
         />
         <SoKinFeed
           t={t}

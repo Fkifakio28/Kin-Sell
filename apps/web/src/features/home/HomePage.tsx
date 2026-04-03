@@ -205,15 +205,25 @@ export function HomePage() {
     }
   };
 
-  // Load real listings from API
+  // Load real listings from API (with fallback: city+country → country only → no filter)
   useEffect(() => {
     let cancelled = false;
+    const loadType = async (type: 'PRODUIT' | 'SERVICE', limit: number) => {
+      // Try with city + country
+      let results = await listingsApi.latest({ type, city: defaultCity, country: effectiveCountry, limit }).catch(() => []);
+      if (results.length > 0) return results;
+      // Fallback: country only (no city filter)
+      results = await listingsApi.latest({ type, country: effectiveCountry, limit }).catch(() => []);
+      if (results.length > 0) return results;
+      // Fallback: no geo filter at all
+      return listingsApi.latest({ type, limit }).catch(() => []);
+    };
     const load = async () => {
       setIsLoadingArticles(true);
       try {
         const [products, services] = await Promise.all([
-          listingsApi.latest({ type: 'PRODUIT', city: defaultCity, country: effectiveCountry, limit: 8 }),
-          listingsApi.latest({ type: 'SERVICE', city: defaultCity, country: effectiveCountry, limit: 8 }),
+          loadType('PRODUIT', 8),
+          loadType('SERVICE', 8),
         ]);
         if (!cancelled) {
           setLiveProducts(products);

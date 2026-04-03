@@ -165,11 +165,11 @@ export function ExplorerPageDesktop() {
     e.preventDefault();
     e.stopPropagation();
     if (!isLoggedIn) { nav('/login'); return; }
-    if (isAdmin) { setExCardFb({ id: articleId, msg: '­ƒöÆ Les administrateurs ne peuvent pas effectuer de transactions.' }); setTimeout(() => setExCardFb(null), 3000); return; }
+    if (isAdmin) { setExCardFb({ id: articleId, msg: '­🚫 Les administrateurs ne peuvent pas effectuer de transactions.' }); setTimeout(() => setExCardFb(null), 3000); return; }
     // Anti-self-purchase
     const article = liveArticles.find(a => a.id === articleId);
     if (article?.ownerId && user && article.ownerId === user.id) {
-      setExCardFb({ id: articleId, msg: 'ÔÜá´©Å Vous ne pouvez pas acheter vos propres articles.' });
+      setExCardFb({ id: articleId, msg: '⚠️ Vous ne pouvez pas acheter vos propres articles.' });
       setTimeout(() => setExCardFb(null), 3000);
       return;
     }
@@ -178,10 +178,10 @@ export function ExplorerPageDesktop() {
     try {
       const qty = getExQty(articleId);
       await ordersApi.addCartItem({ listingId: articleId, quantity: qty });
-      setExCardFb({ id: articleId, msg: `Ô£ô ${qty > 1 ? qty + '├ù ' : ''}Ajout├® au panier` });
+      setExCardFb({ id: articleId, msg: `✔ ${qty > 1 ? qty + 'ù ' : ''}Ajouté au panier` });
       setExCardQty((prev) => { const next = { ...prev }; delete next[articleId]; return next; });
     } catch {
-      setExCardFb({ id: articleId, msg: 'Ô£ù Erreur' });
+      setExCardFb({ id: articleId, msg: '✗ Erreur' });
     } finally {
       setExCardBusy(null);
       setTimeout(() => setExCardFb(null), 2000);
@@ -192,7 +192,7 @@ export function ExplorerPageDesktop() {
     e.preventDefault();
     e.stopPropagation();
     if (!isLoggedIn) { nav('/login'); return; }
-    if (isAdmin) { setExCardFb({ id: article.id, msg: '­ƒöÆ Les administrateurs ne peuvent pas n├®gocier.' }); setTimeout(() => setExCardFb(null), 3000); return; }
+    if (isAdmin) { setExCardFb({ id: article.id, msg: '­🚫 Les administrateurs ne peuvent pas négocier.' }); setTimeout(() => setExCardFb(null), 3000); return; }
     setNegotiateArticle(article);
   };
 
@@ -253,7 +253,7 @@ export function ExplorerPageDesktop() {
 
   const buildShopDescription = (badge: string) => `Boutique ${badge.toLowerCase()} active sur Kin-Sell.`;
 
-  const buildProfileDescription = (domain: string) => `Sp├®cialit├®: ${domain}`;
+  const buildProfileDescription = (domain: string) => `Spécialité: ${domain}`;
 
   const renderPager = (
     pageCount: number,
@@ -278,16 +278,16 @@ export function ExplorerPageDesktop() {
           className="explorer-pager-btn explorer-pager-btn--nav"
           disabled={currentPage === 0}
           onClick={() => onChange(Math.max(0, currentPage - 1))}
-          aria-label="Page pr├®c├®dente"
+          aria-label="Page précédente"
         >
-          ÔÇ╣ Pr├®c
+          ← Préc
         </button>
 
         <div className="explorer-pager-pages">
           {startPage > 0 && (
             <>
               <button type="button" className="explorer-pager-btn" onClick={() => onChange(0)}>1</button>
-              {startPage > 1 && <span className="explorer-pager-ellipsis">ÔÇª</span>}
+              {startPage > 1 && <span className="explorer-pager-ellipsis">…</span>}
             </>
           )}
           {Array.from({ length: endPage - startPage }, (_, i) => {
@@ -305,7 +305,7 @@ export function ExplorerPageDesktop() {
           })}
           {endPage < pageCount && (
             <>
-              {endPage < pageCount - 1 && <span className="explorer-pager-ellipsis">ÔÇª</span>}
+              {endPage < pageCount - 1 && <span className="explorer-pager-ellipsis">…</span>}
               <button type="button" className="explorer-pager-btn" onClick={() => onChange(pageCount - 1)}>{pageCount}</button>
             </>
           )}
@@ -318,7 +318,7 @@ export function ExplorerPageDesktop() {
           onClick={() => onChange(Math.min(pageCount - 1, currentPage + 1))}
           aria-label="Page suivante"
         >
-          Suiv ÔÇ║
+          Suiv ►
         </button>
       </div>
     );
@@ -343,7 +343,7 @@ export function ExplorerPageDesktop() {
 
         setStats(payload);
       } catch {
-        // API indisponible ÔÇö conserver les valeurs ├á 0
+        // API indisponible — conserver les valeurs à 0
       } finally {
         if (!controller.signal.aborted) setIsLoadingStats(false);
       }
@@ -429,7 +429,7 @@ export function ExplorerPageDesktop() {
         const combined = [...products, ...services];
         if (!cancelled) setLiveArticles(combined);
       } catch {
-        // API indisponible ÔÇö afficher ├®tat vide
+        // API indisponible — afficher état vide
         if (!cancelled) setLiveArticles([]);
       } finally {
         if (!cancelled) setIsLoadingArticles(false);
@@ -446,20 +446,20 @@ export function ExplorerPageDesktop() {
     <Header />
     <div className="explorer-shell">
       <SeoMeta
-        title="Explorer ÔÇö Boutiques et services ├á Kinshasa"
-        description="Parcourez les boutiques, produits et services disponibles ├á Kinshasa et partout en RDC. Recherchez par cat├®gorie, prix et localit├®."
+        title="Explorer — Boutiques et services à Kinshasa"
+        description="Parcourez les boutiques, produits et services disponibles à Kinshasa et partout en RDC. Recherchez par catégorie, prix et localité."
         canonical="https://kin-sell.com/explorer"
       />
-      {/* ÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉ
+      {/* ═══════════════════════════════════════════════
           HERO SECTION
-          ÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉ */}
+          ═══════════════════════════════════════════════ */}
       <section className="explorer-hero">
         <div className="explorer-hero-inner">
           {/* Hero Image (Left) */}
           <div className="explorer-hero-image">
             <img
               src="/assets/kin-sell/black-man-standing-cafe-with-shopping-bags.jpg"
-              alt="Vendeur Kin-Sell pr├®sentant des sacs de shopping"
+              alt="Vendeur Kin-Sell présentant des sacs de shopping"
               className="explorer-hero-photo"
             />
           </div>
@@ -468,20 +468,20 @@ export function ExplorerPageDesktop() {
           <div className="explorer-hero-content">
             <div className="explorer-hero-label">Catalogue</div>
 
-            <h1 className="explorer-hero-title">Trouvez la bonne cat├®gorie en quelques secondes.</h1>
+            <h1 className="explorer-hero-title">Trouvez la bonne catégorie en quelques secondes.</h1>
 
             <p className="explorer-hero-subtitle">
-              Explorez toutes les cat├®gories Kin-Sell, comparez les offres et ouvrez chaque page
-              d├®di├®e pour consulter les vendeurs disponibles sur Kin-Sell.
+              Explorez toutes les catégories Kin-Sell, comparez les offres et ouvrez chaque page
+              dédiée pour consulter les vendeurs disponibles sur Kin-Sell.
             </p>
 
             <div className="explorer-hero-search-wrap">
               <div className="explorer-search-bar explorer-search-bar--hero">
-                <div className="explorer-search-icon">­ƒöì</div>
+                <div className="explorer-search-icon">🔍</div>
                 <input
                   type="text"
                   className="explorer-search-input explorer-search-input--hero"
-                  placeholder="Rechercher une cat├®gorie, un article/service ou un utilisateur"
+                  placeholder="Rechercher une catégorie, un article/service ou un utilisateur"
                   value={searchQuery}
                   onChange={handleSearch}
                 />
@@ -491,15 +491,15 @@ export function ExplorerPageDesktop() {
             {/* Stats */}
             <div className="explorer-hero-stats">
               <div className="explorer-stat">
-                <div className="explorer-stat-number">{isLoadingStats ? 'ÔÇª' : stats.categories}</div>
-                <div className="explorer-stat-label">Cat├®gories</div>
+                <div className="explorer-stat-number">{isLoadingStats ? '…' : stats.categories}</div>
+                <div className="explorer-stat-label">Catégories</div>
               </div>
               <div className="explorer-stat">
-                <div className="explorer-stat-number">{isLoadingStats ? 'ÔÇª' : stats.publicProfiles.toLocaleString('fr-FR')}</div>
+                <div className="explorer-stat-number">{isLoadingStats ? '…' : stats.publicProfiles.toLocaleString('fr-FR')}</div>
                 <div className="explorer-stat-label">Profils publics</div>
               </div>
               <div className="explorer-stat">
-                <div className="explorer-stat-number">{isLoadingStats ? 'ÔÇª' : stats.onlineShops}</div>
+                <div className="explorer-stat-number">{isLoadingStats ? '…' : stats.onlineShops}</div>
                 <div className="explorer-stat-label">Boutiques en ligne</div>
               </div>
             </div>
@@ -507,9 +507,9 @@ export function ExplorerPageDesktop() {
         </div>
       </section>
 
-      {/* ÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉ
+      {/* ═══════════════════════════════════════════════
           MAIN LAYOUT: TABS + CONTENT
-          ÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉ */}
+          ═══════════════════════════════════════════════ */}
       <div className="explorer-main">
         <div className="explorer-layout">
           {/* LEFT: CONTROL */}
@@ -525,7 +525,7 @@ export function ExplorerPageDesktop() {
               />
             </div>
 
-            {/* AD SIDEBAR - supprim├® */}
+            {/* AD SIDEBAR - supprimé */}
           </div>
 
           {/* RIGHT: CATEGORIES CONTENT */}
@@ -533,7 +533,7 @@ export function ExplorerPageDesktop() {
             {/* Header */}
             <div className="explorer-header">
               <h2 className="explorer-header-title">
-                {isProducts ? '­ƒøì´©Å Produits' : '­ƒÆ╝ Services'} ({categories.length})
+                {isProducts ? '🛍️ Produits' : '💼 Services'} ({categories.length})
               </h2>
             </div>
 
@@ -568,17 +568,17 @@ export function ExplorerPageDesktop() {
           </div>
         </div>
 
-        {/* Banni├¿re publicitaire */}
+        {/* Bannière publicitaire */}
         <AdBanner page="explorer" />
 
-        {/* ÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉ
+        {/* ═══════════════════════════════════════════════
             ARTICLES PREVIEW SECTION
-            ÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉ */}
+            ═══════════════════════════════════════════════ */}
         <div className="explorer-shops-section">
           <div className="explorer-section-header">
-            <h3 className="explorer-section-title">­ƒº® Articles disponibles</h3>
+            <h3 className="explorer-section-title">🧩 Articles disponibles</h3>
             <button type="button" className="explorer-show-all-btn" style={{ marginLeft: 'auto', marginRight: 8 }} onClick={() => setIsMapView(v => !v)}>
-              {isMapView ? '­ƒôï Liste' : '­ƒù║´©Å Carte'}
+              {isMapView ? '📋 Liste' : '🗺️ Carte'}
             </button>
           </div>
 
@@ -590,7 +590,7 @@ export function ExplorerPageDesktop() {
                   lat: a.latitude ?? -4.325,
                   lng: a.longitude ?? 15.322,
                   title: a.title,
-                  info: `${a.title} ÔÇö ${a.priceLabel}`,
+                  info: `${a.title} — ${a.priceLabel}`,
                 }))}
                 zoom={12}
                 height="450px"
@@ -600,14 +600,14 @@ export function ExplorerPageDesktop() {
 
           <div className="explorer-articles-box">
             {isLoadingArticles ? (
-              <p className="explorer-empty-msg">Chargement des articlesÔÇª</p>
+              <p className="explorer-empty-msg">Chargement des articles…</p>
             ) : filteredArticles.length === 0 ? (
               <p className="explorer-empty-msg">
                 {liveArticles.length === 0
-                  ? 'Aucun article publi├® pour le moment. Soyez le premier ├á publier une annonce┬á!'
+                  ? 'Aucun article publié pour le moment. Soyez le premier à publier une annonce !'
                   : selectedCategoryId
-                  ? `Aucun article dans cette cat├®gorie pour le moment.`
-                  : 'Aucun r├®sultat pour cette recherche.'}
+                  ? `Aucun article dans cette catégorie pour le moment.`
+                  : 'Aucun résultat pour cette recherche.'}
               </p>
             ) : (
               <>
@@ -634,9 +634,9 @@ export function ExplorerPageDesktop() {
                     <p className="explorer-article-publisher">{article.publisherName}</p>
                     <div className="explorer-article-actions-row">
                       <button type="button" className="explorer-article-action-btn" onClick={() => nav(article.targetPath)}>Voir plus</button>
-                      <button type="button" className="explorer-article-action-btn" title="Contacter" onClick={(e) => void handleExCardContact(article, e)}>­ƒÆ¼</button>
-                      <button type="button" className="explorer-article-action-btn" title={t("common.addToCart")} disabled={exCardBusy === article.id} onClick={(e) => void handleExCardCart(article.id, e)}>­ƒøÆ</button>
-                      {article.isNegotiable !== false && !isCategoryLocked(lockedCats, article.category) && <button type="button" className="explorer-article-action-btn" title={t("common.negotiate")} onClick={(e) => handleExCardNegotiate(article, e)}>­ƒñØ</button>}
+                      <button type="button" className="explorer-article-action-btn" title="Contacter" onClick={(e) => void handleExCardContact(article, e)}>💬</button>
+                      <button type="button" className="explorer-article-action-btn" title={t("common.addToCart")} disabled={exCardBusy === article.id} onClick={(e) => void handleExCardCart(article.id, e)}>🛒</button>
+                      {article.isNegotiable !== false && !isCategoryLocked(lockedCats, article.category) && <button type="button" className="explorer-article-action-btn" title={t("common.negotiate")} onClick={(e) => handleExCardNegotiate(article, e)}>🤝</button>}
                     </div>
                     {exCardFb?.id === article.id && <span className="explorer-article-feedback">{exCardFb.msg}</span>}
                   </div>
@@ -653,13 +653,13 @@ export function ExplorerPageDesktop() {
           </div>
         </div>
 
-        {/* ÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉ
+        {/* ═══════════════════════════════════════════════
             FEATURED SHOPS SECTION
-            ÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉ */}
+            ═══════════════════════════════════════════════ */}
         <div className="explorer-shops-section">
           <div className="explorer-section-header">
-            <h3 className="explorer-section-title">­ƒÅ¬ Boutiques populaires</h3>
-            <a href="/sokin/market" className="explorer-section-link">Voir toutes ÔåÆ</a>
+            <h3 className="explorer-section-title">🏪 Boutiques populaires</h3>
+            <a href="/sokin/market" className="explorer-section-link">Voir toutes →</a>
           </div>
 
           <div className="explorer-shops-grid">
@@ -672,7 +672,7 @@ export function ExplorerPageDesktop() {
                   {shop.coverImage ? (
                     <img className="explorer-shop-cover" src={shop.coverImage} alt={shop.name} />
                   ) : (
-                    <div className="explorer-shop-cover explorer-shop-cover--placeholder">­ƒÅ¬</div>
+                    <div className="explorer-shop-cover explorer-shop-cover--placeholder">🏪</div>
                   )}
                   <div className="explorer-shop-badge">{shop.badge}</div>
                   <div className="explorer-hover-details" aria-hidden="true">
@@ -693,14 +693,14 @@ export function ExplorerPageDesktop() {
           </div>
         </div>
 
-        {/* ÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉ
+        {/* ═══════════════════════════════════════════════
 
             PUBLIC PROFILES SECTION (Creative addition)
-            ÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉ */}
+            ═══════════════════════════════════════════════ */}
         <div className="explorer-shops-section">
           <div className="explorer-section-header">
-            <h3 className="explorer-section-title">­ƒæÑ Vendeurs en vedette</h3>
-            <a href="/sokin/profiles" className="explorer-section-link">Voir tous ÔåÆ</a>
+            <h3 className="explorer-section-title">👥 Vendeurs en vedette</h3>
+            <a href="/sokin/profiles" className="explorer-section-link">Voir tous →</a>
           </div>
 
           <div className="explorer-shops-grid">
@@ -713,7 +713,7 @@ export function ExplorerPageDesktop() {
                   {profile.avatarUrl ? (
                     <img className="explorer-shop-cover" src={profile.avatarUrl} alt={profile.displayName} />
                   ) : (
-                    <div className="explorer-shop-cover explorer-shop-cover--placeholder">­ƒæñ</div>
+                    <div className="explorer-shop-cover explorer-shop-cover--placeholder">👤</div>
                   )}
                   <div className="explorer-shop-badge">{profile.badge}</div>
                   <div className="explorer-hover-details" aria-hidden="true">
@@ -741,7 +741,7 @@ export function ExplorerPageDesktop() {
             <div className="explorer-modal-head">
               <h3>Tous les articles</h3>
               <button type="button" className="explorer-modal-close" onClick={() => setIsAllArticlesOpen(false)}>
-                Ô£ò
+                ✕
               </button>
             </div>
             <div className="explorer-articles-grid explorer-articles-grid--four">
@@ -766,14 +766,14 @@ export function ExplorerPageDesktop() {
                     <p className="explorer-article-publisher">{article.publisherName}</p>
                     <div className="explorer-article-actions-row">
                       <button type="button" className="explorer-article-action-btn" onClick={() => nav(article.targetPath)}>Voir plus</button>
-                      <button type="button" className="explorer-article-action-btn" title="Contacter" onClick={(e) => void handleExCardContact(article, e)}>­ƒÆ¼</button>
+                      <button type="button" className="explorer-article-action-btn" title="Contacter" onClick={(e) => void handleExCardContact(article, e)}>💬</button>
                       <span className="explorer-qty-selector">
-                        <button type="button" className="explorer-qty-btn" onClick={(e) => changeExQty(article.id, -1, e)} disabled={getExQty(article.id) <= 1}>ÔêÆ</button>
+                        <button type="button" className="explorer-qty-btn" onClick={(e) => changeExQty(article.id, -1, e)} disabled={getExQty(article.id) <= 1}>−</button>
                         <span className="explorer-qty-value">{getExQty(article.id)}</span>
                         <button type="button" className="explorer-qty-btn" onClick={(e) => changeExQty(article.id, 1, e)}>+</button>
                       </span>
-                      <button type="button" className="explorer-article-action-btn" title={t("common.addToCart")} disabled={exCardBusy === article.id} onClick={(e) => void handleExCardCart(article.id, e)}>­ƒøÆ</button>
-                      {article.isNegotiable !== false && !isCategoryLocked(lockedCats, article.category) && <button type="button" className="explorer-article-action-btn" title={t("common.negotiate")} onClick={(e) => handleExCardNegotiate(article, e)}>­ƒñØ</button>}
+                      <button type="button" className="explorer-article-action-btn" title={t("common.addToCart")} disabled={exCardBusy === article.id} onClick={(e) => void handleExCardCart(article.id, e)}>🛒</button>
+                      {article.isNegotiable !== false && !isCategoryLocked(lockedCats, article.category) && <button type="button" className="explorer-article-action-btn" title={t("common.negotiate")} onClick={(e) => handleExCardNegotiate(article, e)}>🤝</button>}
                     </div>
                     {exCardFb?.id === article.id && <span className="explorer-article-feedback">{exCardFb.msg}</span>}
                   </div>

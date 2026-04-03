@@ -331,7 +331,7 @@ export const searchListings = async (input: SearchListingsInput) => {
     where: {
       isPublished: true,
       type: input.type,
-      city: input.city,
+      ...(input.city ? { city: { contains: input.city, mode: "insensitive" as const } } : {}),
       ...(andClauses.length > 0 ? { AND: andClauses } : {}),
       OR: input.q
         ? [
@@ -428,7 +428,7 @@ export const latestListings = async (input: { type?: ListingType; city?: string;
       isPublished: true,
       status: ListingStatus.ACTIVE,
       type: input.type,
-      city: input.city,
+      ...(input.city ? { city: { contains: input.city, mode: "insensitive" as const } } : {}),
       ...(andClauses.length > 0 ? { AND: andClauses } : {}),
     },
     include: {
