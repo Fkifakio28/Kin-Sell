@@ -339,10 +339,39 @@ function LiveViewer({
         vid.src = playbackUrl; vid.load(); void tryPlay();
       } else if (Hls.isSupported()) {
         hlsRef.current?.destroy();
-        const hls = new Hls({ enableWorker: true, lowLatencyMode: true });
+        const hls = new Hls({
+          enableWorker: true,
+          lowLatencyMode: true,
+          // Buffer : petit pour basse latence, assez grand pour éviter les saccades
+          maxBufferLength: 8,
+          maxMaxBufferLength: 15,
+          maxBufferSize: 30 * 1000 * 1000, // 30 MB
+          maxBufferHole: 0.5,
+          // Latence : rattraper le live si trop en retard
+          liveSyncDurationCount: 3,
+          liveMaxLatencyDurationCount: 6,
+          liveDurationInfinity: true,
+          // Récupération réseau robuste
+          manifestLoadingMaxRetry: 6,
+          levelLoadingMaxRetry: 6,
+          fragLoadingMaxRetry: 6,
+          manifestLoadingRetryDelay: 500,
+          levelLoadingRetryDelay: 500,
+          fragLoadingRetryDelay: 500,
+        });
         hlsRef.current = hls;
         hls.loadSource(playbackUrl); hls.attachMedia(vid);
         hls.on(Hls.Events.MANIFEST_PARSED, () => void tryPlay());
+        // Auto-recovery sur erreurs réseau
+        hls.on(Hls.Events.ERROR, (_event, data) => {
+          if (data.fatal) {
+            if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+              hls.startLoad(); // re-try
+            } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+              hls.recoverMediaError();
+            }
+          }
+        });
       }
     } else {
       hlsRef.current?.destroy(); hlsRef.current = null;

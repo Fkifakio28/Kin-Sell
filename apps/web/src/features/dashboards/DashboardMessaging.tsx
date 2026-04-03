@@ -172,6 +172,7 @@ export function DashboardMessaging() {
 
   const [callState, setCallState] = useState<null | { type: "audio" | "video"; conversationId: string; remoteUserId: string; direction: "incoming" | "outgoing"; status: "ringing" | "connected" | "ended" }>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
+  const iceRestartAttemptRef = useRef(0);
   const localStreamRef = useRef<MediaStream | null>(null);
   const remoteStreamRef = useRef<MediaStream | null>(null);
   const localVideoRef = useRef<HTMLVideoElement>(null);
@@ -275,7 +276,22 @@ export function DashboardMessaging() {
 
   /* ── WebRTC helpers ── */
   const createPeerConnection = useCallback((remoteUserId: string) => {
-    const pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun1.l.google.com:19302" }, { urls: "turn:openrelay.metered.ca:80", username: "openrelayproject", credential: "openrelayproject" }, { urls: "turn:openrelay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" }, { urls: "turn:openrelay.metered.ca:443?transport=tcp", username: "openrelayproject", credential: "openrelayproject" }] });
+    const pc = new RTCPeerConnection({
+      iceServers: [
+        { urls: "stun:stun.l.google.com:19302" },
+        { urls: "stun:stun1.l.google.com:19302" },
+        { urls: "stun:stun2.l.google.com:19302" },
+        { urls: "stun:stun3.l.google.com:19302" },
+        { urls: "stun:stun4.l.google.com:19302" },
+        { urls: "turn:a.relay.metered.ca:80", username: "e7e6b1bdc41c6b2127249e04", credential: "kfMI+J8bFHMn7gMj" },
+        { urls: "turn:a.relay.metered.ca:80?transport=tcp", username: "e7e6b1bdc41c6b2127249e04", credential: "kfMI+J8bFHMn7gMj" },
+        { urls: "turn:a.relay.metered.ca:443", username: "e7e6b1bdc41c6b2127249e04", credential: "kfMI+J8bFHMn7gMj" },
+        { urls: "turns:a.relay.metered.ca:443?transport=tcp", username: "e7e6b1bdc41c6b2127249e04", credential: "kfMI+J8bFHMn7gMj" },
+      ],
+      bundlePolicy: "max-bundle",
+      rtcpMuxPolicy: "require",
+      iceCandidatePoolSize: 4,
+    });
     pc.onicecandidate = (e) => { if (e.candidate) emit("webrtc:ice-candidate", { targetUserId: remoteUserId, candidate: e.candidate.toJSON() }); };
     pc.ontrack = (e) => {
       remoteStreamRef.current = e.streams[0];
@@ -288,40 +304,99 @@ export function DashboardMessaging() {
         void remoteAudioRef.current.play().catch(() => {});
       }
     };
+    // ── ICE reconnection automatique ──
+    pc.oniceconnectionstatechange = () => {
+      const state = pc.iceConnectionState;
+      if (state === "connected" || state === "completed") {
+        iceRestartAttemptRef.current = 0;
+      }
+      if (state === "disconnected") {
+        setTimeout(() => {
+          if (pc.iceConnectionState === "disconnected" && iceRestartAttemptRef.current < 3) {
+            iceRestartAttemptRef.current++;
+            pc.restartIce();
+            pc.createOffer({ iceRestart: true }).then(async (offer) => {
+              await pc.setLocalDescription(offer);
+              emit("webrtc:offer", { targetUserId: remoteUserId, sdp: offer });
+            }).catch(() => {});
+          }
+        }, 2000);
+      }
+      if (state === "failed" && iceRestartAttemptRef.current < 3) {
+        iceRestartAttemptRef.current++;
+        pc.restartIce();
+        pc.createOffer({ iceRestart: true }).then(async (offer) => {
+          await pc.setLocalDescription(offer);
+          emit("webrtc:offer", { targetUserId: remoteUserId, sdp: offer });
+        }).catch(() => {});
+      }
+    };
     peerConnectionRef.current = pc;
     return pc;
   }, [emit]);
 
-  const cleanupCall = useCallback(() => { peerConnectionRef.current?.close(); peerConnectionRef.current = null; localStreamRef.current?.getTracks().forEach((t) => t.stop()); localStreamRef.current = null; remoteStreamRef.current = null; }, []);
+  const cleanupCall = useCallback(() => {
+    peerConnectionRef.current?.close();
+    peerConnectionRef.current = null;
+    localStreamRef.current?.getTracks().forEach((t) => t.stop());
+    localStreamRef.current = null;
+    remoteStreamRef.current = null;
+    iceRestartAttemptRef.current = 0;
+  }, []);
+
+  const getCallMedia = useCallback(async (callType: "audio" | "video") => {
+    return navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1, sampleRate: 48000 },
+      video: callType === "video" ? { width: { ideal: 1280, max: 1920 }, height: { ideal: 720, max: 1080 }, frameRate: { ideal: 30, max: 30 }, facingMode: "user" } : false,
+    });
+  }, []);
+
+  const optimizePeerSenders = useCallback(async (pc: RTCPeerConnection) => {
+    await Promise.all(pc.getSenders().map(async (sender) => {
+      try {
+        const params = sender.getParameters();
+        params.degradationPreference = "balanced";
+        if (sender.track?.kind === "video") {
+          params.encodings = [{ ...(params.encodings?.[0] ?? {}), maxBitrate: 1_500_000, maxFramerate: 30, scaleResolutionDownBy: 1 }];
+        }
+        if (sender.track?.kind === "audio") {
+          params.encodings = [{ ...(params.encodings?.[0] ?? {}), maxBitrate: 64_000 }];
+        }
+        await sender.setParameters(params);
+      } catch { /* */ }
+    }));
+  }, []);
 
   const startCall = useCallback(async (callType: "audio" | "video") => {
     if (!activeConv || activeConv.isGroup) return;
     const rid = getOtherUserId(activeConv, myId);
     if (!rid) return;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: callType === "video" });
+      const stream = await getCallMedia(callType);
       localStreamRef.current = stream;
       if (localVideoRef.current) localVideoRef.current.srcObject = stream;
       const pc = createPeerConnection(rid);
       stream.getTracks().forEach((t) => pc.addTrack(t, stream));
+      await optimizePeerSenders(pc);
       setCallState({ type: callType, conversationId: activeConv.id, remoteUserId: rid, direction: "outgoing", status: "ringing" });
       emit("call:initiate", { conversationId: activeConv.id, targetUserId: rid, callType });
     } catch { alert("Impossible d'accéder au micro/caméra."); }
-  }, [activeConv, myId, createPeerConnection, emit]);
+  }, [activeConv, myId, createPeerConnection, emit, getCallMedia, optimizePeerSenders]);
 
   const acceptCall = useCallback(async (preferredType?: "audio" | "video") => {
     if (!callState) return;
     const acceptedType = preferredType ?? callState.type;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: acceptedType === "video" });
+      const stream = await getCallMedia(acceptedType);
       localStreamRef.current = stream;
       if (localVideoRef.current) localVideoRef.current.srcObject = stream;
       const pc = createPeerConnection(callState.remoteUserId);
       stream.getTracks().forEach((t) => pc.addTrack(t, stream));
+      await optimizePeerSenders(pc);
       emit("call:accept", { conversationId: callState.conversationId, callerId: callState.remoteUserId });
       setCallState((p) => p ? { ...p, type: acceptedType, status: "connected" } : null);
     } catch { alert("Impossible d'accéder au micro/caméra."); }
-  }, [callState, createPeerConnection, emit]);
+  }, [callState, createPeerConnection, emit, getCallMedia, optimizePeerSenders]);
 
   const rejectCall = useCallback(() => { if (!callState) return; emit("call:reject", { conversationId: callState.conversationId, callerId: callState.remoteUserId }); cleanupCall(); setCallState(null); }, [callState, emit, cleanupCall]);
   const endCall = useCallback(() => { if (!callState) return; emit("call:end", { conversationId: callState.conversationId, targetUserId: callState.remoteUserId }); cleanupCall(); setCallState(null); }, [callState, emit, cleanupCall]);

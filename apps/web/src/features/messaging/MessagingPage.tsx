@@ -301,6 +301,7 @@ export function MessagingPage() {
   const qualityPoorStreakRef = useRef(0);
   const qualityGoodStreakRef = useRef(0);
   const ringtoneIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const iceRestartAttemptRef = useRef(0);
 
   /* ── MessageGuard ── */
   const [guardAlert, setGuardAlert] = useState<{ type: "warn" | "block"; message: string } | null>(null);
@@ -626,16 +627,56 @@ export function MessagingPage() {
       ],
       bundlePolicy: "max-bundle",
       rtcpMuxPolicy: "require",
-      iceCandidatePoolSize: 2,
+      iceCandidatePoolSize: 4,
     });
+
+    // ICE candidate relay
     pc.onicecandidate = (event) => {
       if (event.candidate) emit("webrtc:ice-candidate", { targetUserId: remoteUserId, candidate: event.candidate.toJSON() });
     };
+
+    // Remote track received
     pc.ontrack = (event) => {
       remoteStreamRef.current = event.streams[0];
       if (remoteVideoRef.current) { remoteVideoRef.current.srcObject = event.streams[0]; void remoteVideoRef.current.play().catch(() => {}); }
       if (remoteAudioRef.current) { remoteAudioRef.current.srcObject = event.streams[0]; remoteAudioRef.current.muted = !isSpeakerOn; void remoteAudioRef.current.play().catch(() => {}); }
     };
+
+    // ── ICE reconnection automatique ──
+    // Si la connexion ICE se dégrade (disconnected/failed), tenter un ICE restart
+    // au lieu de couper l'appel. Max 3 tentatives.
+    pc.oniceconnectionstatechange = () => {
+      const state = pc.iceConnectionState;
+      if (state === "connected" || state === "completed") {
+        iceRestartAttemptRef.current = 0; // reset compteur si OK
+      }
+      if (state === "disconnected") {
+        // Attendre 2s avant de tenter un restart (le réseau peut revenir seul)
+        setTimeout(() => {
+          if (pc.iceConnectionState === "disconnected" && iceRestartAttemptRef.current < 3) {
+            iceRestartAttemptRef.current++;
+            pc.restartIce();
+            // Renégocier avec iceRestart
+            pc.createOffer({ iceRestart: true }).then(async (offer) => {
+              await pc.setLocalDescription(offer);
+              emit("webrtc:offer", { targetUserId: remoteUserId, sdp: offer });
+            }).catch(() => {});
+          }
+        }, 2000);
+      }
+      if (state === "failed") {
+        if (iceRestartAttemptRef.current < 3) {
+          iceRestartAttemptRef.current++;
+          pc.restartIce();
+          pc.createOffer({ iceRestart: true }).then(async (offer) => {
+            await pc.setLocalDescription(offer);
+            emit("webrtc:offer", { targetUserId: remoteUserId, sdp: offer });
+          }).catch(() => {});
+        }
+        // Après 3 tentatives, la qualité monitor basculera en "poor"
+      }
+    };
+
     peerConnectionRef.current = pc;
     return pc;
   }, [emit, isSpeakerOn]);
@@ -651,6 +692,7 @@ export function MessagingPage() {
     setIsMuted(false); setIsCameraOff(false); setIsSpeakerOn(true); setIsEarMode(false);
     setConnectionQuality("unknown");
     qualityPoorStreakRef.current = 0; qualityGoodStreakRef.current = 0;
+    iceRestartAttemptRef.current = 0;
   }, []);
 
   const applyVideoProfile = useCallback(async (profile: "hd" | "balanced" | "data-saver") => {
@@ -701,9 +743,22 @@ export function MessagingPage() {
     await Promise.all(pc.getSenders().map(async (sender) => {
       try {
         const params = sender.getParameters();
-        params.degradationPreference = "maintain-framerate";
-        if (sender.track?.kind === "video") { params.encodings = [{ ...(params.encodings?.[0] ?? {}), maxBitrate: 1_500_000, maxFramerate: 30, scaleResolutionDownBy: 1 }]; }
-        if (sender.track?.kind === "audio") { params.encodings = [{ ...(params.encodings?.[0] ?? {}), maxBitrate: 64_000 }]; }
+        // balanced = compromis idéal entre framerate et résolution selon le réseau
+        params.degradationPreference = "balanced";
+        if (sender.track?.kind === "video") {
+          params.encodings = [{
+            ...(params.encodings?.[0] ?? {}),
+            maxBitrate: 1_500_000,
+            maxFramerate: 30,
+            scaleResolutionDownBy: 1,
+          }];
+        }
+        if (sender.track?.kind === "audio") {
+          params.encodings = [{
+            ...(params.encodings?.[0] ?? {}),
+            maxBitrate: 64_000,
+          }];
+        }
         await sender.setParameters(params);
       } catch { /* */ }
     }));
