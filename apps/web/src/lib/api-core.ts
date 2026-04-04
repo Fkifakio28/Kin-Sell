@@ -203,6 +203,81 @@ async function refreshAccessToken(): Promise<boolean> {
   }
 }
 
+// ── Proactive Token Refresh ──────────────────────────────────────────────────
+let _refreshTimer: ReturnType<typeof setTimeout> | null = null;
+
+function getTokenExpMs(): number | null {
+  const token = getToken();
+  if (!token) return null;
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) return null;
+    const payload = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")));
+    if (typeof payload.exp === "number") return payload.exp * 1000;
+  } catch { /* malformed token */ }
+  return null;
+}
+
+export function scheduleTokenRefresh(onSessionLost?: () => void): () => void {
+  clearScheduledRefresh();
+
+  const schedule = () => {
+    const expMs = getTokenExpMs();
+    if (!expMs) return;
+    // Refresh at 75% of TTL (e.g. 11 min 15 s for a 15 min token)
+    const now = Date.now();
+    const ttl = expMs - now;
+    if (ttl <= 0) {
+      // Already expired — attempt immediate refresh
+      void refreshAccessToken().then((ok) => {
+        if (ok) schedule();
+        else onSessionLost?.();
+      });
+      return;
+    }
+    const delay = Math.max(ttl * 0.75, 10_000); // at least 10 s
+    _refreshTimer = setTimeout(async () => {
+      const ok = await refreshAccessToken();
+      if (ok) {
+        schedule(); // re-schedule for next cycle
+      } else {
+        onSessionLost?.();
+      }
+    }, delay);
+  };
+
+  schedule();
+
+  // Also refresh when tab becomes visible after being hidden
+  const handleVisibility = () => {
+    if (document.visibilityState === "visible") {
+      const expMs = getTokenExpMs();
+      if (expMs && expMs - Date.now() < 60_000) {
+        // Less than 1 min remaining — refresh now
+        void refreshAccessToken().then((ok) => {
+          if (ok) schedule();
+          else onSessionLost?.();
+        });
+      } else {
+        schedule();
+      }
+    }
+  };
+  document.addEventListener("visibilitychange", handleVisibility);
+
+  return () => {
+    clearScheduledRefresh();
+    document.removeEventListener("visibilitychange", handleVisibility);
+  };
+}
+
+export function clearScheduledRefresh(): void {
+  if (_refreshTimer) {
+    clearTimeout(_refreshTimer);
+    _refreshTimer = null;
+  }
+}
+
 // ── Core Request ─────────────────────────────────────────────────────────────
 export async function request<T>(path: string, opts: RequestOptions = {}, allowRefresh = true): Promise<T> {
   const { method = "GET", body, headers = {}, params } = opts;

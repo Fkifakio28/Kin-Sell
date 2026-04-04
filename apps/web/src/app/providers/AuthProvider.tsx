@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { auth as authApi, clearAuthSession, clearCache, getRefreshToken, getToken } from "../../lib/api-client";
+import { auth as authApi, clearAuthSession, clearCache, getRefreshToken, getToken, scheduleTokenRefresh, clearScheduledRefresh } from "../../lib/api-client";
 import type { AccountUser } from "../../lib/api-client";
 
 type AuthContextValue = {
@@ -58,6 +58,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     void bootstrap();
   }, [refreshUser]);
+
+  // Proactive token refresh — keeps session alive before JWT expires
+  useEffect(() => {
+    if (!user) {
+      clearScheduledRefresh();
+      return;
+    }
+    const cleanup = scheduleTokenRefresh(() => {
+      // Session could not be refreshed — clear state
+      clearAuthSession();
+      setUser(null);
+    });
+    return cleanup;
+  }, [user]);
 
   const login = useCallback(async (email: string, password: string, cfTurnstileToken?: string) => {
     const result = await authApi.login({ email, password, cfTurnstileToken });

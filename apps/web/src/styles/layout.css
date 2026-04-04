@@ -85,6 +85,13 @@
   margin: 0 auto;
 }
 
+/* Dashboards need more room — their shells have their own max-width */
+.page-main-content:has(.ad-shell),
+.page-main-content:has(.ud-shell),
+.page-main-content:has(.bz-shell) {
+  max-width: none;
+}
+
 .page-footer {
   padding: var(--space-xl) var(--space-md);
   background: var(--glass-bg);

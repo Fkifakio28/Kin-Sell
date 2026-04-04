@@ -25,13 +25,15 @@
   display: grid;
   grid-template-columns: var(--ad-sidebar-w) 1fr;
   min-height: 100vh;
+  min-height: 100dvh; /* modern: dynamic viewport height (iOS Safari) */
   background: var(--ad-bg);
   color: var(--ad-text-1);
   font-family: inherit;
   transition: grid-template-columns 0.3s ease;
   border-radius: 24px;
   border: 1px solid var(--ad-border);
-  overflow: hidden;
+  overflow: visible;
+  overflow-x: hidden;
   box-shadow: 0 8px 48px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.04) inset;
   max-width: 1700px;
   margin: 20px auto;
@@ -985,6 +987,8 @@
     border-radius: 0;
     margin: 0;
     min-height: 100vh;
+    min-height: 100dvh;
+    overflow: visible;
   }
   .ad-sidebar {
     position: fixed;
@@ -1033,7 +1037,9 @@
     margin: 0;
     border-radius: 0;
     border: none;
+    min-height: 100vh;
     min-height: 100dvh;
+    overflow: visible;
   }
 
   /* Sidebar → barre d'onglets horizontale sticky */
@@ -1045,6 +1051,7 @@
     flex-direction: row;
     overflow-x: auto;
     overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
     padding: 8px 12px;
     border-right: none;
     border-bottom: 1px solid var(--ad-border);

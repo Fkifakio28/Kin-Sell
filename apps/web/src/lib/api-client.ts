@@ -23,6 +23,8 @@ export {
   setSessionId,
   clearToken,
   clearAuthSession,
+  scheduleTokenRefresh,
+  clearScheduledRefresh,
   ApiError,
   health,
   request,

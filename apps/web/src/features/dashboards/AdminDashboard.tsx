@@ -756,7 +756,7 @@ export function AdminDashboard() {
      ══════════════════════════════════════ */
 
   const renderDashboard = () => {
-    if (!stats) return <div className="ad-empty"><div className="ad-empty-icon">⏳</div><p className="ad-empty-msg">Chargement des statistiques…</p></div>;
+    if (!stats) return <div className="ad-empty"><div className="ad-empty-icon">⏳</div><p className="ad-empty-msg">Chargement des statistiques…</p><button className="ad-btn ad-btn--primary" style={{marginTop:12}} onClick={loadSectionData}>↻ Réessayer</button></div>;
     return (
       <>
         <div className="ad-stats-grid">
@@ -2728,7 +2728,7 @@ export function AdminDashboard() {
           </div>
         </div>
 
-        {error && <div className="ad-badge ad-badge--danger" style={{ padding: '10px 16px', fontSize: 13 }}>⚠ {error}</div>}
+        {error && <div className="ad-badge ad-badge--danger" style={{ padding: '10px 16px', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>⚠ {error} <button className="ad-btn ad-btn--primary" style={{ marginLeft: 'auto', padding: '4px 12px', fontSize: 12 }} onClick={() => { setError(null); loadSectionData(); }}>↻ Réessayer</button></div>}
         {success && <div className="ad-badge ad-badge--success" style={{ padding: '10px 16px', fontSize: 13 }}>✅ {success}</div>}
 
         <AdBanner page="admin" forceKinSell />
