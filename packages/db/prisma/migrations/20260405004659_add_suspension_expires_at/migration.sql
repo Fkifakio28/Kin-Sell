@@ -1,2 +1,1 @@
-﻿-- Add suspensionExpiresAt to User
-ALTER TABLE "User" ADD COLUMN "suspensionExpiresAt" TIMESTAMP(3);
+﻿ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "suspensionExpiresAt" TIMESTAMP(3);
