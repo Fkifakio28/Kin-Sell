@@ -4,14 +4,27 @@
  * Usage: npx tsx packages/db/prisma/seed-kinshasa.ts
  */
 
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, CountryCode } from "@prisma/client";
 
 const prisma = new PrismaClient();
+
+const CONGO_COUNTRY = {
+  code: CountryCode.CD,
+  nameEnglish: "Democratic Republic of the Congo",
+  nameFrench: "République Démocratique du Congo",
+  nameLocal: "Republiki ya Kongo ya Dimokalasi",
+  currency: "CDF",
+  currencyCode: "CDF",
+  currencySymbol: "FC",
+  timezone: "Africa/Kinshasa",
+  dialCode: "+243",
+  region: "Central Africa",
+};
 
 const KINSHASA_DATA = {
   city: "Kinshasa",
   country: "Congo-Kinshasa",
-  countryCode: "CD",
+  countryCode: CountryCode.CD,
   currency: "CDF",
   timezone: "Africa/Kinshasa",
 };
@@ -142,10 +155,18 @@ const CATEGORIES = [
 async function main() {
   console.log("🌍 Seed Kinshasa — Données marché...");
 
+  // Upsert pays
+  const country = await prisma.marketCountry.upsert({
+    where: { code: CONGO_COUNTRY.code },
+    create: CONGO_COUNTRY,
+    update: { currency: CONGO_COUNTRY.currency, timezone: CONGO_COUNTRY.timezone },
+  });
+  console.log(`✅ Pays: ${country.nameFrench} (${country.id})`);
+
   // Upsert ville
   const city = await prisma.marketCity.upsert({
-    where: { city_country: { city: KINSHASA_DATA.city, country: KINSHASA_DATA.country } },
-    create: KINSHASA_DATA,
+    where: { city_countryCode: { city: KINSHASA_DATA.city, countryCode: KINSHASA_DATA.countryCode } },
+    create: { ...KINSHASA_DATA, marketCountryId: country.id },
     update: { currency: KINSHASA_DATA.currency, timezone: KINSHASA_DATA.timezone },
   });
   console.log(`✅ Ville: ${city.city} (${city.id})`);
