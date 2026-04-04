@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
+import { SK_MUSIC_STOPPED } from "../shared/constants/storage-keys";
 
-const MUSIC_PREF_KEY = "ks-music-stopped";
+const MUSIC_PREF_KEY = SK_MUSIC_STOPPED;
 
 interface BackgroundMusicProps {
   playing: boolean;

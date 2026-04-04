@@ -8,7 +8,7 @@ import path from "node:path";
 import pinoHttpModule from "pino-http";
 const pinoHttp = (pinoHttpModule as any).default || pinoHttpModule;
 import { env } from "./config/env.js";
-import { logger } from "./shared/logger.js";
+import { logger, genRequestId } from "./shared/logger.js";
 import { prisma } from "./shared/db/prisma.js";
 import { canTrade, Role } from "./types/roles.js";
 import authRoutes from "./modules/auth/auth.routes.js";
@@ -51,11 +51,16 @@ const httpServer = createServer(app);
 if (env.NODE_ENV === "production") {
   app.set("trust proxy", 1);
 }
-app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  hsts: { maxAge: 63_072_000, includeSubDomains: true, preload: true },
+  referrerPolicy: { policy: "strict-origin-when-cross-origin" },
+  contentSecurityPolicy: false, // CSP handled by nginx/frontend
+}));
 app.use(compression());
-app.use(pinoHttp({ logger, autoLogging: { ignore: (req: any) => req.url === "/health" } }) as any);
-app.use(express.json({ limit: "20mb" }));
-app.use(cors({ origin: env.CORS_ORIGIN }));
+app.use(pinoHttp({ logger, genReqId: genRequestId, autoLogging: { ignore: (req: any) => req.url === "/health" } }) as any);
+app.use(express.json({ limit: "2mb" }));
+app.use(cors({ origin: env.CORS_ORIGIN, credentials: true }));
 
 // ── Cache-Control headers pour réponses API ──
 app.use((req, res, next) => {
@@ -84,7 +89,7 @@ app.use((_req, res, next) => {
   res.json = function (data: unknown) {
     if (res.statusCode >= 200 && res.statusCode < 300) {
       const body = JSON.stringify(data);
-      const etag = `"${crypto.createHash("md5").update(body).digest("hex").slice(0, 16)}"`;
+      const etag = `"${crypto.createHash("sha256").update(body).digest("hex").slice(0, 16)}"`;
       res.set("ETag", etag);
       if (_req.get("If-None-Match") === etag) {
         return res.status(304).end();
@@ -176,16 +181,18 @@ app.post("/errors", (req, res) => {
     if (c !== undefined) _errorRateLimit.set(ip, Math.max(0, c - 1));
   }, 60_000);
 
+  const sanitize = (v: unknown, max: number) => String(v ?? "").replace(/[\x00-\x1f]/g, "").slice(0, max);
+
   logger.warn({
     clientError: true,
-    errorType: type,
-    errorMessage: String(message).slice(0, 500),
-    errorStack: String(stack || "").slice(0, 1000),
-    errorUrl: String(url || "").slice(0, 300),
+    errorType: sanitize(type, 80),
+    errorMessage: sanitize(message, 500),
+    errorStack: sanitize(stack, 1000),
+    errorUrl: sanitize(url, 300),
     errorTimestamp: timestamp,
     ip,
     ua: req.headers["user-agent"],
-  }, `[Client Error] ${type}: ${String(message).slice(0, 200)}`);
+  }, `[Client Error] ${sanitize(type, 80)}: ${sanitize(message, 200)}`);
 
   res.status(204).end();
 });

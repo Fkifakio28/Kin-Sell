@@ -5,8 +5,10 @@
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "/api";
 
+import { SK_ACCESS_TOKEN } from "../shared/constants/storage-keys";
+
 function getAuthHeaders(): HeadersInit {
-  const token = localStorage.getItem("kin-sell.token");
+  const token = localStorage.getItem(SK_ACCESS_TOKEN);
   return token ? { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } : { "Content-Type": "application/json" };
 }
 

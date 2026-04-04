@@ -1,5 +1,5 @@
 /**
- * Routes Géolocalisation — Google Maps (multi-pays)
+ * Routes Géolocalisation — OpenStreetMap Nominatim (multi-pays)
  *
  * GET  /geo/autocomplete?input=...&country=...  → Suggestions de lieux
  * GET  /geo/place/:placeId                      → Détails basiques (rétro-compat)

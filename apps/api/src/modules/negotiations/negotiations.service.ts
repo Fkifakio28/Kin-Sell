@@ -3,7 +3,7 @@ import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
 import { randomBytes } from "crypto";
 import { sendPushToUser } from "../notifications/push.service.js";
-import { emitToUsers, emitToUser } from "../messaging/socket.js";
+import { emitToUsers, emitToUser, isUserOnline } from "../messaging/socket.js";
 
 const NEGOTIATION_TTL_MS = 48 * 60 * 60 * 1000; // 48 heures
 const GROUPED_TTL_MS = 72 * 60 * 60 * 1000; // 72 heures pour groupé
@@ -294,7 +294,7 @@ export const respondToNegotiation = async (userId: string, negotiationId: string
                 listingType: cartItem.listing.type,
                 title: cartItem.listing.title,
                 category: cartItem.listing.category,
-                city: cartItem.listing.city ?? "Kinshasa",
+                city: cartItem.listing.city ?? "—",
                 quantity: negotiation.quantity,
                 unitPriceUsdCents: acceptedPrice,
                 lineTotalUsdCents,
@@ -306,21 +306,25 @@ export const respondToNegotiation = async (userId: string, negotiationId: string
         // Retirer l'article du panier (il est maintenant commandé)
         await prisma.cartItem.delete({ where: { id: cartItem.id } });
 
-        // Push notification à l'acheteur
-        void sendPushToUser(negotiation.buyerUserId, {
-          title: "✅ Marchandage accepté !",
-          body: `Votre offre pour "${cartItem.listing.title}" a été acceptée. Commande #${order.id.slice(-6)} créée.`,
-          tag: `nego-accepted-${negotiationId}`,
-          data: { type: "order", orderId: order.id, negotiationId },
-        });
+        // Push notification à l'acheteur (seulement si offline)
+        if (!isUserOnline(negotiation.buyerUserId)) {
+          void sendPushToUser(negotiation.buyerUserId, {
+            title: "✅ Marchandage accepté !",
+            body: `Votre offre pour "${cartItem.listing.title}" a été acceptée. Commande #${order.id.slice(-6)} créée.`,
+            tag: `nego-accepted-${negotiationId}`,
+            data: { type: "order", orderId: order.id, negotiationId },
+          });
+        }
 
-        // Push notification au vendeur (confirmation)
-        void sendPushToUser(cartItem.listing.ownerUserId, {
-          title: "🛒 Commande créée automatiquement",
-          body: `Commande #${order.id.slice(-6)} créée suite au marchandage accepté.`,
-          tag: `order-${order.id}`,
-          data: { type: "order", orderId: order.id },
-        });
+        // Push notification au vendeur (seulement si offline)
+        if (!isUserOnline(cartItem.listing.ownerUserId)) {
+          void sendPushToUser(cartItem.listing.ownerUserId, {
+            title: "🛒 Commande créée automatiquement",
+            body: `Commande #${order.id.slice(-6)} créée suite au marchandage accepté.`,
+            tag: `order-${order.id}`,
+            data: { type: "order", orderId: order.id },
+          });
+        }
 
         // Socket: emit order:created to both buyer and seller
         const orderCreatedPayload = {
@@ -530,6 +534,18 @@ export const expireStaleNegotiations = async () => {
       sellerUserId: neg.sellerUserId,
       expiredAt: new Date().toISOString(),
     });
+
+    // Push notification for offline users
+    for (const uid of [neg.buyerUserId, neg.sellerUserId]) {
+      if (!isUserOnline(uid)) {
+        void sendPushToUser(uid, {
+          title: "⏰ Marchandage expiré",
+          body: `Marchandage #${neg.id.slice(-6)} a expiré`,
+          tag: `nego-expired-${neg.id}`,
+          data: { type: "negotiation", negotiationId: neg.id },
+        });
+      }
+    }
   }
 
   return { expired: result.count };

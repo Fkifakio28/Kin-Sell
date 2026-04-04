@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Browser } from "@capacitor/browser";
 import { Capacitor } from "@capacitor/core";
@@ -8,11 +8,9 @@ import { useLocaleCurrency } from "../../app/providers/LocaleCurrencyProvider";
 import { ApiError, auth as authApi } from "../../lib/api-client";
 import { TurnstileWidget } from "../../components/TurnstileWidget";
 
-type ProfileType = "user" | "business";
 type LoginTab = "identifiant" | "telephone";
 type LoginStep = "credentials" | "totp" | "otp";
 
-const rememberedRoleKey = "kin-sell.auth.role";
 const rememberedIdentifierKey = "kin-sell.auth.identifier";
 
 function getErrorMessage(error: unknown, t: (k: string) => string): string {
@@ -46,9 +44,6 @@ export function LoginPage() {
   const [identifier, setIdentifier] = useState(() => localStorage.getItem(rememberedIdentifierKey) ?? "");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(Boolean(localStorage.getItem(rememberedIdentifierKey)));
-  const [profileType, setProfileType] = useState<ProfileType>(() => {
-    return (localStorage.getItem(rememberedRoleKey) as ProfileType | null) ?? "user";
-  });
 
   // OTP Téléphone
   const [phone, setPhone] = useState("");
@@ -96,12 +91,6 @@ export function LoginPage() {
     }
   }, [step]);
 
-  const helperText = useMemo(() => {
-    return profileType === "business"
-      ? t("auth.helperBusiness")
-      : t("auth.helperUser");
-  }, [profileType, t]);
-
   const handleSocialClick = async (provider: "google" | "facebook") => {
     setErrorMessage(null);
     if (provider === "google") {
@@ -137,7 +126,6 @@ export function LoginPage() {
       } else {
         localStorage.removeItem(rememberedIdentifierKey);
       }
-      localStorage.setItem(rememberedRoleKey, profileType);
       navigate(getRedirectPath(nextUser.role), { replace: true });
     } catch (error: unknown) {
       if (error instanceof Error && error.message === "TOTP_REQUIRED") {
@@ -210,7 +198,6 @@ export function LoginPage() {
         verificationId: otpVerificationId,
         code: otpCode,
         phone: phone.trim(),
-        accountType: profileType === "business" ? "BUSINESS" : "USER",
       });
       await refreshUser();
       navigate(getRedirectPath(result.user.role), { replace: true });
@@ -242,8 +229,6 @@ export function LoginPage() {
         eyebrow={t("auth.totpEyebrow")}
         title={t("auth.totpTitle")}
         subtitle={t("auth.totpSubtitle")}
-        role={profileType}
-        onRoleChange={setProfileType}
         socialMessage={null}
         onSocialClick={handleSocialClick}
       >
@@ -290,8 +275,6 @@ export function LoginPage() {
       title={t("auth.loginTitle")}
       subtitle={t("auth.loginSubtitle")}
       dividerText={t("auth.loginDivider")}
-      role={profileType}
-      onRoleChange={setProfileType}
       socialMessage={socialMessage}
       onSocialClick={handleSocialClick}
     >
@@ -320,8 +303,6 @@ export function LoginPage() {
       {/* �"?�"? Onglet Email/Identifiant �"?�"? */}
       {tab === "identifiant" && (
         <form className="auth-form" onSubmit={handleSubmitIdentifiant}>
-          <div className="auth-helper-text">{helperText}</div>
-
           <div className="auth-field-group">
             <label htmlFor="login-identifier" className="auth-label">{t("auth.identifierLabel")}</label>
             <input

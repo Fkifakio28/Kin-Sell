@@ -10,6 +10,7 @@
  */
 
 import { prisma } from "../db/prisma.js";
+import { getActiveCurrencies } from "../../config/platform.js";
 
 /** Taux de fallback (approximatifs, utilisés si la DB est vide) */
 const FALLBACK_RATES: Record<string, number> = {
@@ -127,7 +128,7 @@ export async function convertAmount(amountCents: number, from: string, to: strin
  * Utilisé par l'endpoint GET /market/rates.
  */
 export async function getAllRatesFromUsd(): Promise<Record<string, number>> {
-  const targets = ["CDF", "EUR", "XAF", "AOA", "XOF", "GNF", "MAD"];
+  const targets = getActiveCurrencies().filter((c) => c !== "USD");
   const result: Record<string, number> = { USD: 1 };
 
   for (const to of targets) {

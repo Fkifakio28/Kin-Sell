@@ -16,6 +16,8 @@ type InitiateInput = {
   provider: "ORANGE_MONEY" | "MPESA";
   phoneNumber: string;
   amountCDF: number;
+  /** Devise locale du paiement (défaut CDF pour RDC). */
+  currency?: string;
   purpose: "ORDER" | "SUBSCRIPTION" | "AD_PAYMENT";
   targetId?: string;
 };
@@ -24,7 +26,7 @@ type InitiateInput = {
  * Initier un paiement Mobile Money.
  */
 export async function initiatePayment(userId: string, input: InitiateInput) {
-  const { provider, phoneNumber, amountCDF, purpose, targetId } = input;
+  const { provider, phoneNumber, amountCDF, currency = "CDF", purpose, targetId } = input;
 
   if (amountCDF <= 0) throw new HttpError(400, "Le montant doit être supérieur à 0");
 
@@ -37,7 +39,7 @@ export async function initiatePayment(userId: string, input: InitiateInput) {
       provider: provider as PaymentMethod,
       phoneNumber,
       amountCents: amountCDF * 100,
-      currency: "CDF",
+      currency,
       amountLocalUnits: amountCDF,
       status: MomoStatus.INITIATED,
       purpose,

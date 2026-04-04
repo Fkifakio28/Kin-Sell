@@ -583,7 +583,7 @@ export function ExplorerPageDesktop() {
           </div>
 
           {isMapView ? (
-            <div style={{ marginBottom: 'var(--space-lg)' }}>
+            <div className="ex-map-wrap">
               <MapView
                 center={{ lat: -4.325, lng: 15.322 }}
                 markers={filteredArticles.map(a => ({
@@ -670,7 +670,7 @@ export function ExplorerPageDesktop() {
               >
                 <div className="explorer-shop-header">
                   {shop.coverImage ? (
-                    <img className="explorer-shop-cover" src={shop.coverImage} alt={shop.name} />
+                    <img className="explorer-shop-cover" src={shop.coverImage} alt={shop.name} loading="lazy" />
                   ) : (
                     <div className="explorer-shop-cover explorer-shop-cover--placeholder">🏪</div>
                   )}
@@ -711,7 +711,7 @@ export function ExplorerPageDesktop() {
               >
                 <div className="explorer-shop-header">
                   {profile.avatarUrl ? (
-                    <img className="explorer-shop-cover" src={profile.avatarUrl} alt={profile.displayName} />
+                    <img className="explorer-shop-cover" src={profile.avatarUrl} alt={profile.displayName} loading="lazy" />
                   ) : (
                     <div className="explorer-shop-cover explorer-shop-cover--placeholder">👤</div>
                   )}
@@ -751,7 +751,7 @@ export function ExplorerPageDesktop() {
                   onMouseLeave={articleHover.handleMouseLeave}
                 >
                   <div className="explorer-article-cover-wrap">
-                    <img className="explorer-article-cover" src={article.coverImage} alt={article.title} />
+                    <img className="explorer-article-cover" src={article.coverImage} alt={article.title} loading="lazy" />
                     {article.promoLabel ? <span className="explorer-article-badge">{article.promoLabel}</span> : null}
                     <div className="explorer-hover-details" aria-hidden="true">
                       <strong>{article.title}</strong>

@@ -7,8 +7,8 @@ type AuthShellProps = {
   title: string;
   subtitle: string;
   dividerText?: string;
-  role: "user" | "business";
-  onRoleChange: (role: "user" | "business") => void;
+  role?: "user" | "business";
+  onRoleChange?: (role: "user" | "business") => void;
   socialMessage: string | null;
   onSocialClick: (provider: "google" | "facebook") => void;
   children: ReactNode;
@@ -83,13 +83,13 @@ export function AuthShell({
             <p className="auth-subtitle">{subtitle}</p>
           </div>
 
-          <div className="auth-role-switch" role="radiogroup" aria-label={t("auth.roleAriaLabel")}>
+          <div className="auth-role-switch" role="radiogroup" aria-label={t("auth.roleAriaLabel")} style={role == null ? { display: "none" } : undefined}>
             <span className="auth-role-label">{t("auth.roleLabel")}</span>
             <div className="auth-role-buttons">
               <button
                 type="button"
                 className={`auth-role-button${role === "user" ? " auth-role-button--active" : ""}`}
-                onClick={() => onRoleChange("user")}
+                onClick={() => onRoleChange?.("user")}
                 aria-pressed={role === "user"}
               >
                 {t("auth.roleUser")}
@@ -97,7 +97,7 @@ export function AuthShell({
               <button
                 type="button"
                 className={`auth-role-button${role === "business" ? " auth-role-button--active" : ""}`}
-                onClick={() => onRoleChange("business")}
+                onClick={() => onRoleChange?.("business")}
                 aria-pressed={role === "business"}
               >
                 {t("auth.roleBusiness")}

@@ -1,7 +1,7 @@
 /**
  * Service de normalisation et gestion de la localisation
  *
- * - normalizeLocationFromGoogle() : parse les address_components Google Maps
+ * - normalizeLocationFromNominatim() : parse les address fields OSM / Nominatim
  * - buildPublicLocationView() : filtre selon LocationVisibility
  * - buildPrivateLocationView() : retourne toutes les données au propriétaire
  */
@@ -27,7 +27,7 @@ export interface StructuredLocation {
   city: string | null;
   district: string | null;
   postalCode: string | null;
-  mapSource: "google_maps" | "manual" | "gps";
+  mapSource: "openstreetmap" | "manual" | "gps";
 }
 
 export interface PublicLocationView {
@@ -42,45 +42,45 @@ export interface PublicLocationView {
   displayLabel: string;
 }
 
-export interface GoogleAddressComponent {
-  long_name: string;
-  short_name: string;
-  types: string[];
+export interface NominatimAddress {
+  road?: string;
+  neighbourhood?: string;
+  suburb?: string;
+  city?: string;
+  town?: string;
+  village?: string;
+  municipality?: string;
+  state?: string;
+  region?: string;
+  country?: string;
+  country_code?: string;
+  postcode?: string;
+  [key: string]: string | undefined;
 }
 
 // ── Normalisation ──
 
 /**
- * Parse les address_components de Google Maps en structure plate.
+ * Parse les champs address de Nominatim (OpenStreetMap) en structure plate.
  */
-export function normalizeLocationFromGoogle(
-  addressComponents: GoogleAddressComponent[],
+export function normalizeLocationFromNominatim(
+  address: NominatimAddress,
   geometry: { lat: number; lng: number },
   formattedAddress: string,
   placeId?: string
 ): StructuredLocation {
-  const find = (type: string): string | null =>
-    addressComponents.find((c) => c.types.includes(type))?.long_name ?? null;
-
-  const findShort = (type: string): string | null =>
-    addressComponents.find((c) => c.types.includes(type))?.short_name ?? null;
-
   return {
     latitude: geometry.lat,
     longitude: geometry.lng,
     formattedAddress,
     placeId: placeId ?? null,
-    country: find("country"),
-    countryCode: findShort("country"),      // ISO 3166-1 alpha-2 (ex: "CD", "MA")
-    region: find("administrative_area_level_1"),
-    city: find("locality") ?? find("administrative_area_level_2"),
-    district:
-      find("sublocality_level_1") ??
-      find("sublocality") ??
-      find("neighborhood") ??
-      find("administrative_area_level_3"),
-    postalCode: find("postal_code"),
-    mapSource: "google_maps",
+    country: address.country ?? null,
+    countryCode: address.country_code?.toUpperCase() ?? null,
+    region: address.state ?? address.region ?? null,
+    city: address.city ?? address.town ?? address.village ?? address.municipality ?? null,
+    district: address.suburb ?? address.neighbourhood ?? null,
+    postalCode: address.postcode ?? null,
+    mapSource: "openstreetmap",
   };
 }
 

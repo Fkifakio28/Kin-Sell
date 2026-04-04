@@ -207,9 +207,6 @@ PAYPAL_CANCEL_URL="https://kin-sell.com/forfaits?cancelled=1"
 # MPESA_BASE_URL="https://openapi.m-pesa.com/production/ipg/v2/vodacomDRC"
 # MPESA_CALLBACK_URL="https://api.kin-sell.com/mobile-money/webhook/mpesa"
 
-# ── Google Maps ──
-GOOGLE_MAPS_API_KEY=""
-
 # ── Frontend (sera injecté au build Vite) ──
 VITE_API_URL="https://api.kin-sell.com"
 VITE_ANDROID_APK_URL="https://kin-sell.com/downloads/kin-sell-release.apk"

@@ -19,7 +19,7 @@ import {
 } from "./sokin.service.js";
 import { sendPushToUser } from "../notifications/push.service.js";
 import { prisma } from "../../shared/db/prisma.js";
-import { emitToAll } from "../messaging/socket.js";
+import { emitToAll, isUserOnline } from "../messaging/socket.js";
 
 const createPostSchema = z.object({
   text: z.string().min(1).max(500),
@@ -168,7 +168,7 @@ router.post(
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     const { type } = reactionSchema.parse(req.body);
     const result = await reactToPost(req.auth!.userId, req.params.id, type);
-    if (result.authorId && result.authorId !== req.auth!.userId) {
+    if (result.authorId && result.authorId !== req.auth!.userId && !isUserOnline(result.authorId)) {
       const actor = await prisma.userProfile.findUnique({
         where: { userId: req.auth!.userId },
         select: { displayName: true },
@@ -207,7 +207,7 @@ router.post(
       updatedAt: new Date().toISOString(),
     });
 
-    if (result.authorId && result.authorId !== req.auth!.userId) {
+    if (result.authorId && result.authorId !== req.auth!.userId && !isUserOnline(result.authorId)) {
       const actor = await prisma.userProfile.findUnique({
         where: { userId: req.auth!.userId },
         select: { displayName: true },

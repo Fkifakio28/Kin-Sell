@@ -140,10 +140,10 @@ export async function getAdTargetingAdvice(
 
   // ── Budget recommendation ──
   const baseRecommendedUsdCents = 2000; // $20 par défaut
-  const budgetRationale =
-    suggestedCities.includes("Kinshasa")
-      ? "Kinshasa est un marché dense — budget recommandé pour visibilité optimale."
-      : "Budget standard pour votre zone géographique.";
+  const hasCapitalCity = suggestedCities.some((c) => ["Kinshasa", "Abidjan", "Dakar", "Casablanca", "Luanda", "Libreville", "Brazzaville", "Conakry"].includes(c));
+  const budgetRationale = hasCapitalCity
+    ? "Ville capitale détectée — marché dense, budget recommandé pour visibilité optimale."
+    : "Budget standard pour votre zone géographique.";
 
   // ── Duration ──
   const suggestedDays = 7;
@@ -186,8 +186,8 @@ export async function getAdTargetingAdvice(
   };
 
   const tips: string[] = [];
-  if (suggestedCities.includes("Kinshasa")) {
-    tips.push("Kinshasa représente le plus grand bassin d'acheteurs — priorité haute.");
+  if (hasCapitalCity) {
+    tips.push("Ville principale détectée dans votre audience — grand bassin d'acheteurs, priorité haute.");
   }
   tips.push("Les pubs avec image attirent 3× plus de clics que le texte seul.");
   tips.push("Commencez par 7 jours pour mesurer l'impact avant d'investir davantage.");

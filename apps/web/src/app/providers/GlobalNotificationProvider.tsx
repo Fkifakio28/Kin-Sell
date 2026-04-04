@@ -7,7 +7,9 @@ import { playCallSound, stopCallSound, refreshCallSoundIfNeeded } from "../../ut
 import "../../styles/global-notifications.css";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:4000";
-const PUSH_BANNER_DISMISSED_AT_KEY = "kinsell.push.banner.dismissedAt";
+
+import { SK_PUSH_BANNER_DISMISSED } from "../../shared/constants/storage-keys";
+const PUSH_BANNER_DISMISSED_AT_KEY = SK_PUSH_BANNER_DISMISSED;
 const PUSH_BANNER_DISMISS_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 /* ── Context ── */
@@ -65,6 +67,7 @@ function resolveNotificationTarget(data: PushPayloadData): string {
       return "/account?tab=commandes";
     case "like":
     case "publication":
+    case "sokin":
       return "/sokin";
     default:
       return data.url || "/";
@@ -75,6 +78,7 @@ function resolveNotificationKind(data: PushPayloadData): NotificationKind {
   if (data.type === "message" || data.type === "order" || data.type === "negotiation" || data.type === "like" || data.type === "publication") {
     return data.type;
   }
+  if (data.type === "sokin") return "publication";
   return "system";
 }
 
@@ -488,6 +492,51 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
       setTimeout(() => setToasts((p) => p.filter((t) => t.id !== toast.id)), 6000);
     };
 
+    const handleSokinPostCreated = (data: { postId: string; authorId: string; sourceUserId: string }) => {
+      if (data.sourceUserId === user?.id) return;
+      const toast: MessageToast = {
+        id: `sokin-post-${data.postId}-${Date.now()}`,
+        kind: "publication",
+        title: "🌍 Nouvelle publication",
+        content: "Un utilisateur a publié sur So-Kin",
+        icon: "🌍",
+        targetUrl: "/sokin",
+        timestamp: Date.now(),
+      };
+      setToasts((p) => [toast, ...p].slice(0, 4));
+      setTimeout(() => setToasts((p) => p.filter((t) => t.id !== toast.id)), 6000);
+    };
+
+    const handleSokinStoryCreated = (data: { storyId: string; authorId: string; sourceUserId: string }) => {
+      if (data.sourceUserId === user?.id) return;
+      const toast: MessageToast = {
+        id: `sokin-story-${data.storyId}-${Date.now()}`,
+        kind: "publication",
+        title: "📸 Nouvelle story",
+        content: "Un utilisateur a ajouté une story So-Kin",
+        icon: "📸",
+        targetUrl: "/sokin",
+        timestamp: Date.now(),
+      };
+      setToasts((p) => [toast, ...p].slice(0, 4));
+      setTimeout(() => setToasts((p) => p.filter((t) => t.id !== toast.id)), 6000);
+    };
+
+    const handleSokinPostShared = (data: { postId: string; shares: number; sourceUserId: string }) => {
+      if (data.sourceUserId === user?.id) return;
+      const toast: MessageToast = {
+        id: `sokin-share-${data.postId}-${Date.now()}`,
+        kind: "publication",
+        title: "🔁 Publication partagée",
+        content: "Votre publication a été partagée sur So-Kin",
+        icon: "🔁",
+        targetUrl: "/sokin",
+        timestamp: Date.now(),
+      };
+      setToasts((p) => [toast, ...p].slice(0, 4));
+      setTimeout(() => setToasts((p) => p.filter((t) => t.id !== toast.id)), 6000);
+    };
+
     socket.on("message:new", handleNewMessage);
     socket.on("call:incoming", handleIncomingCall);
     socket.on("call:ended", handleCallEnded);
@@ -498,6 +547,9 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
     socket.on("order:delivery-confirmed", handleDeliveryConfirmed);
     socket.on("negotiation:updated", handleNegotiationUpdated);
     socket.on("negotiation:expired", handleNegotiationExpired);
+    socket.on("sokin:post-created", handleSokinPostCreated);
+    socket.on("sokin:story-created", handleSokinStoryCreated);
+    socket.on("sokin:post-shared", handleSokinPostShared);
 
     return () => {
       socket.off("message:new", handleNewMessage);
@@ -510,8 +562,21 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
       socket.off("order:delivery-confirmed", handleDeliveryConfirmed);
       socket.off("negotiation:updated", handleNegotiationUpdated);
       socket.off("negotiation:expired", handleNegotiationExpired);
+      socket.off("sokin:post-created", handleSokinPostCreated);
+      socket.off("sokin:story-created", handleSokinStoryCreated);
+      socket.off("sokin:post-shared", handleSokinPostShared);
     };
   }, [isLoggedIn, user?.id, playMessageSound, presentIncomingCall]);
+
+  /* ── Reconnect catch-up: notify pages to refetch data on socket reconnection ── */
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    const handleReconnect = () => {
+      window.dispatchEvent(new CustomEvent("ks:data-stale", { detail: { reason: "socket-reconnected" } }));
+    };
+    window.addEventListener("ks:socket-reconnected", handleReconnect);
+    return () => window.removeEventListener("ks:socket-reconnected", handleReconnect);
+  }, [isLoggedIn]);
 
   useEffect(() => {
     return () => {

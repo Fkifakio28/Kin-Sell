@@ -1433,3 +1433,12 @@
 .explorer-category--selected {
   will-change: transform, box-shadow;
 }
+
+/* ── MAP WRAPPER ── */
+
+.ex-map-wrap {
+  border-radius: var(--radius-md, 12px);
+  overflow: hidden;
+  margin-bottom: var(--space-md, 16px);
+  border: 1px solid var(--glass-border, rgba(180,160,255,0.24));
+}

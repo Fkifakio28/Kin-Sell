@@ -1,9 +1,5 @@
 /**
- * Retourne le chemin du dashboard privé en fonction du rôle utilisateur.
- * Utilisé partout où un lien /account était autrefois codé en dur.
+ * Re-export depuis shared/constants/roles pour compatibilité ascendante.
+ * @deprecated Importer directement depuis "@/shared/constants/roles".
  */
-export function getDashboardPath(role: string | undefined | null): string {
-  if (role === "ADMIN" || role === "SUPER_ADMIN") return "/admin/dashboard";
-  if (role === "BUSINESS") return "/business/dashboard";
-  return "/account";
-}
+export { getDashboardPath, isAdmin, isBusiness, DASHBOARD_PATHS } from "../shared/constants/roles";

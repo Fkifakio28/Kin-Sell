@@ -729,6 +729,8 @@ model Negotiation {
   @@index([sellerUserId, status])
   @@index([listingId])
   @@index([status, expiresAt])
+  @@index([buyerUserId, status, expiresAt])
+  @@index([sellerUserId, status, expiresAt])
   @@index([groupId])
   @@index([bundleId])
 }
@@ -830,7 +832,7 @@ model Message {
   readReceipts MessageReadReceipt[]
 
   @@index([conversationId, createdAt])
-  @@index([senderId])
+  @@index([senderId, createdAt])
 }
 
 model MessageReadReceipt {

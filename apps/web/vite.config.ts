@@ -189,6 +189,12 @@ export default defineConfig({
           "vendor-react": ["react", "react-dom", "react-router-dom"],
           // Socket.io chargée séparément (lourde, rarement modifiée)
           "vendor-socket": ["socket.io-client"],
+          // HLS.js pour le streaming live (lourd, uniquement So-Kin Live)
+          "vendor-hls": ["hls.js"],
+          // Leaflet pour les cartes OSM (lourd, uniquement Explorer/Map)
+          "vendor-leaflet": ["leaflet"],
+          // QR code libs (scan + génération) — chargées uniquement sur pages dédiées
+          "vendor-qr": ["html5-qrcode", "qrcode"],
         },
       },
     },

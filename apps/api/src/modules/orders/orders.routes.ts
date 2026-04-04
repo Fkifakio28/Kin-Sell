@@ -6,7 +6,7 @@ import { asyncHandler } from "../../shared/utils/async-handler.js";
 import { Role } from "../../types/roles.js";
 import * as ordersService from "./orders.service.js";
 import { sendPushToUser } from "../notifications/push.service.js";
-import { emitToUsers, emitToUser } from "../messaging/socket.js";
+import { emitToUsers, emitToUser, isUserOnline } from "../messaging/socket.js";
 import * as momoService from "../mobile-money/mobile-money.service.js";
 
 const pagingSchema = z.object({
@@ -111,12 +111,14 @@ router.post(
     // Push + Socket notify sellers about new orders
     for (const order of data.orders ?? []) {
       if (order.seller?.userId && order.seller.userId !== request.auth!.userId) {
-        void sendPushToUser(order.seller.userId, {
-          title: "🛒 Nouvelle commande !",
-          body: `Vous avez reçu une nouvelle commande de ${order.itemsCount ?? 1} article(s)`,
-          tag: `order-${order.id}`,
-          data: { type: "order", orderId: order.id },
-        });
+        if (!isUserOnline(order.seller.userId)) {
+          void sendPushToUser(order.seller.userId, {
+            title: "🛒 Nouvelle commande !",
+            body: `Vous avez re\u00e7u une nouvelle commande de ${order.itemsCount ?? 1} article(s)`,
+            tag: `order-${order.id}`,
+            data: { type: "order", orderId: order.id },
+          });
+        }
         emitToUser(order.seller.userId, "order:created", {
           type: "ORDER_CREATED",
           orderId: order.id,
@@ -168,12 +170,14 @@ router.post(
 
       // Push + Socket notify sellers
       if (order.seller?.userId && order.seller.userId !== request.auth!.userId) {
-        void sendPushToUser(order.seller.userId, {
-          title: "🛒 Nouvelle commande !",
-          body: `Vous avez reçu une nouvelle commande de ${order.itemsCount ?? 1} article(s)`,
-          tag: `order-${order.id}`,
-          data: { type: "order", orderId: order.id },
-        });
+        if (!isUserOnline(order.seller.userId)) {
+          void sendPushToUser(order.seller.userId, {
+            title: "🛒 Nouvelle commande !",
+            body: `Vous avez reçu une nouvelle commande de ${order.itemsCount ?? 1} article(s)`,
+            tag: `order-${order.id}`,
+            data: { type: "order", orderId: order.id },
+          });
+        }
         emitToUser(order.seller.userId, "order:created", {
           type: "ORDER_CREATED",
           orderId: order.id,
@@ -238,7 +242,7 @@ router.patch(
     // Push notify buyer about order status change
     const statusLabels: Record<string, string> = { CONFIRMED: "confirmée", SHIPPED: "expédiée", DELIVERED: "livrée", CANCELED: "annulée" };
     const label = statusLabels[payload.status] ?? payload.status;
-    if (data.buyer?.userId && data.buyer.userId !== request.auth!.userId) {
+    if (data.buyer?.userId && data.buyer.userId !== request.auth!.userId && !isUserOnline(data.buyer.userId)) {
       void sendPushToUser(data.buyer.userId, {
         title: "📦 Commande " + label,
         body: `Votre commande #${data.id.slice(-6)} a été ${label}`,
@@ -278,7 +282,7 @@ router.post(
   asyncHandler(async (request: AuthenticatedRequest, response) => {
     const payload = buyerConfirmSchema.parse(request.body);
     const data = await ordersService.buyerConfirmDelivery(request.auth!.userId, request.params.orderId, payload.code);
-    if (data.seller?.userId && data.seller.userId !== request.auth!.userId) {
+    if (data.seller?.userId && data.seller.userId !== request.auth!.userId && !isUserOnline(data.seller.userId)) {
       void sendPushToUser(data.seller.userId, {
         title: "✅ Livraison confirmée",
         body: `La commande #${data.id.slice(-6)} a été validée par l'acheteur`,

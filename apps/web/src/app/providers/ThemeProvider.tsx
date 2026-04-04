@@ -11,7 +11,8 @@ type ThemeContextValue = {
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
-const STORAGE_KEY = "kin-sell.theme";
+import { SK_THEME } from "../../shared/constants/storage-keys";
+const STORAGE_KEY = SK_THEME;
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<Theme>("dark");

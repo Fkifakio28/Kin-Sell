@@ -8,7 +8,7 @@ const schema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   CORS_ORIGIN: z.string().default("http://localhost:5173"),
   JWT_SECRET: z.string().min(24),
-  JWT_EXPIRES_IN: z.string().default("7d"),
+  JWT_EXPIRES_IN: z.string().default("15m"),
   REFRESH_TOKEN_SECRET: z.string().min(24).default("kinsell-refresh-secret-change-me-in-prod-please")
     .refine(
       (val) => process.env.NODE_ENV !== "production" || val !== "kinsell-refresh-secret-change-me-in-prod-please",
@@ -55,9 +55,6 @@ const schema = z.object({
   PAYPAL_IPN_VERIFY_URL: z.string().default("https://ipnpb.paypal.com/cgi-bin/webscr"),
   PAYPAL_RETURN_URL: z.string().default("http://localhost:5173/forfaits?paid=1"),
   PAYPAL_CANCEL_URL: z.string().default("http://localhost:5173/forfaits?cancelled=1"),
-
-  // ── Google Maps ──
-  GOOGLE_MAPS_API_KEY: z.string().optional(),
 
   // ── SMTP (Email) ──
   SMTP_HOST: z.string().default("smtp.hostinger.com"),

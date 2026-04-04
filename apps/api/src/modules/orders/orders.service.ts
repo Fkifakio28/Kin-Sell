@@ -76,10 +76,11 @@ const mapCart = (cart: {
       priceUsdCents: number;
       isNegotiable: boolean;
       ownerUserId: string;
-      ownerUser: { id: string; profile: { displayName: string } | null };
+      ownerUser: { id: string; profile: { displayName: string; avatarUrl: string | null; username: string | null; city: string | null } | null };
       business: { id: string; publicName: string; slug: string } | null;
     };
   }>;
+  [key: string]: unknown;
 }) => {
   const subtotalUsdCents = cart.items.reduce((sum, item) => sum + item.unitPriceUsdCents * item.quantity, 0);
 
@@ -238,8 +239,8 @@ export const getBuyerCart = async (userId: string) => {
         include: {
           listing: {
             include: {
-              ownerUser: { include: { profile: true } },
-              business: true
+              ownerUser: { select: { id: true, profile: { select: { displayName: true, avatarUrl: true, username: true, city: true } } } },
+              business: { select: { id: true, publicName: true, slug: true } }
             }
           },
           negotiation: {

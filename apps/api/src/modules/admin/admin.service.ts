@@ -553,7 +553,7 @@ export const resolveReport = async (reportId: string, adminUserId: string, resol
 // ════════════════════════════════════════════
 
 export const listAdOffers = async () => {
-  return prisma.adOffer.findMany({ orderBy: { createdAt: "desc" } });
+  return prisma.adOffer.findMany({ orderBy: { createdAt: "desc" }, take: 100 });
 };
 
 export const createAdOffer = async (data: {
@@ -580,7 +580,7 @@ export const deleteAdOffer = async (id: string) => {
 // ════════════════════════════════════════════
 
 export const listAiAgents = async () => {
-  return prisma.aiAgent.findMany({ orderBy: { createdAt: "desc" } });
+  return prisma.aiAgent.findMany({ orderBy: { createdAt: "desc" }, take: 50 });
 };
 
 export const updateAiAgent = async (id: string, data: { enabled?: boolean; level?: string }) => {
@@ -649,6 +649,7 @@ export const listAdmins = async () => {
     where: { role: { in: ["ADMIN", "SUPER_ADMIN"] } },
     include: { profile: true, adminProfile: true },
     orderBy: { createdAt: "asc" },
+    take: 200,
   });
 
   return admins.map((a) => ({
@@ -709,7 +710,7 @@ export const demoteAdmin = async (userId: string) => {
 // ════════════════════════════════════════════
 
 export const listCurrencyRates = async () => {
-  return prisma.currencyRate.findMany({ orderBy: { fromCurrency: "asc" } });
+  return prisma.currencyRate.findMany({ orderBy: { fromCurrency: "asc" }, take: 200 });
 };
 
 export const upsertCurrencyRate = async (data: {

@@ -1,4 +1,4 @@
-const USD_TO_CDF_RATE = 2850;
+import { USD_TO_CDF_RATE } from "../shared/constants/currencies";
 
 const formatNumber = (value: number) => new Intl.NumberFormat('fr-CD').format(value);
 

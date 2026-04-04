@@ -9,6 +9,7 @@
 import { prisma } from "../../shared/db/prisma.js";
 import { computePricePosition, getMarketDemand, PRICE_THRESHOLD_PERCENT } from "../../shared/market/market-shared.js";
 import { CountryCode } from "@prisma/client";
+import { getDefaultCurrency } from "../../config/platform.js";
 
 // ── Types ──
 
@@ -46,7 +47,7 @@ export async function getOrCreateCity(
   cityName: string,
   country: string,
   countryCode: string,
-  currency = "CDF"
+  currency = getDefaultCurrency(countryCode)
 ) {
   const normalizedCountryCode = (countryCode ?? "").toUpperCase();
   const safeCountryCode = (Object.values(CountryCode) as string[]).includes(normalizedCountryCode)

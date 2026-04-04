@@ -39,6 +39,11 @@ import { PublicProfileWrapper, BusinessShopWrapper } from "./ParamWrappers";
 import { RootLayout } from "./RootLayout";
 import { AppLayout } from "./AppLayout";
 
+/* Guards */
+import { AuthGuard } from "./guards/AuthGuard";
+import { RoleGuard } from "./guards/RoleGuard";
+import { GuestGuard } from "./guards/GuestGuard";
+
 /* Error pages */
 import { NotFoundPage } from "../../features/error/NotFoundPage";
 import { ErrorBoundaryPage } from "../../features/error/ErrorBoundaryPage";
@@ -50,8 +55,8 @@ export const router = createBrowserRouter([
     children: [
       /* Pages without header (Home + So-Kin) */
       { path: "/", element: <HomeEntry /> },
-      { path: "/login", element: <LoginPage /> },
-      { path: "/register", element: <RegisterPage /> },
+      { path: "/login", element: <GuestGuard><LoginPage /></GuestGuard> },
+      { path: "/register", element: <GuestGuard><RegisterPage /></GuestGuard> },
       { path: "/forgot-password", element: <ForgotPasswordPage /> },
       { path: "/auth/callback", element: <AuthCallbackPage /> },
       { path: "/suspended", element: <SuspendedPage /> },
@@ -80,9 +85,9 @@ export const router = createBrowserRouter([
           { path: "/forfaits", element: <PricingPage /> },
           { path: "/plans", element: <PricingPage /> },
           { path: "/cart", element: <CartPage /> },
-          { path: "/account", element: <UserDashboard /> },
-          { path: "/business/dashboard", element: <BusinessDashboard /> },
-          { path: "/admin/dashboard", element: <AdminDashboard /> },
+          { path: "/account", element: <RoleGuard allowed="USER"><UserDashboard /></RoleGuard> },
+          { path: "/business/dashboard", element: <RoleGuard allowed="BUSINESS"><BusinessDashboard /></RoleGuard> },
+          { path: "/admin/dashboard", element: <RoleGuard allowed={["ADMIN", "SUPER_ADMIN"]}><AdminDashboard /></RoleGuard> },
 
           { path: "/explorer/shops-online", element: <ExplorerShopsPage /> },
           { path: "/explorer/public-profiles", element: <ExplorerProfilesPage /> },

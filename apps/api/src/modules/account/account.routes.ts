@@ -7,6 +7,7 @@ import { asyncHandler } from "../../shared/utils/async-handler.js";
 import { isAcceptedImageInput } from "../../shared/utils/media-storage.js";
 import { verifyTurnstile } from "../../shared/utils/turnstile.js";
 import { env } from "../../config/env.js";
+import { rateLimit, RateLimits } from "../../shared/middleware/rate-limit.middleware.js";
 import * as accountService from "./account.service.js";
 
 const accountTypeSchema = z.nativeEnum(AccountType).optional();
@@ -95,6 +96,7 @@ const router = Router();
 
 router.post(
   "/entry",
+  rateLimit(RateLimits.LOGIN),
   asyncHandler(async (request, response) => {
     // Turnstile CAPTCHA verification
     const cfToken = request.body?.cfTurnstileToken;
@@ -124,6 +126,7 @@ router.post(
 
 router.post(
   "/otp/request",
+  rateLimit(RateLimits.LOGIN),
   asyncHandler(async (request: AuthenticatedRequest, response) => {
     const payload = otpRequestSchema.parse(request.body);
     const result = await accountService.requestPhoneOtp({
@@ -136,6 +139,7 @@ router.post(
 
 router.post(
   "/otp/verify",
+  rateLimit(RateLimits.LOGIN),
   asyncHandler(async (request, response) => {
     const payload = otpVerifySchema.parse(request.body);
     const result = await accountService.verifyPhoneOtpAndSignIn({
@@ -284,6 +288,7 @@ router.delete(
 
 router.post(
   "/2fa/totp/challenge",
+  rateLimit(RateLimits.LOGIN),
   asyncHandler(async (request, response) => {
     const { challengeToken, code } = totpChallengeSchema.parse(request.body);
     const result = await accountService.verifyTotpChallenge(
@@ -345,6 +350,7 @@ const passwordResetConfirmSchema = z.object({
 
 router.post(
   "/password-reset/request",
+  rateLimit(RateLimits.LOGIN),
   asyncHandler(async (request, response) => {
     const { email } = passwordResetRequestSchema.parse(request.body);
     const result = await accountService.requestPasswordReset(email);
@@ -354,6 +360,7 @@ router.post(
 
 router.post(
   "/password-reset/confirm",
+  rateLimit(RateLimits.LOGIN),
   asyncHandler(async (request, response) => {
     const { verificationId, code, newPassword } = passwordResetConfirmSchema.parse(request.body);
     const result = await accountService.confirmPasswordReset(verificationId, code, newPassword);

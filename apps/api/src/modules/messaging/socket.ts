@@ -5,6 +5,7 @@ import * as messagingService from "./messaging.service.js";
 import * as callLogService from "./call-log.service.js";
 import { sendPushToUser, sendPushToUsers } from "../notifications/push.service.js";
 import { prisma } from "../../shared/db/prisma.js";
+import { logger } from "../../shared/logger.js";
 
 /** userId → Set<socketId> (one user can have multiple tabs) */
 const onlineUsers = new Map<string, Set<string>>();
@@ -303,23 +304,28 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
         }
       }
 
-      // Update call log → set endedAt + compute duration
+      // Update call log → set endedAt + compute duration (atomic)
       const logId = activeCallLogs.get(data.conversationId);
       if (logId) {
+        activeCallLogs.delete(data.conversationId);
         void (async () => {
           try {
-            const existing = await prisma.callLog.findUnique({ where: { id: logId }, select: { answeredAt: true } });
-            const endedAt = new Date();
-            const durationSeconds = existing?.answeredAt ? Math.round((endedAt.getTime() - existing.answeredAt.getTime()) / 1000) : undefined;
-            await callLogService.updateCallLogStatus(logId, existing?.answeredAt ? "ANSWERED" : "MISSED", { endedAt, durationSeconds });
-          } catch (e) { console.error("[CallLog] end error", e); }
-          activeCallLogs.delete(data.conversationId);
+            await prisma.$transaction(async (tx) => {
+              const existing = await tx.callLog.findUnique({ where: { id: logId }, select: { answeredAt: true } });
+              const endedAt = new Date();
+              const durationSeconds = existing?.answeredAt ? Math.round((endedAt.getTime() - existing.answeredAt.getTime()) / 1000) : undefined;
+              await callLogService.updateCallLogStatus(logId, existing?.answeredAt ? "ANSWERED" : "MISSED", { endedAt, durationSeconds });
+            });
+          } catch (e) { logger.error({ err: e, logId }, "[CallLog] end error"); }
         })();
       }
     });
 
-    /* WebRTC SDP & ICE relay */
+    /* WebRTC SDP & ICE relay — with input validation */
+    const MAX_SDP_SIZE = 10_000; // ~10KB max for SDP
+
     socket.on("webrtc:offer", (data: { targetUserId: string; sdp: RTCSessionDescriptionInit }) => {
+      if (!data?.sdp || !data.targetUserId || JSON.stringify(data.sdp).length > MAX_SDP_SIZE) return;
       const targetSockets = onlineUsers.get(data.targetUserId);
       if (targetSockets) {
         for (const sid of targetSockets) {
@@ -329,6 +335,7 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
     });
 
     socket.on("webrtc:answer", (data: { targetUserId: string; sdp: RTCSessionDescriptionInit }) => {
+      if (!data?.sdp || !data.targetUserId || JSON.stringify(data.sdp).length > MAX_SDP_SIZE) return;
       const targetSockets = onlineUsers.get(data.targetUserId);
       if (targetSockets) {
         for (const sid of targetSockets) {
@@ -337,7 +344,17 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
       }
     });
 
+    // ICE candidate deduplication per target user
+    const sentIceCandidates = new Set<string>();
     socket.on("webrtc:ice-candidate", (data: { targetUserId: string; candidate: RTCIceCandidateInit }) => {
+      if (!data?.candidate || !data.targetUserId) return;
+      // Deduplicate based on candidate string
+      const dedupKey = `${data.targetUserId}:${data.candidate.candidate ?? ""}`;
+      if (sentIceCandidates.has(dedupKey)) return;
+      sentIceCandidates.add(dedupKey);
+      // Cap dedup set size to prevent memory leak
+      if (sentIceCandidates.size > 200) sentIceCandidates.clear();
+
       const targetSockets = onlineUsers.get(data.targetUserId);
       if (targetSockets) {
         for (const sid of targetSockets) {
@@ -386,6 +403,10 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
 
 export function getOnlineUserIds(): string[] {
   return Array.from(onlineUsers.keys()).filter((id) => onlineVisibility.get(id) ?? true);
+}
+
+export function isUserOnline(userId: string): boolean {
+  return (onlineUsers.get(userId)?.size ?? 0) > 0;
 }
 
 export function emitToUser<TPayload>(userId: string, event: string, payload: TPayload) {

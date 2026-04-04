@@ -1,5 +1,6 @@
 import { prisma } from "../../shared/db/prisma.js";
 import { resolveCountryTerms } from "../../shared/geo/country-aliases.js";
+import { getDefaultCity } from "../../config/platform.js";
 
 export const getExplorerStats = async () => {
   const [distinctCategories, publicProfiles, onlineShops] = await Promise.all([
@@ -75,7 +76,7 @@ export const getFeaturedShops = async (limit = 4, city?: string, country?: strin
     name: shop.business.publicName,
     slug: shop.business.slug,
     badge: shop.business.verificationStatus === "VERIFIED" ? "Vérifié" : "Standard",
-    city: shop.city ?? "Kinshasa",
+    city: shop.city ?? getDefaultCity(shop.countryCode),
     coverImage: shop.coverImage ?? null,
     logo: shop.logo ?? null,
     publicDescription: shop.publicDescription ?? null,
@@ -118,6 +119,7 @@ export const getFeaturedProfiles = async (limit = 4, city?: string, country?: st
       avatarUrl: true,
       city: true,
       country: true,
+      countryCode: true,
       verificationStatus: true,
     },
   });
@@ -128,7 +130,7 @@ export const getFeaturedProfiles = async (limit = 4, city?: string, country?: st
     username: profile.username,
     displayName: profile.displayName,
     avatarUrl: profile.avatarUrl,
-    city: profile.city ?? "Kinshasa",
+    city: profile.city ?? getDefaultCity(profile.countryCode),
     badge: profile.verificationStatus === "VERIFIED" ? "Vérifié" : "Membre",
   }));
 };

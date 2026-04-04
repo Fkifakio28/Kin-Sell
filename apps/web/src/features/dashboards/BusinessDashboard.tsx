@@ -28,12 +28,12 @@ type BizSection =
 type AbonnementTier = 'based' | 'medium' | 'premium';
 
 /* ─── Helpers devise ───────────────────────────────────────── */
-const USD_TO_CDF = 2850;
-const toCdf = (usdCents: number) => Math.round((usdCents / 100) * USD_TO_CDF);
-const fmtK = (cdf: number) =>
-  cdf >= 1_000_000
-    ? `${(cdf / 1_000_000).toFixed(1)} M CDF`
-    : `${Math.round(cdf / 1_000)} K CDF`;
+import { USD_TO_CDF_RATE, usdCentsToCdf, formatCdfCompact } from '../../shared/constants/currencies';
+import { SK_BIZ_AI_ADVICE, SK_BIZ_AI_AUTO_NEGO, SK_BIZ_AI_COMMANDE } from '../../shared/constants/storage-keys';
+import { DashboardSecurityBlock, DashboardAiSettings } from './sections';
+const USD_TO_CDF = USD_TO_CDF_RATE;
+const toCdf = usdCentsToCdf;
+const fmtK = formatCdfCompact;
 
 function deriveTier(planCode?: string | null): AbonnementTier {
   if (!planCode) return 'based';
@@ -103,9 +103,9 @@ export function BusinessDashboard() {
   const [bizDeepInsights, setBizDeepInsights] = useState<DeepInsights | null>(null);
   const [bizAnalyticsLoading, setBizAnalyticsLoading] = useState(false);
   // ── AI preferences (localStorage-persisted) ──
-  const [bizAiAdviceEnabled, setBizAiAdviceEnabled] = useState(() => localStorage.getItem('ks-biz-ai-advice') !== 'off');
-  const [bizAiAutoNegoEnabled, setBizAiAutoNegoEnabled] = useState(() => localStorage.getItem('ks-biz-ai-auto-nego') === 'on');
-  const [bizAiCommandeEnabled, setBizAiCommandeEnabled] = useState(() => localStorage.getItem('ks-biz-ai-commande') !== 'off');
+  const [bizAiAdviceEnabled, setBizAiAdviceEnabled] = useState(() => localStorage.getItem(SK_BIZ_AI_ADVICE) !== 'off');
+  const [bizAiAutoNegoEnabled, setBizAiAutoNegoEnabled] = useState(() => localStorage.getItem(SK_BIZ_AI_AUTO_NEGO) === 'on');
+  const [bizAiCommandeEnabled, setBizAiCommandeEnabled] = useState(() => localStorage.getItem(SK_BIZ_AI_COMMANDE) !== 'off');
   const [validationCodeBusyId, setValidationCodeBusyId] = useState<string | null>(null);
   const [sellerValidationQr, setSellerValidationQr] = useState<{ orderId: string; code: string } | null>(null);
 
@@ -2251,117 +2251,7 @@ export function BusinessDashboard() {
                 <h3 className="ud-settings-section-title">Sécurité du compte</h3>
               </div>
               <div className="ud-settings-security-grid">
-                {/* Email */}
-                <div className="ud-settings-security-item">
-                  <div className="ud-settings-security-info">
-                    <strong>Email vérifié</strong>
-                    <span className={user?.emailVerified ? 'ud-settings-verified' : 'ud-settings-unverified'}>{user?.emailVerified ? '✅ Oui' : '❌ Non'}</span>
-                  </div>
-                  {user && !user.emailVerified && user.email && bzEmailVerifStep === 'idle' && (
-                    <button type="button" className="ud-quick-btn ud-quick-btn--primary" style={{ marginTop: 6, fontSize: '0.82rem' }} onClick={() => void handleBzSendEmailVerification()} disabled={bzEmailVerifBusy}>
-                      {bzEmailVerifBusy ? '...' : '📧 Vérifier mon email'}
-                    </button>
-                  )}
-                  {bzEmailVerifStep === 'sent' && (
-                    <div style={{ marginTop: 8, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                      <input type="text" inputMode="numeric" maxLength={6} placeholder="000000" value={bzEmailVerifCode}
-                        onChange={(e) => setBzEmailVerifCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                        style={{ width: 100, padding: '6px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: 'var(--ud-text-1, #fff)', fontFamily: 'monospace', fontSize: '1rem', textAlign: 'center' }}
-                      />
-                      <button type="button" className="ud-quick-btn ud-quick-btn--primary" style={{ fontSize: '0.82rem' }} onClick={() => void handleBzConfirmEmailVerification()} disabled={bzEmailVerifBusy || bzEmailVerifCode.length !== 6}>
-                        {bzEmailVerifBusy ? '...' : '✓ Confirmer'}
-                      </button>
-                      <button type="button" className="ud-quick-btn" style={{ fontSize: '0.82rem' }} onClick={() => { setBzEmailVerifStep('idle'); setBzEmailVerifCode(''); setBzEmailVerifMsg(null); }}>
-                        Annuler
-                      </button>
-                    </div>
-                  )}
-                  {bzEmailVerifMsg && <p style={{ fontSize: '0.8rem', marginTop: 4, color: bzEmailVerifMsg.type === 'ok' ? '#7ef5c4' : '#ff6b6b' }}>{bzEmailVerifMsg.text}</p>}
-                </div>
-                {/* Phone */}
-                <div className="ud-settings-security-item">
-                  <div className="ud-settings-security-info">
-                    <strong>Téléphone vérifié</strong>
-                    <span className={user?.phoneVerified ? 'ud-settings-verified' : 'ud-settings-unverified'}>{user?.phoneVerified ? '✅ Oui' : '❌ Non'}</span>
-                  </div>
-                </div>
-                {/* Sessions */}
-                <div className="ud-settings-security-item">
-                  <div className="ud-settings-security-info">
-                    <strong>Sessions actives</strong>
-                    <span style={{ color: 'var(--ud-text-2, #aaa)' }}>{bzSessionsCount ?? '—'}</span>
-                  </div>
-                </div>
-                {/* TOTP 2FA */}
-                <div className="ud-settings-security-item ud-settings-security-item--full">
-                  <div className="ud-settings-security-info">
-                    <strong>Authentification 2FA (TOTP)</strong>
-                    <span className={bzTotpEnabled ? 'ud-settings-verified' : 'ud-settings-unverified'}>
-                      {bzTotpEnabled ? '✅ Activé' : '❌ Désactivé'}
-                    </span>
-                  </div>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
-                    {!bzTotpEnabled && bzTotpStep === 'idle' && (
-                      <button type="button" className="ud-quick-btn ud-quick-btn--primary" onClick={() => void handleBzTotpSetup()} disabled={bzTotpBusy}>
-                        {bzTotpBusy ? '...' : '🔐 Configurer 2FA'}
-                      </button>
-                    )}
-                    {bzTotpEnabled && bzTotpStep === 'idle' && (
-                      <button type="button" className="ud-quick-btn" style={{ color: 'var(--color-error, #ff6b6b)' }} onClick={() => { setBzTotpStep('disable'); setBzTotpMessage(null); }} disabled={bzTotpBusy}>
-                        🔓 Désactiver 2FA
-                      </button>
-                    )}
-                  </div>
-
-                  {bzTotpStep === 'setup' && (
-                    <div style={{ marginTop: 16, padding: 16, background: 'rgba(111,88,255,0.08)', borderRadius: 12, border: '1px solid rgba(111,88,255,0.2)' }}>
-                      <p style={{ margin: '0 0 12px', fontSize: '0.88rem', color: 'var(--ud-text-2, #aaa)' }}>
-                        Scannez ce QR code avec Google Authenticator ou une app similaire :
-                      </p>
-                      {bzTotpQrDataUrl && <img src={bzTotpQrDataUrl} alt="QR code 2FA" style={{ display: 'block', margin: '0 auto 12px', borderRadius: 8 }} />}
-                      {bzTotpSetupSecret && (
-                        <div style={{ margin: '0 0 12px', padding: '10px 14px', background: 'rgba(255,255,255,0.06)', borderRadius: 8, border: '1px dashed rgba(255,255,255,0.2)', textAlign: 'center' }}>
-                          <p style={{ margin: '0 0 4px', fontSize: '0.78rem', color: 'var(--ud-text-2, #aaa)' }}>Clé manuelle :</p>
-                          <code style={{ fontSize: '0.95rem', letterSpacing: '0.15em', color: '#a78bfa', fontWeight: 600, wordBreak: 'break-all', userSelect: 'all' }}>{bzTotpSetupSecret}</code>
-                        </div>
-                      )}
-                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                        <input type="text" inputMode="numeric" maxLength={6} placeholder="000000" value={bzTotpSetupCode}
-                          onChange={(e) => setBzTotpSetupCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                          style={{ flex: 1, minWidth: 100, padding: '8px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: 'var(--ud-text-1, #fff)', fontFamily: 'monospace', fontSize: '1.2rem', textAlign: 'center', letterSpacing: '0.2em' }}
-                        />
-                        <button type="button" className="ud-quick-btn ud-quick-btn--primary" onClick={() => void handleBzTotpEnable()} disabled={bzTotpBusy || bzTotpSetupCode.length !== 6}>
-                          {bzTotpBusy ? '...' : '✓ Activer'}
-                        </button>
-                        <button type="button" className="ud-quick-btn" onClick={() => { setBzTotpStep('idle'); setBzTotpSetupUri(null); setBzTotpSetupSecret(null); setBzTotpQrDataUrl(null); setBzTotpSetupCode(''); setBzTotpMessage(null); }}>
-                          Annuler
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {bzTotpStep === 'disable' && (
-                    <div style={{ marginTop: 16, padding: 16, background: 'rgba(255,107,107,0.08)', borderRadius: 12, border: '1px solid rgba(255,107,107,0.2)' }}>
-                      <p style={{ margin: '0 0 12px', fontSize: '0.88rem', color: 'var(--ud-text-2, #aaa)' }}>Entrez votre mot de passe pour désactiver la 2FA :</p>
-                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                        <input type="password" placeholder="Mot de passe" value={bzTotpDisablePassword}
-                          onChange={(e) => setBzTotpDisablePassword(e.target.value)}
-                          style={{ flex: 1, minWidth: 160, padding: '8px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: 'var(--ud-text-1, #fff)' }}
-                        />
-                        <button type="button" className="ud-quick-btn" style={{ color: 'var(--color-error, #ff6b6b)' }} onClick={() => void handleBzTotpDisable()} disabled={bzTotpBusy}>
-                          {bzTotpBusy ? '...' : 'Confirmer'}
-                        </button>
-                        <button type="button" className="ud-quick-btn" onClick={() => { setBzTotpStep('idle'); setBzTotpDisablePassword(''); setBzTotpMessage(null); }}>
-                          Annuler
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {bzTotpMessage && (
-                    <p style={{ marginTop: 8, fontSize: '0.85rem', color: bzTotpMessage.type === 'ok' ? '#7ef5c4' : '#ff6b6b' }}>{bzTotpMessage.text}</p>
-                  )}
-                </div>
+                {user && <DashboardSecurityBlock user={user} t={t} />}
               </div>
             </section>
 
@@ -2461,96 +2351,13 @@ export function BusinessDashboard() {
             </section>
 
             {/* ── Section: Gestion IA ── */}
-            <section className="ud-glass-panel ud-settings-section">
-              <div className="ud-settings-section-head">
-                <span className="ud-settings-section-icon">🤖</span>
-                <h3 className="ud-settings-section-title">{t('user.settingsAiTitle')}</h3>
-              </div>
-              <p className="ud-placeholder-text" style={{ margin: '0 0 12px', fontSize: '0.82rem' }}>
-                {t('user.settingsAiDesc')}
-              </p>
-
-              <div className="ud-ai-toggles">
-                {/* ── Conseils IA ── */}
-                <div className="ud-ai-toggle-row">
-                  <div className="ud-ai-toggle-info">
-                    <strong>💡 {t('user.aiAdviceLabel')}</strong>
-                    <span className="ud-ai-toggle-hint">{t('user.aiAdviceHint')}</span>
-                  </div>
-                  <button
-                    type="button"
-                    className={`ud-ai-switch${bizAiAdviceEnabled ? ' ud-ai-switch--on' : ''}`}
-                    onClick={() => {
-                      const next = !bizAiAdviceEnabled;
-                      setBizAiAdviceEnabled(next);
-                      localStorage.setItem('ks-biz-ai-advice', next ? 'on' : 'off');
-                    }}
-                    aria-pressed={bizAiAdviceEnabled}
-                  >
-                    <span className="ud-ai-switch-thumb" />
-                  </button>
-                </div>
-
-                {/* ── Marchandage automatique ── */}
-                <div className={`ud-ai-toggle-row${!bizHasIaMarchandPlan ? ' ud-ai-toggle-row--locked' : ''}`}>
-                  <div className="ud-ai-toggle-info">
-                    <strong>🤝 {t('user.aiAutoNegoLabel')}</strong>
-                    <span className="ud-ai-toggle-hint">
-                      {bizHasIaMarchandPlan ? t('user.aiAutoNegoHint') : t('user.aiAutoNegoLocked')}
-                    </span>
-                  </div>
-                  {bizHasIaMarchandPlan ? (
-                    <button
-                      type="button"
-                      className={`ud-ai-switch${bizAiAutoNegoEnabled ? ' ud-ai-switch--on' : ''}`}
-                      onClick={() => {
-                        const next = !bizAiAutoNegoEnabled;
-                        setBizAiAutoNegoEnabled(next);
-                        localStorage.setItem('ks-biz-ai-auto-nego', next ? 'on' : 'off');
-                      }}
-                      aria-pressed={bizAiAutoNegoEnabled}
-                    >
-                      <span className="ud-ai-switch-thumb" />
-                    </button>
-                  ) : (
-                    <Link to="/forfaits" className="ud-ai-upgrade-link">★ {t('user.aiUpgrade')}</Link>
-                  )}
-                </div>
-
-                {/* ── IA Commande ── */}
-                <div className={`ud-ai-toggle-row${!bizHasIaOrderPlan ? ' ud-ai-toggle-row--locked' : ''}`}>
-                  <div className="ud-ai-toggle-info">
-                    <strong>📦 {t('user.aiCommandeLabel')}</strong>
-                    <span className="ud-ai-toggle-hint">
-                      {bizHasIaOrderPlan ? t('user.aiCommandeHint') : t('user.aiCommandeLocked')}
-                    </span>
-                  </div>
-                  {bizHasIaOrderPlan ? (
-                    <button
-                      type="button"
-                      className={`ud-ai-switch${bizAiCommandeEnabled ? ' ud-ai-switch--on' : ''}`}
-                      onClick={() => {
-                        const next = !bizAiCommandeEnabled;
-                        setBizAiCommandeEnabled(next);
-                        localStorage.setItem('ks-biz-ai-commande', next ? 'on' : 'off');
-                      }}
-                      aria-pressed={bizAiCommandeEnabled}
-                    >
-                      <span className="ud-ai-switch-thumb" />
-                    </button>
-                  ) : (
-                    <Link to="/forfaits" className="ud-ai-upgrade-link">★ {t('user.aiUpgrade')}</Link>
-                  )}
-                </div>
-              </div>
-
-              {bizAutoNegoActive && (
-                <div className="ud-ai-auto-status">
-                  <span className="ud-ai-auto-dot" />
-                  <span>{t('user.aiAutoNegoActive')}</span>
-                </div>
-              )}
-            </section>
+            <DashboardAiSettings
+              t={t}
+              storageKeys={{ advice: SK_BIZ_AI_ADVICE, autoNego: SK_BIZ_AI_AUTO_NEGO, commande: SK_BIZ_AI_COMMANDE }}
+              hasIaMarchandPlan={bizHasIaMarchandPlan}
+              hasIaOrderPlan={bizHasIaOrderPlan}
+              autoNegoActive={bizAutoNegoActive}
+            />
 
           </div>
         )}

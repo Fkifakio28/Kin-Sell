@@ -5,6 +5,7 @@ import { Footer } from "../../components/Footer";
 import { shouldShowSplash, SplashScreen } from "../../components/SplashScreen";
 import { SuspensionGuard } from "../providers/AuthProvider";
 import { InstallBanner } from "../../components/InstallBanner";
+import { CookieConsent } from "../../components/CookieConsent";
 import { useIsMobile } from "../../hooks/useIsMobile";
 
 /** Routes où la musique de fond doit être stoppée (caméra/micro/live actifs). */
@@ -38,7 +39,7 @@ export function RootLayout() {
   return (
     <div className="live-background-shell">
       <div className="live-background-media" aria-hidden="true">
-        <video autoPlay loop muted playsInline preload="none">
+        <video autoPlay loop muted playsInline preload="none" poster="/assets/kin-sell/live-background-poster.webp">
           <source src="/assets/kin-sell/live-background.mp4" type="video/mp4" />
           <source src="/assets/kin-sell/live-background.gif" type="image/gif" />
         </video>
@@ -61,6 +62,7 @@ export function RootLayout() {
       {splashVisible && <SplashScreen onDismiss={handleSplashDismiss} />}
       <BackgroundMusic playing={musicPlaying} />
       <InstallBanner />
+      <CookieConsent />
     </div>
   );
 }

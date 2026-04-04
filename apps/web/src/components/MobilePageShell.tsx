@@ -10,10 +10,8 @@ import { Suspense, useState } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../app/providers/AuthProvider";
 import { useScrollDirection } from "../hooks/useScrollDirection";
-import { getDashboardPath } from "../utils/role-routing";
+import { getDashboardPath, DASHBOARD_PATHS } from "../shared/constants/roles";
 import "./mobile-shell.css";
-
-const DASHBOARD_PATHS = ["/account", "/business/dashboard", "/admin/dashboard"];
 
 // ─────────────────────────────────────────────────────────────
 // Create Menu (bottom sheet)

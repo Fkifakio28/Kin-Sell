@@ -8,7 +8,7 @@ import { requireNoRestriction } from "../../shared/middleware/trust-guard.middle
 import { Role } from "../../types/roles.js";
 import * as negotiationsService from "./negotiations.service.js";
 import { sendPushToUser } from "../notifications/push.service.js";
-import { emitToUsers } from "../messaging/socket.js";
+import { emitToUsers, isUserOnline } from "../messaging/socket.js";
 
 const emitNegotiationUpdated = (
   data: { id: string; buyerUserId: string; sellerUserId: string; updatedAt: string },
@@ -60,7 +60,7 @@ router.post(
     const payload = createSchema.parse(request.body);
     const data = await negotiationsService.createNegotiation(request.auth!.userId, payload);
     // Push notify seller about new negotiation
-    if (data.sellerUserId && data.sellerUserId !== request.auth!.userId) {
+    if (data.sellerUserId && data.sellerUserId !== request.auth!.userId && !isUserOnline(data.sellerUserId)) {
       void sendPushToUser(data.sellerUserId, {
         title: "🤝 Nouvelle offre de marchandage",
         body: `Un acheteur propose un prix pour ${data.listing?.title ?? "votre article"}`,
@@ -114,7 +114,7 @@ router.post(
       minBuyers: z.coerce.number().int().min(2).max(50).optional()
     }).parse(request.body);
     const data = await negotiationsService.createBundleNegotiation(request.auth!.userId, payload);
-    if (data.sellerUserId && data.sellerUserId !== request.auth!.userId) {
+    if (data.sellerUserId && data.sellerUserId !== request.auth!.userId && !isUserOnline(data.sellerUserId)) {
       void sendPushToUser(data.sellerUserId, {
         title: "📦 Offre lot — Marchandage",
         body: `Un acheteur propose un prix groupé pour ${(data as any).bundle?.items?.length ?? 0} articles`,
@@ -177,7 +177,7 @@ router.post(
     }).parse(request.body);
     const data = await negotiationsService.joinGroupNegotiation(request.auth!.userId, request.params.groupId, payload);
     // Push notify seller
-    if (data.sellerUserId && data.sellerUserId !== request.auth!.userId) {
+    if (data.sellerUserId && data.sellerUserId !== request.auth!.userId && !isUserOnline(data.sellerUserId)) {
       void sendPushToUser(data.sellerUserId, {
         title: "👥 Nouveau membre — Marchandage groupé",
         body: `Un acheteur a rejoint le groupe pour ${data.listing?.title ?? "votre article"}`,
@@ -209,7 +209,7 @@ router.post(
     const data = await negotiationsService.respondToNegotiation(request.auth!.userId, request.params.negotiationId, payload);
     // Push notify the other party
     const targetUserId = data.buyerUserId === request.auth!.userId ? data.sellerUserId : data.buyerUserId;
-    if (targetUserId) {
+    if (targetUserId && !isUserOnline(targetUserId)) {
       const actionLabels: Record<string, string> = { ACCEPT: "acceptée ✅", REFUSE: "refusée ❌", COUNTER: "contre-offre 🔄" };
       void sendPushToUser(targetUserId, {
         title: "🤝 Marchandage — " + (actionLabels[payload.action] ?? payload.action),

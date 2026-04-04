@@ -46,7 +46,15 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     });
 
     socketRef.current = socket;
-    socket.on("connect", () => setIsConnected(true));
+    let wasConnectedBefore = false;
+    socket.on("connect", () => {
+      const isReconnect = wasConnectedBefore;
+      wasConnectedBefore = true;
+      setIsConnected(true);
+      if (isReconnect) {
+        window.dispatchEvent(new CustomEvent("ks:socket-reconnected"));
+      }
+    });
     socket.on("disconnect", () => setIsConnected(false));
 
     return () => {

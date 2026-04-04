@@ -10,6 +10,12 @@ import { useSocket } from "../../hooks/useSocket";
 import { createOptimizedAudioRecorder, createUploadFile, prepareMediaUrl } from "../../utils/media-upload";
 import { useGlobalNotification } from "../../app/providers/GlobalNotificationProvider";
 import { playCallSound, stopCallSound, refreshCallSoundIfNeeded } from "../../utils/call-sound";
+import {
+  getRtcConfig, applyCodecPreferences, optimizeSenders, applyVideoProfileToPC,
+  getInitialProfile, getMediaConstraints, type VideoProfile,
+  QUALITY_POOR, QUALITY_FAIR, UPGRADE_STREAK, DOWNGRADE_STREAK,
+  ICE_RESTART_DELAYS, ICE_MAX_ATTEMPTS, VIDEO_BITRATE, VIDEO_CONSTRAINTS, VIDEO_SCALE_DOWN,
+} from "../../utils/webrtc-config";
 import "./dashboard-messaging.css";
 
 /* ── Emoji data ── */
@@ -288,22 +294,7 @@ export function DashboardMessaging() {
 
   /* ── WebRTC helpers ── */
   const createPeerConnection = useCallback((remoteUserId: string) => {
-    const pc = new RTCPeerConnection({
-      iceServers: [
-        { urls: "stun:stun.l.google.com:19302" },
-        { urls: "stun:stun1.l.google.com:19302" },
-        { urls: "stun:stun2.l.google.com:19302" },
-        { urls: "stun:stun3.l.google.com:19302" },
-        { urls: "stun:stun4.l.google.com:19302" },
-        { urls: "turn:a.relay.metered.ca:80", username: "e7e6b1bdc41c6b2127249e04", credential: "kfMI+J8bFHMn7gMj" },
-        { urls: "turn:a.relay.metered.ca:80?transport=tcp", username: "e7e6b1bdc41c6b2127249e04", credential: "kfMI+J8bFHMn7gMj" },
-        { urls: "turn:a.relay.metered.ca:443", username: "e7e6b1bdc41c6b2127249e04", credential: "kfMI+J8bFHMn7gMj" },
-        { urls: "turns:a.relay.metered.ca:443?transport=tcp", username: "e7e6b1bdc41c6b2127249e04", credential: "kfMI+J8bFHMn7gMj" },
-      ],
-      bundlePolicy: "max-bundle",
-      rtcpMuxPolicy: "require",
-      iceCandidatePoolSize: 4,
-    });
+    const pc = new RTCPeerConnection(getRtcConfig());
     pc.onicecandidate = (e) => { if (e.candidate) emit("webrtc:ice-candidate", { targetUserId: remoteUserId, candidate: e.candidate.toJSON() }); };
     pc.ontrack = (e) => {
       remoteStreamRef.current = e.streams[0];
@@ -317,8 +308,6 @@ export function DashboardMessaging() {
       }
     };
     // ── ICE reconnection automatique avec backoff exponentiel ──
-    const ICE_RESTART_DELAYS = [500, 1000, 2000, 3000, 5000];
-    const ICE_MAX_ATTEMPTS = 5;
     pc.oniceconnectionstatechange = () => {
       const state = pc.iceConnectionState;
       if (state === "connected" || state === "completed") {
@@ -330,6 +319,10 @@ export function DashboardMessaging() {
         setTimeout(() => {
           if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") return;
           iceRestartAttemptRef.current++;
+          // Dégrader la qualité après 2 échecs
+          if (iceRestartAttemptRef.current >= 2 && localStreamRef.current) {
+            void applyVideoProfileToPC(pc, localStreamRef.current, "data-saver");
+          }
           pc.restartIce();
           pc.createOffer({ iceRestart: true }).then(async (offer) => {
             await pc.setLocalDescription(offer);
@@ -341,23 +334,7 @@ export function DashboardMessaging() {
       if (state === "failed") attemptRestart();
     };
     peerConnectionRef.current = pc;
-
-    // ── Préférence codecs VP9 > H264 (meilleure compression) ──
-    for (const tr of pc.getTransceivers()) {
-      try {
-        if (tr.receiver?.track?.kind === "video" || tr.sender?.track?.kind === "video") {
-          const codecs = RTCRtpReceiver.getCapabilities?.("video")?.codecs;
-          if (codecs) {
-            const sorted = [...codecs].sort((a, b) => {
-              const prio = (c: { mimeType: string }) => /vp9/i.test(c.mimeType) ? 0 : /h264/i.test(c.mimeType) ? 1 : 2;
-              return prio(a) - prio(b);
-            });
-            tr.setCodecPreferences(sorted);
-          }
-        }
-      } catch { /* codec prefs non supportées */ }
-    }
-
+    // Codec preferences applied after tracks added (in optimizePeerSenders)
     return pc;
   }, [emit]);
 
@@ -373,6 +350,9 @@ export function DashboardMessaging() {
 
   const startQualityMonitor = useCallback((pc: RTCPeerConnection) => {
     if (callQualityTimerRef.current) { clearInterval(callQualityTimerRef.current); callQualityTimerRef.current = null; }
+    let poorStreak = 0;
+    let goodStreak = 0;
+    let currentProfile: VideoProfile = getInitialProfile();
     const sample = async () => {
       try {
         const stats = await pc.getStats();
@@ -383,46 +363,42 @@ export function DashboardMessaging() {
         });
         const total = packetsLost + packetsRecv;
         const loss = total > 0 ? packetsLost / total : 0;
-        // Auto-dégradation sur mauvaise qualité : réduit bitrate/resolution
-        if (loss > 0.12 || fps < 12 || rtt > 0.8) {
-          const sender = pc.getSenders().find((s) => s.track?.kind === "video");
-          if (sender) {
-            try { const p = sender.getParameters(); p.encodings = [{ ...(p.encodings?.[0] ?? {}), maxBitrate: 450_000, maxFramerate: 15, scaleResolutionDownBy: 1.6 }]; await sender.setParameters(p); } catch { /* */ }
+        if (loss > QUALITY_POOR.lossRate || fps < QUALITY_POOR.minFps || rtt > QUALITY_POOR.maxRtt) {
+          poorStreak++; goodStreak = 0;
+          // Auto-downgrade
+          if (poorStreak >= DOWNGRADE_STREAK) {
+            const next: VideoProfile = currentProfile === "hd" ? "balanced" : "data-saver";
+            if (next !== currentProfile) {
+              currentProfile = next;
+              if (localStreamRef.current) void applyVideoProfileToPC(pc, localStreamRef.current, next);
+            }
+          }
+        } else if (loss > QUALITY_FAIR.lossRate || fps < QUALITY_FAIR.minFps || rtt > QUALITY_FAIR.maxRtt) {
+          poorStreak = Math.max(0, poorStreak - 1); goodStreak = 0;
+        } else {
+          goodStreak++; poorStreak = Math.max(0, poorStreak - 1);
+          // Auto-upgrade
+          if (goodStreak >= UPGRADE_STREAK) {
+            const next: VideoProfile = currentProfile === "data-saver" ? "balanced" : currentProfile === "balanced" ? "hd" : "hd";
+            if (next !== currentProfile) {
+              currentProfile = next;
+              if (localStreamRef.current) void applyVideoProfileToPC(pc, localStreamRef.current, next);
+            }
           }
         }
       } catch { /* */ }
     };
     void sample();
-    callQualityTimerRef.current = setInterval(() => void sample(), 1500);
+    callQualityTimerRef.current = setInterval(() => void sample(), 2000);
   }, []);
 
   const getCallMedia = useCallback(async (callType: "audio" | "video") => {
-    const isMob = /Mobi|Android|iPhone/i.test(navigator.userAgent);
-    const videoConstraints = callType === "video"
-      ? isMob
-        ? { width: { ideal: 720, max: 1280 }, height: { ideal: 480, max: 720 }, frameRate: { ideal: 24, max: 30 }, facingMode: "user" as const }
-        : { width: { ideal: 1280, max: 1920 }, height: { ideal: 720, max: 1080 }, frameRate: { ideal: 30, max: 30 }, facingMode: "user" as const }
-      : false;
-    return navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1, sampleRate: 48000 },
-      video: videoConstraints,
-    });
+    return navigator.mediaDevices.getUserMedia(getMediaConstraints(callType));
   }, []);
 
   const optimizePeerSenders = useCallback(async (pc: RTCPeerConnection) => {
-    await Promise.all(pc.getSenders().map(async (sender) => {
-      try {
-        const params = sender.getParameters();
-        params.degradationPreference = "balanced";
-        if (sender.track?.kind === "video") {
-          params.encodings = [{ ...(params.encodings?.[0] ?? {}), maxBitrate: 1_500_000, maxFramerate: 30, scaleResolutionDownBy: 1 }];
-        }
-        if (sender.track?.kind === "audio") {
-          params.encodings = [{ ...(params.encodings?.[0] ?? {}), maxBitrate: 64_000 }];
-        }
-        await sender.setParameters(params);
-      } catch { /* */ }
-    }));
+    applyCodecPreferences(pc);
+    await optimizeSenders(pc, getInitialProfile());
   }, []);
 
   const startCall = useCallback(async (callType: "audio" | "video") => {
@@ -437,11 +413,8 @@ export function DashboardMessaging() {
       stream.getTracks().forEach((t) => pc.addTrack(t, stream));
       await optimizePeerSenders(pc);
       // Sélection initiale basée sur le réseau
-      const net = (navigator as any).connection?.effectiveType as string | undefined;
-      if (callType === "video" && net && (net === "2g" || net === "slow-2g" || net === "3g")) {
-        const sender = pc.getSenders().find((s) => s.track?.kind === "video");
-        if (sender) { try { const p = sender.getParameters(); p.encodings = [{ ...(p.encodings?.[0] ?? {}), maxBitrate: net === "3g" ? 900_000 : 450_000, maxFramerate: net === "3g" ? 24 : 15, scaleResolutionDownBy: net === "3g" ? 1.2 : 1.6 }]; await sender.setParameters(p); } catch { /* */ } }
-      }
+      const initProf = getInitialProfile();
+      if (callType === "video") await applyVideoProfileToPC(pc, stream, initProf);
       startQualityMonitor(pc);
       setCallState({ type: callType, conversationId: activeConv.id, remoteUserId: rid, direction: "outgoing", status: "ringing" });
       emit("call:initiate", { conversationId: activeConv.id, targetUserId: rid, callType });
@@ -459,11 +432,8 @@ export function DashboardMessaging() {
       stream.getTracks().forEach((t) => pc.addTrack(t, stream));
       await optimizePeerSenders(pc);
       // Sélection initiale basée sur le réseau
-      const net = (navigator as any).connection?.effectiveType as string | undefined;
-      if (acceptedType === "video" && net && (net === "2g" || net === "slow-2g" || net === "3g")) {
-        const sender = pc.getSenders().find((s) => s.track?.kind === "video");
-        if (sender) { try { const p = sender.getParameters(); p.encodings = [{ ...(p.encodings?.[0] ?? {}), maxBitrate: net === "3g" ? 900_000 : 450_000, maxFramerate: net === "3g" ? 24 : 15, scaleResolutionDownBy: net === "3g" ? 1.2 : 1.6 }]; await sender.setParameters(p); } catch { /* */ } }
-      }
+      const initProf = getInitialProfile();
+      if (acceptedType === "video") await applyVideoProfileToPC(pc, stream, initProf);
       startQualityMonitor(pc);
       emit("call:accept", { conversationId: callState.conversationId, callerId: callState.remoteUserId });
       setCallState((p) => p ? { ...p, type: acceptedType, status: "connected" } : null);
@@ -497,10 +467,11 @@ export function DashboardMessaging() {
     const conn = (navigator as any).connection;
     if (!conn) return;
     const handleNetChange = () => {
-      const net = conn.effectiveType as string | undefined;
-      if (net === "2g" || net === "slow-2g" || net === "3g") {
-        const sender = peerConnectionRef.current?.getSenders().find((s) => s.track?.kind === "video");
-        if (sender) { try { const p = sender.getParameters(); p.encodings = [{ ...(p.encodings?.[0] ?? {}), maxBitrate: net === "3g" ? 900_000 : 450_000, maxFramerate: net === "3g" ? 24 : 15, scaleResolutionDownBy: net === "3g" ? 1.2 : 1.6 }]; void sender.setParameters(p); } catch { /* */ } }
+      const pc = peerConnectionRef.current;
+      const stream = localStreamRef.current;
+      if (pc && stream) {
+        const profile = getInitialProfile();
+        void applyVideoProfileToPC(pc, stream, profile);
       }
     };
     conn.addEventListener("change", handleNetChange);

@@ -3,6 +3,7 @@ import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
 import { Role } from "../../types/roles.js";
 import { normalizeImageInput, normalizeImageInputs } from "../../shared/utils/media-storage.js";
+import { resolveCountryCode, resolveCountryTerms, getSameRegionCountries } from "../../shared/geo/country-aliases.js";
 
 export type ListingType = "PRODUIT" | "SERVICE";
 
@@ -44,13 +45,15 @@ export type SearchListingsInput = {
   type?: ListingType;
   city?: string;
   country?: string;
+  /** Code ISO pays (filtre direct sur Listing.countryCode). */
+  countryCode?: string;
+  /** Mode de découverte : local_first (défaut), local_only, all. */
+  discoveryMode?: "local_first" | "local_only" | "all";
   latitude?: number;
   longitude?: number;
   radiusKm?: number;
   limit: number;
 };
-
-import { resolveCountryTerms } from "../../shared/geo/country-aliases.js";
 
 type GeoPoint = {
   lat: number;
@@ -310,10 +313,22 @@ export const myListingsStats = async (userId: string) => {
 export const searchListings = async (input: SearchListingsInput) => {
   const byCoordinates = typeof input.latitude === "number" && typeof input.longitude === "number";
   const radiusKm = input.radiusKm ?? DEFAULT_RADIUS_KM;
+  const discoveryMode = input.discoveryMode ?? "local_first";
+
+  // ── Résolution du code pays ──
+  const resolvedCode = input.countryCode?.toUpperCase()
+    ?? resolveCountryCode(input.country)
+    ?? undefined;
+
+  // ── Country-aware filtering (utilise Listing.countryCode si disponible) ──
   const countryTerms = resolveCountryTerms(input.country);
   const andClauses: Record<string, unknown>[] = [];
 
-  if (countryTerms.length > 0) {
+  if (resolvedCode && discoveryMode !== "all") {
+    // Filtre direct sur Listing.countryCode (index performant)
+    andClauses.push({ countryCode: resolvedCode });
+  } else if (countryTerms.length > 0) {
+    // Fallback legacy : filtre via profile.country (texte)
     andClauses.push({
       OR: countryTerms.map((term) => ({
         ownerUser: {
@@ -391,6 +406,90 @@ export const searchListings = async (input: SearchListingsInput) => {
     enriched.sort((a, b) => (a.distanceKm ?? 0) - (b.distanceKm ?? 0));
   }
 
+  // ── Fallback local → régional → global (si local_first et peu de résultats) ──
+  const MIN_RESULTS_THRESHOLD = 3;
+  let fallbackLevel: "local" | "regional" | "global" = "local";
+
+  if (discoveryMode === "local_first" && resolvedCode && enriched.length < MIN_RESULTS_THRESHOLD) {
+    // Pas assez de résultats locaux — essayer la région
+    const regionCodes = getSameRegionCountries(resolvedCode as any);
+    if (regionCodes.length > 1) {
+      const regionalRows = await prisma.listing.findMany({
+        where: {
+          isPublished: true,
+          type: input.type,
+          countryCode: { in: regionCodes, not: resolvedCode as any },
+          ...(input.city ? { city: { contains: input.city, mode: "insensitive" as const } } : {}),
+          OR: input.q
+            ? [
+                { title: { contains: input.q, mode: "insensitive" } },
+                { category: { contains: input.q, mode: "insensitive" } },
+              ]
+            : undefined,
+          scope: { in: ["REGIONAL", "INTERNATIONAL"] },
+        },
+        include: { ownerUser: { include: { profile: true } }, business: true },
+        take: Math.max(1, Math.min(input.limit - enriched.length, 50)),
+        orderBy: { createdAt: "desc" },
+      });
+
+      for (const row of regionalRows) {
+        enriched.push({
+          id: row.id, type: row.type, title: row.title, description: row.description,
+          category: row.category, city: row.city, latitude: row.latitude, longitude: row.longitude,
+          imageUrl: row.imageUrl, priceUsdCents: row.priceUsdCents, isNegotiable: row.isNegotiable,
+          createdAt: row.createdAt, distanceKm: null,
+          owner: {
+            userId: row.ownerUserId,
+            displayName: row.ownerUser.profile?.displayName ?? "Utilisateur Kin-Sell",
+            username: row.ownerUser.profile?.username ?? null,
+            avatarUrl: row.ownerUser.profile?.avatarUrl ?? null,
+            businessPublicName: row.business?.publicName ?? null,
+          },
+        });
+      }
+      if (regionalRows.length > 0) fallbackLevel = "regional";
+    }
+
+    // Toujours pas assez — ouvrir au global (INTERNATIONAL scope uniquement)
+    if (enriched.length < MIN_RESULTS_THRESHOLD) {
+      const globalRows = await prisma.listing.findMany({
+        where: {
+          isPublished: true,
+          type: input.type,
+          scope: "INTERNATIONAL",
+          ...(resolvedCode ? { countryCode: { not: resolvedCode as any } } : {}),
+          OR: input.q
+            ? [
+                { title: { contains: input.q, mode: "insensitive" } },
+                { category: { contains: input.q, mode: "insensitive" } },
+              ]
+            : undefined,
+        },
+        include: { ownerUser: { include: { profile: true } }, business: true },
+        take: Math.max(1, Math.min(input.limit - enriched.length, 30)),
+        orderBy: { createdAt: "desc" },
+      });
+
+      for (const row of globalRows) {
+        enriched.push({
+          id: row.id, type: row.type, title: row.title, description: row.description,
+          category: row.category, city: row.city, latitude: row.latitude, longitude: row.longitude,
+          imageUrl: row.imageUrl, priceUsdCents: row.priceUsdCents, isNegotiable: row.isNegotiable,
+          createdAt: row.createdAt, distanceKm: null,
+          owner: {
+            userId: row.ownerUserId,
+            displayName: row.ownerUser.profile?.displayName ?? "Utilisateur Kin-Sell",
+            username: row.ownerUser.profile?.username ?? null,
+            avatarUrl: row.ownerUser.profile?.avatarUrl ?? null,
+            businessPublicName: row.business?.publicName ?? null,
+          },
+        });
+      }
+      if (globalRows.length > 0) fallbackLevel = "global";
+    }
+  }
+
   return {
     location: byCoordinates
       ? {
@@ -399,17 +498,21 @@ export const searchListings = async (input: SearchListingsInput) => {
           radiusKm
         }
       : null,
+    fallbackLevel,
     total: enriched.length,
     results: enriched
   };
 };
 
 /* ── Latest published listings (public, no auth) ── */
-export const latestListings = async (input: { type?: ListingType; city?: string; country?: string; limit: number }) => {
+export const latestListings = async (input: { type?: ListingType; city?: string; country?: string; countryCode?: string; limit: number }) => {
+  const resolvedCode = input.countryCode?.toUpperCase() ?? resolveCountryCode(input.country) ?? undefined;
   const countryTerms = resolveCountryTerms(input.country);
   const andClauses: Record<string, unknown>[] = [];
 
-  if (countryTerms.length > 0) {
+  if (resolvedCode) {
+    andClauses.push({ countryCode: resolvedCode });
+  } else if (countryTerms.length > 0) {
     andClauses.push({
       OR: countryTerms.map((term) => ({
         ownerUser: {

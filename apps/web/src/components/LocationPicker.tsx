@@ -1,5 +1,5 @@
 /**
- * LocationPicker — Sélection d'adresse avec autocomplétion Google Maps
+ * LocationPicker — Sélection d'adresse avec autocomplétion OpenStreetMap (Nominatim)
  *
  * Usage basique:
  *   <LocationPicker

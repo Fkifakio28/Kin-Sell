@@ -117,6 +117,11 @@ export const rotateSessionTokens = async (refreshToken: string) => {
   }
 
   if (session.refreshTokenHash !== currentHash) {
+    // Token reuse detected — possible theft; revoke entire session family
+    await prisma.userSession.update({
+      where: { id: session.id },
+      data: { status: SessionStatus.REVOKED, revokedAt: new Date() }
+    });
     throw new Error("Refresh token invalide");
   }
 

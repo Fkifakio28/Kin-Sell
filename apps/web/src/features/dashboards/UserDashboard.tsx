@@ -37,27 +37,20 @@ import VisibilitySelector from '../../components/VisibilitySelector';
 import type { StructuredLocation, LocationVisibility } from '../../lib/api-client';
 import { extractValidationCodeFromQrPayload } from '../../utils/order-validation';
 import { useSocket } from '../../hooks/useSocket';
+import { LISTING_PRODUCT_CATEGORIES, LISTING_SERVICE_CATEGORIES } from '../../shared/constants/categories';
+import { USD_TO_CDF_RATE } from '../../shared/constants/currencies';
+import { SK_AI_ADVICE, SK_AI_AUTO_NEGO, SK_AI_COMMANDE } from '../../shared/constants/storage-keys';
+import {
+  DashboardSecurityBlock,
+  DashboardAccountDeletion,
+  DashboardAiSettings,
+  DashboardAnalyticsInsights,
+  DashboardContactsSection,
+} from './sections';
 import './dashboard.css';
 
-/* ── Catégories par type ── */
-const PRODUCT_CATEGORIES = [
-  'Téléphones & Accessoires', 'Informatique & Bureautique', 'Électronique & TV',
-  'Vêtements & Mode', 'Chaussures & Sacs', 'Beauté & Cosmétiques',
-  'Alimentation & Boissons', 'Maison & Mobilier', 'Électroménager',
-  'Jeux vidéo & Consoles', 'Auto & Moto', 'Bébé & Enfant',
-  'Sports & Loisirs', 'Livres & Papeterie', 'Bijoux & Montres',
-  'Santé & Bien-être', 'Agriculture & Jardin', 'Autre produit',
-];
-const SERVICE_CATEGORIES = [
-  'Coiffure & Esthétique', 'Transport & Livraison', 'Réparation & Dépannage',
-  'Santé & Soins', 'Éducation & Cours particuliers', 'Informatique & Tech',
-  'Construction & BTP', 'Restauration & Traiteur', 'Couture & Retouche',
-  'Photographie & Vidéo', 'Ménage & Nettoyage', 'Mécanique & Auto',
-  'Conseil & Consulting', 'Design & Graphisme', 'Événementiel',
-  'Autre service',
-];
-
-const USD_TO_CDF_RATE = 2850;
+const PRODUCT_CATEGORIES = LISTING_PRODUCT_CATEGORIES;
+const SERVICE_CATEGORIES = LISTING_SERVICE_CATEGORIES;
 
 type HubSection =
   | 'overview'
@@ -251,9 +244,9 @@ export function UserDashboard() {
   const [deepInsights, setDeepInsights] = useState<DeepInsights | null>(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   // ── AI preferences (localStorage-persisted) ──
-  const [aiAdviceEnabled, setAiAdviceEnabled] = useState(() => localStorage.getItem('ks-ai-advice') !== 'off');
-  const [aiAutoNegoEnabled, setAiAutoNegoEnabled] = useState(() => localStorage.getItem('ks-ai-auto-nego') === 'on');
-  const [aiCommandeEnabled, setAiCommandeEnabled] = useState(() => localStorage.getItem('ks-ai-commande') !== 'off');
+  const [aiAdviceEnabled, setAiAdviceEnabled] = useState(() => localStorage.getItem(SK_AI_ADVICE) !== 'off');
+  const [aiAutoNegoEnabled, setAiAutoNegoEnabled] = useState(() => localStorage.getItem(SK_AI_AUTO_NEGO) === 'on');
+  const [aiCommandeEnabled, setAiCommandeEnabled] = useState(() => localStorage.getItem(SK_AI_COMMANDE) !== 'off');
   const [savingSettings, setSavingSettings] = useState(false);
   const [logoutBusy, setLogoutBusy] = useState(false);
   // Suppression de compte
@@ -2030,7 +2023,7 @@ export function UserDashboard() {
                     <article key={article.id} className={`ud-art-card${article.status === 'INACTIVE' ? ' ud-art-card--dim' : ''}`}>
                       <div className="ud-art-card-visual">
                         {article.imageUrl ? (
-                          <img src={article.imageUrl} alt={article.title} className="ud-art-card-img" />
+                          <img src={article.imageUrl} alt={article.title} className="ud-art-card-img" loading="lazy" />
                         ) : (
                           <div className="ud-art-card-placeholder">
                             <span>{article.type === 'SERVICE' ? '🛠️' : '📦'}</span>
@@ -2405,7 +2398,7 @@ export function UserDashboard() {
                       <div key={neg.id} className={`ud-neg-card glass-card ud-neg-card--${neg.status.toLowerCase()}`}>
                         <div className="ud-neg-card-header">
                           {neg.listing?.imageUrl ? (
-                            <img src={neg.listing.imageUrl} alt={neg.listing.title} className="ud-neg-img" />
+                            <img src={neg.listing.imageUrl} alt={neg.listing.title} className="ud-neg-img" loading="lazy" />
                           ) : (
                             <div className="ud-neg-img-placeholder">{neg.listing?.type === 'SERVICE' ? '🛠' : '📦'}</div>
                           )}
@@ -2863,124 +2856,8 @@ export function UserDashboard() {
         )}
 
         {activeSection === 'contacts' && (
-          <div className="ud-section animate-fade-in">
-            <section className="ud-glass-panel">
-              <div className="ud-panel-head">
-                <h2 className="ud-panel-title">🤝 {t('user.contactTitle')}</h2>
-                <button type="button" className="ud-quick-btn ud-quick-btn--primary" onClick={() => { setContactSearchOpen(true); setContactSearchQuery(''); setContactSearchResults([]); }}>
-                  ➕ {t('user.contactAddBtn')}
-                </button>
-              </div>
-              <div className="ud-contacts-toolbar">
-                <div className="ud-contacts-filters">
-                  {(['all', 'online', 'favorites'] as const).map((f) => (
-                    <button key={f} type="button" className={`ud-filter-chip${contactFilter === f ? ' ud-filter-chip--active' : ''}`} onClick={() => setContactFilter(f)}>
-                      {f === 'all' ? t('user.contactAllLabel') : f === 'online' ? t('user.contactOnlineLabel') : `⭐ ${t('user.contactFavLabel')}`}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </section>
-
-            <div className="ud-contacts-grid">
-              <section className="ud-glass-panel" style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '48px 24px' }}>
-                <span style={{ fontSize: '3rem', display: 'block', marginBottom: 12 }}>🤝</span>
-                <h3 style={{ margin: '0 0 8px', color: 'var(--ud-text-1)' }}>{t('user.contactEmptyTitle')}</h3>
-                <p className="ud-placeholder-text" style={{ margin: '0 0 20px' }}>
-                  {t('user.contactEmptyDesc')}
-                </p>
-                <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
-                  <button type="button" className="ud-quick-btn ud-quick-btn--primary" onClick={() => { setContactSearchOpen(true); setContactSearchQuery(''); setContactSearchResults([]); }}>
-                    ➕ {t('user.contactAddBtn')}
-                  </button>
-                  <button type="button" className="ud-quick-btn" onClick={() => navigate('/messaging')}>
-                    💬 {t('user.messagerie')}
-                  </button>
-                </div>
-              </section>
-            </div>
-
-            {/* ── Popup ajout de contact ── */}
-            {contactSearchOpen && (
-              <div className="ud-publish-backdrop" onClick={(e) => { if (e.target === e.currentTarget) setContactSearchOpen(false); }}>
-                <div className="ud-contact-search-modal">
-                  <div className="ud-publish-header">
-                    <h2 className="ud-publish-title">🔍 {t('user.contactSearchTitle')}</h2>
-                    <button type="button" className="ud-publish-close" onClick={() => setContactSearchOpen(false)} aria-label={t('common.close')}>✕</button>
-                  </div>
-                  <p className="ud-contact-search-hint">{t('user.contactSearchHint2')}</p>
-                  <div className="ud-contact-search-bar">
-                    <input
-                      className="ud-input"
-                      placeholder={t('user.contactSearchPlaceholder')}
-                      value={contactSearchQuery}
-                      onChange={(e) => setContactSearchQuery(e.target.value)}
-                      onKeyDown={async (e) => {
-                        if (e.key === 'Enter' && contactSearchQuery.trim().length >= 2) {
-                          setContactSearching(true);
-                          try {
-                            const res = await messaging.searchUsers(contactSearchQuery.trim());
-                            setContactSearchResults(res.users.filter((u) => u.id !== user?.id));
-                          } catch { setContactSearchResults([]); }
-                          finally { setContactSearching(false); }
-                        }
-                      }}
-                      autoFocus
-                    />
-                    <button
-                      type="button"
-                      className="ud-quick-btn ud-quick-btn--primary"
-                      disabled={contactSearching || contactSearchQuery.trim().length < 2}
-                      onClick={async () => {
-                        setContactSearching(true);
-                        try {
-                          const res = await messaging.searchUsers(contactSearchQuery.trim());
-                          setContactSearchResults(res.users.filter((u) => u.id !== user?.id));
-                        } catch { setContactSearchResults([]); }
-                        finally { setContactSearching(false); }
-                      }}
-                    >
-                      {contactSearching ? '...' : t('user.contactSearchBtn')}
-                    </button>
-                  </div>
-
-                  <div className="ud-contact-search-results">
-                    {contactSearching && <p style={{ textAlign: 'center', color: 'var(--ud-text-2)', padding: '20px 0' }}>{t('user.contactSearchInProgress')}</p>}
-                    {!contactSearching && contactSearchResults.length === 0 && contactSearchQuery.length >= 2 && (
-                      <p style={{ textAlign: 'center', color: 'var(--ud-text-2)', padding: '20px 0' }}>{t('user.contactNoResult')}</p>
-                    )}
-                    {contactSearchResults.map((result) => (
-                      <div key={result.id} className="ud-contact-search-item">
-                        <div className="ud-contact-search-avatar">
-                          {result.profile.avatarUrl ? (
-                            <img src={result.profile.avatarUrl} alt={result.profile.displayName} />
-                          ) : (
-                            <span className="ud-contact-search-initials">{result.profile.displayName.split(' ').map((p) => p[0]).join('').slice(0, 2)}</span>
-                          )}
-                        </div>
-                        <div className="ud-contact-search-info">
-                          <strong>{result.profile.displayName}</strong>
-                          <span className="ud-contact-search-meta">
-                            {result.profile.username ? `@${result.profile.username}` : ''}{result.profile.city ? ` · ${result.profile.city}` : ''}
-                          </span>
-                          <span className="ud-contact-search-id">ID: {result.id.slice(0, 8)}…</span>
-                        </div>
-                        <button
-                          type="button"
-                          className="ud-quick-btn ud-quick-btn--primary"
-                          onClick={() => navigate('/messaging')}
-                        >
-                          💬 {t('user.contactBtnMsg')}
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
+          <DashboardContactsSection t={t} userId={user?.id ?? ''} />
         )}
-
         {activeSection === 'sokin' && (
           <div className="ud-section animate-fade-in">
             <section className="ud-glass-panel">
@@ -3530,333 +3407,21 @@ export function UserDashboard() {
                 <h3 className="ud-settings-section-title">{t('user.settingsSecurityTitle')}</h3>
               </div>
               <div className="ud-settings-security-grid">
-                <div className="ud-settings-security-item">
-                  <div className="ud-settings-security-info">
-                    <strong>{t('user.settingsEmailVerified')}</strong>
-                    <span className={user.emailVerified ? 'ud-settings-verified' : 'ud-settings-unverified'}>{user.emailVerified ? `✅ ${t('user.settingsYes')}` : `❌ ${t('user.settingsNo')}`}</span>
-                  </div>
-                  {!user.emailVerified && user.email && emailVerifStep === 'idle' && (
-                    <button type="button" className="ud-quick-btn ud-quick-btn--primary" style={{ marginTop: 6, fontSize: '0.82rem' }} onClick={() => void handleSendEmailVerification()} disabled={emailVerifBusy}>
-                      {emailVerifBusy ? '...' : '📧 Vérifier mon email'}
-                    </button>
-                  )}
-                  {emailVerifStep === 'sent' && (
-                    <div style={{ marginTop: 8, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                      <input type="text" inputMode="numeric" maxLength={6} placeholder="000000" value={emailVerifCode}
-                        onChange={(e) => setEmailVerifCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                        style={{ width: 100, padding: '6px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: 'var(--ud-text-1)', fontFamily: 'monospace', fontSize: '1rem', textAlign: 'center' }}
-                      />
-                      <button type="button" className="ud-quick-btn ud-quick-btn--primary" style={{ fontSize: '0.82rem' }} onClick={() => void handleConfirmEmailVerification()} disabled={emailVerifBusy || emailVerifCode.length !== 6}>
-                        {emailVerifBusy ? '...' : '✓ Confirmer'}
-                      </button>
-                      <button type="button" className="ud-quick-btn" style={{ fontSize: '0.82rem' }} onClick={() => { setEmailVerifStep('idle'); setEmailVerifCode(''); setEmailVerifMsg(null); }}>
-                        Annuler
-                      </button>
-                    </div>
-                  )}
-                  {emailVerifDevCode && <p style={{ fontSize: '0.75rem', color: '#a78bfa', margin: '4px 0 0' }}>[DEV] Code : {emailVerifDevCode}</p>}
-                  {emailVerifMsg && <p style={{ fontSize: '0.8rem', marginTop: 4, color: emailVerifMsg.type === 'ok' ? '#7ef5c4' : '#ff6b6b' }}>{emailVerifMsg.text}</p>}
-                </div>
-                <div className="ud-settings-security-item">
-                  <div className="ud-settings-security-info">
-                    <strong>{t('user.settingsPhoneVerified')}</strong>
-                    <span className={user.phoneVerified ? 'ud-settings-verified' : 'ud-settings-unverified'}>{user.phoneVerified ? `✅ ${t('user.settingsYes')}` : `❌ ${t('user.settingsNo')}`}</span>
-                  </div>
-                </div>
-                <div className="ud-settings-security-item">
-                  <div className="ud-settings-security-info">
-                    <strong>{t('user.settingsActiveSessions')}</strong>
-                    <span style={{ color: 'var(--ud-text-2)' }}>{loadingSessions ? '...' : (sessionsCount ?? '—')}</span>
-                  </div>
-                </div>
-                <div className="ud-settings-security-item">
-                  <div className="ud-settings-security-info">
-                    <strong>ID Kin-Sell</strong>
-                    <span style={{ color: 'var(--ud-text-2)', fontFamily: 'monospace', fontSize: '0.78rem' }}>{user.id.slice(0, 12)}…</span>
-                  </div>
-                </div>
-
-                {/* TOTP 2FA */}
-                <div className="ud-settings-security-item ud-settings-security-item--full">
-                  <div className="ud-settings-security-info">
-                    <strong>{t('user.settings2faTitle')}</strong>
-                    <span className={totpEnabled ? 'ud-settings-verified' : 'ud-settings-unverified'}>
-                      {totpEnabled ? `✅ ${t('user.settings2faEnabled')}` : `❌ ${t('user.settings2faDisabled')}`}
-                    </span>
-                  </div>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
-                    {!totpEnabled && totpStep === 'idle' && (
-                      <button type="button" className="ud-quick-btn ud-quick-btn--primary" onClick={() => void handleTotpSetup()} disabled={totpBusy}>
-                        {totpBusy ? '...' : `🔐 ${t('user.settings2faSetupBtn')}`}
-                      </button>
-                    )}
-                    {totpEnabled && totpStep === 'idle' && (
-                      <button type="button" className="ud-quick-btn" style={{ color: 'var(--color-error, #ff6b6b)' }} onClick={() => { setTotpStep('disable'); setTotpMessage(null); }} disabled={totpBusy}>
-                        🔓 {t('user.settings2faDisableBtn')}
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Step: scan QR + saisie code */}
-                  {totpStep === 'setup' && (
-                    <div style={{ marginTop: 16, padding: 16, background: 'rgba(111,88,255,0.08)', borderRadius: 12, border: '1px solid rgba(111,88,255,0.2)' }}>
-                      <p style={{ margin: '0 0 12px', fontSize: '0.88rem', color: 'var(--ud-text-2)' }}>
-                        {t('user.settings2faScanPrompt')}
-                      </p>
-                      {totpQrDataUrl && <img src={totpQrDataUrl} alt="QR code 2FA" style={{ display: 'block', margin: '0 auto 12px', borderRadius: 8 }} />}
-                      {totpSetupSecret && (
-                        <div style={{ margin: '0 0 12px', padding: '10px 14px', background: 'rgba(255,255,255,0.06)', borderRadius: 8, border: '1px dashed rgba(255,255,255,0.2)', textAlign: 'center' }}>
-                          <p style={{ margin: '0 0 4px', fontSize: '0.78rem', color: 'var(--ud-text-2)' }}>Clé manuelle (si le QR ne fonctionne pas) :</p>
-                          <code style={{ fontSize: '0.95rem', letterSpacing: '0.15em', color: '#a78bfa', fontWeight: 600, wordBreak: 'break-all', userSelect: 'all' }}>{totpSetupSecret}</code>
-                        </div>
-                      )}
-                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                        <input
-                          type="text" inputMode="numeric" maxLength={6}
-                          placeholder="000000"
-                          value={totpSetupCode}
-                          onChange={(e) => setTotpSetupCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                          style={{ flex: 1, minWidth: 100, padding: '8px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: 'var(--ud-text-1)', fontFamily: 'monospace', fontSize: '1.2rem', textAlign: 'center', letterSpacing: '0.2em' }}
-                        />
-                        <button type="button" className="ud-quick-btn ud-quick-btn--primary" onClick={() => void handleTotpEnable()} disabled={totpBusy || totpSetupCode.length !== 6}>
-                          {totpBusy ? '...' : `✓ ${t('user.settings2faActivate')}`}
-                        </button>
-                        <button type="button" className="ud-quick-btn" onClick={() => { setTotpStep('idle'); setTotpSetupUri(null); setTotpSetupSecret(null); setTotpQrDataUrl(null); setTotpSetupCode(''); setTotpMessage(null); }}>
-                          {t('user.cancelLabel')}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Step: désactiver avec mot de passe */}
-                  {totpStep === 'disable' && (
-                    <div style={{ marginTop: 16, padding: 16, background: 'rgba(255,107,107,0.08)', borderRadius: 12, border: '1px solid rgba(255,107,107,0.2)' }}>
-                      <p style={{ margin: '0 0 12px', fontSize: '0.88rem', color: 'var(--ud-text-2)' }}>{t('user.settings2faDisablePrompt')}</p>
-                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                        <input
-                          type="password" placeholder={t('user.settings2faPasswordPlaceholder')}
-                          value={totpDisablePassword}
-                          onChange={(e) => setTotpDisablePassword(e.target.value)}
-                          style={{ flex: 1, minWidth: 160, padding: '8px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: 'var(--ud-text-1)' }}
-                        />
-                        <button type="button" className="ud-quick-btn" style={{ color: 'var(--color-error, #ff6b6b)' }} onClick={() => void handleTotpDisable()} disabled={totpBusy}>
-                          {totpBusy ? '...' : t('user.settings2faConfirmBtn')}
-                        </button>
-                        <button type="button" className="ud-quick-btn" onClick={() => { setTotpStep('idle'); setTotpDisablePassword(''); setTotpMessage(null); }}>
-                          {t('user.cancelLabel')}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {totpMessage && (
-                    <p style={{ marginTop: 8, fontSize: '0.85rem', color: totpMessage.type === 'ok' ? '#7ef5c4' : '#ff6b6b' }}>{totpMessage.text}</p>
-                  )}
-                </div>
+                <DashboardSecurityBlock user={user} t={t} />
               </div>
             </section>
 
             {/* ── Zone sensible ── */}
-            <section className="ud-glass-panel ud-settings-section ud-settings-danger">
-              <div className="ud-settings-section-head">
-                <span className="ud-settings-section-icon">⚠️</span>
-                <h3 className="ud-settings-section-title">{t('user.settingsDangerTitle')}</h3>
-              </div>
-
-              {deleteStep === 'idle' && (
-                <>
-                  <p className="ud-placeholder-text" style={{ margin: '0 0 12px', fontSize: '0.84rem' }}>
-                    {t('user.settingsDangerDesc')}
-                  </p>
-                  <button
-                    type="button"
-                    className="ud-quick-btn ud-settings-delete-btn"
-                    onClick={() => setDeleteStep('confirm')}
-                  >
-                    🗑️ {t('user.settingsDeleteBtn')}
-                  </button>
-                </>
-              )}
-
-              {deleteStep === 'confirm' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  <p className="ud-placeholder-text" style={{ margin: 0, fontSize: '0.9rem', fontWeight: 600 }}>
-                    {t('user.settingsDeleteConfirmQ')}
-                  </p>
-                  <p className="ud-placeholder-text" style={{ margin: 0, fontSize: '0.84rem' }}>
-                    {t('user.settingsDeleteConfirmDesc')}
-                  </p>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    <button
-                      type="button"
-                      className="ud-quick-btn ud-settings-delete-btn"
-                      onClick={() => setDeleteStep('reason')}
-                    >
-                      {t('user.settingsDeleteContinue')}
-                    </button>
-                    <button
-                      type="button"
-                      className="ud-quick-btn"
-                      onClick={() => setDeleteStep('idle')}
-                    >
-                      {t('user.cancelLabel')}
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {deleteStep === 'reason' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  <p className="ud-placeholder-text" style={{ margin: 0, fontSize: '0.84rem' }}>
-                    {t('user.settingsDeleteReasonPrompt')}
-                  </p>
-                  <textarea
-                    className="ud-input"
-                    placeholder={t('user.settingsDeleteReasonPlaceholder')}
-                    value={deleteReason}
-                    onChange={e => setDeleteReason(e.target.value)}
-                    rows={3}
-                    maxLength={1000}
-                    style={{ resize: 'vertical' }}
-                  />
-                  {deleteError && (
-                    <p style={{ margin: 0, fontSize: '0.83rem', color: 'var(--color-error, #ff6b6b)' }}>{deleteError}</p>
-                  )}
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    <button
-                      type="button"
-                      className="ud-quick-btn ud-settings-delete-btn"
-                      disabled={deleteBusy}
-                      onClick={async () => {
-                        setDeleteBusy(true);
-                        setDeleteError(null);
-                        try {
-                          await authApi.requestDeletion(deleteReason.trim() || t('user.settingsDeleteNoReason'));
-                          setDeleteStep('done');
-                        } catch {
-                          setDeleteError(t('user.settingsDeleteError'));
-                        } finally {
-                          setDeleteBusy(false);
-                        }
-                      }}
-                    >
-                      {deleteBusy ? '...' : t('user.settingsDeleteConfirm2')}
-                    </button>
-                    <button
-                      type="button"
-                      className="ud-quick-btn"
-                      disabled={deleteBusy}
-                      onClick={() => { setDeleteStep('idle'); setDeleteReason(''); setDeleteError(null); }}
-                    >
-                      {t('user.cancelLabel')}
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {deleteStep === 'done' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <p className="ud-placeholder-text" style={{ margin: 0, fontSize: '0.9rem', fontWeight: 600 }}>
-                    ✅ {t('user.settingsDeleteDoneTitle')}
-                  </p>
-                  <p className="ud-placeholder-text" style={{ margin: 0, fontSize: '0.84rem' }}>
-                    {t('user.settingsDeleteDoneInfo')}
-                  </p>
-                </div>
-              )}
-            </section>
+            <DashboardAccountDeletion t={t} />
 
             {/* ── Section: Gestion IA ── */}
-            <section className="ud-glass-panel ud-settings-section">
-              <div className="ud-settings-section-head">
-                <span className="ud-settings-section-icon">🤖</span>
-                <h3 className="ud-settings-section-title">{t('user.settingsAiTitle')}</h3>
-              </div>
-              <p className="ud-placeholder-text" style={{ margin: '0 0 12px', fontSize: '0.82rem' }}>
-                {t('user.settingsAiDesc')}
-              </p>
-
-              <div className="ud-ai-toggles">
-                {/* ── Conseils IA (gratuit : suggestions de prix) ── */}
-                <div className="ud-ai-toggle-row">
-                  <div className="ud-ai-toggle-info">
-                    <strong>💡 {t('user.aiAdviceLabel')}</strong>
-                    <span className="ud-ai-toggle-hint">{t('user.aiAdviceHint')}</span>
-                  </div>
-                  <button
-                    type="button"
-                    className={`ud-ai-switch${aiAdviceEnabled ? ' ud-ai-switch--on' : ''}`}
-                    onClick={() => {
-                      const next = !aiAdviceEnabled;
-                      setAiAdviceEnabled(next);
-                      localStorage.setItem('ks-ai-advice', next ? 'on' : 'off');
-                    }}
-                    aria-pressed={aiAdviceEnabled}
-                  >
-                    <span className="ud-ai-switch-thumb" />
-                  </button>
-                </div>
-
-                {/* ── Marchandage automatique (payant) ── */}
-                <div className={`ud-ai-toggle-row${!hasIaMarchandPlan ? ' ud-ai-toggle-row--locked' : ''}`}>
-                  <div className="ud-ai-toggle-info">
-                    <strong>🤝 {t('user.aiAutoNegoLabel')}</strong>
-                    <span className="ud-ai-toggle-hint">
-                      {hasIaMarchandPlan ? t('user.aiAutoNegoHint') : t('user.aiAutoNegoLocked')}
-                    </span>
-                  </div>
-                  {hasIaMarchandPlan ? (
-                    <button
-                      type="button"
-                      className={`ud-ai-switch${aiAutoNegoEnabled ? ' ud-ai-switch--on' : ''}`}
-                      onClick={() => {
-                        const next = !aiAutoNegoEnabled;
-                        setAiAutoNegoEnabled(next);
-                        localStorage.setItem('ks-ai-auto-nego', next ? 'on' : 'off');
-                      }}
-                      aria-pressed={aiAutoNegoEnabled}
-                    >
-                      <span className="ud-ai-switch-thumb" />
-                    </button>
-                  ) : (
-                    <Link to="/forfaits" className="ud-ai-upgrade-link">★ {t('user.aiUpgrade')}</Link>
-                  )}
-                </div>
-
-                {/* ── IA Commande (payant) ── */}
-                <div className={`ud-ai-toggle-row${!hasIaOrderPlan ? ' ud-ai-toggle-row--locked' : ''}`}>
-                  <div className="ud-ai-toggle-info">
-                    <strong>📦 {t('user.aiCommandeLabel')}</strong>
-                    <span className="ud-ai-toggle-hint">
-                      {hasIaOrderPlan ? t('user.aiCommandeHint') : t('user.aiCommandeLocked')}
-                    </span>
-                  </div>
-                  {hasIaOrderPlan ? (
-                    <button
-                      type="button"
-                      className={`ud-ai-switch${aiCommandeEnabled ? ' ud-ai-switch--on' : ''}`}
-                      onClick={() => {
-                        const next = !aiCommandeEnabled;
-                        setAiCommandeEnabled(next);
-                        localStorage.setItem('ks-ai-commande', next ? 'on' : 'off');
-                      }}
-                      aria-pressed={aiCommandeEnabled}
-                    >
-                      <span className="ud-ai-switch-thumb" />
-                    </button>
-                  ) : (
-                    <Link to="/forfaits" className="ud-ai-upgrade-link">★ {t('user.aiUpgrade')}</Link>
-                  )}
-                </div>
-              </div>
-
-              {autoNegoActive && (
-                <div className="ud-ai-auto-status">
-                  <span className="ud-ai-auto-dot" />
-                  <span>{t('user.aiAutoNegoActive')}</span>
-                </div>
-              )}
-            </section>
+            <DashboardAiSettings
+              t={t}
+              storageKeys={{ advice: SK_AI_ADVICE, autoNego: SK_AI_AUTO_NEGO, commande: SK_AI_COMMANDE }}
+              hasIaMarchandPlan={hasIaMarchandPlan}
+              hasIaOrderPlan={hasIaOrderPlan}
+              autoNegoActive={autoNegoActive}
+            />
 
             {missing.length > 0 ? (
               <section className="ud-glass-panel ud-settings-section">
@@ -3877,159 +3442,15 @@ export function UserDashboard() {
         {/* ═══════════════  KIN-SELL ANALYTIQUE  ═══════════════ */}
         {activeSection === 'analytics' && hasAnalytics && (
           <div className="ud-section animate-fade-in">
-            <section className="ud-glass-panel">
-              <div className="ud-panel-head">
-                <h2 className="ud-panel-title">📊 {t('user.analyticsTitle')}</h2>
-                {analyticsLoading && <span className="ud-analytics-loading">Analyse…</span>}
-              </div>
-
-              {!analyticsLoading && !basicInsights && (
-                <p className="ud-placeholder-text" style={{ margin: '12px 0' }}>Aucune donnée analytique disponible pour le moment.</p>
-              )}
-
-              {basicInsights && (
-                <div className="ud-analytics-grid">
-                  {/* ── Résumé d'activité ── */}
-                  <div className="ud-analytics-card glass-container">
-                    <h3 className="ud-analytics-card-title">{t('user.analyticsSummary')}</h3>
-                    <div className="ud-analytics-stats">
-                      <div className="ud-analytics-stat">
-                        <span className="ud-analytics-stat-value">{basicInsights.activitySummary.listings}</span>
-                        <span className="ud-analytics-stat-label">Articles</span>
-                      </div>
-                      <div className="ud-analytics-stat">
-                        <span className="ud-analytics-stat-value">{basicInsights.activitySummary.negotiations}</span>
-                        <span className="ud-analytics-stat-label">Négociations</span>
-                      </div>
-                      <div className="ud-analytics-stat">
-                        <span className="ud-analytics-stat-value">{basicInsights.activitySummary.orders}</span>
-                        <span className="ud-analytics-stat-label">Commandes</span>
-                      </div>
-                      <div className="ud-analytics-stat">
-                        <span className="ud-analytics-stat-value">{formatMoneyFromUsdCents(basicInsights.activitySummary.revenueCents)}</span>
-                        <span className="ud-analytics-stat-label">Revenus</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* ── Position sur le marché ── */}
-                  <div className="ud-analytics-card glass-container">
-                    <h3 className="ud-analytics-card-title">{t('user.analyticsMarket')}</h3>
-                    <div className="ud-analytics-market">
-                      <span className={`ud-analytics-market-badge ud-analytics-market-badge--${basicInsights.marketPosition.position.toLowerCase().replace('_', '-')}`}>
-                        {basicInsights.marketPosition.position === 'BELOW_MARKET' ? '📉 Sous le marché' :
-                         basicInsights.marketPosition.position === 'ON_MARKET' ? '📊 Au marché' : '📈 Au-dessus du marché'}
-                      </span>
-                      <p>Prix moyen : {formatMoneyFromUsdCents(basicInsights.marketPosition.avgPriceCents)}</p>
-                      <p>Médiane : {formatMoneyFromUsdCents(basicInsights.marketPosition.medianCents)}</p>
-                    </div>
-                  </div>
-
-                  {/* ── Catégories tendances ── */}
-                  {basicInsights.trendingCategories.length > 0 && (
-                    <div className="ud-analytics-card glass-container">
-                      <h3 className="ud-analytics-card-title">{t('user.analyticsTrending')}</h3>
-                      <div className="ud-analytics-trending">
-                        {basicInsights.trendingCategories.map((cat, i) => (
-                          <div key={i} className="ud-analytics-trending-item">
-                            <span>{cat.category}</span>
-                            <span className="ud-analytics-trending-count">{cat.count}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* ── Recommandations IA ── */}
-                  {basicInsights.recommendations.length > 0 && (
-                    <div className="ud-analytics-card ud-analytics-card--wide glass-container">
-                      <h3 className="ud-analytics-card-title">🤖 {t('user.analyticsRecommendations')}</h3>
-                      <ul className="ud-analytics-reco-list">
-                        {basicInsights.recommendations.map((r, i) => <li key={i}>{r}</li>)}
-                      </ul>
-                    </div>
-                  )}
-
-                  {/* ── PREMIUM: Entonnoir de conversion ── */}
-                  {deepInsights && (
-                    <>
-                      <div className="ud-analytics-card glass-container">
-                        <h3 className="ud-analytics-card-title">{t('user.analyticsFunnel')}</h3>
-                        <div className="ud-analytics-funnel">
-                          <div className="ud-analytics-funnel-step">
-                            <span className="ud-analytics-funnel-label">Vues</span>
-                            <span className="ud-analytics-funnel-value">{deepInsights.funnel.views}</span>
-                          </div>
-                          <span className="ud-analytics-funnel-arrow">→</span>
-                          <div className="ud-analytics-funnel-step">
-                            <span className="ud-analytics-funnel-label">Négociations</span>
-                            <span className="ud-analytics-funnel-value">{deepInsights.funnel.negotiations}</span>
-                          </div>
-                          <span className="ud-analytics-funnel-arrow">→</span>
-                          <div className="ud-analytics-funnel-step">
-                            <span className="ud-analytics-funnel-label">Commandes</span>
-                            <span className="ud-analytics-funnel-value">{deepInsights.funnel.orders}</span>
-                          </div>
-                          <span className="ud-analytics-funnel-rate">{(deepInsights.funnel.conversionRate * 100).toFixed(1)}% conversion</span>
-                        </div>
-                      </div>
-
-                      {/* ── Segments d'audience ── */}
-                      {deepInsights.audienceSegments.length > 0 && (
-                        <div className="ud-analytics-card glass-container">
-                          <h3 className="ud-analytics-card-title">{t('user.analyticsAudience')}</h3>
-                          <div className="ud-analytics-audience">
-                            {deepInsights.audienceSegments.map((seg, i) => (
-                              <div key={i} className="ud-analytics-audience-seg">
-                                <span>{seg.label}</span>
-                                <div className="ud-analytics-audience-bar">
-                                  <div className="ud-analytics-audience-fill" style={{ width: `${seg.percent}%` }} />
-                                </div>
-                                <span className="ud-analytics-audience-pct">{seg.percent}%</span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* ── Vitesse de vente ── */}
-                      <div className="ud-analytics-card glass-container">
-                        <h3 className="ud-analytics-card-title">{t('user.analyticsVelocity')}</h3>
-                        <p>Jours moyens pour vendre : <strong>{deepInsights.velocityMetrics.avgDaysToSell}</strong></p>
-                        {deepInsights.velocityMetrics.fastestCategory && (
-                          <p>Catégorie la plus rapide : <strong>{deepInsights.velocityMetrics.fastestCategory}</strong></p>
-                        )}
-                      </div>
-
-                      {/* ── Prédictions ── */}
-                      <div className="ud-analytics-card glass-container">
-                        <h3 className="ud-analytics-card-title">{t('user.analyticsPredictions')}</h3>
-                        <div className="ud-analytics-predictions">
-                          <div className="ud-analytics-pred-item">
-                            <span>Risque de churn</span>
-                            <span className={`ud-analytics-pred-score ud-analytics-pred-score--${deepInsights.predictiveScores.churnRisk > 0.6 ? 'high' : deepInsights.predictiveScores.churnRisk > 0.3 ? 'medium' : 'low'}`}>
-                              {(deepInsights.predictiveScores.churnRisk * 100).toFixed(0)}%
-                            </span>
-                          </div>
-                          <div className="ud-analytics-pred-item">
-                            <span>Potentiel de croissance</span>
-                            <span className="ud-analytics-pred-score ud-analytics-pred-score--growth">
-                              {(deepInsights.predictiveScores.growthPotential * 100).toFixed(0)}%
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </>
-                  )}
-
-                  {hasPremiumAnalytics && !deepInsights && !analyticsLoading && (
-                    <div className="ud-analytics-card ud-analytics-card--wide glass-container">
-                      <p className="ud-placeholder-text" style={{ margin: 0 }}>Insights avancés en cours de calcul…</p>
-                    </div>
-                  )}
-                </div>
-              )}
-            </section>
+            <DashboardAnalyticsInsights
+              t={t}
+              basicInsights={basicInsights}
+              deepInsights={deepInsights}
+              analyticsLoading={analyticsLoading}
+              hasAnalytics={hasAnalytics}
+              hasPremiumAnalytics={hasPremiumAnalytics}
+              formatMoney={formatMoneyFromUsdCents}
+            />
           </div>
         )}
       </main>

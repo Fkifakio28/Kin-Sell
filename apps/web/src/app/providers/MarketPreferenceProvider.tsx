@@ -20,8 +20,10 @@ type MarketPreferenceContextValue = {
   getCountryConfig: (country?: MarketCountryCode) => MarketCountryConfig;
 };
 
-const STORAGE_COUNTRY = "ks-market-country";
-const STORAGE_SELECTION_MODE = "ks-market-selection-mode";
+import { SK_MARKET_COUNTRY, SK_MARKET_SELECTION_MODE } from "../../shared/constants/storage-keys";
+
+const STORAGE_COUNTRY = SK_MARKET_COUNTRY;
+const STORAGE_SELECTION_MODE = SK_MARKET_SELECTION_MODE;
 
 const MarketPreferenceContext = createContext<MarketPreferenceContextValue | null>(null);
 
