@@ -13,8 +13,16 @@ export type CreateListingInput = {
   description?: string;
   category: string;
   city: string;
+  country?: string;
+  countryCode?: string;
+  region?: string;
+  district?: string;
+  formattedAddress?: string;
   latitude: number;
   longitude: number;
+  placeId?: string;
+  locationVisibility?: string;
+  serviceRadiusKm?: number;
   imageUrl?: string;
   mediaUrls?: string[];
   priceUsdCents?: number;
@@ -29,8 +37,16 @@ export type UpdateListingInput = {
   description?: string;
   category?: string;
   city?: string;
+  country?: string;
+  countryCode?: string;
+  region?: string;
+  district?: string;
+  formattedAddress?: string;
   latitude?: number;
   longitude?: number;
+  placeId?: string;
+  locationVisibility?: string;
+  serviceRadiusKm?: number | null;
   imageUrl?: string;
   mediaUrls?: string[];
   priceUsdCents?: number;
@@ -103,6 +119,11 @@ export const createListing = async (userId: string, payload: CreateListingInput)
     normalizeImageInputs(payload.mediaUrls, { folder: "listings" }),
   ]);
 
+  // ── Résolution du countryCode ──
+  const resolvedCountryCode = payload.countryCode?.toUpperCase()
+    ?? resolveCountryCode(payload.country)
+    ?? undefined;
+
   const listing = await prisma.$transaction(async (tx) => {
     const created = await tx.listing.create({
       data: {
@@ -111,8 +132,16 @@ export const createListing = async (userId: string, payload: CreateListingInput)
         description: payload.description,
         category: payload.category,
         city: payload.city,
+        country: payload.country,
+        countryCode: resolvedCountryCode as any,
+        region: payload.region,
+        district: payload.district,
+        formattedAddress: payload.formattedAddress,
         latitude: payload.latitude,
         longitude: payload.longitude,
+        placeId: payload.placeId,
+        locationVisibility: (payload.locationVisibility as any) ?? undefined,
+        serviceRadiusKm: payload.serviceRadiusKm,
         imageUrl,
         mediaUrls: mediaUrls ?? [],
         priceUsdCents: payload.priceUsdCents ?? 0,
@@ -219,6 +248,11 @@ export const updateListing = async (userId: string, listingId: string, payload: 
     normalizeImageInputs(payload.mediaUrls, { folder: "listings" }),
   ]);
 
+  // ── Résolution du countryCode si pays fourni ──
+  const resolvedCountryCode = payload.countryCode?.toUpperCase()
+    ?? resolveCountryCode(payload.country)
+    ?? undefined;
+
   const updated = await prisma.listing.update({
     where: { id: listingId },
     data: {
@@ -226,8 +260,16 @@ export const updateListing = async (userId: string, listingId: string, payload: 
       ...(payload.description !== undefined && { description: payload.description }),
       ...(payload.category !== undefined && { category: payload.category }),
       ...(payload.city !== undefined && { city: payload.city }),
+      ...(payload.country !== undefined && { country: payload.country }),
+      ...(resolvedCountryCode !== undefined && { countryCode: resolvedCountryCode as any }),
+      ...(payload.region !== undefined && { region: payload.region }),
+      ...(payload.district !== undefined && { district: payload.district }),
+      ...(payload.formattedAddress !== undefined && { formattedAddress: payload.formattedAddress }),
       ...(payload.latitude !== undefined && { latitude: payload.latitude }),
       ...(payload.longitude !== undefined && { longitude: payload.longitude }),
+      ...(payload.placeId !== undefined && { placeId: payload.placeId }),
+      ...(payload.locationVisibility !== undefined && { locationVisibility: payload.locationVisibility as any }),
+      ...(payload.serviceRadiusKm !== undefined && { serviceRadiusKm: payload.serviceRadiusKm }),
       ...(payload.imageUrl !== undefined && { imageUrl }),
       ...(payload.mediaUrls !== undefined && { mediaUrls }),
       ...(payload.priceUsdCents !== undefined && { priceUsdCents: payload.priceUsdCents }),
