@@ -71,8 +71,17 @@ export const auth = {
   },
 
   refresh: async () => {
-    const refreshToken = localStorage.getItem("kin_refresh_token");
+    const refreshToken = localStorage.getItem("kin-sell.refresh-token");
     if (!refreshToken) throw new ApiError(401, "Session expiree");
+
+    const data = await request<{ accessToken: string; refreshToken: string; sessionId: string }>(
+      "/account/refresh",
+      { method: "POST", body: { refreshToken } },
+      false,
+    );
+    setToken(data.accessToken);
+    setRefreshToken(data.refreshToken);
+    setSessionId(data.sessionId);
   },
 
   me: () => request<AccountUser>("/account/me"),
