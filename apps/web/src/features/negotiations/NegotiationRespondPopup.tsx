@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLocaleCurrency } from "../../app/providers/LocaleCurrencyProvider";
-import { negotiations, negotiationAi, type NegotiationSummary, type SellerNegotiationAdvice, ApiError } from "../../lib/api-client";
+import { negotiations, negotiationAi, resolveMediaUrl, type NegotiationSummary, type SellerNegotiationAdvice, ApiError } from "../../lib/api-client";
 import "./negotiate-popup.css";
 
 type NegotiationRespondPopupProps = {
@@ -78,7 +78,7 @@ export function NegotiationRespondPopup({ negotiation, onClose, onUpdated, showA
         {negotiation.listing && (
           <div className="neg-listing-preview">
             {negotiation.listing.imageUrl ? (
-              <img src={negotiation.listing.imageUrl} alt={negotiation.listing.title} className="neg-listing-img" />
+              <img src={resolveMediaUrl(negotiation.listing.imageUrl)} alt={negotiation.listing.title} className="neg-listing-img" />
             ) : (
               <div className="neg-listing-placeholder">{negotiation.listing.type === "SERVICE" ? "🛠" : "📦"}</div>
             )}

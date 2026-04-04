@@ -2,6 +2,7 @@ import { useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../app/providers/AuthProvider";
 import { useLocaleCurrency } from "../../app/providers/LocaleCurrencyProvider";
+import { resolveMediaUrl } from "../../lib/api-core";
 
 /* ── Types ── */
 export interface DashboardSection {
@@ -122,7 +123,7 @@ export function DashboardLayout({
         <div className={`${px}-profile-card`}>
           <div className={`${px}-avatar`}>
             {profile.avatarUrl ? (
-              <img src={profile.avatarUrl} alt={profile.displayName} />
+              <img src={resolveMediaUrl(profile.avatarUrl)} alt={profile.displayName} />
             ) : (
               <span className={`${px}-avatar-initials`}>
                 {profile.displayName.split(" ").map((p) => p[0]).join("").slice(0, 2)}

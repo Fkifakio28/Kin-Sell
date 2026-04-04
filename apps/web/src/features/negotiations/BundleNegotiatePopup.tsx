@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useLocaleCurrency } from "../../app/providers/LocaleCurrencyProvider";
-import { negotiations, type NegotiationSummary, type BundleNegotiationResult, ApiError } from "../../lib/api-client";
+import { negotiations, resolveMediaUrl, type NegotiationSummary, type BundleNegotiationResult, ApiError } from "../../lib/api-client";
 import "./negotiate-popup.css";
 
 export type BundleListingItem = {
@@ -135,7 +135,7 @@ export function BundleNegotiatePopup({ sellerDisplayName, listings, onClose, onS
                 </button>
                 <div className="neg-bundle-item-img">
                   {listing.imageUrl ? (
-                    <img src={listing.imageUrl} alt={listing.title} />
+                    <img src={resolveMediaUrl(listing.imageUrl)} alt={listing.title} />
                   ) : (
                     <span>{listing.type === "SERVICE" ? "??" : "??"}</span>
                   )}

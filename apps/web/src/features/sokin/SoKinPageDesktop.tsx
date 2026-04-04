@@ -10,7 +10,7 @@ import { prepareMediaUrl, prepareMediaUrls } from '../../utils/media-upload';
 import { useScrollRestore } from '../../utils/useScrollRestore';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { useSocket } from '../../hooks/useSocket';
-import { listings as listingsApi, orders as ordersApi, sokin as sokinApi, type MyListing, type SoKinApiFeedPost, type SoKinStory } from '../../lib/api-client';
+import { listings as listingsApi, orders as ordersApi, sokin as sokinApi, resolveMediaUrl, type MyListing, type SoKinApiFeedPost, type SoKinStory } from '../../lib/api-client';
 import type { SoKinReactionType as ApiReactionType } from '../../lib/api-client';
 import { useHoverPopup, ProfileHoverPopup, ArticleHoverPopup, type ProfileHoverData, type ArticleHoverData } from '../../components/HoverPopup';
 import './sokin-desktop.css';
@@ -143,7 +143,7 @@ function mapApiFeedPost(
     author: {
       name: displayName,
       handle: username ? `@${username}` : `@${shortId}`,
-      avatarUrl: p.author.profile?.avatarUrl ?? '',
+      avatarUrl: resolveMediaUrl(p.author.profile?.avatarUrl) || '',
       kinId: username ? `#${username}` : `#${shortId}`,
       city: p.author.profile?.city ?? 'Kinshasa',
       isPrivate: false,
@@ -152,7 +152,7 @@ function mapApiFeedPost(
     timestampLabel: formatRelativeTime(p.createdAt, t, formatDate),
     visibility: 'PUBLIC',
     sponsored: false,
-    media: p.mediaUrls.map((src) => ({ kind: 'image' as const, src, label: '' })),
+    media: p.mediaUrls.map((src) => ({ kind: 'image' as const, src: resolveMediaUrl(src), label: '' })),
     linkedCard: linkedProduct
       ? {
           kind: linkedProduct.type === 'SERVICE' ? 'service' : 'product',
@@ -808,7 +808,7 @@ export function SoKinPageDesktop() {
   };
 
   const currentUserName = user?.profile.displayName ?? 'Vous';
-  const currentUserAvatar = user?.profile.avatarUrl ?? '';
+  const currentUserAvatar = resolveMediaUrl(user?.profile.avatarUrl) || '';
   const selectedPostListing = myListings.find((listing) => listing.id === selectedPostListingId) ?? null;
   const selectedStoryListing = myListings.find((listing) => listing.id === selectedStoryListingId) ?? null;
 
@@ -826,13 +826,13 @@ export function SoKinPageDesktop() {
       >
         <div
           className="sokin-wave-card-media"
-          style={hasMedia ? { backgroundImage: `linear-gradient(180deg, rgba(10, 8, 24, 0.05), rgba(10, 8, 24, 0.86)), url(${story.mediaUrl})` } : { background: story.bgColor ?? 'linear-gradient(145deg, rgba(111, 88, 255, 0.85), rgba(36, 23, 82, 0.96))' }}
+          style={hasMedia ? { backgroundImage: `linear-gradient(180deg, rgba(10, 8, 24, 0.05), rgba(10, 8, 24, 0.86)), url(${resolveMediaUrl(story.mediaUrl)})` } : { background: story.bgColor ?? 'linear-gradient(145deg, rgba(111, 88, 255, 0.85), rgba(36, 23, 82, 0.96))' }}
         >
           <span className="sokin-wave-card-badge">Wave</span>
           <span className="sokin-wave-card-time">{formatStoryAge(story.createdAt, t)}</span>
           <span className="sokin-wave-card-avatar-wrap">
             {story.author.profile?.avatarUrl ? (
-              <img src={story.author.profile.avatarUrl} alt={authorName} className="sokin-wave-card-avatar" />
+              <img src={resolveMediaUrl(story.author.profile.avatarUrl)} alt={authorName} className="sokin-wave-card-avatar" />
             ) : (
               <span className="sokin-wave-card-avatar sokin-wave-card-avatar-fallback">👤</span>
             )}
@@ -984,7 +984,7 @@ export function SoKinPageDesktop() {
                 onClick={() => setAccountMenuOpen((prev) => !prev)}
               >
                 {isLoggedIn && user?.profile.avatarUrl ? (
-                  <img src={user.profile.avatarUrl} alt={t('sokin.myAccount')} className="sokin-top-avatar" />
+                  <img src={resolveMediaUrl(user.profile.avatarUrl)} alt={t('sokin.myAccount')} className="sokin-top-avatar" />
                 ) : (
                   <span>👤</span>
                 )}
@@ -1233,7 +1233,7 @@ export function SoKinPageDesktop() {
               
               <article className="sokin-preview-post" style={{ borderRadius: '18px', padding: '18px', background: 'rgba(35, 24, 72, 0.4)' }}>
                 <header style={{ marginBottom: '12px' }}>
-                  <img src={user?.profile.avatarUrl || ''} alt={user?.profile.displayName} style={{ width: '40px', height: '40px', borderRadius: '50%' }} />
+                  <img src={resolveMediaUrl(user?.profile.avatarUrl || '')} alt={user?.profile.displayName} style={{ width: '40px', height: '40px', borderRadius: '50%' }} />
                   <div>
                     <strong>{user?.profile.displayName}</strong>
                     <p style={{ fontSize: '0.9em', color: 'rgba(255,255,255,0.6)' }}>@{user?.profile.username}</p>
@@ -1766,7 +1766,7 @@ export function SoKinPageDesktop() {
 
             <div className="sokin-story-viewer-head">
               <div className="sokin-story-viewer-author">
-                {currentStory.author.profile?.avatarUrl ? <img src={currentStory.author.profile.avatarUrl} alt={currentStory.author.profile.displayName} /> : <span>👤</span>}
+                {currentStory.author.profile?.avatarUrl ? <img src={resolveMediaUrl(currentStory.author.profile.avatarUrl)} alt={currentStory.author.profile.displayName} /> : <span>👤</span>}
                 <div>
                   <strong>{currentStory.author.profile?.displayName ?? 'Utilisateur'}</strong>
                   <span>{formatStoryAge(currentStory.createdAt, t)} · {currentStory.viewCount} vues</span>
@@ -1777,7 +1777,7 @@ export function SoKinPageDesktop() {
 
             <div className="sokin-story-stage">
               {currentStory.mediaType !== 'TEXT' && currentStory.mediaUrl ? (
-                currentStory.mediaType === 'VIDEO' ? <video src={currentStory.mediaUrl} controls autoPlay playsInline /> : <img src={currentStory.mediaUrl} alt="Wave" />
+                currentStory.mediaType === 'VIDEO' ? <video src={resolveMediaUrl(currentStory.mediaUrl)} controls autoPlay playsInline /> : <img src={resolveMediaUrl(currentStory.mediaUrl)} alt="Wave" />
               ) : (
                 <div className="sokin-story-text-stage">
                   <p>{currentStory.caption ?? 'Wave textuelle'}</p>

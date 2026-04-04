@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { adsApi, type AdvertisementItem } from '../lib/api-client';
+import { adsApi, resolveMediaUrl, type AdvertisementItem } from '../lib/api-client';
 import '../styles/ad-banner.css';
 
 // ── Kin-Sell internal promos (fallback quand aucune pub payante n'est active) ──
@@ -210,7 +210,7 @@ export function AdBanner({
       style={{ cursor: 'pointer' }}
     >
       {ad.imageUrl ? (
-        <img src={ad.imageUrl} alt="" className="ks-ad-banner__img" loading="lazy" />
+        <img src={resolveMediaUrl(ad.imageUrl)} alt="" className="ks-ad-banner__img" loading="lazy" />
       ) : (
         <div className="ks-ad-banner__icon">📢</div>
       )}

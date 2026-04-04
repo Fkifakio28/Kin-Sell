@@ -6,6 +6,7 @@ import { useLocaleCurrency } from '../../app/providers/LocaleCurrencyProvider';
 import {
   admin,
   invalidateCache,
+  resolveMediaUrl,
   type AdminStats,
   type AdminUser,
   type AdminUserDetail,
@@ -848,7 +849,7 @@ export function AdminDashboard() {
                   <td>
                     <div className="ad-table-user">
                       <div className="ad-table-avatar">
-                        {u.avatarUrl ? <img src={u.avatarUrl} alt="" /> : initials(u.displayName)}
+                        {u.avatarUrl ? <img src={resolveMediaUrl(u.avatarUrl)} alt="" /> : initials(u.displayName)}
                       </div>
                       <div>
                         <div className="ad-table-username">{u.displayName}</div>
@@ -1703,7 +1704,7 @@ export function AdminDashboard() {
             <div className="ad-ranking-item" key={r.userId}>
               <div className={`ad-ranking-pos ${r.rank === 1 ? 'ad-ranking-pos--gold' : r.rank === 2 ? 'ad-ranking-pos--silver' : r.rank === 3 ? 'ad-ranking-pos--bronze' : ''}`}>{r.rank}</div>
               <div className="ad-ranking-user">
-                <div className="ad-table-avatar">{r.avatarUrl ? <img src={r.avatarUrl} alt="" /> : initials(r.displayName)}</div>
+                <div className="ad-table-avatar">{r.avatarUrl ? <img src={resolveMediaUrl(r.avatarUrl)} alt="" /> : initials(r.displayName)}</div>
                 <div>
                   <div className="ad-ranking-name">{r.displayName}</div>
                   <span className={roleBadgeClass(r.role)} style={{ fontSize: 10 }}>{r.role}</span>
@@ -1735,7 +1736,7 @@ export function AdminDashboard() {
                 <tr key={a.id}>
                   <td>
                     <div className="ad-table-user">
-                      <div className="ad-table-avatar">{a.avatarUrl ? <img src={a.avatarUrl} alt="" /> : initials(a.displayName)}</div>
+                      <div className="ad-table-avatar">{a.avatarUrl ? <img src={resolveMediaUrl(a.avatarUrl)} alt="" /> : initials(a.displayName)}</div>
                       <div>
                         <div className="ad-table-username">{a.displayName}</div>
                         <div className="ad-table-email">{a.email ?? a.id.slice(0, 8)}</div>
@@ -2028,7 +2029,7 @@ export function AdminDashboard() {
               <tr key={l.id}>
                 <td>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    {l.imageUrl ? <img src={l.imageUrl} alt="" style={{ width: 36, height: 36, borderRadius: 6, objectFit: 'cover' }} /> : <span style={{ fontSize: 20 }}>{l.type === 'SERVICE' ? '🛠' : '📦'}</span>}
+                    {l.imageUrl ? <img src={resolveMediaUrl(l.imageUrl)} alt="" style={{ width: 36, height: 36, borderRadius: 6, objectFit: 'cover' }} /> : <span style={{ fontSize: 20 }}>{l.type === 'SERVICE' ? '🛠' : '📦'}</span>}
                     <span style={{ fontWeight: 600, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.title}</span>
                   </div>
                 </td>
@@ -2194,7 +2195,7 @@ export function AdminDashboard() {
               <div className="ad-modal-body">
                 <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
                   <div className="ad-table-avatar" style={{ width: 56, height: 56, fontSize: 18 }}>
-                    {selectedUser.profile?.avatarUrl ? <img src={selectedUser.profile.avatarUrl} alt="" /> : initials(selectedUser.profile?.displayName ?? '?')}
+                    {selectedUser.profile?.avatarUrl ? <img src={resolveMediaUrl(selectedUser.profile.avatarUrl)} alt="" /> : initials(selectedUser.profile?.displayName ?? '?')}
                   </div>
                   <div>
                     <div style={{ fontSize: 18, fontWeight: 700 }}>{selectedUser.profile?.displayName}</div>
@@ -2384,7 +2385,7 @@ export function AdminDashboard() {
                   <div className="ad-report-party">
                     <span className="ad-report-party-label ad-report-party-label--reporter">Accusateur</span>
                     <div className="ad-table-avatar" style={{ width: 48, height: 48, fontSize: 16 }}>
-                      {selectedReport.reporter.avatarUrl ? <img src={selectedReport.reporter.avatarUrl} alt="" /> : initials(selectedReport.reporter.displayName)}
+                      {selectedReport.reporter.avatarUrl ? <img src={resolveMediaUrl(selectedReport.reporter.avatarUrl)} alt="" /> : initials(selectedReport.reporter.displayName)}
                     </div>
                     <div className="ad-report-party-name">{selectedReport.reporter.displayName}</div>
                     <div style={{ fontSize: 11, color: 'var(--ad-text-3)' }}>{selectedReport.reporter.email}</div>
@@ -2396,7 +2397,7 @@ export function AdminDashboard() {
                   <div className="ad-report-party">
                     <span className="ad-report-party-label ad-report-party-label--reported">Accusé</span>
                     <div className="ad-table-avatar" style={{ width: 48, height: 48, fontSize: 16 }}>
-                      {selectedReport.reported.avatarUrl ? <img src={selectedReport.reported.avatarUrl} alt="" /> : initials(selectedReport.reported.displayName)}
+                      {selectedReport.reported.avatarUrl ? <img src={resolveMediaUrl(selectedReport.reported.avatarUrl)} alt="" /> : initials(selectedReport.reported.displayName)}
                     </div>
                     <div className="ad-report-party-name">{selectedReport.reported.displayName}</div>
                     <div style={{ fontSize: 11, color: 'var(--ad-text-3)' }}>{selectedReport.reported.email}</div>
@@ -2672,7 +2673,7 @@ export function AdminDashboard() {
 
         <div className="ad-profile-card">
           <div className="ad-avatar">
-            {user.profile?.avatarUrl ? <img src={user.profile.avatarUrl} alt="" /> : <span className="ad-avatar-initials">{initials(displayName)}</span>}
+            {user.profile?.avatarUrl ? <img src={resolveMediaUrl(user.profile.avatarUrl)} alt="" /> : <span className="ad-avatar-initials">{initials(displayName)}</span>}
           </div>
           {!sidebarCollapsed && (
             <div className="ad-profile-info">

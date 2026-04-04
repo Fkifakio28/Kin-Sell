@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { resolveMediaUrl } from '../lib/api-core';
 import './hover-popup.css';
 
 /* ──────────────────────────────────────────────
@@ -102,7 +103,7 @@ export function ProfileHoverPopup({ popup }: { popup: PopupState<ProfileHoverDat
     <div className="ks-hover-popup ks-hover-popup--profile" style={style}>
       <div className="ks-hover-popup-avatar-row">
         {popup.data.avatarUrl ? (
-          <img className="ks-hover-popup-avatar" src={popup.data.avatarUrl} alt={popup.data.name} />
+          <img className="ks-hover-popup-avatar" src={resolveMediaUrl(popup.data.avatarUrl)} alt={popup.data.name} />
         ) : (
           <span className="ks-hover-popup-avatar ks-hover-popup-avatar--placeholder">👤</span>
         )}

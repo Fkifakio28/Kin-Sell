@@ -4,7 +4,7 @@ import '../../styles/design-tokens.css';
 import './explorer.css';
 import { PRODUCT_CATEGORIES, SERVICE_CATEGORIES } from './explorer-data';
 import type { ExplorerArticlePreview } from './explorer-data';
-import { explorer as explorerApi, orders as ordersApi, listings as listingsApi, type ExplorerShopApi, type ExplorerProfileApi } from '../../lib/api-client';
+import { explorer as explorerApi, orders as ordersApi, listings as listingsApi, resolveMediaUrl, type ExplorerShopApi, type ExplorerProfileApi } from '../../lib/api-client';
 import { useHoverPopup, ArticleHoverPopup, ProfileHoverPopup, type ArticleHoverData, type ProfileHoverData } from '../../components/HoverPopup';
 import { useScrollRestore } from '../../utils/useScrollRestore';
 import { useAuth } from '../../app/providers/AuthProvider';
@@ -412,7 +412,7 @@ function ExplorerPageMobile() {
           publisherName: item.owner.displayName, publisherType: 'personne',
           publisherLink: item.owner.username ? `/user/${item.owner.username}` : '#',
           targetPath: item.owner.username ? `/user/${item.owner.username}#${item.id}` : '#',
-          coverImage: item.imageUrl ?? '/assets/kin-sell/black-man-standing-cafe-with-shopping-bags.jpg',
+          coverImage: resolveMediaUrl(item.imageUrl) || '/assets/kin-sell/black-man-standing-cafe-with-shopping-bags.jpg',
           media: [], ownerId: item.owner.userId, isNegotiable: item.isNegotiable !== false,
           latitude: item.latitude ?? undefined, longitude: item.longitude ?? undefined,
         });
@@ -519,11 +519,11 @@ function ExplorerPageMobile() {
           <div className="ex-shops-grid">
             {shops.length > 0 ? shops.map((shop) => (
               <Link key={shop.id} to={`/business/${shop.slug}`} className="ex-shop-card"
-                onMouseEnter={(e) => profileHover.handleMouseEnter({ avatarUrl: shop.coverImage || shop.logo, name: shop.name, username: shop.slug, kinId: null, publicPageUrl: `/business/${shop.slug}` }, e)}
+                onMouseEnter={(e) => profileHover.handleMouseEnter({ avatarUrl: resolveMediaUrl(shop.coverImage || shop.logo), name: shop.name, username: shop.slug, kinId: null, publicPageUrl: `/business/${shop.slug}` }, e)}
                 onMouseLeave={profileHover.handleMouseLeave}
               >
                 <div className="ex-shop-cover">
-                  {shop.coverImage ? <img src={shop.coverImage} alt={shop.name} loading="lazy" /> : <div className="ex-shop-cover-ph">🏪</div>}
+                  {shop.coverImage ? <img src={resolveMediaUrl(shop.coverImage)} alt={shop.name} loading="lazy" /> : <div className="ex-shop-cover-ph">🏪</div>}
                   <span className="ex-shop-badge">{shop.badge}</span>
                 </div>
                 <div className="ex-shop-body">
@@ -545,11 +545,11 @@ function ExplorerPageMobile() {
           <div className="ex-profiles-grid">
             {profiles.length > 0 ? profiles.map((profile) => (
               <Link key={profile.id} to={profile.username ? `/user/${profile.username}` : '#'} className="ex-profile-card"
-                onMouseEnter={(e) => profileHover.handleMouseEnter({ avatarUrl: profile.avatarUrl, name: profile.displayName, username: profile.username, kinId: null, publicPageUrl: profile.username ? `/user/${profile.username}` : null }, e)}
+                onMouseEnter={(e) => profileHover.handleMouseEnter({ avatarUrl: resolveMediaUrl(profile.avatarUrl), name: profile.displayName, username: profile.username, kinId: null, publicPageUrl: profile.username ? `/user/${profile.username}` : null }, e)}
                 onMouseLeave={profileHover.handleMouseLeave}
               >
                 <div className="ex-profile-avatar">
-                  {profile.avatarUrl ? <img src={profile.avatarUrl} alt={profile.displayName} /> : <span className="ex-profile-avatar-ph">👤</span>}
+                  {profile.avatarUrl ? <img src={resolveMediaUrl(profile.avatarUrl)} alt={profile.displayName} /> : <span className="ex-profile-avatar-ph">👤</span>}
                   <span className="ex-profile-badge">{profile.badge}</span>
                 </div>
                 <h4 className="ex-profile-name">{profile.displayName}</h4>

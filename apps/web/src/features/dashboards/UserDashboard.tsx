@@ -25,7 +25,8 @@ import {
   type NegotiationStatus,
   type OrderSummary,
   type OrderStatus,
-  users as usersApi
+  users as usersApi,
+  resolveMediaUrl
 } from '../../lib/api-client';
 import { NegotiationRespondPopup } from '../negotiations/NegotiationRespondPopup';
 import { compressAndEncodeMedia } from '../../utils/media-compress';
@@ -1637,7 +1638,7 @@ export function UserDashboard() {
         <div className="ud-profile-card ud-profile-card--enhanced">
           <div className="ud-avatar ud-avatar--lg">
             {user.profile.avatarUrl
-              ? <img src={user.profile.avatarUrl} alt={displayName} />
+              ? <img src={resolveMediaUrl(user.profile.avatarUrl)} alt={displayName} />
               : <span className="ud-avatar-initials">{displayName.split(' ').map((part) => part[0]).join('').slice(0, 2)}</span>
             }
             <span className="ud-presence ud-presence--online" />
@@ -2023,7 +2024,7 @@ export function UserDashboard() {
                     <article key={article.id} className={`ud-art-card${article.status === 'INACTIVE' ? ' ud-art-card--dim' : ''}`}>
                       <div className="ud-art-card-visual">
                         {article.imageUrl ? (
-                          <img src={article.imageUrl} alt={article.title} className="ud-art-card-img" loading="lazy" />
+                          <img src={resolveMediaUrl(article.imageUrl)} alt={article.title} className="ud-art-card-img" loading="lazy" />
                         ) : (
                           <div className="ud-art-card-placeholder">
                             <span>{article.type === 'SERVICE' ? '🛠️' : '📦'}</span>
@@ -2149,7 +2150,7 @@ export function UserDashboard() {
                       <div key={neg.id} className={`ud-neg-card glass-card ud-neg-card--${neg.status.toLowerCase()}`}>
                         <div className="ud-neg-card-header">
                           {neg.listing?.imageUrl ? (
-                            <img src={neg.listing.imageUrl} alt={neg.listing.title} className="ud-neg-img" />
+                            <img src={resolveMediaUrl(neg.listing.imageUrl)} alt={neg.listing.title} className="ud-neg-img" />
                           ) : (
                             <div className="ud-neg-img-placeholder">{neg.listing?.type === 'SERVICE' ? '🛠' : '📦'}</div>
                           )}
@@ -2199,7 +2200,7 @@ export function UserDashboard() {
                                 {expandedBundles[neg.bundleId].map((bi) => (
                                   <div key={bi.listingId} className="ud-neg-bundle-item">
                                     {bi.listing?.imageUrl ? (
-                                      <img src={bi.listing.imageUrl} alt={bi.listing.title} className="ud-neg-bundle-item-img" />
+                                      <img src={resolveMediaUrl(bi.listing.imageUrl)} alt={bi.listing.title} className="ud-neg-bundle-item-img" />
                                     ) : (
                                       <div className="ud-neg-bundle-item-img-ph">{bi.listing?.type === 'SERVICE' ? '🛠' : '📦'}</div>
                                     )}
@@ -2398,7 +2399,7 @@ export function UserDashboard() {
                       <div key={neg.id} className={`ud-neg-card glass-card ud-neg-card--${neg.status.toLowerCase()}`}>
                         <div className="ud-neg-card-header">
                           {neg.listing?.imageUrl ? (
-                            <img src={neg.listing.imageUrl} alt={neg.listing.title} className="ud-neg-img" loading="lazy" />
+                            <img src={resolveMediaUrl(neg.listing.imageUrl)} alt={neg.listing.title} className="ud-neg-img" loading="lazy" />
                           ) : (
                             <div className="ud-neg-img-placeholder">{neg.listing?.type === 'SERVICE' ? '🛠' : '📦'}</div>
                           )}
@@ -2448,7 +2449,7 @@ export function UserDashboard() {
                                 {expandedBundles[neg.bundleId].map((bi) => (
                                   <div key={bi.listingId} className="ud-neg-bundle-item">
                                     {bi.listing?.imageUrl ? (
-                                      <img src={bi.listing.imageUrl} alt={bi.listing.title} className="ud-neg-bundle-item-img" />
+                                      <img src={resolveMediaUrl(bi.listing.imageUrl)} alt={bi.listing.title} className="ud-neg-bundle-item-img" />
                                     ) : (
                                       <div className="ud-neg-bundle-item-img-ph">{bi.listing?.type === 'SERVICE' ? '🛠' : '📦'}</div>
                                     )}
@@ -2918,7 +2919,7 @@ export function UserDashboard() {
                     <article key={article.id} className="ud-sokin-card">
                       <div className="ud-sokin-card-visual">
                         {article.imageUrl ? (
-                          <img src={article.imageUrl} alt={article.title} className="ud-sokin-card-img" />
+                          <img src={resolveMediaUrl(article.imageUrl)} alt={article.title} className="ud-sokin-card-img" />
                         ) : (
                           <div className="ud-sokin-card-placeholder">{article.type === 'SERVICE' ? '🛠️' : '📦'}</div>
                         )}
@@ -3024,7 +3025,7 @@ export function UserDashboard() {
                   <div className="ud-pp-identity-card">
                     <div className="ud-pp-avatar-wrap" onClick={() => setActiveSection('settings')} title={t('user.ppEditPhotoHint')}>
                       {user.profile.avatarUrl ? (
-                        <img src={user.profile.avatarUrl} alt={displayName} className="ud-pp-avatar-img" />
+                        <img src={resolveMediaUrl(user.profile.avatarUrl)} alt={displayName} className="ud-pp-avatar-img" />
                       ) : (
                         <span className="ud-pp-avatar-placeholder">{displayName.split(' ').map((p) => p[0]).join('').slice(0, 2)}</span>
                       )}
@@ -3167,7 +3168,7 @@ export function UserDashboard() {
                   <div className="ud-pp-prev-hero">
                     <div className="ud-pp-prev-avatar">
                       {user.profile.avatarUrl ? (
-                        <img src={user.profile.avatarUrl} alt="" />
+                        <img src={resolveMediaUrl(user.profile.avatarUrl)} alt="" />
                       ) : (
                         <span>{(ppDisplayName || displayName).split(' ').map((p) => p[0]).join('').slice(0, 2)}</span>
                       )}
@@ -3206,7 +3207,7 @@ export function UserDashboard() {
                       <div className="ud-pp-prev-listings-thumbs">
                         {publicProfile.listings.slice(0, 4).map((listing) => (
                           <div key={listing.id} className="ud-pp-prev-thumb">
-                            {listing.imageUrl ? <img src={listing.imageUrl} alt="" /> : <span>{listing.type === 'SERVICE' ? '🛠️' : '📦'}</span>}
+                            {listing.imageUrl ? <img src={resolveMediaUrl(listing.imageUrl)} alt="" /> : <span>{listing.type === 'SERVICE' ? '🛠️' : '📦'}</span>}
                           </div>
                         ))}
                         {publicProfile.listings.length > 4 && <div className="ud-pp-prev-thumb ud-pp-prev-thumb-more">+{publicProfile.listings.length - 4}</div>}
@@ -3249,7 +3250,7 @@ export function UserDashboard() {
                       {avatarPreview ? (
                         <img src={avatarPreview} alt="avatar" className="ud-pp-avatar-img" />
                       ) : settingsForm.avatarUrl ? (
-                        <img src={settingsForm.avatarUrl} alt="avatar" className="ud-pp-avatar-img" />
+                        <img src={resolveMediaUrl(settingsForm.avatarUrl)} alt="avatar" className="ud-pp-avatar-img" />
                       ) : (
                         <span className="ud-pp-avatar-placeholder">{displayName.split(' ').map((p) => p[0]).join('').slice(0, 2)}</span>
                       )}

@@ -6,6 +6,18 @@
 import { SK_ACCESS_TOKEN, SK_REFRESH_TOKEN, SK_SESSION_ID } from "../shared/constants/storage-keys";
 
 export const API_BASE = import.meta.env.VITE_API_URL ?? "/api";
+
+/**
+ * Résout une URL média relative (/uploads/...) en URL absolue pointant vers l'API.
+ * Les URLs déjà absolues (http/https/data:) sont retournées telles quelles.
+ */
+export function resolveMediaUrl(url: string | null | undefined): string {
+  if (!url) return "";
+  if (url.startsWith("http") || url.startsWith("data:") || url.startsWith("blob:")) return url;
+  if (url.startsWith("/uploads/")) return `${API_BASE}${url}`;
+  return url;
+}
+
 const ACCESS_TOKEN_KEY = SK_ACCESS_TOKEN;
 const REFRESH_TOKEN_KEY = SK_REFRESH_TOKEN;
 const SESSION_ID_KEY = SK_SESSION_ID;

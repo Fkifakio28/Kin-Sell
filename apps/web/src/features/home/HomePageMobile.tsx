@@ -22,6 +22,7 @@ import { getDashboardPath } from "../../utils/role-routing";
 import {
   listings as listingsApi,
   sokin as sokinApi,
+  resolveMediaUrl,
   type PublicListing,
   type SoKinApiFeedPost,
   type SoKinReactionType,
@@ -538,7 +539,7 @@ function SuggestionsSection({
               >
                 <div className="hm-suggestion-img">
                   {item.imageUrl ? (
-                    <img src={item.imageUrl} alt={item.title} loading="lazy" />
+                    <img src={resolveMediaUrl(item.imageUrl)} alt={item.title} loading="lazy" />
                   ) : (
                     <span className="hm-suggestion-placeholder">
                       {item.type === "SERVICE" ? "\uD83D\uDEE0\uFE0F" : "\uD83D\uDCE6"}
@@ -705,7 +706,7 @@ function MarketCard({
     >
       <div className="hm-market-card-img">
         {listing.imageUrl ? (
-          <img src={listing.imageUrl} alt={listing.title} loading="lazy" />
+          <img src={resolveMediaUrl(listing.imageUrl)} alt={listing.title} loading="lazy" />
         ) : (
           <span className="hm-market-card-placeholder">
             {listing.type === "SERVICE" ? "\uD83D\uDEE0\uFE0F" : "\uD83D\uDCE6"}
@@ -1003,7 +1004,7 @@ function SoKinPostCard({
           className="hm-letter-avatar"
         >
           {profile?.avatarUrl ? (
-            <img src={profile.avatarUrl} alt={name} />
+            <img src={resolveMediaUrl(profile.avatarUrl)} alt={name} />
           ) : (
             <span>{initial}</span>
           )}

@@ -13,6 +13,7 @@
 // Core infrastructure
 export {
   API_BASE,
+  resolveMediaUrl,
   invalidateCache,
   clearCache,
   getToken,

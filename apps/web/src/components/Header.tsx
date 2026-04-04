@@ -4,7 +4,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../app/providers/AuthProvider";
 import { useLocaleCurrency } from "../app/providers/LocaleCurrencyProvider";
 import { getDashboardPath } from "../utils/role-routing";
-import { orders as ordersApi } from "../lib/api-client";
+import { orders as ordersApi, resolveMediaUrl } from "../lib/api-client";
 import { InstallPrompt } from "./InstallPrompt";
 import { RegionLanguageCurrencySelector } from "./RegionLanguageCurrencySelector";
 
@@ -239,7 +239,7 @@ export const Header = React.memo(function Header() {
             <div className="ks-account-wrap" ref={accountRef}>
               <button className="ks-icon-btn ks-account-btn" aria-label={t('nav.accountAria')} title={accountLabel} onClick={handleAccountTrigger} type="button" aria-expanded={accountOpen}>
                 {isLoggedIn && user?.profile.avatarUrl ? (
-                  <img src={user.profile.avatarUrl} alt={accountLabel} className="ks-avatar" />
+                  <img src={resolveMediaUrl(user.profile.avatarUrl)} alt={accountLabel} className="ks-avatar" />
                 ) : isLoggedIn && user ? (
                   <span className="ks-avatar-initial">{getAccountInitial(user)}</span>
                 ) : (

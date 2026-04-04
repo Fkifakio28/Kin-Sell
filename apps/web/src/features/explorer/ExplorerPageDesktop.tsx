@@ -7,7 +7,7 @@ import {
   SERVICE_CATEGORIES,
 } from './explorer-data';
 import type { ExplorerArticlePreview } from './explorer-data';
-import { explorer as explorerApi, orders as ordersApi, listings as listingsApi, type ExplorerShopApi, type ExplorerProfileApi } from '../../lib/api-client';
+import { explorer as explorerApi, orders as ordersApi, listings as listingsApi, resolveMediaUrl, type ExplorerShopApi, type ExplorerProfileApi } from '../../lib/api-client';
 import { useHoverPopup, ArticleHoverPopup, ProfileHoverPopup, type ArticleHoverData, type ProfileHoverData } from '../../components/HoverPopup';
 import { useScrollRestore } from '../../utils/useScrollRestore';
 import { useAuth } from '../../app/providers/AuthProvider';
@@ -415,7 +415,7 @@ export function ExplorerPageDesktop() {
           publisherType: 'personne',
           publisherLink: item.owner.username ? `/user/${item.owner.username}` : '#',
           targetPath: item.owner.username ? `/user/${item.owner.username}#${item.id}` : '#',
-          coverImage: item.imageUrl ?? '/assets/kin-sell/black-man-standing-cafe-with-shopping-bags.jpg',
+          coverImage: resolveMediaUrl(item.imageUrl) || '/assets/kin-sell/black-man-standing-cafe-with-shopping-bags.jpg',
           media: [],
           ownerId: item.owner.userId,
           isNegotiable: item.isNegotiable !== false,
@@ -665,12 +665,12 @@ export function ExplorerPageDesktop() {
           <div className="explorer-shops-grid">
             {shops.length > 0 ? shops.map((shop) => (
               <a key={shop.id} className="explorer-shop-card explorer-shop-card--rich" href={`/business/${shop.slug}`}
-                onMouseEnter={(e) => profileHover.handleMouseEnter({ avatarUrl: shop.coverImage || shop.logo, name: shop.name, username: shop.slug, kinId: null, publicPageUrl: `/business/${shop.slug}` }, e)}
+                onMouseEnter={(e) => profileHover.handleMouseEnter({ avatarUrl: resolveMediaUrl(shop.coverImage || shop.logo), name: shop.name, username: shop.slug, kinId: null, publicPageUrl: `/business/${shop.slug}` }, e)}
                 onMouseLeave={profileHover.handleMouseLeave}
               >
                 <div className="explorer-shop-header">
                   {shop.coverImage ? (
-                    <img className="explorer-shop-cover" src={shop.coverImage} alt={shop.name} loading="lazy" />
+                    <img className="explorer-shop-cover" src={resolveMediaUrl(shop.coverImage)} alt={shop.name} loading="lazy" />
                   ) : (
                     <div className="explorer-shop-cover explorer-shop-cover--placeholder">🏪</div>
                   )}
@@ -706,12 +706,12 @@ export function ExplorerPageDesktop() {
           <div className="explorer-shops-grid">
             {profiles.length > 0 ? profiles.map((profile) => (
               <a key={profile.id} className="explorer-shop-card explorer-shop-card--rich" href={profile.username ? `/user/${profile.username}` : '#'}
-                onMouseEnter={(e) => profileHover.handleMouseEnter({ avatarUrl: profile.avatarUrl, name: profile.displayName, username: profile.username, kinId: null, publicPageUrl: profile.username ? `/user/${profile.username}` : null }, e)}
+                onMouseEnter={(e) => profileHover.handleMouseEnter({ avatarUrl: resolveMediaUrl(profile.avatarUrl), name: profile.displayName, username: profile.username, kinId: null, publicPageUrl: profile.username ? `/user/${profile.username}` : null }, e)}
                 onMouseLeave={profileHover.handleMouseLeave}
               >
                 <div className="explorer-shop-header">
                   {profile.avatarUrl ? (
-                    <img className="explorer-shop-cover" src={profile.avatarUrl} alt={profile.displayName} loading="lazy" />
+                    <img className="explorer-shop-cover" src={resolveMediaUrl(profile.avatarUrl)} alt={profile.displayName} loading="lazy" />
                   ) : (
                     <div className="explorer-shop-cover explorer-shop-cover--placeholder">👤</div>
                   )}

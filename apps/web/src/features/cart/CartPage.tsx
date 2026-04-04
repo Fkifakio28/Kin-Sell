@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../app/providers/AuthProvider";
 import { useLocaleCurrency } from "../../app/providers/LocaleCurrencyProvider";
-import { orders, negotiations, billing, orderAi, type CartSummary, type NegotiationSummary, type BillingPlanSummary, type CheckoutAdvice, ApiError } from "../../lib/api-client";
+import { orders, negotiations, billing, orderAi, resolveMediaUrl, type CartSummary, type NegotiationSummary, type BillingPlanSummary, type CheckoutAdvice, ApiError } from "../../lib/api-client";
 import { useSocket } from "../../hooks/useSocket";
 import { NegotiationRespondPopup } from "../negotiations/NegotiationRespondPopup";
 import { NegotiatePopup } from "../negotiations/NegotiatePopup";
@@ -466,7 +466,7 @@ export function CartPage() {
               <article key={item.id} className={`cart-item glass-card ${item.itemState === "MARCHANDAGE" ? "cart-item--negotiating" : ""}`}>
                 <div className="cart-item-visual">
                   {item.listing.imageUrl ? (
-                    <img src={item.listing.imageUrl} alt={item.listing.title} className="cart-item-img" />
+                    <img src={resolveMediaUrl(item.listing.imageUrl)} alt={item.listing.title} className="cart-item-img" />
                   ) : (
                     <div className="cart-item-placeholder">
                       {item.listing.type === "SERVICE" ? "🛠" : "📦"}

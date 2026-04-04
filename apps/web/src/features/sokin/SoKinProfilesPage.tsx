@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import type { ExplorerProfile } from '../explorer/explorer-data';
 import { useLocaleCurrency } from '../../app/providers/LocaleCurrencyProvider';
 import { useMarketPreference } from '../../app/providers/MarketPreferenceProvider';
-import { sokin as sokinApi } from '../../lib/api-client';
+import { sokin as sokinApi, resolveMediaUrl } from '../../lib/api-client';
 import { useHoverPopup, ProfileHoverPopup, type ProfileHoverData } from '../../components/HoverPopup';
 import { useScrollRestore } from '../../utils/useScrollRestore';
 import { AdBanner } from '../../components/AdBanner';
@@ -56,7 +56,7 @@ export function SoKinProfilesPage() {
             href: `/user/${u.username!}`,
             city: u.city ?? '',
             domain: u.domain ?? u.qualification ?? '',
-            avatarImage: u.avatarUrl ?? '',
+            avatarImage: resolveMediaUrl(u.avatarUrl) || '',
           }))
         );
       } catch {

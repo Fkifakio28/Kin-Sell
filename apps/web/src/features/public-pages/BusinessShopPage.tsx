@@ -1,7 +1,7 @@
 ﻿import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../app/providers/AuthProvider';
-import { businesses as businessesApi, reviews as reviewsApi, type ReviewItem } from '../../lib/api-client';
+import { businesses as businessesApi, reviews as reviewsApi, resolveMediaUrl, type ReviewItem } from '../../lib/api-client';
 import './public-pages.css';
 import { SeoMeta } from '../../components/SeoMeta';
 
@@ -150,11 +150,12 @@ export function BusinessShopPage({ slug }: BusinessShopPageProps) {
   const heroImages = useMemo(() => {
     if (!business) return [];
     const imgs: string[] = [];
-    if (business.shop?.coverImage) imgs.push(business.shop.coverImage);
+    if (business.shop?.coverImage) imgs.push(resolveMediaUrl(business.shop.coverImage));
     for (const l of business.listings) {
-      if (l.imageUrl && !imgs.includes(l.imageUrl)) imgs.push(l.imageUrl);
+      if (l.imageUrl && !imgs.includes(resolveMediaUrl(l.imageUrl))) imgs.push(resolveMediaUrl(l.imageUrl));
       for (const u of l.mediaUrls) {
-        if (!imgs.includes(u)) imgs.push(u);
+        const resolved = resolveMediaUrl(u);
+        if (!imgs.includes(resolved)) imgs.push(resolved);
       }
       if (imgs.length >= 5) break;
     }
@@ -350,7 +351,7 @@ export function BusinessShopPage({ slug }: BusinessShopPageProps) {
           {/* Logo */}
           <div className="business-lux-logo-card" aria-hidden="true">
             {shop?.logo
-              ? <img src={shop.logo} alt={business.publicName} className="biz-hero-logo-img" />
+              ? <img src={resolveMediaUrl(shop.logo)} alt={business.publicName} className="biz-hero-logo-img" />
               : <div className="business-lux-logo">{business.publicName.slice(0, 2).toUpperCase()}</div>
             }
           </div>
@@ -424,7 +425,7 @@ export function BusinessShopPage({ slug }: BusinessShopPageProps) {
               <article key={listing.id} id={listing.id} className="business-lux-product-card">
                 <div className="business-lux-product-media">
                   {listing.imageUrl ?? listing.mediaUrls[0]
-                    ? <img src={(listing.imageUrl ?? listing.mediaUrls[0])!} alt={listing.title} />
+                    ? <img src={resolveMediaUrl((listing.imageUrl ?? listing.mediaUrls[0])!)} alt={listing.title} />
                     : <div className="biz-product-no-img">📦</div>
                   }
                 </div>

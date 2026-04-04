@@ -7,6 +7,7 @@ import {
   orders,
   listings as listingsApi,
   reviews as reviewsApi,
+  resolveMediaUrl,
   type ReviewItem,
 } from '../../lib/api-client';
 import { useHoverPopup, ArticleHoverPopup, type ArticleHoverData } from '../../components/HoverPopup';
@@ -401,7 +402,7 @@ export function PublicProfilePage({ username }: { username: string }) {
           {/* Avatar */}
           <div className="up-avatar">
             {profile.avatarUrl
-              ? <img src={profile.avatarUrl} alt={profile.displayName} className="up-avatar-img" />
+              ? <img src={resolveMediaUrl(profile.avatarUrl)} alt={profile.displayName} className="up-avatar-img" />
               : <div className="up-avatar-ph">{initial}</div>}
             <span className={`up-status-dot${isOnline ? ' up-status-dot--online' : ''}`} title={isOnline ? 'En ligne' : 'Hors ligne'} />
           </div>
@@ -524,7 +525,7 @@ export function PublicProfilePage({ username }: { username: string }) {
                 >
                   <div className="up-card-img-wrap">
                     {item.imageUrl
-                      ? <img className="up-card-img" src={item.imageUrl} alt={item.title} />
+                      ? <img className="up-card-img" src={resolveMediaUrl(item.imageUrl)} alt={item.title} />
                       : <div className="up-card-noimg">{item.type === 'PRODUIT' ? '📦' : '🛠️'}</div>}
                     <span className="up-card-type-badge">{item.type === 'PRODUIT' ? 'Produit' : 'Service'}</span>
                   </div>

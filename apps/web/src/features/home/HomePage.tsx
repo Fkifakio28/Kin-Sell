@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../app/providers/AuthProvider";
 import { useLocaleCurrency } from "../../app/providers/LocaleCurrencyProvider";
 import { getDashboardPath } from "../../utils/role-routing";
-import { listings as listingsApi, orders as ordersApi, explorer as explorerApi, sokin as sokinApi, blog as blogApi, type PublicListing, type CartSummary, type OrderSummary, type ExplorerShopApi, type ExplorerProfileApi, type SoKinApiFeedPost, type PublicBlogPost } from "../../lib/api-client";
+import { listings as listingsApi, orders as ordersApi, explorer as explorerApi, sokin as sokinApi, blog as blogApi, resolveMediaUrl, type PublicListing, type CartSummary, type OrderSummary, type ExplorerShopApi, type ExplorerProfileApi, type SoKinApiFeedPost, type PublicBlogPost } from "../../lib/api-client";
 import { useHoverPopup, ArticleHoverPopup, type ArticleHoverData } from "../../components/HoverPopup";
 import { useScrollRestore } from "../../utils/useScrollRestore";
 import { useSocket } from "../../hooks/useSocket";
@@ -634,7 +634,7 @@ export function HomePage() {
           >
             <div className="h-avatar">
               {user?.profile.avatarUrl ? (
-                <img src={user.profile.avatarUrl} alt={userName} onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                <img src={resolveMediaUrl(user.profile.avatarUrl)} alt={userName} onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
               ) : null}
               <span className="h-avatar-fallback">{userName.charAt(0).toUpperCase()}</span>
             </div>
@@ -710,7 +710,7 @@ export function HomePage() {
                 <div role="button" onClick={() => navigate(trendingProfiles[safeSellerIdx].username ? `/user/${trendingProfiles[safeSellerIdx].username}` : '/sokin/profiles')} className="h-trending-card glass-card" style={{ cursor: 'pointer' }}>
                   <div className="h-trending-avatar">
                     {trendingProfiles[safeSellerIdx].avatarUrl
-                      ? <img src={trendingProfiles[safeSellerIdx].avatarUrl!} alt={trendingProfiles[safeSellerIdx].displayName} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
+                      ? <img src={resolveMediaUrl(trendingProfiles[safeSellerIdx].avatarUrl!)} alt={trendingProfiles[safeSellerIdx].displayName} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
                       : trendingProfiles[safeSellerIdx].displayName.charAt(0).toUpperCase()}
                   </div>
                   <div className="h-trending-info">
@@ -792,7 +792,7 @@ export function HomePage() {
                     onMouseEnter={(e) => articleHover.handleMouseEnter({ title: p.title, description: p.description, price: formatPriceLabelFromUsdCents(p.priceUsdCents), sellerName: p.owner.displayName || t("common.seller") }, e)}
                     onMouseLeave={articleHover.handleMouseLeave}
                   >
-                    <div className="h-article-thumb" style={p.imageUrl ? { backgroundImage: `url(${p.imageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}>
+                    <div className="h-article-thumb" style={p.imageUrl ? { backgroundImage: `url(${resolveMediaUrl(p.imageUrl)})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}>
                       <span className="h-article-cat">{p.category}</span>
                     </div>
                     <div className="h-article-body">
@@ -800,7 +800,7 @@ export function HomePage() {
                       <span className="h-article-price">{formatPriceLabelFromUsdCents(p.priceUsdCents)}</span>
                       {p.owner.displayName && (
                         <span className="h-article-seller">
-                          {p.owner.avatarUrl ? <img src={p.owner.avatarUrl} alt="" className="h-article-seller-avatar" loading="lazy" /> : <span className="h-article-seller-dot" />}
+                          {p.owner.avatarUrl ? <img src={resolveMediaUrl(p.owner.avatarUrl)} alt="" className="h-article-seller-avatar" loading="lazy" /> : <span className="h-article-seller-dot" />}
                           {p.owner.displayName}
                         </span>
                       )}
@@ -842,7 +842,7 @@ export function HomePage() {
                     onMouseEnter={(e) => articleHover.handleMouseEnter({ title: s.title, description: s.description, price: formatPriceLabelFromUsdCents(s.priceUsdCents), sellerName: s.owner.displayName || t("common.seller") }, e)}
                     onMouseLeave={articleHover.handleMouseLeave}
                   >
-                    <div className="h-article-thumb h-article-thumb--svc" style={s.imageUrl ? { backgroundImage: `url(${s.imageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}>
+                    <div className="h-article-thumb h-article-thumb--svc" style={s.imageUrl ? { backgroundImage: `url(${resolveMediaUrl(s.imageUrl)})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}>
                       <span className="h-article-cat">{s.category}</span>
                     </div>
                     <div className="h-article-body">
@@ -850,7 +850,7 @@ export function HomePage() {
                       <span className="h-article-price">{formatPriceLabelFromUsdCents(s.priceUsdCents)}</span>
                       {s.owner.displayName && (
                         <span className="h-article-seller">
-                          {s.owner.avatarUrl ? <img src={s.owner.avatarUrl} alt="" className="h-article-seller-avatar" loading="lazy" /> : <span className="h-article-seller-dot" />}
+                          {s.owner.avatarUrl ? <img src={resolveMediaUrl(s.owner.avatarUrl)} alt="" className="h-article-seller-avatar" loading="lazy" /> : <span className="h-article-seller-dot" />}
                           {s.owner.displayName}
                         </span>
                       )}

@@ -139,7 +139,37 @@ export const optimizeUploadedImageFile = async (
   options: NormalizeImageOptions = {}
 ) => {
   const buffer = await fs.readFile(filePath);
-  const stored = await storeImageDataUrl(`data:image/webp;base64,${buffer.toString("base64")}`, options);
+
+  if (!buffer.length || buffer.length > MAX_IMAGE_BYTES) {
+    throw new HttpError(400, "Image trop volumineuse.");
+  }
+
+  const targetDir = await ensureUploadsDir(options.folder);
+  const baseName = generateBaseName();
+  const mainOutputPath = path.join(targetDir, `${baseName}.webp`);
+  const thumbnailOutputPath = path.join(targetDir, `${baseName}-thumb.webp`);
+
+  // Optimise directement depuis le buffer (sharp détecte auto le format d'entrée)
+  const optimized = await optimizeImageBuffer(buffer, options);
+  await fs.writeFile(mainOutputPath, optimized);
+
+  let thumbnailUrl: string | undefined;
+  if (options.generateThumbnail !== false) {
+    const thumbBuffer = await sharp(buffer, { failOn: "none" }).rotate().resize({
+      width: THUMB_WIDTH,
+      height: THUMB_HEIGHT,
+      fit: "inside",
+      withoutEnlargement: true,
+    }).webp({ quality: 72, effort: 4 }).toBuffer();
+    await fs.writeFile(thumbnailOutputPath, thumbBuffer);
+    thumbnailUrl = buildPublicUrl(thumbnailOutputPath);
+  }
+
+  // Supprime le fichier temporaire multer
   await fs.unlink(filePath).catch(() => undefined);
-  return stored;
+
+  return {
+    url: buildPublicUrl(mainOutputPath),
+    thumbnailUrl,
+  };
 };
