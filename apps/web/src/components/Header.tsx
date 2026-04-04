@@ -138,7 +138,7 @@ export const Header = React.memo(function Header() {
 
   const accountLabel = useMemo(() => {
     if (!user) return t("nav.visitor");
-    const roleText = user.role === "BUSINESS" ? t("nav.business") : t("nav.userRole");
+    const roleText = user.role === "SUPER_ADMIN" ? "⭐ Super Admin" : user.role === "ADMIN" ? "⚡ Admin" : user.role === "BUSINESS" ? t("nav.business") : t("nav.userRole");
     return `${getAccountLabel(user)} | ${roleText}`;
   }, [user, t]);
 

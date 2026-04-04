@@ -162,9 +162,11 @@ function SideDrawer({
                 <span className="hm-drawer-profile-badge">
                   {user.role === "BUSINESS"
                     ? "\uD83C\uDFE2 " + t("home.businessRole")
-                    : user.role === "ADMIN"
-                      ? "\u26A1 " + t("home.svc.admin")
-                      : "\uD83D\uDC64 " + t("home.userRole")}
+                    : user.role === "SUPER_ADMIN"
+                      ? "⭐ Super Admin"
+                      : user.role === "ADMIN"
+                        ? "\u26A1 " + t("home.svc.admin")
+                        : "\uD83D\uDC64 " + t("home.userRole")}
                 </span>
               </div>
             </div>
