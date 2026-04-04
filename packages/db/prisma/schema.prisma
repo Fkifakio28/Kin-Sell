@@ -165,6 +165,7 @@ model User {
   profileCompleted     Boolean       @default(false)
   accountStatus        AccountStatus @default(ACTIVE)
   suspensionReason     String?
+  suspensionExpiresAt  DateTime?
   deletionRequestedAt  DateTime?
   deletionReason       String?
   trustScore           Int           @default(50)

@@ -265,9 +265,24 @@ export const suspendUser = async (
   const valid = await verifyPassword(adminPassword, admin.passwordHash);
   if (!valid) throw new HttpError(403, "Mot de passe incorrect");
 
+  // Calculate suspension expiry (0 = permanent)
+  const suspensionExpiresAt = durationHours > 0
+    ? new Date(Date.now() + durationHours * 3600_000)
+    : null;
+
   await prisma.user.update({
     where: { id: userId },
-    data: { accountStatus: "SUSPENDED", suspensionReason: reason },
+    data: {
+      accountStatus: "SUSPENDED",
+      suspensionReason: reason,
+      suspensionExpiresAt,
+    },
+  });
+
+  // Revoke ALL active sessions so the user is immediately blocked
+  await prisma.userSession.updateMany({
+    where: { userId, status: "ACTIVE" },
+    data: { status: "REVOKED", revokedAt: new Date() },
   });
 
   // Log in audit
@@ -277,7 +292,7 @@ export const suspendUser = async (
       action: "SUSPEND_USER",
       entityType: "User",
       entityId: userId,
-      metadata: { durationHours, reason },
+      metadata: { durationHours, reason, suspensionExpiresAt: suspensionExpiresAt?.toISOString() ?? "permanent" },
     },
   });
 
@@ -287,7 +302,7 @@ export const suspendUser = async (
 export const unsuspendUser = async (userId: string) => {
   await prisma.user.update({
     where: { id: userId },
-    data: { accountStatus: "ACTIVE", suspensionReason: null },
+    data: { accountStatus: "ACTIVE", suspensionReason: null, suspensionExpiresAt: null },
   });
   return { success: true };
 };

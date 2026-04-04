@@ -86,9 +86,9 @@ export const adminListAds = async (params: {
         },
       }),
     ]);
-    return { total, page, totalPages: Math.ceil(total / limit), advertisements };
+    return { total, page, pages: Math.ceil(total / limit), ads: advertisements };
   } catch {
-    return { total: 0, page, totalPages: 0, advertisements: [] };
+    return { total: 0, page, pages: 0, ads: [] };
   }
 };
 

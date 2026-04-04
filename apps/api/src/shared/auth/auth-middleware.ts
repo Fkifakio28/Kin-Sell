@@ -2,6 +2,7 @@ import { NextFunction, Request, Response } from "express";
 import { Role } from "../../types/roles.js";
 import { HttpError } from "../errors/http-error.js";
 import { verifyAccessToken } from "./jwt.js";
+import { prisma } from "../db/prisma.js";
 
 export type AuthenticatedRequest = Request & {
   auth?: {
@@ -28,13 +29,13 @@ const getBearerToken = (request: Request): string | null => {
 export const requireAuth = (request: AuthenticatedRequest, _response: Response, next: NextFunction): void => {
   const token = getBearerToken(request);
   if (!token) {
-    throw new HttpError(401, "Authentification requise");
+    return next(new HttpError(401, "Authentification requise"));
   }
 
   try {
     const payload = verifyAccessToken(token);
     if (!payload?.sub || typeof payload.sub !== "string") {
-      throw new HttpError(401, "Token invalide");
+      return next(new HttpError(401, "Token invalide"));
     }
 
     request.auth = {
@@ -43,11 +44,35 @@ export const requireAuth = (request: AuthenticatedRequest, _response: Response, 
       sessionId: payload.sid
     };
   } catch {
-    throw new HttpError(401, "Token invalide ou expiré");
+    return next(new HttpError(401, "Token invalide ou expiré"));
   }
 
-  next();
+  // Verify user account is still active and session not revoked
+  _verifyAccountAndSession(request.auth!.userId, request.auth!.sessionId)
+    .then(() => next())
+    .catch((err) => next(err));
 };
+
+async function _verifyAccountAndSession(userId: string, sessionId?: string): Promise<void> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { accountStatus: true },
+  });
+
+  if (!user) throw new HttpError(401, "Compte introuvable");
+  if (user.accountStatus === "SUSPENDED") throw new HttpError(403, "Votre compte est suspendu");
+  if (user.accountStatus === "PENDING_DELETION") throw new HttpError(403, "Votre compte est en cours de suppression");
+
+  if (sessionId) {
+    const session = await prisma.userSession.findUnique({
+      where: { id: sessionId },
+      select: { status: true },
+    });
+    if (session && session.status !== "ACTIVE") {
+      throw new HttpError(401, "Session révoquée");
+    }
+  }
+}
 
 export const requireRoles = (...roles: Role[]) => {
   return (request: AuthenticatedRequest, _response: Response, next: NextFunction): void => {
