@@ -1,4 +1,4 @@
-import { request, setToken, setRefreshToken, setSessionId, clearAuthSession, ApiError, type AccountUser } from "../api-core";
+import { request, setToken, setRefreshToken, setSessionId, clearAuthSession, ApiError, getRefreshToken, type AccountUser } from "../api-core";
 import type { LocationVisibility } from "./geo.service";
 
 type AccountAuthResponse = {
@@ -71,17 +71,17 @@ export const auth = {
   },
 
   refresh: async () => {
-    const refreshToken = localStorage.getItem("kin-sell.refresh-token");
+    const refreshToken = getRefreshToken();
     if (!refreshToken) throw new ApiError(401, "Session expiree");
 
-    const data = await request<{ accessToken: string; refreshToken: string; sessionId: string }>(
+    const res = await request<{ accessToken: string; refreshToken: string; sessionId: string }>(
       "/account/refresh",
       { method: "POST", body: { refreshToken } },
-      false,
+      false
     );
-    setToken(data.accessToken);
-    setRefreshToken(data.refreshToken);
-    setSessionId(data.sessionId);
+    setToken(res.accessToken);
+    setRefreshToken(res.refreshToken);
+    setSessionId(res.sessionId);
   },
 
   me: () => request<AccountUser>("/account/me"),
