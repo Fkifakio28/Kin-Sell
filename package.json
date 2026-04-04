@@ -18,5 +18,8 @@
   },
   "devDependencies": {
     "sharp": "^0.34.5"
+  },
+  "dependencies": {
+    "hls.js": "^1.6.15"
   }
 }

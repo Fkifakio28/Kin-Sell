@@ -36,6 +36,7 @@ import {
 } from '../../lib/api-client';
 import { DashboardMessaging } from './DashboardMessaging';
 import { AdBanner } from '../../components/AdBanner';
+import './dashboard.css';
 import './admin-dashboard.css';
 
 /* ──────── Types ──────── */
