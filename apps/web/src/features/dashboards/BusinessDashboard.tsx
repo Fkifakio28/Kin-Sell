@@ -1017,7 +1017,7 @@ export function BusinessDashboard() {
         )}
 
         <div className="ud-drawer-logout">
-          <button type="button" className="ud-drawer-logout-btn" onClick={() => { logout(); navigate('/'); }}>
+          <button type="button" className="ud-drawer-logout-btn" onClick={() => { logout(); navigate('/login'); }}>
             🚪 {t('common.logout')}
           </button>
         </div>

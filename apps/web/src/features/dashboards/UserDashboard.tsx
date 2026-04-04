@@ -1202,7 +1202,7 @@ export function UserDashboard() {
     setLogoutBusy(true);
     try {
       await logout();
-      navigate('/');
+      navigate('/login');
     } finally {
       setLogoutBusy(false);
     }

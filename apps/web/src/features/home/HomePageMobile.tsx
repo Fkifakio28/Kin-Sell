@@ -120,7 +120,7 @@ function SideDrawer({
   const handleLogout = async () => {
     await logout();
     onClose();
-    void navigate("/");
+    void navigate("/login");
   };
 
   const drawerCls = "hm-drawer" + (open ? " hm-drawer--open" : "");

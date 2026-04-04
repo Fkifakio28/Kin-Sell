@@ -81,7 +81,7 @@ export function DashboardLayout({
   }
 
   function handleLogout() {
-    void logout().then(() => navigate("/"));
+    void logout().then(() => navigate("/login"));
   }
 
   function renderNav(items: DashboardSection[]) {

@@ -998,7 +998,7 @@ export function HomePage() {
                   type="button"
                   className="h-popup-link h-popup-link--btn"
                   onClick={() => {
-                    void logout();
+                    void logout().then(() => navigate('/login'));
                     setIsAccountOpen(false);
                   }}
                 >

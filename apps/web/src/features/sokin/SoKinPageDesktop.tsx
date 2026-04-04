@@ -1000,7 +1000,7 @@ export function SoKinPageDesktop() {
                       <button
                         type="button"
                         onClick={() => {
-                          void logout();
+                          void logout().then(() => navigate('/login'));
                           setAccountMenuOpen(false);
                         }}
                       >

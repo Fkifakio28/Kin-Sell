@@ -83,7 +83,7 @@ function ExDrawer({ open, onClose, t, isLoggedIn, user, logout }: {
   const nav = useNavigate();
   if (!open) return null;
 
-  const handleLogout = () => { logout(); onClose(); void nav('/'); };
+  const handleLogout = () => { logout(); onClose(); void nav('/login'); };
 
   const links = [
     { icon: '🏠', label: 'Accueil', href: '/' },
