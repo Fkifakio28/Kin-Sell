@@ -211,8 +211,15 @@ export function PublicProfilePage({ username }: { username: string }) {
         });
 
         if (payload.reviews) {
-          setAllReviews(payload.reviews.map((r) => ({
-            ...r,
+          setAllReviews(payload.reviews.map((r: any) => ({
+            id: r.id,
+            authorId: r.authorId ?? '',
+            authorName: r.authorName ?? 'Anonyme',
+            authorAvatar: r.authorAvatar ?? null,
+            rating: r.rating,
+            text: r.text ?? null,
+            verified: r.verified ?? false,
+            orderId: r.orderId ?? null,
             createdAt: typeof r.createdAt === 'string' ? r.createdAt : new Date(r.createdAt).toISOString(),
           })));
         }
