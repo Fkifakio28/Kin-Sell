@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useMemo, useState, useCallback } from 'react';
+import { type FormEvent, useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../app/providers/AuthProvider';
 import { getDashboardPath } from '../../utils/role-routing';
@@ -33,6 +33,7 @@ import {
   reviews as reviewsApi,
   resolveMediaUrl
 } from '../../lib/api-client';
+import type { BulkImportItemInput, BulkImportResult, DbPreviewConfig } from '../../lib/services/listings.service';
 import { NegotiationRespondPopup } from '../negotiations/NegotiationRespondPopup';
 import { compressAndEncodeMedia } from '../../utils/media-compress';
 import { prepareMediaUrls } from '../../utils/media-upload';
@@ -391,6 +392,19 @@ export function UserDashboard() {
   const [showSoKinCatPopup, setShowSoKinCatPopup] = useState(false);
   const [priceCdf, setPriceCdf] = useState('');
   const [publishError, setPublishError] = useState<string | null>(null);
+
+  /* ── Bulk import state ── */
+  const [showBulkImport, setShowBulkImport] = useState(false);
+  const [bulkTab, setBulkTab] = useState<'file' | 'db'>('file');
+  const [bulkParsedRows, setBulkParsedRows] = useState<Record<string, string>[]>([]);
+  const [bulkColumns, setBulkColumns] = useState<string[]>([]);
+  const [bulkMapping, setBulkMapping] = useState<Record<string, string>>({});
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkResult, setBulkResult] = useState<BulkImportResult | null>(null);
+  const [bulkError, setBulkError] = useState<string | null>(null);
+  const [bulkFileType, setBulkFileType] = useState<string>('');
+  const bulkFileRef = useRef<HTMLInputElement>(null);
+  const [bulkDbForm, setBulkDbForm] = useState({ host: '', port: '3306', user: '', password: '', database: '', table: '' });
 
   // ── Contacts state ──
   const [contactSearchOpen, setContactSearchOpen] = useState(false);
@@ -928,6 +942,188 @@ export function UserDashboard() {
     setShowSoKinCatPopup(false);
     setPriceCdf('');
     setPublishError(null);
+  };
+
+  /* ── Bulk import helpers ── */
+  const BULK_TARGET_FIELDS = [
+    { key: '', label: '— ignorer —' },
+    { key: 'title', label: 'Titre' },
+    { key: 'description', label: 'Description' },
+    { key: 'category', label: 'Catégorie' },
+    { key: 'city', label: 'Ville' },
+    { key: 'type', label: 'Type (PRODUIT/SERVICE)' },
+    { key: 'price', label: 'Prix (USD cents)' },
+    { key: 'stock', label: 'Stock' },
+    { key: 'imageUrl', label: 'URL image' },
+  ];
+
+  const parseCSV = (text: string): { columns: string[]; rows: Record<string, string>[] } => {
+    const lines = text.split(/\r?\n/).filter(l => l.trim());
+    if (lines.length < 2) return { columns: [], rows: [] };
+    const sep = lines[0].includes(';') ? ';' : ',';
+    const columns = lines[0].split(sep).map(c => c.replace(/^"|"$/g, '').trim());
+    const rows = lines.slice(1, 51).map(line => {
+      const vals = line.split(sep).map(v => v.replace(/^"|"$/g, '').trim());
+      const row: Record<string, string> = {};
+      columns.forEach((col, i) => { row[col] = vals[i] ?? ''; });
+      return row;
+    });
+    return { columns, rows };
+  };
+
+  const parseJSONFile = (text: string): { columns: string[]; rows: Record<string, string>[] } => {
+    const data = JSON.parse(text);
+    const arr: Record<string, unknown>[] = Array.isArray(data)
+      ? data
+      : Array.isArray(data.data) ? data.data
+      : Array.isArray(data.items) ? data.items
+      : Array.isArray(data.products) ? data.products
+      : Array.isArray(data.articles) ? data.articles
+      : [];
+    const sliced = arr.slice(0, 50);
+    if (sliced.length === 0) return { columns: [], rows: [] };
+    const columns = Object.keys(sliced[0]);
+    const rows = sliced.map(item => {
+      const row: Record<string, string> = {};
+      columns.forEach(col => { row[col] = String(item[col] ?? ''); });
+      return row;
+    });
+    return { columns, rows };
+  };
+
+  const parseXML = (text: string): { columns: string[]; rows: Record<string, string>[] } => {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(text, 'application/xml');
+    const root = doc.documentElement;
+    if (!root || root.querySelector('parsererror')) return { columns: [], rows: [] };
+    const items = Array.from(root.children).slice(0, 50);
+    if (items.length === 0) return { columns: [], rows: [] };
+    const columns = Array.from(new Set(items.flatMap(el => Array.from(el.children).map(c => c.tagName))));
+    const rows = items.map(el => {
+      const row: Record<string, string> = {};
+      columns.forEach(col => { row[col] = el.querySelector(col)?.textContent?.trim() ?? ''; });
+      return row;
+    });
+    return { columns, rows };
+  };
+
+  const autoDetectMapping = (cols: string[]): Record<string, string> => {
+    const m: Record<string, string> = {};
+    const find = (patterns: string[]) => cols.find(c => patterns.some(p => c.toLowerCase().includes(p)));
+    const titleCol = find(['title', 'titre', 'nom', 'name', 'produit', 'article']);
+    if (titleCol) m[titleCol] = 'title';
+    const descCol = find(['description', 'desc', 'détail', 'detail', 'contenu']);
+    if (descCol) m[descCol] = 'description';
+    const catCol = find(['categor', 'catégorie', 'type_prod', 'rayon']);
+    if (catCol) m[catCol] = 'category';
+    const cityCol = find(['city', 'ville', 'localité', 'location']);
+    if (cityCol) m[cityCol] = 'city';
+    const typeCol = find(['type', 'kind']);
+    if (typeCol && typeCol !== titleCol && typeCol !== catCol) m[typeCol] = 'type';
+    const priceCol = find(['price', 'prix', 'cout', 'coût', 'amount', 'montant']);
+    if (priceCol) m[priceCol] = 'price';
+    const stockCol = find(['stock', 'quantité', 'quantity', 'qty']);
+    if (stockCol) m[stockCol] = 'stock';
+    const imgCol = find(['image', 'img', 'photo', 'imageurl', 'image_url', 'media']);
+    if (imgCol) m[imgCol] = 'imageUrl';
+    return m;
+  };
+
+  const handleBulkFileLoad = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setBulkError(null); setBulkResult(null); setBulkParsedRows([]); setBulkColumns([]);
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
+    if (!['csv', 'json', 'xml'].includes(ext)) {
+      setBulkError('Format non supporté. Utilisez CSV, JSON ou XML.');
+      return;
+    }
+    setBulkFileType(ext);
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const text = reader.result as string;
+        const parsed = ext === 'csv' ? parseCSV(text) : ext === 'json' ? parseJSONFile(text) : parseXML(text);
+        if (parsed.rows.length === 0) { setBulkError('Aucune donnée trouvée dans le fichier.'); return; }
+        setBulkColumns(parsed.columns);
+        setBulkParsedRows(parsed.rows);
+        setBulkMapping(autoDetectMapping(parsed.columns));
+      } catch (err) {
+        setBulkError('Erreur de lecture du fichier : ' + (err instanceof Error ? err.message : 'format invalide'));
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleBulkDbPreview = async () => {
+    setBulkError(null); setBulkResult(null); setBulkParsedRows([]); setBulkColumns([]); setBulkBusy(true);
+    try {
+      const config: DbPreviewConfig = {
+        host: bulkDbForm.host, port: Number(bulkDbForm.port) || 3306,
+        user: bulkDbForm.user, password: bulkDbForm.password,
+        database: bulkDbForm.database, table: bulkDbForm.table,
+      };
+      const preview = await listingsApi.dbPreview(config);
+      if (preview.rows.length === 0) { setBulkError('La table est vide.'); setBulkBusy(false); return; }
+      const cols = preview.columns;
+      const rows = preview.rows.map(r => {
+        const row: Record<string, string> = {};
+        cols.forEach(c => { row[c] = String(r[c] ?? ''); });
+        return row;
+      });
+      setBulkColumns(cols);
+      setBulkParsedRows(rows);
+      setBulkMapping(autoDetectMapping(cols));
+    } catch (err) {
+      setBulkError(err instanceof ApiError ? (err.data as any)?.error ?? err.message : err instanceof Error ? err.message : 'Erreur de connexion');
+    } finally { setBulkBusy(false); }
+  };
+
+  const handleBulkConfirm = async () => {
+    setBulkError(null); setBulkResult(null); setBulkBusy(true);
+    try {
+      // Build reverse mapping: targetField → sourceColumn
+      const reverseMap: Record<string, string> = {};
+      for (const [srcCol, targetField] of Object.entries(bulkMapping)) {
+        if (targetField) reverseMap[targetField] = srcCol;
+      }
+      if (!reverseMap['title']) { setBulkError("Vous devez mapper au moins le champ « Titre »."); setBulkBusy(false); return; }
+
+      const items: BulkImportItemInput[] = bulkParsedRows.map(row => {
+        const rawType = reverseMap['type'] ? row[reverseMap['type']]?.toUpperCase() : '';
+        const type = (rawType === 'SERVICE' ? 'SERVICE' : 'PRODUIT') as 'PRODUIT' | 'SERVICE';
+        const rawPrice = reverseMap['price'] ? Number(row[reverseMap['price']]) : 0;
+        return {
+          type,
+          title: (reverseMap['title'] ? row[reverseMap['title']] : '') ?? '',
+          description: reverseMap['description'] ? row[reverseMap['description']] || undefined : undefined,
+          category: (reverseMap['category'] ? row[reverseMap['category']] : '') || 'Non classé',
+          city: (reverseMap['city'] ? row[reverseMap['city']] : '') || settingsForm.city || 'Kinshasa',
+          latitude: -4.325,
+          longitude: 15.322,
+          imageUrl: reverseMap['imageUrl'] ? row[reverseMap['imageUrl']] || undefined : undefined,
+          priceUsdCents: isNaN(rawPrice) ? 0 : Math.round(Math.abs(rawPrice)),
+          stockQuantity: type === 'PRODUIT' && reverseMap['stock'] ? (Number(row[reverseMap['stock']]) || null) : null,
+        };
+      });
+
+      const result = await listingsApi.bulkImport(items);
+      setBulkResult(result);
+      if (result.created > 0) {
+        setSuccessMessage(`${result.created} article(s) importé(s) avec succès !`);
+        await refreshArticles(1, articlesFilter);
+        setArticlesPage(1);
+      }
+    } catch (err) {
+      setBulkError(err instanceof ApiError ? (err.data as any)?.error ?? err.message : err instanceof Error ? err.message : 'Erreur lors de l\'import');
+    } finally { setBulkBusy(false); }
+  };
+
+  const resetBulkImport = () => {
+    setShowBulkImport(false); setBulkTab('file'); setBulkParsedRows([]); setBulkColumns([]);
+    setBulkMapping({}); setBulkBusy(false); setBulkResult(null); setBulkError(null);
+    setBulkFileType(''); setBulkDbForm({ host: '', port: '3306', user: '', password: '', database: '', table: '' });
+    if (bulkFileRef.current) bulkFileRef.current.value = '';
   };
 
   const handleArticleCreate = async (e: FormEvent) => {
@@ -2048,15 +2244,148 @@ export function UserDashboard() {
                   <span className="ud-art-stat-chip">{articlesStats?.archived ?? 0} {t('user.archivedCount')}</span>
                 </div>
               </div>
-              <button type="button" className="ud-art-publish-btn" onClick={() => {
-                resetArticleForm();
-                if (settingsForm.city) setArticleForm(p => ({ ...p, city: settingsForm.city }));
-                setShowCreateForm(true);
-              }}>
-                <span className="ud-art-publish-icon">+</span>
-                {t('user.publishBtn')}
-              </button>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button type="button" className="ud-art-publish-btn" style={{ background: 'rgba(111,88,255,.15)', color: 'var(--color-primary)' }} onClick={() => { resetBulkImport(); setShowBulkImport(true); }}>
+                  <span className="ud-art-publish-icon">📥</span>
+                  Importer
+                </button>
+                <button type="button" className="ud-art-publish-btn" onClick={() => {
+                  resetArticleForm();
+                  if (settingsForm.city) setArticleForm(p => ({ ...p, city: settingsForm.city }));
+                  setShowCreateForm(true);
+                }}>
+                  <span className="ud-art-publish-icon">+</span>
+                  {t('user.publishBtn')}
+                </button>
+              </div>
             </div>
+
+            {/* ── Modal import en masse ── */}
+            {showBulkImport && (
+              <div className="ud-section glass-card" style={{ marginBottom: 24, padding: 20 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                  <h3 style={{ margin: 0, fontSize: 16 }}>📥 Import en masse (max 50 articles)</h3>
+                  <button type="button" onClick={resetBulkImport} style={{ background: 'none', border: 'none', color: 'var(--color-text-muted)', fontSize: 20, cursor: 'pointer' }}>✕</button>
+                </div>
+
+                {/* Tabs */}
+                <div style={{ display: 'flex', gap: 0, marginBottom: 16, borderBottom: '1px solid rgba(255,255,255,.1)' }}>
+                  {(['file', 'db'] as const).map(tab => (
+                    <button key={tab} type="button" onClick={() => { setBulkTab(tab); setBulkParsedRows([]); setBulkColumns([]); setBulkMapping({}); setBulkError(null); setBulkResult(null); }}
+                      style={{ flex: 1, padding: '10px 16px', background: bulkTab === tab ? 'rgba(111,88,255,.15)' : 'transparent', color: bulkTab === tab ? 'var(--color-primary)' : 'var(--color-text-muted)', border: 'none', borderBottom: bulkTab === tab ? '2px solid var(--color-primary)' : '2px solid transparent', cursor: 'pointer', fontSize: 14, fontWeight: 600 }}>
+                      {tab === 'file' ? '📄 Fichier (CSV / JSON / XML)' : '🔗 Base de données MySQL'}
+                    </button>
+                  ))}
+                </div>
+
+                {/* ── Tab Fichier ── */}
+                {bulkTab === 'file' && (
+                  <div>
+                    <div style={{ border: '2px dashed rgba(111,88,255,.3)', borderRadius: 12, padding: 24, textAlign: 'center', marginBottom: 16, cursor: 'pointer' }}
+                      onClick={() => bulkFileRef.current?.click()}>
+                      <input ref={bulkFileRef} type="file" accept=".csv,.json,.xml" onChange={handleBulkFileLoad} style={{ display: 'none' }} />
+                      <p style={{ margin: 0, fontSize: 14, color: 'var(--color-text-muted)' }}>
+                        {bulkParsedRows.length > 0
+                          ? `✅ ${bulkParsedRows.length} ligne(s) détectée(s) — ${bulkFileType.toUpperCase()}`
+                          : 'Cliquez pour sélectionner un fichier CSV, JSON ou XML'}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Tab Base de données ── */}
+                {bulkTab === 'db' && (
+                  <div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px', gap: 8, marginBottom: 8 }}>
+                      <input placeholder="Hôte (ex: db.example.com)" value={bulkDbForm.host} onChange={e => setBulkDbForm(p => ({ ...p, host: e.target.value }))} className="ud-form-input" />
+                      <input placeholder="Port" value={bulkDbForm.port} onChange={e => setBulkDbForm(p => ({ ...p, port: e.target.value }))} className="ud-form-input" />
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+                      <input placeholder="Utilisateur" value={bulkDbForm.user} onChange={e => setBulkDbForm(p => ({ ...p, user: e.target.value }))} className="ud-form-input" />
+                      <input placeholder="Mot de passe" type="password" value={bulkDbForm.password} onChange={e => setBulkDbForm(p => ({ ...p, password: e.target.value }))} className="ud-form-input" />
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
+                      <input placeholder="Base de données" value={bulkDbForm.database} onChange={e => setBulkDbForm(p => ({ ...p, database: e.target.value }))} className="ud-form-input" />
+                      <input placeholder="Nom de la table" value={bulkDbForm.table} onChange={e => setBulkDbForm(p => ({ ...p, table: e.target.value }))} className="ud-form-input" />
+                    </div>
+                    <button type="button" disabled={bulkBusy || !bulkDbForm.host || !bulkDbForm.database || !bulkDbForm.table} onClick={() => void handleBulkDbPreview()}
+                      className="ud-art-publish-btn" style={{ width: '100%', marginBottom: 12 }}>
+                      {bulkBusy ? '⏳ Connexion…' : '🔍 Aperçu des données'}
+                    </button>
+                  </div>
+                )}
+
+                {/* ── Erreur ── */}
+                {bulkError && (
+                  <div style={{ background: 'rgba(255,60,60,.12)', border: '1px solid rgba(255,60,60,.3)', borderRadius: 8, padding: '10px 14px', marginBottom: 12, fontSize: 13, color: '#ff6b6b' }}>
+                    ❌ {bulkError}
+                  </div>
+                )}
+
+                {/* ── Résultat d'import ── */}
+                {bulkResult && (
+                  <div style={{ background: bulkResult.created > 0 ? 'rgba(60,255,100,.1)' : 'rgba(255,200,60,.1)', border: `1px solid ${bulkResult.created > 0 ? 'rgba(60,255,100,.3)' : 'rgba(255,200,60,.3)'}`, borderRadius: 8, padding: '12px 14px', marginBottom: 12, fontSize: 13 }}>
+                    <p style={{ margin: 0, fontWeight: 600 }}>
+                      ✅ {bulkResult.created}/{bulkResult.total} article(s) créé(s)
+                    </p>
+                    {bulkResult.errors.length > 0 && (
+                      <ul style={{ margin: '8px 0 0', paddingLeft: 18, fontSize: 12, color: '#ff9f43' }}>
+                        {bulkResult.errors.slice(0, 10).map((e, i) => (
+                          <li key={i}>Ligne {e.index + 1} : {e.error}</li>
+                        ))}
+                        {bulkResult.errors.length > 10 && <li>… et {bulkResult.errors.length - 10} autres erreurs</li>}
+                      </ul>
+                    )}
+                  </div>
+                )}
+
+                {/* ── Preview + Mapping ── */}
+                {bulkParsedRows.length > 0 && !bulkResult && (
+                  <div>
+                    <h4 style={{ fontSize: 14, margin: '0 0 8px', color: 'var(--color-text-secondary)' }}>
+                      Mapping des colonnes ({bulkParsedRows.length} ligne{bulkParsedRows.length > 1 ? 's' : ''})
+                    </h4>
+                    <div style={{ overflowX: 'auto', marginBottom: 12 }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                        <thead>
+                          <tr>
+                            {bulkColumns.map(col => (
+                              <th key={col} style={{ padding: '6px 8px', borderBottom: '1px solid rgba(255,255,255,.1)', textAlign: 'left', whiteSpace: 'nowrap' }}>
+                                <div style={{ marginBottom: 4, fontWeight: 600, color: 'var(--color-text)' }}>{col}</div>
+                                <select value={bulkMapping[col] ?? ''} onChange={e => setBulkMapping(p => ({ ...p, [col]: e.target.value }))}
+                                  style={{ width: '100%', padding: '4px 6px', background: 'rgba(255,255,255,.06)', border: '1px solid rgba(255,255,255,.12)', borderRadius: 6, color: 'var(--color-text)', fontSize: 11 }}>
+                                  {BULK_TARGET_FIELDS.map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
+                                </select>
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {bulkParsedRows.slice(0, 5).map((row, ri) => (
+                            <tr key={ri}>
+                              {bulkColumns.map(col => (
+                                <td key={col} style={{ padding: '4px 8px', borderBottom: '1px solid rgba(255,255,255,.05)', maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--color-text-muted)', fontSize: 11 }}>
+                                  {row[col]}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    {bulkParsedRows.length > 5 && (
+                      <p style={{ fontSize: 11, color: 'var(--color-text-muted)', margin: '0 0 12px' }}>
+                        … et {bulkParsedRows.length - 5} autre(s) ligne(s)
+                      </p>
+                    )}
+                    <button type="button" disabled={bulkBusy || !Object.values(bulkMapping).includes('title')} onClick={() => void handleBulkConfirm()}
+                      className="ud-art-publish-btn" style={{ width: '100%' }}>
+                      {bulkBusy ? '⏳ Import en cours…' : `📥 Importer ${bulkParsedRows.length} article(s)`}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* ── Filtres articles ── */}
             <div className="ud-art-filters">

@@ -119,4 +119,47 @@ export const listings = {
     mutate<{ conversationId: string; listingId: string; sellerUserId: string; message: string }>(
       `/listings/${encodeURIComponent(listingId)}/contact`, { method: "POST" }, ["/messaging"]
     ),
+  bulkImport: (items: BulkImportItemInput[]) =>
+    mutate<BulkImportResult>("/listings/bulk-import", { method: "POST", body: { items } }, ["/listings"]),
+  dbPreview: (config: DbPreviewConfig) =>
+    mutate<DbPreviewResult>("/listings/bulk-import/db-preview", { method: "POST", body: config }, []),
+};
+
+export type BulkImportItemInput = {
+  type: "PRODUIT" | "SERVICE";
+  title: string;
+  description?: string;
+  category: string;
+  city: string;
+  country?: string;
+  countryCode?: string;
+  latitude: number;
+  longitude: number;
+  imageUrl?: string;
+  priceUsdCents?: number;
+  stockQuantity?: number | null;
+  serviceDurationMin?: number | null;
+  serviceLocation?: string | null;
+  isNegotiable?: boolean;
+};
+
+export type BulkImportResult = {
+  total: number;
+  created: number;
+  errors: Array<{ index: number; error: string }>;
+};
+
+export type DbPreviewConfig = {
+  host: string;
+  port: number;
+  user: string;
+  password: string;
+  database: string;
+  table: string;
+};
+
+export type DbPreviewResult = {
+  columns: string[];
+  rows: Record<string, unknown>[];
+  totalAvailable: number;
 };

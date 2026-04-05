@@ -6,6 +6,7 @@ import { asyncHandler } from "../../shared/utils/async-handler.js";
 import { rateLimit, RateLimits } from "../../shared/middleware/rate-limit.middleware.js";
 import { requireNoRestriction } from "../../shared/middleware/trust-guard.middleware.js";
 import * as listingsService from "./listings.service.js";
+import * as bulkImportService from "./bulk-import.service.js";
 import { getOrCreateDMConversation, sendMessage } from "../messaging/messaging.service.js";
 
 const listingTypeSchema = z.enum(["PRODUIT", "SERVICE"]);
@@ -275,6 +276,63 @@ router.get("/locked-categories", asyncHandler(async (_req, res) => {
   });
   res.json(rules.map((r: { category: string }) => r.category));
 }));
+
+/* ── Bulk import: créer jusqu'à 50 articles en une seule requête ── */
+const bulkImportItemSchema = z.object({
+  type: listingTypeSchema,
+  title: z.string().min(2).max(140),
+  description: z.string().max(1200).optional(),
+  category: z.string().min(2).max(80),
+  city: z.string().min(2).max(80),
+  country: z.string().max(80).optional(),
+  countryCode: z.string().length(2).optional(),
+  latitude: z.number().min(-90).max(90),
+  longitude: z.number().min(-180).max(180),
+  imageUrl: z.string().optional(),
+  priceUsdCents: z.number().int().min(0).optional(),
+  stockQuantity: z.number().int().min(0).nullable().optional(),
+  serviceDurationMin: z.number().int().min(1).nullable().optional(),
+  serviceLocation: z.string().max(40).nullable().optional(),
+  isNegotiable: z.boolean().optional(),
+});
+
+router.post(
+  "/bulk-import",
+  requireAuth,
+  requireRoles(Role.USER, Role.BUSINESS),
+  requireNoRestriction("LISTING_LIMIT"),
+  rateLimit(RateLimits.BULK_IMPORT),
+  asyncHandler(async (request: AuthenticatedRequest, response) => {
+    const body = z.object({
+      items: z.array(bulkImportItemSchema).min(1).max(50),
+    }).parse(request.body);
+
+    const result = await bulkImportService.bulkCreateListings(request.auth!.userId, body.items);
+    response.status(201).json(result);
+  })
+);
+
+/* ── Bulk import: aperçu base de données externe (MySQL) ── */
+const dbPreviewSchema = z.object({
+  host: z.string().min(1).max(255),
+  port: z.number().int().min(1).max(65535).default(3306),
+  user: z.string().min(1).max(100),
+  password: z.string().min(1).max(255),
+  database: z.string().min(1).max(100),
+  table: z.string().min(1).max(64).regex(/^[a-zA-Z_][a-zA-Z0-9_]*$/, "Nom de table invalide"),
+});
+
+router.post(
+  "/bulk-import/db-preview",
+  requireAuth,
+  requireRoles(Role.USER, Role.BUSINESS),
+  rateLimit(RateLimits.BULK_IMPORT),
+  asyncHandler(async (request: AuthenticatedRequest, response) => {
+    const config = dbPreviewSchema.parse(request.body);
+    const result = await bulkImportService.previewExternalDb(config);
+    response.json(result);
+  })
+);
 
 /* ── Contact vendeur depuis un listing (crée un DM + message initial) ── */
 router.post(

@@ -33,6 +33,8 @@ export const RateLimits = {
   MESSAGE: { windowMs: 60_000, max: 20, label: "MESSAGE" },
   /** Listing creation: 5 per hour */
   LISTING_CREATE: { windowMs: 3600_000, max: 5, label: "LISTING_CREATE" },
+  /** Bulk import: 2 per hour (max 100 listings via bulk per hour) */
+  BULK_IMPORT: { windowMs: 3600_000, max: 2, label: "BULK_IMPORT" },
   /** Negotiation offers: 10 per hour */
   NEGOTIATION: { windowMs: 3600_000, max: 10, label: "NEGOTIATION" },
   /** Login attempts: 5 per 15 minutes (per IP) */
