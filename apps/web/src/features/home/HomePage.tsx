@@ -887,6 +887,15 @@ export function HomePage() {
               <div className="h-sokin-card glass-card" key={safeKinIdx}>
                 <p className="h-sokin-author">{currentSokinPost.author.profile?.displayName ?? t('home.defaultUser')}</p>
                 <p className="h-sokin-text">{currentSokinPost.text}</p>
+                {currentSokinPost.mediaUrls?.length > 0 && (
+                  <img
+                    src={resolveMediaUrl(currentSokinPost.mediaUrls[0])}
+                    alt=""
+                    className="h-sokin-img"
+                    loading="lazy"
+                    style={{ width: '100%', borderRadius: 8, marginTop: 6, maxHeight: 180, objectFit: 'cover' }}
+                  />
+                )}
                 <div className="h-sokin-meta">
                   <span className="h-sokin-like">👍 {currentSokinPost.likes}</span>
                   <span className="h-sokin-replies">💬 {currentSokinPost.comments}</span>

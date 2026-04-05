@@ -1074,7 +1074,7 @@ function SoKinPostCard({
                   <div key={i} className="hm-letter-video-wrap">
                     <video
                       ref={videoRef}
-                      src={url}
+                      src={resolveMediaUrl(url)}
                       className="hm-letter-video"
                       autoPlay
                       muted
@@ -1093,7 +1093,7 @@ function SoKinPostCard({
               return (
                 <img
                   key={i}
-                  src={url}
+                  src={resolveMediaUrl(url)}
                   alt={"Media " + (i + 1)}
                   className="hm-letter-img"
                   loading="lazy"
@@ -1139,6 +1139,7 @@ function SoKinPostCard({
                 transform="rotate(180 12 12)"
               />
             </svg>
+            <span>{post.reactionCounts?.SAD ?? 0}</span>
           </button>
         </div>
         <div className="hm-letter-foot-right">

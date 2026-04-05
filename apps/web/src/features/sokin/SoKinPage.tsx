@@ -10,6 +10,7 @@ import { useSocket } from '../../hooks/useSocket';
 import { useScrollDirection } from '../../hooks/useScrollDirection';
 import {
   sokin as sokinApi,
+  resolveMediaUrl,
   type SoKinApiFeedPost,
   type SoKinStory,
   type SoKinReactionType,
@@ -273,7 +274,7 @@ function PostCard({
           <div className="sk-post-media" onClick={handleVideoTap}>
             <video
               ref={videoRef}
-              src={post.mediaUrls.find((u) => /\.(mp4|webm|mov)/i.test(u))}
+              src={resolveMediaUrl(post.mediaUrls.find((u) => /\.(mp4|webm|mov)/i.test(u)))}
               loop
               muted
               playsInline
@@ -286,11 +287,11 @@ function PostCard({
         {hasImage && !hasVideo && (
           <div className="sk-post-media">
             {post.mediaUrls.length === 1 ? (
-              <img src={post.mediaUrls[0]} alt="" className="sk-post-image" />
+              <img src={resolveMediaUrl(post.mediaUrls[0])} alt="" className="sk-post-image" />
             ) : (
               <div className="sk-post-gallery">
                 {post.mediaUrls.map((url, i) => (
-                  <img key={i} src={url} alt="" className="sk-post-gallery-img" />
+                  <img key={i} src={resolveMediaUrl(url)} alt="" className="sk-post-gallery-img" />
                 ))}
               </div>
             )}

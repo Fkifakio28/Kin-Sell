@@ -159,17 +159,21 @@ export const getPublicFeed = async (limit = 20, viewerUserId?: string, city?: st
   }
 
   // Build the geo-filter block, but always include the viewer's own posts
-  const geoFilter = andClauses.length > 0
-    ? viewerUserId
-      ? { OR: [{ authorId: viewerUserId }, { AND: andClauses }] }
-      : { AND: andClauses }
-    : {};
+  const scheduleClause = { OR: [{ scheduledAt: null }, { scheduledAt: { lte: new Date() } }] };
+  const andFilters: Record<string, unknown>[] = [scheduleClause];
+
+  if (andClauses.length > 0) {
+    if (viewerUserId) {
+      andFilters.push({ OR: [{ authorId: viewerUserId }, { AND: andClauses }] });
+    } else {
+      andFilters.push(...andClauses);
+    }
+  }
 
   const posts = await prisma.soKinPost.findMany({
     where: {
       status: "ACTIVE",
-      OR: [{ scheduledAt: null }, { scheduledAt: { lte: new Date() } }],
-      ...geoFilter,
+      AND: andFilters,
       author: {
         role: { notIn: ["ADMIN", "SUPER_ADMIN"] },
       },
