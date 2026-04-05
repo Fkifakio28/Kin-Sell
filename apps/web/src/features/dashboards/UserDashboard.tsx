@@ -45,6 +45,7 @@ import VisibilitySelector from '../../components/VisibilitySelector';
 import type { StructuredLocation, LocationVisibility } from '../../lib/api-client';
 import { extractValidationCodeFromQrPayload } from '../../utils/order-validation';
 import { useSocket } from '../../hooks/useSocket';
+import { useMarketPreference } from '../../app/providers/MarketPreferenceProvider';
 import { LISTING_PRODUCT_CATEGORIES, LISTING_SERVICE_CATEGORIES } from '../../shared/constants/categories';
 import { USD_TO_CDF_RATE } from '../../shared/constants/currencies';
 import { SK_AI_ADVICE, SK_AI_AUTO_NEGO, SK_AI_COMMANDE } from '../../shared/constants/storage-keys';
@@ -206,6 +207,8 @@ export function UserDashboard() {
   const { t, formatMoneyFromUsdCents, formatPriceLabelFromUsdCents } = useLocaleCurrency();
   const { user, isLoading, isLoggedIn, logout, refreshUser } = useAuth();
   const { on, off } = useSocket();
+  const { effectiveCountry, getCountryConfig } = useMarketPreference();
+  const countryConfig = getCountryConfig();
   const money = (usdCents: number) => formatMoneyFromUsdCents(usdCents);
   const statusLabel = (status: string) => t(STATUS_LABEL_KEY[status] ?? status);
   const missing = user ? MISSING_FIELD_KEYS.filter(f => f.check(user)).map(f => t(f.key)) : [];
@@ -368,14 +371,14 @@ export function UserDashboard() {
     title: '',
     description: '',
     category: '',
-    city: '',
-    country: '',
-    countryCode: '',
+    city: countryConfig.defaultCity,
+    country: countryConfig.name,
+    countryCode: countryConfig.code,
     region: '',
     district: '',
     formattedAddress: '',
-    latitude: '-4.325',
-    longitude: '15.322',
+    latitude: String(countryConfig.defaultLat),
+    longitude: String(countryConfig.defaultLng),
     placeId: '',
     locationVisibility: 'CITY_PUBLIC' as LocationVisibility,
     serviceRadiusKm: '',
@@ -926,11 +929,12 @@ export function UserDashboard() {
 
   /* ── Articles handlers ── */
   const resetArticleForm = () => {
+    const cfg = getCountryConfig();
     setArticleForm({
-      type: 'PRODUIT', title: '', description: '', category: '', city: '',
-      country: '', countryCode: '', region: '', district: '', formattedAddress: '', placeId: '',
+      type: 'PRODUIT', title: '', description: '', category: '', city: cfg.defaultCity,
+      country: cfg.name, countryCode: cfg.code, region: '', district: '', formattedAddress: '', placeId: '',
       locationVisibility: 'CITY_PUBLIC', serviceRadiusKm: '',
-      latitude: '-4.325', longitude: '15.322', imageUrl: '', priceUsdCents: '0', stockQuantity: '',
+      latitude: String(cfg.defaultLat), longitude: String(cfg.defaultLng), imageUrl: '', priceUsdCents: '0', stockQuantity: '',
       serviceDurationMin: '', serviceLocation: '',
     });
     setEditingArticle(null);
@@ -1098,9 +1102,9 @@ export function UserDashboard() {
           title: (reverseMap['title'] ? row[reverseMap['title']] : '') ?? '',
           description: reverseMap['description'] ? row[reverseMap['description']] || undefined : undefined,
           category: (reverseMap['category'] ? row[reverseMap['category']] : '') || 'Non classé',
-          city: (reverseMap['city'] ? row[reverseMap['city']] : '') || settingsForm.city || 'Kinshasa',
-          latitude: -4.325,
-          longitude: 15.322,
+          city: (reverseMap['city'] ? row[reverseMap['city']] : '') || settingsForm.city || countryConfig.defaultCity,
+          latitude: countryConfig.defaultLat,
+          longitude: countryConfig.defaultLng,
           imageUrl: reverseMap['imageUrl'] ? row[reverseMap['imageUrl']] || undefined : undefined,
           priceUsdCents: isNaN(rawPrice) ? 0 : Math.round(Math.abs(rawPrice)),
           stockQuantity: type === 'PRODUIT' && reverseMap['stock'] ? (Number(row[reverseMap['stock']]) || null) : null,
