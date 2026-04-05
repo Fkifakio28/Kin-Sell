@@ -20,6 +20,7 @@ import {
 import { sendPushToUser } from "../notifications/push.service.js";
 import { prisma } from "../../shared/db/prisma.js";
 import { emitToAll, isUserOnline } from "../messaging/socket.js";
+import { rateLimit, RateLimits } from "../../shared/middleware/rate-limit.middleware.js";
 
 const createPostSchema = z.object({
   text: z.string().min(1).max(500),
@@ -38,8 +39,8 @@ router.get(
   "/posts",
   asyncHandler(async (req, res) => {
     const raw = req.query.limit;
-    const city = typeof req.query.city === "string" ? req.query.city : undefined;
-    const country = typeof req.query.country === "string" ? req.query.country : undefined;
+    const city = typeof req.query.city === "string" ? req.query.city.slice(0, 100) : undefined;
+    const country = typeof req.query.country === "string" ? req.query.country.slice(0, 100) : undefined;
     const limit = Math.min(
       parseInt(typeof raw === "string" ? raw : "20", 10) || 20,
       50
@@ -81,7 +82,10 @@ router.get(
 router.get(
   "/users",
   asyncHandler(async (req, res) => {
-    const { city, search, country } = req.query as Record<string, string | undefined>;
+    const { city: rawCity, search: rawSearch, country: rawCountry } = req.query as Record<string, string | undefined>;
+    const city = rawCity?.slice(0, 100);
+    const search = rawSearch?.slice(0, 100);
+    const country = rawCountry?.slice(0, 100);
     const raw = req.query.limit;
     const limit = Math.min(
       parseInt(typeof raw === "string" ? raw : "50", 10) || 50,
@@ -106,6 +110,7 @@ router.get(
 router.post(
   "/posts",
   requireAuth,
+  rateLimit(RateLimits.SOKIN_POST),
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     const { text, mediaUrls = [], location, tags, hashtags, scheduledAt } = createPostSchema.parse(req.body);
 

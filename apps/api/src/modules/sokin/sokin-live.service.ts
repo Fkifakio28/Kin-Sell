@@ -182,46 +182,42 @@ export async function setLiveFeaturedListing(liveId: string, hostId: string, lis
 
 /* ── Rejoindre un live ── */
 export async function joinLive(liveId: string, userId: string, role = "VIEWER") {
-  const participant = await prisma.soKinLiveParticipant.upsert({
-    where: { liveId_userId: { liveId, userId } },
-    create: { liveId, userId, role },
-    update: { leftAt: null, role },
-  });
-
-  // Incrémenter le compteur de viewers
-  await prisma.soKinLive.update({
-    where: { id: liveId },
-    data: {
-      viewerCount: { increment: 1 },
-      peakViewers: {
-        // Le peakViewers sera mis à jour si viewerCount > peakViewers via un trigger ou un check
-        increment: 0,
-      },
-    },
-  });
-
-  // Mettre à jour le peakViewers si nécessaire
-  const live = await prisma.soKinLive.findUnique({ where: { id: liveId }, select: { viewerCount: true, peakViewers: true } });
-  if (live && live.viewerCount > live.peakViewers) {
-    await prisma.soKinLive.update({
-      where: { id: liveId },
-      data: { peakViewers: live.viewerCount },
+  return prisma.$transaction(async (tx) => {
+    const participant = await tx.soKinLiveParticipant.upsert({
+      where: { liveId_userId: { liveId, userId } },
+      create: { liveId, userId, role },
+      update: { leftAt: null, role },
     });
-  }
 
-  return participant;
+    // Incrémenter le compteur de viewers
+    const live = await tx.soKinLive.update({
+      where: { id: liveId },
+      data: { viewerCount: { increment: 1 } },
+      select: { viewerCount: true, peakViewers: true },
+    });
+
+    // Mettre à jour le peakViewers atomiquement si nécessaire
+    if (live.viewerCount > live.peakViewers) {
+      await tx.soKinLive.update({
+        where: { id: liveId },
+        data: { peakViewers: live.viewerCount },
+      });
+    }
+
+    return participant;
+  });
 }
 
 /* ── Quitter un live ── */
 export async function leaveLive(liveId: string, userId: string) {
-  await prisma.soKinLiveParticipant.updateMany({
-    where: { liveId, userId, leftAt: null },
-    data: { leftAt: new Date() },
-  });
+  await prisma.$transaction(async (tx) => {
+    await tx.soKinLiveParticipant.updateMany({
+      where: { liveId, userId, leftAt: null },
+      data: { leftAt: new Date() },
+    });
 
-  await prisma.soKinLive.update({
-    where: { id: liveId },
-    data: { viewerCount: { decrement: 1 } },
+    // Décrémenter sans aller en-dessous de 0
+    await tx.$executeRaw`UPDATE "SoKinLive" SET "viewerCount" = GREATEST("viewerCount" - 1, 0) WHERE "id" = ${liveId}`;
   });
 }
 

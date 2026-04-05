@@ -35,6 +35,8 @@ export const RateLimits = {
   LISTING_CREATE: { windowMs: 3600_000, max: 5, label: "LISTING_CREATE" },
   /** Bulk import: 2 per hour (max 100 listings via bulk per hour) */
   BULK_IMPORT: { windowMs: 3600_000, max: 2, label: "BULK_IMPORT" },
+  /** SoKin posts: 10 per hour */
+  SOKIN_POST: { windowMs: 3600_000, max: 10, label: "SOKIN_POST" },
   /** Negotiation offers: 10 per hour */
   NEGOTIATION: { windowMs: 3600_000, max: 10, label: "NEGOTIATION" },
   /** Login attempts: 5 per 15 minutes (per IP) */
