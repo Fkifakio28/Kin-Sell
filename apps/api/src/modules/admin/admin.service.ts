@@ -342,19 +342,45 @@ export const createUser = async (data: {
 // 3. BLOG
 // ════════════════════════════════════════════
 
-export const listBlogPosts = async (params: { page?: number; limit?: number; status?: string }) => {
+function generateSlug(title: string): string {
+  return title
+    .toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 80) + "-" + Date.now().toString(36);
+}
+
+export const listBlogPosts = async (params: {
+  page?: number; limit?: number; status?: string;
+  category?: string; search?: string; language?: string;
+  sortBy?: string;
+}) => {
   const page = params.page ?? 1;
   const limit = Math.min(params.limit ?? 20, 50);
   const skip = (page - 1) * limit;
   const where: Record<string, unknown> = {};
   if (params.status && params.status !== "ALL") where.status = params.status;
+  if (params.category && params.category !== "ALL") where.category = params.category;
+  if (params.language && params.language !== "ALL") where.language = params.language;
+  if (params.search) {
+    where.OR = [
+      { title: { contains: params.search, mode: "insensitive" } },
+      { excerpt: { contains: params.search, mode: "insensitive" } },
+    ];
+  }
+
+  const orderBy: Record<string, string> =
+    params.sortBy === "views" ? { views: "desc" }
+    : params.sortBy === "published" ? { publishedAt: "desc" }
+    : { createdAt: "desc" };
 
   const [total, posts] = await Promise.all([
     prisma.blogPost.count({ where: where as any }),
     prisma.blogPost.findMany({
       where: where as any,
       include: { author: { include: { profile: true } } },
-      orderBy: { createdAt: "desc" },
+      orderBy: orderBy as any,
       skip,
       take: limit,
     }),
@@ -363,19 +389,57 @@ export const listBlogPosts = async (params: { page?: number; limit?: number; sta
   return {
     total,
     page,
-    totalPages: Math.ceil(total / limit),
+    totalPages: Math.max(1, Math.ceil(total / limit)),
     posts: posts.map((p) => ({
       id: p.id,
       title: p.title,
+      slug: p.slug,
       excerpt: p.excerpt,
       coverImage: p.coverImage,
       mediaUrl: p.mediaUrl,
       mediaType: p.mediaType,
+      gifUrl: p.gifUrl,
+      category: p.category,
+      tags: p.tags,
+      language: p.language,
+      views: p.views,
       status: p.status,
       publishedAt: p.publishedAt?.toISOString() ?? null,
       createdAt: p.createdAt.toISOString(),
       author: p.author.profile?.displayName ?? "Admin",
+      authorId: p.authorId,
     })),
+  };
+};
+
+export const getBlogPost = async (postId: string) => {
+  const p = await prisma.blogPost.findUnique({
+    where: { id: postId },
+    include: { author: { include: { profile: true } } },
+  });
+  if (!p) throw new HttpError(404, "Article introuvable");
+  return {
+    id: p.id,
+    title: p.title,
+    slug: p.slug,
+    content: p.content,
+    excerpt: p.excerpt,
+    coverImage: p.coverImage,
+    mediaUrl: p.mediaUrl,
+    mediaType: p.mediaType,
+    gifUrl: p.gifUrl,
+    category: p.category,
+    tags: p.tags,
+    language: p.language,
+    metaTitle: p.metaTitle,
+    metaDescription: p.metaDescription,
+    views: p.views,
+    status: p.status,
+    publishedAt: p.publishedAt?.toISOString() ?? null,
+    createdAt: p.createdAt.toISOString(),
+    updatedAt: p.updatedAt.toISOString(),
+    author: p.author.profile?.displayName ?? "Admin",
+    authorId: p.authorId,
   };
 };
 
@@ -386,17 +450,31 @@ export const createBlogPost = async (authorId: string, data: {
   coverImage?: string;
   mediaUrl?: string;
   mediaType?: string;
+  gifUrl?: string;
+  category?: string;
+  tags?: string[];
+  language?: string;
+  metaTitle?: string;
+  metaDescription?: string;
   status?: string;
 }) => {
+  const slug = generateSlug(data.title);
   const post = await prisma.blogPost.create({
     data: {
       authorId,
       title: data.title,
+      slug,
       content: data.content,
       excerpt: data.excerpt,
       coverImage: data.coverImage,
       mediaUrl: data.mediaUrl,
       mediaType: data.mediaType,
+      gifUrl: data.gifUrl,
+      category: data.category ?? "general",
+      tags: data.tags ?? [],
+      language: data.language ?? "fr",
+      metaTitle: data.metaTitle,
+      metaDescription: data.metaDescription,
       status: (data.status as any) ?? "DRAFT",
       publishedAt: data.status === "PUBLISHED" ? new Date() : undefined,
     },
@@ -404,13 +482,46 @@ export const createBlogPost = async (authorId: string, data: {
   return post;
 };
 
-export const updateBlogPost = async (postId: string, data: Record<string, unknown>) => {
-  if (data.status === "PUBLISHED") {
-    data.publishedAt = new Date();
+export const updateBlogPost = async (postId: string, data: {
+  title?: string;
+  content?: string;
+  excerpt?: string | null;
+  coverImage?: string | null;
+  mediaUrl?: string | null;
+  mediaType?: string | null;
+  gifUrl?: string | null;
+  category?: string;
+  tags?: string[];
+  language?: string;
+  metaTitle?: string | null;
+  metaDescription?: string | null;
+  status?: string;
+}) => {
+  const updateData: Record<string, unknown> = {};
+  if (data.title !== undefined) updateData.title = data.title;
+  if (data.content !== undefined) updateData.content = data.content;
+  if (data.excerpt !== undefined) updateData.excerpt = data.excerpt;
+  if (data.coverImage !== undefined) updateData.coverImage = data.coverImage || null;
+  if (data.mediaUrl !== undefined) updateData.mediaUrl = data.mediaUrl || null;
+  if (data.mediaType !== undefined) updateData.mediaType = data.mediaType || null;
+  if (data.gifUrl !== undefined) updateData.gifUrl = data.gifUrl || null;
+  if (data.category !== undefined) updateData.category = data.category;
+  if (data.tags !== undefined) updateData.tags = data.tags;
+  if (data.language !== undefined) updateData.language = data.language;
+  if (data.metaTitle !== undefined) updateData.metaTitle = data.metaTitle || null;
+  if (data.metaDescription !== undefined) updateData.metaDescription = data.metaDescription || null;
+  if (data.status !== undefined) {
+    updateData.status = data.status;
+    if (data.status === "PUBLISHED") {
+      // Only set publishedAt if not already set
+      const existing = await prisma.blogPost.findUnique({ where: { id: postId }, select: { publishedAt: true } });
+      if (!existing?.publishedAt) updateData.publishedAt = new Date();
+    }
   }
+
   const post = await prisma.blogPost.update({
     where: { id: postId },
-    data: data as any,
+    data: updateData as any,
   });
   return post;
 };
@@ -418,6 +529,41 @@ export const updateBlogPost = async (postId: string, data: Record<string, unknow
 export const deleteBlogPost = async (postId: string) => {
   await prisma.blogPost.delete({ where: { id: postId } });
   return { success: true };
+};
+
+export const incrementBlogViews = async (postId: string) => {
+  await prisma.blogPost.update({
+    where: { id: postId },
+    data: { views: { increment: 1 } },
+  });
+};
+
+export const getBlogAnalytics = async () => {
+  const [totalPosts, published, drafts, totalViews, topPosts] = await Promise.all([
+    prisma.blogPost.count(),
+    prisma.blogPost.count({ where: { status: "PUBLISHED" } }),
+    prisma.blogPost.count({ where: { status: "DRAFT" } }),
+    prisma.blogPost.aggregate({ _sum: { views: true } }),
+    prisma.blogPost.findMany({
+      where: { status: "PUBLISHED" },
+      orderBy: { views: "desc" },
+      take: 5,
+      select: { id: true, title: true, slug: true, views: true, publishedAt: true },
+    }),
+  ]);
+  const categories = await prisma.blogPost.groupBy({
+    by: ["category"],
+    _count: { id: true },
+  });
+  return {
+    totalPosts,
+    published,
+    drafts,
+    archived: totalPosts - published - drafts,
+    totalViews: totalViews._sum.views ?? 0,
+    topPosts,
+    categories: categories.map(c => ({ category: c.category, count: c._count.id })),
+  };
 };
 
 // ════════════════════════════════════════════

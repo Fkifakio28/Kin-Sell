@@ -13,6 +13,8 @@ import {
   type AdminTransaction,
   type AdminReport,
   type AdminBlogPost,
+  type AdminBlogPostDetail,
+  type BlogAnalytics,
   type AdminAdOffer,
   type AdminAuditLog,
   type AdminMember,
@@ -51,7 +53,8 @@ type AdminSection =
 type ModalType =
   | null | 'user-detail' | 'user-role' | 'user-message' | 'user-suspend'
   | 'user-create' | 'report-detail' | 'blog-edit' | 'ad-edit'
-  | 'admin-edit' | 'admin-create' | 'currency-edit' | 'feed-moderate' | 'advertisement-edit';
+  | 'admin-edit' | 'admin-create' | 'currency-edit' | 'feed-moderate' | 'advertisement-edit'
+  | 'blog-preview';
 
 const ALL_PERMISSIONS = [
   'DASHBOARD', 'USERS', 'BLOG', 'TRANSACTIONS', 'REPORTS', 'FEED',
@@ -171,8 +174,19 @@ export function AdminDashboard() {
   const [blogPosts, setBlogPosts] = useState<AdminBlogPost[]>([]);
   const [blogTotal, setBlogTotal] = useState(0);
   const [blogPage, setBlogPage] = useState(1);
-  const [blogForm, setBlogForm] = useState({ title: '', content: '', excerpt: '', coverImage: '', status: 'DRAFT' });
+  const [blogStatusFilter, setBlogStatusFilter] = useState('ALL');
+  const [blogCategoryFilter, setBlogCategoryFilter] = useState('ALL');
+  const [blogSearch, setBlogSearch] = useState('');
+  const [blogSortBy, setBlogSortBy] = useState('created');
+  const [blogAnalytics, setBlogAnalytics] = useState<BlogAnalytics | null>(null);
+  const [blogForm, setBlogForm] = useState({
+    title: '', content: '', excerpt: '', coverImage: '', mediaUrl: '', mediaType: '',
+    gifUrl: '', category: 'general', tags: '' as string, language: 'fr',
+    metaTitle: '', metaDescription: '', status: 'DRAFT',
+  });
   const [editingBlogId, setEditingBlogId] = useState<string | null>(null);
+  const [blogPreview, setBlogPreview] = useState<AdminBlogPostDetail | null>(null);
+  const [blogUploadBusy, setBlogUploadBusy] = useState(false);
 
   // Transactions
   const [transactions, setTransactions] = useState<AdminTransaction[]>([]);
@@ -341,9 +355,19 @@ export function AdminDashboard() {
           break;
         }
         case 'blog': {
-          const res = await admin.blogPosts({ page: blogPage, limit: 20 });
+          const [res, analytics] = await Promise.all([
+            admin.blogPosts({
+              page: blogPage, limit: 20,
+              status: blogStatusFilter !== 'ALL' ? blogStatusFilter : undefined,
+              category: blogCategoryFilter !== 'ALL' ? blogCategoryFilter : undefined,
+              search: blogSearch || undefined,
+              sortBy: blogSortBy !== 'created' ? blogSortBy : undefined,
+            }),
+            admin.blogAnalytics().catch(() => null),
+          ]);
           setBlogPosts(res.posts);
           setBlogTotal(res.total);
+          setBlogAnalytics(analytics);
           break;
         }
         case 'transactions': {
@@ -471,7 +495,7 @@ export function AdminDashboard() {
     } catch (e: any) {
       setError(e?.message ?? 'Erreur de chargement');
     }
-  }, [activeSection, usersPage, usersSearch, usersRoleFilter, usersStatusFilter, blogPage, txPage, txStatusFilter, reportsPage, reportsStatusFilter, rankPeriod, rankType, auditPage, secEventsPage, fraudPage, fraudFilter, restrictionsPage, restrictionsFilter, mgLogsPage, mgVerdictFilter, feedPage, feedStatusFilter, feedSearch, donationsPage, donationsStatusFilter, donationsTypeFilter, advPage, advStatusFilter, advTypeFilter, advSearch, adminListingsPage, adminListingsStatusFilter, adminListingsTypeFilter, adminListingsSearch, appealsPage]);
+  }, [activeSection, usersPage, usersSearch, usersRoleFilter, usersStatusFilter, blogPage, blogStatusFilter, blogCategoryFilter, blogSearch, blogSortBy, txPage, txStatusFilter, reportsPage, reportsStatusFilter, rankPeriod, rankType, auditPage, secEventsPage, fraudPage, fraudFilter, restrictionsPage, restrictionsFilter, mgLogsPage, mgVerdictFilter, feedPage, feedStatusFilter, feedSearch, donationsPage, donationsStatusFilter, donationsTypeFilter, advPage, advStatusFilter, advTypeFilter, advSearch, adminListingsPage, adminListingsStatusFilter, adminListingsTypeFilter, adminListingsSearch, appealsPage]);
 
   useEffect(() => { if (isLoggedIn) loadSectionData(); }, [loadSectionData, isLoggedIn]);
 
@@ -551,29 +575,99 @@ export function AdminDashboard() {
     } catch (e: any) { setError(e?.message); } finally { setBusy(false); }
   };
 
+  const resetBlogForm = () => {
+    setBlogForm({
+      title: '', content: '', excerpt: '', coverImage: '', mediaUrl: '', mediaType: '',
+      gifUrl: '', category: 'general', tags: '', language: 'fr',
+      metaTitle: '', metaDescription: '', status: 'DRAFT',
+    });
+    setEditingBlogId(null);
+  };
+
+  const handleEditBlog = async (postId: string) => {
+    try {
+      const detail = await admin.blogPost(postId);
+      setBlogForm({
+        title: detail.title,
+        content: detail.content,
+        excerpt: detail.excerpt ?? '',
+        coverImage: detail.coverImage ?? '',
+        mediaUrl: detail.mediaUrl ?? '',
+        mediaType: detail.mediaType ?? '',
+        gifUrl: detail.gifUrl ?? '',
+        category: detail.category,
+        tags: detail.tags.join(', '),
+        language: detail.language,
+        metaTitle: detail.metaTitle ?? '',
+        metaDescription: detail.metaDescription ?? '',
+        status: detail.status,
+      });
+      setEditingBlogId(postId);
+      setModal('blog-edit');
+    } catch (e: any) { setError(e?.message); }
+  };
+
+  const handlePreviewBlog = async (postId: string) => {
+    try {
+      const detail = await admin.blogPost(postId);
+      setBlogPreview(detail);
+      setModal('blog-preview');
+    } catch (e: any) { setError(e?.message); }
+  };
+
   const handleCreateBlog = async () => {
     setBusy(true);
     try {
+      const payload = {
+        ...blogForm,
+        tags: blogForm.tags ? blogForm.tags.split(',').map(t => t.trim()).filter(Boolean) : [],
+      };
       if (editingBlogId) {
-        await admin.updateBlogPost(editingBlogId, blogForm);
+        await admin.updateBlogPost(editingBlogId, payload);
       } else {
-        await admin.createBlogPost(blogForm);
+        await admin.createBlogPost(payload);
       }
       setModal(null);
-      setBlogForm({ title: '', content: '', excerpt: '', coverImage: '', status: 'DRAFT' });
-      setEditingBlogId(null);
+      resetBlogForm();
       invalidateCache('/admin/blog');
       loadSectionData();
       setSuccess(editingBlogId ? 'Article modifié' : 'Article créé');
     } catch (e: any) { setError(e?.message); } finally { setBusy(false); }
   };
 
+  const handleUploadBlogMedia = async (file: File, field: 'coverImage' | 'mediaUrl' | 'gifUrl') => {
+    setBlogUploadBusy(true);
+    try {
+      const formData = new FormData();
+      formData.append('files', file);
+      const res = await fetch(`${import.meta.env.VITE_API_URL || ''}/uploads`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token') ?? ''}` },
+        body: formData,
+      });
+      if (!res.ok) throw new Error('Upload échoué');
+      const json = await res.json();
+      const url = json.urls?.[0] ?? '';
+      if (url) {
+        setBlogForm(f => ({
+          ...f,
+          [field]: url,
+          ...(field === 'mediaUrl' && file.type.startsWith('video') ? { mediaType: 'video' } : {}),
+          ...(field === 'mediaUrl' && file.type.startsWith('image') ? { mediaType: 'image' } : {}),
+        }));
+        setSuccess('Média uploadé');
+      }
+    } catch (e: any) { setError(e?.message); } finally { setBlogUploadBusy(false); }
+  };
+
   const handleDeleteBlog = async (id: string) => {
+    if (!confirm('Supprimer définitivement cet article ?')) return;
     setBusy(true);
     try {
       await admin.deleteBlogPost(id);
       invalidateCache('/admin/blog');
       loadSectionData();
+      setSuccess('Article supprimé');
     } catch (e: any) { setError(e?.message); } finally { setBusy(false); }
   };
 
@@ -927,34 +1021,105 @@ export function AdminDashboard() {
 
   const renderBlog = () => (
     <>
+      {/* Analytics cards */}
+      {blogAnalytics && (
+        <div className="ad-stats-grid">
+          <div className="ad-stat-card"><div className="ad-stat-card-head"><span className="ad-stat-label">Total articles</span><span className="ad-stat-icon">📰</span></div><div className="ad-stat-value">{blogAnalytics.totalPosts}</div></div>
+          <div className="ad-stat-card"><div className="ad-stat-card-head"><span className="ad-stat-label">Publiés</span><span className="ad-stat-icon">🟢</span></div><div className="ad-stat-value ad-stat-value--green">{blogAnalytics.published}</div></div>
+          <div className="ad-stat-card"><div className="ad-stat-card-head"><span className="ad-stat-label">Brouillons</span><span className="ad-stat-icon">📝</span></div><div className="ad-stat-value ad-stat-value--amber">{blogAnalytics.drafts}</div></div>
+          <div className="ad-stat-card"><div className="ad-stat-card-head"><span className="ad-stat-label">Vues totales</span><span className="ad-stat-icon">👁️</span></div><div className="ad-stat-value ad-stat-value--accent">{blogAnalytics.totalViews.toLocaleString()}</div></div>
+        </div>
+      )}
+
+      {/* Top articles */}
+      {blogAnalytics && blogAnalytics.topPosts.length > 0 && (
+        <div className="ad-panel" style={{ marginBottom: 16 }}>
+          <h4 style={{ fontSize: 13, fontWeight: 600, color: 'var(--ad-text-2)', marginBottom: 10 }}>🔥 Articles les plus lus</h4>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {blogAnalytics.topPosts.map((tp, i) => (
+              <div key={tp.id} style={{ padding: '6px 12px', background: 'rgba(111,88,255,0.08)', borderRadius: 8, fontSize: 12, color: 'var(--ad-text-2)' }}>
+                #{i + 1} {tp.title.slice(0, 40)}{tp.title.length > 40 ? '…' : ''} — <strong>{tp.views}</strong> vues
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="ad-panel-head">
         <h3 className="ad-panel-title">Kin-Sell Blog — {blogTotal} article{blogTotal > 1 ? 's' : ''}</h3>
-        <button className="ad-btn ad-btn--primary" onClick={() => { setBlogForm({ title: '', content: '', excerpt: '', coverImage: '', status: 'DRAFT' }); setEditingBlogId(null); setModal('blog-edit'); }}>+ Nouvel article</button>
+        <button className="ad-btn ad-btn--primary" onClick={() => { resetBlogForm(); setModal('blog-edit'); }}>+ Nouvel article</button>
       </div>
+
+      {/* Filters */}
+      <div className="ad-panel" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', padding: '10px 14px', marginBottom: 12 }}>
+        <select className="ad-select" style={{ width: 'auto' }} value={blogStatusFilter} onChange={e => { setBlogStatusFilter(e.target.value); setBlogPage(1); }}>
+          <option value="ALL">Tous statuts</option>
+          <option value="PUBLISHED">Publié</option>
+          <option value="DRAFT">Brouillon</option>
+          <option value="ARCHIVED">Archivé</option>
+        </select>
+        <select className="ad-select" style={{ width: 'auto' }} value={blogCategoryFilter} onChange={e => { setBlogCategoryFilter(e.target.value); setBlogPage(1); }}>
+          <option value="ALL">Toutes catégories</option>
+          <option value="general">Général</option>
+          <option value="actualites">Actualités</option>
+          <option value="conseils">Conseils</option>
+          <option value="technologie">Technologie</option>
+          <option value="business">Business</option>
+          <option value="tutoriel">Tutoriel</option>
+          <option value="annonce">Annonce</option>
+        </select>
+        <select className="ad-select" style={{ width: 'auto' }} value={blogSortBy} onChange={e => setBlogSortBy(e.target.value)}>
+          <option value="created">Plus récents</option>
+          <option value="published">Derniers publiés</option>
+          <option value="views">Plus vus</option>
+        </select>
+        <input className="ad-input" style={{ width: 180 }} placeholder="🔍 Rechercher…" value={blogSearch} onChange={e => setBlogSearch(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { setBlogPage(1); loadSectionData(); } }} />
+      </div>
+
       <div className="ad-panel">
         <div className="ad-table-wrap">
           <table className="ad-table">
-            <thead><tr><th>Titre</th><th>Statut</th><th>Auteur</th><th>Date</th><th>Actions</th></tr></thead>
+            <thead><tr><th style={{ width: 50 }}>Image</th><th>Titre</th><th>Catégorie</th><th>Statut</th><th>Auteur</th><th>Vues</th><th>Date</th><th>Actions</th></tr></thead>
             <tbody>
               {blogPosts.map(p => (
                 <tr key={p.id}>
-                  <td style={{ fontWeight: 600, color: 'var(--ad-text-1)' }}>{p.title}</td>
+                  <td>
+                    {p.coverImage ? (
+                      <img src={resolveMediaUrl(p.coverImage)} alt="" style={{ width: 44, height: 44, borderRadius: 8, objectFit: 'cover' }} />
+                    ) : (
+                      <div style={{ width: 44, height: 44, borderRadius: 8, background: 'rgba(111,88,255,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>📰</div>
+                    )}
+                  </td>
+                  <td>
+                    <div style={{ fontWeight: 600, color: 'var(--ad-text-1)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title}</div>
+                    {p.tags.length > 0 && <div style={{ fontSize: 10, color: 'var(--ad-text-3)', marginTop: 2 }}>{p.tags.map(t => `#${t}`).join(' ')}</div>}
+                  </td>
+                  <td><span className="ad-badge" style={{ textTransform: 'capitalize' }}>{p.category}</span></td>
                   <td><span className={statusBadgeClass(p.status)}>{p.status === 'PUBLISHED' ? 'Publié' : p.status === 'ARCHIVED' ? 'Archivé' : 'Brouillon'}</span></td>
-                  <td>{p.author}</td>
-                  <td>{fmtDate(p.createdAt)}</td>
+                  <td style={{ fontSize: 12 }}>{p.author}</td>
+                  <td><span style={{ fontSize: 12, color: 'var(--ad-text-2)' }}>👁️ {p.views}</span></td>
+                  <td style={{ fontSize: 12, whiteSpace: 'nowrap' }}>{fmtDate(p.publishedAt ?? p.createdAt)}</td>
                   <td>
                     <div style={{ display: 'flex', gap: 4 }}>
-                      <button className="ad-btn ad-btn--sm" onClick={() => { setBlogForm({ title: p.title, content: '', excerpt: p.excerpt ?? '', coverImage: p.coverImage ?? '', status: p.status }); setEditingBlogId(p.id); setModal('blog-edit'); }}>✏️</button>
-                      <button className="ad-btn ad-btn--sm" onClick={() => admin.updateBlogPost(p.id, { status: p.status === 'PUBLISHED' ? 'ARCHIVED' : 'PUBLISHED' }).then(() => { invalidateCache('/admin/blog'); loadSectionData(); })}>{p.status === 'PUBLISHED' ? '📦' : '🚀'}</button>
-                      <button className="ad-btn ad-btn--sm ad-btn--danger" onClick={() => handleDeleteBlog(p.id)}>🗑</button>
+                      <button className="ad-btn ad-btn--sm" title="Aperçu" onClick={() => handlePreviewBlog(p.id)}>👁️</button>
+                      <button className="ad-btn ad-btn--sm" title="Modifier" onClick={() => handleEditBlog(p.id)}>✏️</button>
+                      <button className="ad-btn ad-btn--sm" title={p.status === 'PUBLISHED' ? 'Archiver' : 'Publier'} onClick={() => admin.updateBlogPost(p.id, { status: p.status === 'PUBLISHED' ? 'ARCHIVED' : 'PUBLISHED' }).then(() => { invalidateCache('/admin/blog'); loadSectionData(); })}>{p.status === 'PUBLISHED' ? '📦' : '🚀'}</button>
+                      <button className="ad-btn ad-btn--sm ad-btn--danger" title="Supprimer" onClick={() => handleDeleteBlog(p.id)}>🗑</button>
                     </div>
                   </td>
                 </tr>
               ))}
-              {blogPosts.length === 0 && <tr><td colSpan={5} style={{ textAlign: 'center', padding: 24, color: 'var(--ad-text-3)' }}>Aucun article</td></tr>}
+              {blogPosts.length === 0 && <tr><td colSpan={8} style={{ textAlign: 'center', padding: 24, color: 'var(--ad-text-3)' }}>Aucun article</td></tr>}
             </tbody>
           </table>
         </div>
+        {blogTotal > 20 && (
+          <div className="ad-pagination" style={{ marginTop: 12, display: 'flex', justifyContent: 'center', gap: 8, alignItems: 'center' }}>
+            <button className="ad-btn ad-btn--sm" disabled={blogPage <= 1} onClick={() => setBlogPage(p => p - 1)}>← Précédent</button>
+            <span style={{ fontSize: 12, color: 'var(--ad-text-3)' }}>Page {blogPage} / {Math.ceil(blogTotal / 20)}</span>
+            <button className="ad-btn ad-btn--sm" disabled={blogPage >= Math.ceil(blogTotal / 20)} onClick={() => setBlogPage(p => p + 1)}>Suivant →</button>
+          </div>
+        )}
       </div>
     </>
   );
@@ -2528,25 +2693,175 @@ export function AdminDashboard() {
             <>
               <div className="ad-modal-head">
                 <h2 className="ad-modal-title">{editingBlogId ? 'Modifier l\'article' : 'Nouvel article'}</h2>
-                <button className="ad-modal-close" onClick={() => setModal(null)}>✕</button>
+                <button className="ad-modal-close" onClick={() => { setModal(null); resetBlogForm(); }}>✕</button>
               </div>
-              <div className="ad-modal-body">
-                <div className="ad-field"><label className="ad-label">Titre</label><input className="ad-input" value={blogForm.title} onChange={e => setBlogForm(f => ({ ...f, title: e.target.value }))} /></div>
-                <div className="ad-field"><label className="ad-label">Extrait</label><input className="ad-input" value={blogForm.excerpt} onChange={e => setBlogForm(f => ({ ...f, excerpt: e.target.value }))} /></div>
-                <div className="ad-field"><label className="ad-label">Contenu</label><textarea className="ad-textarea" style={{ minHeight: 120 }} value={blogForm.content} onChange={e => setBlogForm(f => ({ ...f, content: e.target.value }))} /></div>
-                <div className="ad-field"><label className="ad-label">Image de couverture (URL)</label><input className="ad-input" value={blogForm.coverImage} onChange={e => setBlogForm(f => ({ ...f, coverImage: e.target.value }))} /></div>
+              <div className="ad-modal-body" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
+                {/* Title */}
                 <div className="ad-field">
+                  <label className="ad-label">Titre *</label>
+                  <input className="ad-input" value={blogForm.title} onChange={e => setBlogForm(f => ({ ...f, title: e.target.value }))} placeholder="Titre de l'article" />
+                </div>
+
+                {/* Excerpt */}
+                <div className="ad-field">
+                  <label className="ad-label">Extrait / Description courte</label>
+                  <input className="ad-input" value={blogForm.excerpt} onChange={e => setBlogForm(f => ({ ...f, excerpt: e.target.value }))} placeholder="Résumé court pour les cartes" />
+                </div>
+
+                {/* Content */}
+                <div className="ad-field">
+                  <label className="ad-label">Contenu *</label>
+                  <textarea className="ad-textarea" style={{ minHeight: 200, fontFamily: 'inherit', lineHeight: 1.6 }} value={blogForm.content} onChange={e => setBlogForm(f => ({ ...f, content: e.target.value }))} placeholder="Écrivez votre article ici (supporte le formatage basique)" />
+                </div>
+
+                {/* Category + Language row */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div className="ad-field">
+                    <label className="ad-label">Catégorie</label>
+                    <select className="ad-select" value={blogForm.category} onChange={e => setBlogForm(f => ({ ...f, category: e.target.value }))}>
+                      <option value="general">Général</option>
+                      <option value="actualites">Actualités</option>
+                      <option value="conseils">Conseils</option>
+                      <option value="technologie">Technologie</option>
+                      <option value="business">Business</option>
+                      <option value="tutoriel">Tutoriel</option>
+                      <option value="annonce">Annonce</option>
+                    </select>
+                  </div>
+                  <div className="ad-field">
+                    <label className="ad-label">Langue</label>
+                    <select className="ad-select" value={blogForm.language} onChange={e => setBlogForm(f => ({ ...f, language: e.target.value }))}>
+                      <option value="fr">Français</option>
+                      <option value="ln">Lingala</option>
+                      <option value="en">English</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Tags */}
+                <div className="ad-field">
+                  <label className="ad-label">Tags (séparés par des virgules)</label>
+                  <input className="ad-input" value={blogForm.tags} onChange={e => setBlogForm(f => ({ ...f, tags: e.target.value }))} placeholder="kin-sell, e-commerce, kinshasa" />
+                </div>
+
+                {/* Cover Image */}
+                <div className="ad-field">
+                  <label className="ad-label">🖼️ Image de couverture</label>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <input className="ad-input" style={{ flex: 1 }} value={blogForm.coverImage} onChange={e => setBlogForm(f => ({ ...f, coverImage: e.target.value }))} placeholder="URL de l'image ou upload →" />
+                    <label className="ad-btn ad-btn--sm" style={{ cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                      {blogUploadBusy ? '…' : '📤 Upload'}
+                      <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) handleUploadBlogMedia(f, 'coverImage'); }} />
+                    </label>
+                  </div>
+                  {blogForm.coverImage && (
+                    <div style={{ marginTop: 8, position: 'relative', display: 'inline-block' }}>
+                      <img src={resolveMediaUrl(blogForm.coverImage)} alt="" style={{ maxHeight: 120, borderRadius: 8, objectFit: 'cover' }} />
+                      <button type="button" style={{ position: 'absolute', top: 4, right: 4, background: 'rgba(0,0,0,0.6)', border: 'none', borderRadius: '50%', color: '#fff', width: 22, height: 22, cursor: 'pointer', fontSize: 12 }} onClick={() => setBlogForm(f => ({ ...f, coverImage: '' }))}>✕</button>
+                    </div>
+                  )}
+                </div>
+
+                {/* GIF */}
+                <div className="ad-field">
+                  <label className="ad-label">🎞️ GIF (optionnel)</label>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <input className="ad-input" style={{ flex: 1 }} value={blogForm.gifUrl} onChange={e => setBlogForm(f => ({ ...f, gifUrl: e.target.value }))} placeholder="URL du GIF ou upload →" />
+                    <label className="ad-btn ad-btn--sm" style={{ cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                      {blogUploadBusy ? '…' : '📤 Upload'}
+                      <input type="file" accept="image/gif" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) handleUploadBlogMedia(f, 'gifUrl'); }} />
+                    </label>
+                  </div>
+                  {blogForm.gifUrl && (
+                    <div style={{ marginTop: 8, position: 'relative', display: 'inline-block' }}>
+                      <img src={resolveMediaUrl(blogForm.gifUrl)} alt="" style={{ maxHeight: 100, borderRadius: 8 }} />
+                      <button type="button" style={{ position: 'absolute', top: 4, right: 4, background: 'rgba(0,0,0,0.6)', border: 'none', borderRadius: '50%', color: '#fff', width: 22, height: 22, cursor: 'pointer', fontSize: 12 }} onClick={() => setBlogForm(f => ({ ...f, gifUrl: '' }))}>✕</button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Video */}
+                <div className="ad-field">
+                  <label className="ad-label">🎬 Vidéo (optionnel)</label>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <input className="ad-input" style={{ flex: 1 }} value={blogForm.mediaUrl} onChange={e => setBlogForm(f => ({ ...f, mediaUrl: e.target.value, mediaType: 'video' }))} placeholder="URL de la vidéo ou upload →" />
+                    <label className="ad-btn ad-btn--sm" style={{ cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                      {blogUploadBusy ? '…' : '📤 Upload'}
+                      <input type="file" accept="video/*" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) handleUploadBlogMedia(f, 'mediaUrl'); }} />
+                    </label>
+                  </div>
+                  {blogForm.mediaUrl && (
+                    <div style={{ marginTop: 8, position: 'relative', display: 'inline-block' }}>
+                      <video src={resolveMediaUrl(blogForm.mediaUrl)} style={{ maxHeight: 120, borderRadius: 8 }} controls />
+                      <button type="button" style={{ position: 'absolute', top: 4, right: 4, background: 'rgba(0,0,0,0.6)', border: 'none', borderRadius: '50%', color: '#fff', width: 22, height: 22, cursor: 'pointer', fontSize: 12 }} onClick={() => setBlogForm(f => ({ ...f, mediaUrl: '', mediaType: '' }))}>✕</button>
+                    </div>
+                  )}
+                </div>
+
+                {/* SEO */}
+                <details style={{ marginTop: 8 }}>
+                  <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--ad-text-2)', marginBottom: 8 }}>🔍 SEO Meta (optionnel)</summary>
+                  <div className="ad-field">
+                    <label className="ad-label">Meta Title</label>
+                    <input className="ad-input" value={blogForm.metaTitle} onChange={e => setBlogForm(f => ({ ...f, metaTitle: e.target.value }))} placeholder="Titre SEO (si différent du titre)" />
+                  </div>
+                  <div className="ad-field">
+                    <label className="ad-label">Meta Description</label>
+                    <textarea className="ad-textarea" style={{ minHeight: 60 }} value={blogForm.metaDescription} onChange={e => setBlogForm(f => ({ ...f, metaDescription: e.target.value }))} placeholder="Description pour les moteurs de recherche" />
+                  </div>
+                </details>
+
+                {/* Status */}
+                <div className="ad-field" style={{ marginTop: 8 }}>
                   <label className="ad-label">Statut</label>
                   <select className="ad-select" value={blogForm.status} onChange={e => setBlogForm(f => ({ ...f, status: e.target.value }))}>
-                    <option value="DRAFT">Brouillon</option>
-                    <option value="PUBLISHED">Publié</option>
-                    <option value="ARCHIVED">Archivé</option>
+                    <option value="DRAFT">📝 Brouillon</option>
+                    <option value="PUBLISHED">🟢 Publié</option>
+                    <option value="ARCHIVED">📦 Archivé</option>
                   </select>
                 </div>
               </div>
               <div className="ad-modal-footer">
-                <button className="ad-btn" onClick={() => setModal(null)}>Annuler</button>
-                <button className="ad-btn ad-btn--primary" onClick={handleCreateBlog} disabled={busy || !blogForm.title}>{busy ? '…' : 'Sauvegarder'}</button>
+                <button className="ad-btn" onClick={() => { setModal(null); resetBlogForm(); }}>Annuler</button>
+                <button className="ad-btn ad-btn--primary" onClick={handleCreateBlog} disabled={busy || !blogForm.title || !blogForm.content}>{busy ? '…' : (editingBlogId ? 'Enregistrer' : 'Créer l\'article')}</button>
+              </div>
+            </>
+          )}
+
+          {/* Blog Preview */}
+          {modal === 'blog-preview' && blogPreview && (
+            <>
+              <div className="ad-modal-head">
+                <h2 className="ad-modal-title">👁️ Aperçu — {blogPreview.title}</h2>
+                <button className="ad-modal-close" onClick={() => { setModal(null); setBlogPreview(null); }}>✕</button>
+              </div>
+              <div className="ad-modal-body" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
+                {blogPreview.coverImage && (
+                  <img src={resolveMediaUrl(blogPreview.coverImage)} alt="" style={{ width: '100%', maxHeight: 250, objectFit: 'cover', borderRadius: 12, marginBottom: 16 }} />
+                )}
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+                  <span className={statusBadgeClass(blogPreview.status)}>{blogPreview.status}</span>
+                  <span className="ad-badge" style={{ textTransform: 'capitalize' }}>{blogPreview.category}</span>
+                  <span className="ad-badge">🌍 {blogPreview.language.toUpperCase()}</span>
+                  <span className="ad-badge">👁️ {blogPreview.views} vues</span>
+                </div>
+                {blogPreview.tags.length > 0 && (
+                  <div style={{ marginBottom: 12, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                    {blogPreview.tags.map(t => <span key={t} style={{ padding: '2px 8px', background: 'rgba(111,88,255,0.1)', borderRadius: 12, fontSize: 11, color: 'var(--ad-text-2)' }}>#{t}</span>)}
+                  </div>
+                )}
+                <div style={{ fontSize: 12, color: 'var(--ad-text-3)', marginBottom: 12 }}>
+                  ✍️ {blogPreview.author} · {fmtDate(blogPreview.publishedAt ?? blogPreview.createdAt)} · Modifié {fmtDate(blogPreview.updatedAt)}
+                </div>
+                {blogPreview.excerpt && <p style={{ fontStyle: 'italic', color: 'var(--ad-text-2)', marginBottom: 16, padding: 12, background: 'rgba(111,88,255,0.04)', borderRadius: 8 }}>{blogPreview.excerpt}</p>}
+                <div style={{ color: 'var(--ad-text-1)', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{blogPreview.content}</div>
+                {blogPreview.gifUrl && <img src={resolveMediaUrl(blogPreview.gifUrl)} alt="" style={{ maxWidth: '100%', borderRadius: 8, marginTop: 16 }} />}
+                {blogPreview.mediaUrl && blogPreview.mediaType === 'video' && <video src={resolveMediaUrl(blogPreview.mediaUrl)} controls style={{ maxWidth: '100%', borderRadius: 8, marginTop: 16 }} />}
+                {blogPreview.metaTitle && <div style={{ marginTop: 16, padding: 10, background: 'rgba(111,88,255,0.04)', borderRadius: 8, fontSize: 11, color: 'var(--ad-text-3)' }}>🔍 SEO: <strong>{blogPreview.metaTitle}</strong> — {blogPreview.metaDescription ?? 'Pas de meta description'}</div>}
+              </div>
+              <div className="ad-modal-footer">
+                <button className="ad-btn" onClick={() => { setModal(null); setBlogPreview(null); }}>Fermer</button>
+                <button className="ad-btn ad-btn--primary" onClick={() => { setModal(null); setBlogPreview(null); handleEditBlog(blogPreview.id); }}>✏️ Modifier</button>
               </div>
             </>
           )}

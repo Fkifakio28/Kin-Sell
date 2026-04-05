@@ -158,14 +158,38 @@ export type AdminReport = {
 export type AdminBlogPost = {
   id: string;
   title: string;
+  slug: string;
   excerpt: string | null;
   coverImage: string | null;
   mediaUrl: string | null;
   mediaType: string | null;
+  gifUrl: string | null;
+  category: string;
+  tags: string[];
+  language: string;
+  views: number;
   status: string;
   publishedAt: string | null;
   createdAt: string;
   author: string;
+  authorId: string;
+};
+
+export type AdminBlogPostDetail = AdminBlogPost & {
+  content: string;
+  metaTitle: string | null;
+  metaDescription: string | null;
+  updatedAt: string;
+};
+
+export type BlogAnalytics = {
+  totalPosts: number;
+  published: number;
+  drafts: number;
+  archived: number;
+  totalViews: number;
+  topPosts: Array<{ id: string; title: string; slug: string; views: number; publishedAt: string | null }>;
+  categories: Array<{ category: string; count: number }>;
 };
 
 export type AdminAdOffer = {
@@ -416,9 +440,17 @@ export const admin = {
     request<{ id: string; email: string | null; role: string; displayName: string | null }>("/admin/users/create", { method: "POST", body }),
 
   // Blog
-  blogPosts: (params?: { page?: number; limit?: number; status?: string }) =>
+  blogPosts: (params?: { page?: number; limit?: number; status?: string; category?: string; search?: string; language?: string; sortBy?: string }) =>
     request<{ total: number; page: number; totalPages: number; posts: AdminBlogPost[] }>("/admin/blog", { params: params as Record<string, string | number | undefined> }),
-  createBlogPost: (body: { title: string; content: string; excerpt?: string; coverImage?: string; mediaUrl?: string; mediaType?: string; status?: string }) =>
+  blogPost: (id: string) =>
+    request<AdminBlogPostDetail>(`/admin/blog/${encodeURIComponent(id)}`),
+  blogAnalytics: () =>
+    request<BlogAnalytics>("/admin/blog/analytics"),
+  createBlogPost: (body: {
+    title: string; content: string; excerpt?: string; coverImage?: string;
+    mediaUrl?: string; mediaType?: string; gifUrl?: string; category?: string;
+    tags?: string[]; language?: string; metaTitle?: string; metaDescription?: string; status?: string;
+  }) =>
     request<AdminBlogPost>("/admin/blog", { method: "POST", body }),
   updateBlogPost: (id: string, body: Record<string, unknown>) =>
     request<AdminBlogPost>(`/admin/blog/${encodeURIComponent(id)}`, { method: "PATCH", body }),

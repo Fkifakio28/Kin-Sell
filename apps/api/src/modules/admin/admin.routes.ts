@@ -118,8 +118,24 @@ router.get("/blog", asyncHandler(async (req: AuthenticatedRequest, res) => {
     page: z.coerce.number().optional(),
     limit: z.coerce.number().optional(),
     status: z.string().optional(),
+    category: z.string().optional(),
+    search: z.string().optional(),
+    language: z.string().optional(),
+    sortBy: z.string().optional(),
   }).parse(req.query);
   const result = await adminService.listBlogPosts(params);
+  res.json(result);
+}));
+
+router.get("/blog/analytics", asyncHandler(async (req: AuthenticatedRequest, res) => {
+  await checkPermission(req, "BLOG");
+  const result = await adminService.getBlogAnalytics();
+  res.json(result);
+}));
+
+router.get("/blog/:id", asyncHandler(async (req: AuthenticatedRequest, res) => {
+  await checkPermission(req, "BLOG");
+  const result = await adminService.getBlogPost(req.params.id);
   res.json(result);
 }));
 
@@ -132,6 +148,12 @@ router.post("/blog", asyncHandler(async (req: AuthenticatedRequest, res) => {
     coverImage: z.string().optional(),
     mediaUrl: z.string().optional(),
     mediaType: z.string().optional(),
+    gifUrl: z.string().optional(),
+    category: z.string().optional(),
+    tags: z.array(z.string()).optional(),
+    language: z.string().optional(),
+    metaTitle: z.string().optional(),
+    metaDescription: z.string().optional(),
     status: z.string().optional(),
   }).parse(req.body);
   const result = await adminService.createBlogPost(req.auth!.userId, body);
@@ -140,7 +162,22 @@ router.post("/blog", asyncHandler(async (req: AuthenticatedRequest, res) => {
 
 router.patch("/blog/:id", asyncHandler(async (req: AuthenticatedRequest, res) => {
   await checkPermission(req, "BLOG");
-  const result = await adminService.updateBlogPost(req.params.id, req.body);
+  const body = z.object({
+    title: z.string().min(2).optional(),
+    content: z.string().min(10).optional(),
+    excerpt: z.string().nullable().optional(),
+    coverImage: z.string().nullable().optional(),
+    mediaUrl: z.string().nullable().optional(),
+    mediaType: z.string().nullable().optional(),
+    gifUrl: z.string().nullable().optional(),
+    category: z.string().optional(),
+    tags: z.array(z.string()).optional(),
+    language: z.string().optional(),
+    metaTitle: z.string().nullable().optional(),
+    metaDescription: z.string().nullable().optional(),
+    status: z.string().optional(),
+  }).parse(req.body);
+  const result = await adminService.updateBlogPost(req.params.id, body);
   res.json(result);
 }));
 

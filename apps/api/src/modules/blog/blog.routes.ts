@@ -44,15 +44,56 @@ router.get(
       posts: posts.map((post) => ({
         id: post.id,
         title: post.title,
+        slug: post.slug,
         content: post.content,
         excerpt: post.excerpt,
         coverImage: post.coverImage,
         mediaUrl: post.mediaUrl,
         mediaType: post.mediaType,
+        gifUrl: post.gifUrl,
+        category: post.category,
+        tags: post.tags,
+        views: post.views,
         publishedAt: post.publishedAt?.toISOString() ?? null,
         createdAt: post.createdAt.toISOString(),
         author: post.author.profile?.displayName ?? "Admin Kin-Sell",
       })),
+    });
+  }),
+);
+
+// Get single post by slug + increment views
+router.get(
+  "/:slug",
+  asyncHandler(async (req, res) => {
+    const post = await prisma.blogPost.findFirst({
+      where: { slug: req.params.slug, status: "PUBLISHED" },
+      include: { author: { include: { profile: true } } },
+    });
+    if (!post) { res.status(404).json({ error: "Article introuvable" }); return; }
+
+    // Increment views in background
+    prisma.blogPost.update({ where: { id: post.id }, data: { views: { increment: 1 } } }).catch(() => {});
+
+    res.json({
+      id: post.id,
+      title: post.title,
+      slug: post.slug,
+      content: post.content,
+      excerpt: post.excerpt,
+      coverImage: post.coverImage,
+      mediaUrl: post.mediaUrl,
+      mediaType: post.mediaType,
+      gifUrl: post.gifUrl,
+      category: post.category,
+      tags: post.tags,
+      language: post.language,
+      views: post.views,
+      metaTitle: post.metaTitle,
+      metaDescription: post.metaDescription,
+      publishedAt: post.publishedAt?.toISOString() ?? null,
+      createdAt: post.createdAt.toISOString(),
+      author: post.author.profile?.displayName ?? "Admin Kin-Sell",
     });
   }),
 );
