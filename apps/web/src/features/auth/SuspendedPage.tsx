@@ -52,6 +52,22 @@ export function SuspendedPage() {
                 <span className="ks-suspended-reason-text">{user.suspensionReason}</span>
               </div>
             )}
+            {user?.suspensionExpiresAt && (
+              <div className="ks-suspended-expires">
+                <span className="ks-suspended-expires-label">⏳ Durée de la suspension</span>
+                <span className="ks-suspended-expires-text">
+                  Votre compte sera réactivé le {new Date(user.suspensionExpiresAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                </span>
+              </div>
+            )}
+            {!user?.suspensionExpiresAt && user?.accountStatus === 'SUSPENDED' && (
+              <div className="ks-suspended-expires">
+                <span className="ks-suspended-expires-label">⚠️ Suspension permanente</span>
+                <span className="ks-suspended-expires-text">
+                  Votre compte est suspendu indéfiniment. Vous pouvez faire appel ci-dessous.
+                </span>
+              </div>
+            )}
             <p className="ks-suspended-help">{t('auth.suspendedHelp')}</p>
             <div className="ks-suspended-actions">
               <button
@@ -179,6 +195,28 @@ export function SuspendedPage() {
           letter-spacing: 0.05em;
         }
         .ks-suspended-reason-text {
+          font-size: 0.9rem;
+          color: var(--color-text-primary);
+        }
+        .ks-suspended-expires {
+          background: rgba(234, 179, 8, 0.12);
+          border: 1px solid rgba(234, 179, 8, 0.3);
+          border-radius: 12px;
+          padding: 12px 16px;
+          width: 100%;
+          text-align: left;
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+        }
+        .ks-suspended-expires-label {
+          font-size: 0.75rem;
+          font-weight: 600;
+          color: #eab308;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+        }
+        .ks-suspended-expires-text {
           font-size: 0.9rem;
           color: var(--color-text-primary);
         }

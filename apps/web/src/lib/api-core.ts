@@ -132,6 +132,7 @@ export type AccountUser = {
   role: string;
   accountStatus: string;
   suspensionReason?: string | null;
+  suspensionExpiresAt?: string | null;
   deletionRequestedAt?: string | null;
   emailVerified: boolean;
   phoneVerified: boolean;

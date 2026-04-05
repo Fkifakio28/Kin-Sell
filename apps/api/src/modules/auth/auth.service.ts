@@ -149,8 +149,8 @@ export const login = async (input: LoginInput) => {
     throw new HttpError(401, "Email ou mot de passe invalide");
   }
 
-  if (user.accountStatus !== "ACTIVE") {
-    throw new HttpError(403, "Compte inactif ou suspendu");
+  if (user.accountStatus === "PENDING_DELETION") {
+    throw new HttpError(403, "Ce compte est en cours de suppression");
   }
 
   await prisma.auditLog.create({
@@ -218,6 +218,8 @@ export const me = async (userId: string) => {
     email: user.email,
     role: user.role,
     accountStatus: user.accountStatus,
+    suspensionReason: user.suspensionReason ?? null,
+    suspensionExpiresAt: user.suspensionExpiresAt?.toISOString() ?? null,
     displayName: user.profile?.displayName ?? "",
     avatarUrl: user.profile?.avatarUrl ?? null,
     city: user.profile?.city ?? null,

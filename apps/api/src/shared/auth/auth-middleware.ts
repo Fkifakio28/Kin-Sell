@@ -47,20 +47,24 @@ export const requireAuth = (request: AuthenticatedRequest, _response: Response, 
     return next(new HttpError(401, "Token invalide ou expiré"));
   }
 
+  // Routes allowed for suspended users (login, me, logout, appeal)
+  const path = request.path;
+  const skipSuspension = path === "/me" || path === "/appeal" || path.startsWith("/logout");
+
   // Verify user account is still active and session not revoked
-  _verifyAccountAndSession(request.auth!.userId, request.auth!.sessionId)
+  _verifyAccountAndSession(request.auth!.userId, request.auth!.sessionId, skipSuspension)
     .then(() => next())
     .catch((err) => next(err));
 };
 
-async function _verifyAccountAndSession(userId: string, sessionId?: string): Promise<void> {
+async function _verifyAccountAndSession(userId: string, sessionId?: string, skipSuspensionCheck = false): Promise<void> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { accountStatus: true },
   });
 
   if (!user) throw new HttpError(401, "Compte introuvable");
-  if (user.accountStatus === "SUSPENDED") throw new HttpError(403, "Votre compte est suspendu");
+  if (!skipSuspensionCheck && user.accountStatus === "SUSPENDED") throw new HttpError(403, "Votre compte est suspendu");
   if (user.accountStatus === "PENDING_DELETION") throw new HttpError(403, "Votre compte est en cours de suppression");
 
   if (sessionId) {

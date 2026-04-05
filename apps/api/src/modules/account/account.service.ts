@@ -109,6 +109,7 @@ const userPayload = async (userId: string) => {
     role: user.role,
     accountStatus: user.accountStatus,
     suspensionReason: user.suspensionReason ?? null,
+    suspensionExpiresAt: user.suspensionExpiresAt?.toISOString() ?? null,
     deletionRequestedAt: user.deletionRequestedAt?.toISOString() ?? null,
     emailVerified: user.emailVerified,
     phoneVerified: user.phoneVerified,
