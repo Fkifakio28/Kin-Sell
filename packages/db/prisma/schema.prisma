@@ -230,6 +230,8 @@ model User {
   businessFollows          BusinessFollow[]           @relation("BusinessFollows")
   aiRecommendations        AiRecommendation[]         @relation("AiRecommendations")
   aiTrials                 AiTrial[]                  @relation("AiTrials")
+  adCreatives              AiAdCreative[]             @relation("AiAdCreativeUser")
+  adCampaigns              AiAdCampaign[]             @relation("AiAdCampaignUser")
 
   @@index([role])
   @@index([accountStatus])
@@ -291,6 +293,8 @@ model BusinessAccount {
   followers      BusinessFollow[] @relation("BusinessFollowers")
   aiRecommendations AiRecommendation[] @relation("AiRecommendationsBusiness")
   aiTrials          AiTrial[]          @relation("AiTrialsBusiness")
+  adCreatives       AiAdCreative[]     @relation("AiAdCreativeBusiness")
+  adCampaigns       AiAdCampaign[]     @relation("AiAdCampaignBusiness")
 
   @@index([ownerUserId])
 }
@@ -1934,4 +1938,127 @@ model AiTrial {
   @@index([businessId, status])
   @@index([status, endsAt])
   @@index([sourceEngine])
+}
+
+// ═══════════════════════════════════════════════════════
+// IA STUDIO ADS — Créations publicitaires générées par IA
+// ═══════════════════════════════════════════════════════
+
+model AiAdCreative {
+  id              String   @id @default(cuid())
+  title           String
+  adType          String   // BOOST_ARTICLE, BOOST_SHOP, FORFAIT, IA_PROMO, ESSAI, AUTO_VENTE, UPGRADE, CUSTOM
+  audienceType    String   // USER, BUSINESS, ALL
+  sourceEngine    String   @default("studio-ads") // studio-ads, auto-gen
+  generatedBy     String   @default("SYSTEM")     // SYSTEM or adminUserId
+  contentText     String   // texte publicitaire principal
+  subtitle        String?  // sous-titre optionnel
+  mediaType       String   @default("TEXT")        // TEXT, IMAGE, GIF, VIDEO, BANNER, CARD
+  mediaUrl        String?  // URL du média généré
+  ctaLabel        String   @default("Découvrir")
+  ctaTarget       String   @default("/pricing")    // lien cible du CTA
+  tone            String   @default("premium")     // premium, agressif, doux, vendeur, informatif
+  tags            String[] // tags pour le ciblage (gaming, mode, electronique, etc.)
+  status          String   @default("DRAFT")       // DRAFT, READY, PUBLISHED, ARCHIVED
+  // Ciblage optionnel
+  targetPlanCodes String[] // forfaits ciblés (FREE, BOOST, etc.)
+  targetCategory  String?  // catégorie article ciblée
+  // Variantes A/B
+  variantGroup    String?  // groupe de test A/B
+  variantLabel    String?  // A, B, C...
+  // Relations
+  userId          String?
+  businessId      String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user       User?             @relation("AiAdCreativeUser", fields: [userId], references: [id], onDelete: SetNull)
+  business   BusinessAccount?  @relation("AiAdCreativeBusiness", fields: [businessId], references: [id], onDelete: SetNull)
+  campaigns  AiAdCampaign[]    @relation("CampaignCreative")
+
+  @@index([status])
+  @@index([adType])
+  @@index([audienceType])
+  @@index([sourceEngine])
+  @@index([userId])
+  @@index([variantGroup])
+}
+
+// ═══════════════════════════════════════════════════════
+// IA ADS — Campagnes de diffusion intelligente
+// ═══════════════════════════════════════════════════════
+
+model AiAdCampaign {
+  id                  String    @id @default(cuid())
+  creativeId          String
+  campaignName        String
+  objective           String    // CONVERSION, UPSELL, AWARENESS, TRIAL, RETENTION
+  audienceRole        String    @default("ALL")    // USER, BUSINESS, ALL
+  audienceConditions  Json?     // conditions de ciblage JSON { minListings, planCodes, categories, cities }
+  active              Boolean   @default(false)
+  startsAt            DateTime?
+  endsAt              DateTime?
+  frequencyCap        Int       @default(3)    // max affichages par user par jour
+  priority            Int       @default(0)    // 0=normal, 10=urgent
+  budgetType          String    @default("INTERNAL") // INTERNAL (gratuit Kin-Sell), PAID
+  // Relations
+  userId              String?   // créateur de la campagne (admin)
+  businessId          String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  creative   AiAdCreative     @relation("CampaignCreative", fields: [creativeId], references: [id], onDelete: Cascade)
+  user       User?            @relation("AiAdCampaignUser", fields: [userId], references: [id], onDelete: SetNull)
+  business   BusinessAccount? @relation("AiAdCampaignBusiness", fields: [businessId], references: [id], onDelete: SetNull)
+  placements AiAdPlacement[]  @relation("CampaignPlacements")
+  metrics    AiAdPerformance[] @relation("CampaignPerformance")
+
+  @@index([active, startsAt, endsAt])
+  @@index([objective])
+  @@index([audienceRole])
+  @@index([creativeId])
+  @@index([priority])
+}
+
+// ═══════════════════════════════════════════════════════
+// IA ADS — Placements (où afficher dans Kin-Sell)
+// ═══════════════════════════════════════════════════════
+
+model AiAdPlacement {
+  id            String   @id @default(cuid())
+  campaignId    String
+  pageKey       String   // home, explorer, sokin, dashboard_user, dashboard_business, article, shop, pricing, kinsell
+  componentKey  String   // banner_top, banner_bottom, sidebar, inline_card, popup, drawer, contextual, smart_popup
+  priority      Int      @default(0)
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+
+  campaign AiAdCampaign @relation("CampaignPlacements", fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, pageKey, componentKey])
+  @@index([pageKey, active])
+  @@index([componentKey])
+}
+
+// ═══════════════════════════════════════════════════════
+// IA ADS — Métriques de performance
+// ═══════════════════════════════════════════════════════
+
+model AiAdPerformance {
+  id                      String   @id @default(cuid())
+  campaignId              String
+  date                    DateTime @default(now()) @db.Date
+  impressions             Int      @default(0)
+  clicks                  Int      @default(0)
+  dismissals              Int      @default(0)
+  conversions             Int      @default(0)
+  subscriptionsGenerated  Int      @default(0)
+  trialsActivated         Int      @default(0)
+  revenue                 Int      @default(0) // en cents USD
+  createdAt               DateTime @default(now())
+
+  campaign AiAdCampaign @relation("CampaignPerformance", fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, date])
+  @@index([date])
 }

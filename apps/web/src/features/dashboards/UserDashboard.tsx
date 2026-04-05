@@ -36,6 +36,7 @@ import { NegotiationRespondPopup } from '../negotiations/NegotiationRespondPopup
 import { compressAndEncodeMedia } from '../../utils/media-compress';
 import { prepareMediaUrls } from '../../utils/media-upload';
 import { AdBanner } from '../../components/AdBanner';
+import { SmartAdSlot } from '../../components/SmartAdSlot';
 import { OrderValidationQrModal } from '../../components/OrderValidationQrModal';
 import LocationPicker from '../../components/LocationPicker';
 import VisibilitySelector from '../../components/VisibilitySelector';
@@ -1792,6 +1793,7 @@ export function UserDashboard() {
 
             {/* Bannière Kin-Sell */}
             <AdBanner page="account" forceKinSell />
+            <SmartAdSlot pageKey="dashboard_user" componentKey="banner_top" variant="banner" />
 
             {/* ── Main grid: 2 colonnes ── */}
             <div className="ud-ov-grid">

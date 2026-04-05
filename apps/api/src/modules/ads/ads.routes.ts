@@ -40,4 +40,49 @@ router.get('/ai/performance/:adId', requireAuth, asyncHandler(async (req: Authen
   res.json(insights);
 }));
 
+// ══════════════════════════════════════════════════════════════════════════════
+// IA ADS — Placement intelligent (public, appelé par le frontend)
+// ══════════════════════════════════════════════════════════════════════════════
+
+router.get('/ai-slot', asyncHandler(async (req, res) => {
+  const { pageKey, componentKey, userRole, userPlanCode } = req.query as Record<string, string>;
+  if (!pageKey || !componentKey) { res.json({ ad: null }); return; }
+  const { getAdForSlot } = await import('./ai-ad-placement.service.js');
+  const ad = await getAdForSlot({ pageKey, componentKey, userRole, userPlanCode });
+  res.json({ ad });
+}));
+
+router.get('/ai-page', asyncHandler(async (req, res) => {
+  const { pageKey, userRole } = req.query as Record<string, string>;
+  if (!pageKey) { res.json({ ads: [] }); return; }
+  const { getAdsForPage } = await import('./ai-ad-placement.service.js');
+  const ads = await getAdsForPage(pageKey, userRole, 5);
+  res.json({ ads });
+}));
+
+router.post('/ai-campaign/:id/impression', asyncHandler(async (req, res) => {
+  const { recordCampaignImpression } = await import('./ai-ad-placement.service.js');
+  await recordCampaignImpression(req.params.id);
+  res.json({ ok: true });
+}));
+
+router.post('/ai-campaign/:id/click', asyncHandler(async (req, res) => {
+  const { recordCampaignClick } = await import('./ai-ad-placement.service.js');
+  await recordCampaignClick(req.params.id);
+  res.json({ ok: true });
+}));
+
+router.post('/ai-campaign/:id/dismiss', asyncHandler(async (req, res) => {
+  const { recordCampaignDismissal } = await import('./ai-ad-placement.service.js');
+  await recordCampaignDismissal(req.params.id);
+  res.json({ ok: true });
+}));
+
+router.post('/ai-campaign/:id/convert', requireAuth, asyncHandler(async (req, res) => {
+  const { type } = z.object({ type: z.enum(['subscription', 'trial', 'generic']) }).parse(req.body);
+  const { recordCampaignConversion } = await import('./ai-ad-placement.service.js');
+  await recordCampaignConversion(req.params.id, type);
+  res.json({ ok: true });
+}));
+
 export default router;

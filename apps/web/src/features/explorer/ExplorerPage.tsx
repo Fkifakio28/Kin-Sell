@@ -13,6 +13,7 @@ import { useMarketPreference } from '../../app/providers/MarketPreferenceProvide
 import { NegotiatePopup } from '../negotiations/NegotiatePopup';
 import { useLockedCategories, isCategoryLocked } from '../../hooks/useLockedCategories';
 import { AdBanner } from '../../components/AdBanner';
+import { SmartAdSlot } from '../../components/SmartAdSlot';
 import MapView from '../../components/MapView';
 import { SeoMeta } from '../../components/SeoMeta';
 import { useScrollDirection } from '../../hooks/useScrollDirection';
@@ -459,6 +460,7 @@ function ExplorerPageMobile() {
         </div>
 
         <AdBanner page="explorer" variant="slim" hideWhenEmpty />
+        <SmartAdSlot pageKey="explorer" componentKey="banner_top" variant="inline" />
 
         {/* ── Articles ── */}
         <section className="ex-section">

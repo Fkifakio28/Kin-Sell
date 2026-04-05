@@ -6,6 +6,7 @@ import { getDashboardPath } from '../../utils/role-routing';
 import { useLocaleCurrency } from '../../app/providers/LocaleCurrencyProvider';
 import { compressAndEncodeMedia } from '../../utils/media-compress';
 import { DashboardMessaging } from './DashboardMessaging';
+import { SmartAdSlot } from '../../components/SmartAdSlot';
 import {
   ApiError, auth as authApi, businesses, listings, orders, billing, messaging, sokin, invalidateCache, analyticsAi, aiRecommendations, aiTrials,
   type BusinessAccount, type MyListing, type MyListingsStats,
@@ -2560,6 +2561,8 @@ export function BusinessDashboard() {
             </section>
           </div>
         )}
+
+        <SmartAdSlot pageKey="dashboard_business" componentKey="banner_bottom" variant="banner" />
 
       </main>
     </div>

@@ -683,6 +683,42 @@ export const admin = {
     request<AdminAiTrialList>("/admin/ai-trials", { params: params as Record<string, string | number | undefined> }),
   activatePlan: (body: { userId: string; planCode: string; durationDays?: number; reason: string; exempt?: boolean }) =>
     request<unknown>("/admin/subscriptions/activate", { method: "POST", body }),
+
+  // ── IA Studio Ads ──
+  iaStudioCreatives: (params?: { page?: number; limit?: number; status?: string; adType?: string; audienceType?: string }) =>
+    request<{ total: number; creatives: AdminIaCreative[] }>("/admin/ia-studio/creatives", { params: params as Record<string, string | number | undefined> }),
+  iaStudioCreative: (id: string) =>
+    request<AdminIaCreative>(`/admin/ia-studio/creatives/${encodeURIComponent(id)}`),
+  iaStudioGenerate: (body: { adType: string; audienceType?: string; mediaType?: string; tone?: string; customTitle?: string; customText?: string; customCta?: string; customSubtitle?: string }) =>
+    request<AdminIaCreative>("/admin/ia-studio/generate", { method: "POST", body }),
+  iaStudioAutoGenerate: () =>
+    request<{ generated: number }>("/admin/ia-studio/auto-generate", { method: "POST" }),
+  iaStudioUpdateCreative: (id: string, body: Record<string, unknown>) =>
+    request<AdminIaCreative>(`/admin/ia-studio/creatives/${encodeURIComponent(id)}`, { method: "PATCH", body }),
+  iaStudioUpdateStatus: (id: string, status: string) =>
+    request<AdminIaCreative>(`/admin/ia-studio/creatives/${encodeURIComponent(id)}/status`, { method: "PATCH", body: { status } }),
+  iaStudioDeleteCreative: (id: string) =>
+    request<{ ok: boolean }>(`/admin/ia-studio/creatives/${encodeURIComponent(id)}`, { method: "DELETE" }),
+
+  // ── IA Ads ──
+  iaAdsStats: () =>
+    request<AdminIaAdsStats>("/admin/ia-ads/stats"),
+  iaAdsCampaigns: (params?: { page?: number; limit?: number; active?: string; objective?: string }) =>
+    request<{ total: number; campaigns: AdminIaCampaign[] }>("/admin/ia-ads/campaigns", { params: params as Record<string, string | number | undefined> }),
+  iaAdsCreateCampaign: (body: { creativeId: string; campaignName: string; objective: string; audienceRole?: string; placements: { pageKey: string; componentKey: string; priority?: number }[] }) =>
+    request<AdminIaCampaign>("/admin/ia-ads/campaigns", { method: "POST", body }),
+  iaAdsPublish: (creativeId: string, opts?: { campaignName?: string }) =>
+    request<AdminIaCampaign>(`/admin/ia-ads/campaigns/publish/${encodeURIComponent(creativeId)}`, { method: "POST", body: opts || {} }),
+  iaAdsToggleCampaign: (id: string) =>
+    request<AdminIaCampaign>(`/admin/ia-ads/campaigns/${encodeURIComponent(id)}/toggle`, { method: "PATCH" }),
+  iaAdsUpdateCampaign: (id: string, body: Record<string, unknown>) =>
+    request<AdminIaCampaign>(`/admin/ia-ads/campaigns/${encodeURIComponent(id)}`, { method: "PATCH", body }),
+  iaAdsDeleteCampaign: (id: string) =>
+    request<{ ok: boolean }>(`/admin/ia-ads/campaigns/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  iaAdsCampaignPerformance: (id: string, days?: number) =>
+    request<{ daily: AdminIaPerformance[]; totals: Record<string, number> }>(`/admin/ia-ads/campaigns/${encodeURIComponent(id)}/performance${days ? `?days=${days}` : ''}`),
+  iaAdsTopCampaigns: (limit?: number) =>
+    request<{ campaignId: string; campaignName: string; impressions: number; clicks: number; ctr: number }[]>(`/admin/ia-ads/top-campaigns${limit ? `?limit=${limit}` : ''}`),
 };
 
 // ── Admin AI/Subscription types ──
@@ -729,3 +765,95 @@ export type AdminAiTrialItem = {
   user?: { displayName: string; email: string };
 };
 export type AdminAiTrialList = { total: number; page: number; totalPages: number; trials: AdminAiTrialItem[] };
+
+// ══════════════════════════════════════════════════════════════
+// IA Studio Ads — Creative types
+// ══════════════════════════════════════════════════════════════
+
+export type AdminIaCreative = {
+  id: string;
+  title: string;
+  adType: string;
+  audienceType: string;
+  sourceEngine: string;
+  generatedBy: string;
+  contentText: string;
+  subtitle: string | null;
+  mediaType: string;
+  mediaUrl: string | null;
+  ctaLabel: string;
+  ctaTarget: string;
+  tone: string | null;
+  tags: string[];
+  status: string;
+  targetPlanCodes: string[];
+  targetCategory: string | null;
+  variantGroup: string | null;
+  variantLabel: string | null;
+  createdAt: string;
+  updatedAt: string;
+  campaigns?: AdminIaCampaign[];
+};
+
+// ══════════════════════════════════════════════════════════════
+// IA Ads — Campaign types
+// ══════════════════════════════════════════════════════════════
+
+export type AdminIaCampaign = {
+  id: string;
+  creativeId: string;
+  campaignName: string;
+  objective: string;
+  audienceRole: string;
+  audienceConditions: unknown;
+  active: boolean;
+  startsAt: string | null;
+  endsAt: string | null;
+  frequencyCap: number;
+  priority: number;
+  budgetType: string;
+  createdAt: string;
+  creative?: AdminIaCreative;
+  placements?: AdminIaPlacement[];
+  _count?: { metrics: number };
+};
+
+export type AdminIaPlacement = {
+  id: string;
+  campaignId: string;
+  pageKey: string;
+  componentKey: string;
+  priority: number;
+  active: boolean;
+};
+
+export type AdminIaPerformance = {
+  id: string;
+  campaignId: string;
+  date: string;
+  impressions: number;
+  clicks: number;
+  dismissals: number;
+  conversions: number;
+  subscriptionsGenerated: number;
+  trialsActivated: number;
+  revenue: number;
+};
+
+export type AdminIaAdsStats = {
+  totalCampaigns: number;
+  activeCampaigns: number;
+  totalCreatives: number;
+  readyCreatives: number;
+  publishedCreatives: number;
+  performance: {
+    impressions: number;
+    clicks: number;
+    ctr: number;
+    conversions: number;
+    subscriptions: number;
+    trials: number;
+    dismissals: number;
+    revenue: number;
+  };
+};

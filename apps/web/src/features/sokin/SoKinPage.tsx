@@ -15,6 +15,7 @@ import {
   type SoKinReactionType,
 } from '../../lib/api-client';
 import { AdBanner } from '../../components/AdBanner';
+import { SmartAdSlot } from '../../components/SmartAdSlot';
 import { SeoMeta } from '../../components/SeoMeta';
 import { SoKinPageDesktop } from './SoKinPageDesktop';
 import './sokin.css';
@@ -364,6 +365,9 @@ function PostFeed({
     );
     if ((idx + 1) % 4 === 0) {
       items.push(<AdBanner key={`ad-${idx}`} page="sokin" variant="slim" hideWhenEmpty />);
+    }
+    if ((idx + 1) % 6 === 0) {
+      items.push(<SmartAdSlot key={`ia-ad-${idx}`} pageKey="sokin" componentKey="feed_inline" variant="inline" />);
     }
   });
 

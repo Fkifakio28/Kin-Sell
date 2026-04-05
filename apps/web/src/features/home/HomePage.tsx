@@ -11,6 +11,7 @@ import { useMarketPreference } from "../../app/providers/MarketPreferenceProvide
 import { NegotiatePopup } from "../negotiations/NegotiatePopup";
 import { useLockedCategories, isCategoryLocked } from "../../hooks/useLockedCategories";
 import { AdBanner } from "../../components/AdBanner";
+import { SmartAdSlot } from "../../components/SmartAdSlot";
 import { SeoMeta } from "../../components/SeoMeta";
 import { HOME_PRODUCT_CATEGORIES, HOME_SERVICE_CATEGORIES } from "../../shared/constants/categories";
 import "./home.css";
@@ -771,6 +772,7 @@ export function HomePage() {
 
           {/* Bannière publicitaire */}
           <AdBanner page="home" />
+          <SmartAdSlot pageKey="home" componentKey="banner_mid" variant="banner" />
 
           {/* Articles Produits — 4×2 grid, scrollable inside glass */}
           <section className="h-articles h-reveal glass-container">
