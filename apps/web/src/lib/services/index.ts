@@ -14,3 +14,4 @@ export * from "./geo.service";
 export * from "./ai.service";
 export * from "./ads.service";
 export * from "./admin.service";
+export * from "./verification.service";

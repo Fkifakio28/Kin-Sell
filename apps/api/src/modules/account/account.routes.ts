@@ -223,6 +223,7 @@ router.delete(
 router.post(
   "/verifications/email/request",
   requireAuth,
+  rateLimit(RateLimits.LOGIN),
   asyncHandler(async (request: AuthenticatedRequest, response) => {
     const payload = emailVerificationRequestSchema.parse(request.body);
     const result = await accountService.requestEmailVerification(request.auth!.userId, payload.email);
@@ -233,6 +234,7 @@ router.post(
 router.post(
   "/verifications/email/confirm",
   requireAuth,
+  rateLimit(RateLimits.LOGIN),
   asyncHandler(async (request: AuthenticatedRequest, response) => {
     const payload = emailVerificationConfirmSchema.parse(request.body);
     const result = await accountService.confirmEmailVerification(request.auth!.userId, payload.verificationId, payload.code);

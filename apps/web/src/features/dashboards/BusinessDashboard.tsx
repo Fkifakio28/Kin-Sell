@@ -8,11 +8,11 @@ import { compressAndEncodeMedia } from '../../utils/media-compress';
 import { DashboardMessaging } from './DashboardMessaging';
 import { SmartAdSlot } from '../../components/SmartAdSlot';
 import {
-  ApiError, auth as authApi, businesses, listings, orders, billing, messaging, sokin, invalidateCache, analyticsAi, aiRecommendations, aiTrials,
+  ApiError, auth as authApi, businesses, listings, orders, billing, messaging, sokin, reviews as reviewsApi, invalidateCache, analyticsAi, aiRecommendations, aiTrials,
   type BusinessAccount, type MyListing, type MyListingsStats,
   type OrderSummary, type BillingPlanSummary, type OrderStatus,
   type SoKinApiPost, type BasicInsights, type DeepInsights,
-  type AiRecommendation, type AiTrial,
+  type AiRecommendation, type AiTrial, type ReviewItem,
 } from '../../lib/api-client';
 import { OrderValidationQrModal } from '../../components/OrderValidationQrModal';
 import { useSocket } from '../../hooks/useSocket';
@@ -182,8 +182,10 @@ export function BusinessDashboard() {
 
   // ─── Avis (Reviews) ──────────────────────────────────────
   // Les avis sont générés par les acheteurs après livraison. Cette section affiche
-  // les avis existants (fonctionnalité système de reviews à implémenter côté back).
-  // Pour l'instant : état vide — aucune donnée fictive.
+  // ─── Reviews (Avis) ───────────────────────────────────
+  const [bizReviews, setBizReviews] = useState<ReviewItem[]>([]);
+  const [bizReviewsAvg, setBizReviewsAvg] = useState(0);
+  const [bizReviewsLoading, setBizReviewsLoading] = useState(false);
 
   // ─── So-Kin ──────────────────────────────────────────────
   const [sokinPosts, setSokinPosts] = useState<SoKinApiPost[]>([]);
@@ -259,13 +261,15 @@ export function BusinessDashboard() {
     let cancelled = false;
     const load = async () => {
       setDataLoading(true);
+      setBizReviewsLoading(true);
       try {
-        const [ordersRes, listingsRes, statsRes, planRes, sokinRes] = await Promise.allSettled([
+        const [ordersRes, listingsRes, statsRes, planRes, sokinRes, reviewsRes] = await Promise.allSettled([
           orders.sellerOrders({ limit: 50 }),
           listings.mine({ limit: 50 }),
           listings.mineStats(),
           billing.myPlan(),
           sokin.myPosts(),
+          reviewsApi.forUser(business.ownerUserId),
         ]);
         if (cancelled) return;
         if (ordersRes.status === 'fulfilled') setSellerOrders(ordersRes.value.orders);
@@ -273,8 +277,12 @@ export function BusinessDashboard() {
         if (statsRes.status === 'fulfilled') setListingStats(statsRes.value);
         if (planRes.status === 'fulfilled') setMyPlan(planRes.value);
         if (sokinRes.status === 'fulfilled') setSokinPosts(sokinRes.value.posts);
+        if (reviewsRes.status === 'fulfilled') {
+          setBizReviews(reviewsRes.value.reviews);
+          setBizReviewsAvg(reviewsRes.value.averageRating);
+        }
       } finally {
-        if (!cancelled) setDataLoading(false);
+        if (!cancelled) { setDataLoading(false); setBizReviewsLoading(false); }
       }
     };
     void load();
@@ -1768,19 +1776,19 @@ export function BusinessDashboard() {
             <div className="ud-stats-row">
               <article className="ud-stat-card ud-stat-card--gold bz-stat-card">
                 <span className="ud-stat-icon">⭐</span>
-                <div><p className="ud-stat-label">{t('biz.reviewsReceived')}</p><strong className="ud-stat-value">0</strong></div>
+                <div><p className="ud-stat-label">{t('biz.reviewsReceived')}</p><strong className="ud-stat-value">{bizReviews.length}</strong></div>
               </article>
               <article className="ud-stat-card ud-stat-card--green bz-stat-card">
                 <span className="ud-stat-icon">👍</span>
-                <div><p className="ud-stat-label">{t('biz.reviewsPositive')}</p><strong className="ud-stat-value">0</strong></div>
+                <div><p className="ud-stat-label">{t('biz.reviewsPositive')}</p><strong className="ud-stat-value">{bizReviews.filter(r => r.rating >= 4).length}</strong></div>
               </article>
               <article className="ud-stat-card ud-stat-card--amber bz-stat-card">
-                <span className="ud-stat-icon">📝</span>
-                <div><p className="ud-stat-label">{t('biz.reviewsPending')}</p><strong className="ud-stat-value">0</strong></div>
+                <span className="ud-stat-icon">📊</span>
+                <div><p className="ud-stat-label">{t('biz.reviewsAvg')}</p><strong className="ud-stat-value">{bizReviewsAvg ? bizReviewsAvg.toFixed(1) : '—'}</strong></div>
               </article>
               <article className="ud-stat-card ud-stat-card--blue bz-stat-card">
-                <span className="ud-stat-icon">💬</span>
-                <div><p className="ud-stat-label">{t('biz.reviewsReplied')}</p><strong className="ud-stat-value">0</strong></div>
+                <span className="ud-stat-icon">✅</span>
+                <div><p className="ud-stat-label">{t('biz.reviewsVerified')}</p><strong className="ud-stat-value">{bizReviews.filter(r => r.verified).length}</strong></div>
               </article>
             </div>
 
@@ -1796,13 +1804,43 @@ export function BusinessDashboard() {
                   💬 {t('biz.contactClients')}
                 </button>
               </div>
-              <div style={{ textAlign: 'center', padding: '48px 24px' }}>
-                <span style={{ fontSize: '3rem', display: 'block', marginBottom: 12 }}>⭐</span>
-                <h3 style={{ margin: '0 0 8px' }}>{t('biz.noReviewsTitle')}</h3>
-                <p className="ud-placeholder-text">
-                  {t('biz.noReviewsDesc')}
-                </p>
-              </div>
+              {bizReviewsLoading ? (
+                <div style={{ textAlign: 'center', padding: '32px 16px' }}>
+                  <span style={{ fontSize: '1.5rem' }}>⏳</span>
+                  <p className="ud-placeholder-text">{t('biz.loading')}</p>
+                </div>
+              ) : bizReviews.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '48px 24px' }}>
+                  <span style={{ fontSize: '3rem', display: 'block', marginBottom: 12 }}>⭐</span>
+                  <h3 style={{ margin: '0 0 8px' }}>{t('biz.noReviewsTitle')}</h3>
+                  <p className="ud-placeholder-text">{t('biz.noReviewsDesc')}</p>
+                </div>
+              ) : (
+                <div className="bz-reviews-list" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {bizReviews.map(review => (
+                    <article key={review.id} className="ud-glass-panel" style={{ padding: '14px 18px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          {review.authorAvatar ? (
+                            <img src={review.authorAvatar} alt="" style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover' }} />
+                          ) : (
+                            <span style={{ width: 28, height: 28, borderRadius: '50%', background: 'rgba(111,88,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem' }}>👤</span>
+                          )}
+                          <strong style={{ fontSize: '0.88rem' }}>{review.authorName}</strong>
+                          {review.verified && <span style={{ fontSize: '0.7rem', color: '#7ef5c4' }}>✅ vérifié</span>}
+                        </div>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--ud-text-2)' }}>{new Date(review.createdAt).toLocaleDateString('fr-FR')}</span>
+                      </div>
+                      <div style={{ marginBottom: 4 }}>
+                        {Array.from({ length: 5 }, (_, i) => (
+                          <span key={i} style={{ color: i < review.rating ? '#f5c542' : 'rgba(255,255,255,0.15)', fontSize: '1rem' }}>★</span>
+                        ))}
+                      </div>
+                      {review.text && <p style={{ fontSize: '0.84rem', color: 'var(--ud-text-2)', margin: 0 }}>{review.text}</p>}
+                    </article>
+                  ))}
+                </div>
+              )}
             </section>
           </div>
         )}

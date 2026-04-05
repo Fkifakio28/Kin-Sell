@@ -3102,6 +3102,13 @@ export function UserDashboard() {
 
         {activeSection === 'public-profile' && (
           <div className="ud-section animate-fade-in">
+            {loadingPublicProfile ? (
+              <section className="ud-glass-panel" style={{ textAlign: 'center', padding: '48px 24px' }}>
+                <span style={{ fontSize: '2rem', display: 'block', marginBottom: 12 }}>⏳</span>
+                <p className="ud-placeholder-text">{t('user.ppLoading')}</p>
+              </section>
+            ) : (
+            <>
             {/* ── En-tête avec lien + sauvegarde ── */}
             <section className="ud-glass-panel">
               <div className="ud-panel-head">
@@ -3359,6 +3366,8 @@ export function UserDashboard() {
               <button type="button" className="ud-quick-btn" onClick={() => setActiveSection('settings')}>⚙ {t('user.ppProfileSettings')}</button>
               <button type="button" className="ud-quick-btn" onClick={() => setActiveSection('articles')}>🧩 {t('user.ppManageArticles')}</button>
             </div>
+            </>
+            )}
           </div>
         )}
 
