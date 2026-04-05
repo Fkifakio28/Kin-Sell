@@ -37,6 +37,8 @@ import contactsRoutes from "./modules/contacts/contacts.routes.js";
 import mobileMoneyRoutes from "./modules/mobile-money/mobile-money.routes.js";
 import geoRoutes from "./modules/geo/geo.routes.js";
 import reviewsRoutes from "./modules/reviews/reviews.routes.js";
+import verificationRoutes from "./modules/verification/verification.routes.js";
+import { startVerificationScheduler } from "./modules/verification/verification.service.js";
 import { startAdScheduler } from "./modules/ads/ads.service.js";
 import { setupSocketServer } from "./modules/messaging/socket.js";
 import { errorHandler } from "./shared/errors/error-handler.js";
@@ -158,6 +160,7 @@ app.use("/contacts", contactsRoutes);
 app.use("/mobile-money", mobileMoneyRoutes);
 app.use("/geo", geoRoutes);
 app.use("/reviews", reviewsRoutes);
+app.use("/verification", verificationRoutes);
 
 // ── Client-side error reporting endpoint ──
 const _errorRateLimit = new Map<string, number>();
@@ -209,6 +212,7 @@ httpServer.listen(env.API_PORT, async () => {
   startAdScheduler();
   await seedDefaultAgents();
   startAiAutonomyScheduler();
+  startVerificationScheduler();
   logger.info("[IA] Agents initialisés + Scheduler autonome démarré");
 });
 

@@ -376,14 +376,36 @@ export function SoKinPageDesktop() {
       setPosts((prev) => prev.map((post) => (post.id === payload.postId ? { ...post, shares: payload.shares } : post)));
     };
 
+    const handlePostReacted = (payload: { postId: string; type: string; sourceUserId: string }) => {
+      if (payload.sourceUserId === user?.id) return;
+      setPosts((prev) => prev.map((p) => {
+        if (p.id !== payload.postId) return p;
+        const counts = { ...p.reactionCounts } as Record<string, number>;
+        counts[payload.type] = (counts[payload.type] ?? 0) + 1;
+        return { ...p, reactionCounts: counts as typeof p.reactionCounts, likes: p.likes + 1 };
+      }));
+    };
+
+    const handlePostUnreacted = (payload: { postId: string; sourceUserId: string }) => {
+      if (payload.sourceUserId === user?.id) return;
+      setPosts((prev) => prev.map((p) => {
+        if (p.id !== payload.postId) return p;
+        return { ...p, likes: Math.max(0, p.likes - 1) };
+      }));
+    };
+
     on('sokin:post-created', handlePostCreated);
     on('sokin:story-created', handleStoryCreated);
     on('sokin:post-shared', handlePostShared);
+    on('sokin:post-reacted', handlePostReacted);
+    on('sokin:post-unreacted', handlePostUnreacted);
 
     return () => {
       off('sokin:post-created', handlePostCreated);
       off('sokin:story-created', handleStoryCreated);
       off('sokin:post-shared', handlePostShared);
+      off('sokin:post-reacted', handlePostReacted);
+      off('sokin:post-unreacted', handlePostUnreacted);
     };
   }, [on, off, user?.id, loadPublicFeed, loadStories]);
 

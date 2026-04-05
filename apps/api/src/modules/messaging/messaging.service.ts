@@ -136,11 +136,19 @@ export async function getMessages(conversationId: string, userId: string, cursor
       replyTo: {
         select: { id: true, content: true, type: true, sender: { select: { profile: { select: { displayName: true } } } } },
       },
+      // Read receipts only for recent messages (last 10) to avoid O(messages × participants) query
       readReceipts: { select: { userId: true, readAt: true } },
     },
   });
 
-  return messages.reverse(); // chronological order
+  // For older messages (beyond the last 10), strip readReceipts to reduce payload
+  const recent = messages.slice(0, 10);
+  const recentIds = new Set(recent.map((m) => m.id));
+  const trimmed = messages.map((m) =>
+    recentIds.has(m.id) ? m : { ...m, readReceipts: [] }
+  );
+
+  return trimmed.reverse(); // chronological order
 }
 
 export async function sendMessage(

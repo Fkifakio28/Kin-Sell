@@ -819,11 +819,29 @@ function SoKinFeed({
         ),
       );
     };
+    const handleReacted = (payload: { postId: string; type: string; sourceUserId: string }) => {
+      setPosts((prev) => prev.map((p) => {
+        if (p.id !== payload.postId) return p;
+        const counts = { ...(p.reactionCounts ?? {}) } as Record<string, number>;
+        counts[payload.type] = (counts[payload.type] ?? 0) + 1;
+        return { ...p, reactionCounts: counts as typeof p.reactionCounts, likes: (p.likes ?? 0) + 1 };
+      }));
+    };
+    const handleUnreacted = (payload: { postId: string; sourceUserId: string }) => {
+      setPosts((prev) => prev.map((p) => {
+        if (p.id !== payload.postId) return p;
+        return { ...p, likes: Math.max(0, (p.likes ?? 0) - 1) };
+      }));
+    };
     on("sokin:post-created", handleCreated);
     on("sokin:post-shared", handleShared);
+    on("sokin:post-reacted", handleReacted);
+    on("sokin:post-unreacted", handleUnreacted);
     return () => {
       off("sokin:post-created", handleCreated);
       off("sokin:post-shared", handleShared);
+      off("sokin:post-reacted", handleReacted);
+      off("sokin:post-unreacted", handleUnreacted);
     };
   }, [on, off, loadFeed]);
 

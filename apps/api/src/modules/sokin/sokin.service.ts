@@ -3,6 +3,7 @@ import { HttpError } from "../../shared/errors/http-error.js";
 import { normalizeImageInputs } from "../../shared/utils/media-storage.js";
 import { resolveCountryTerms } from "../../shared/geo/country-aliases.js";
 
+// Lightweight include: no reactions array (fetched separately via groupBy)
 const publicPostInclude = {
   author: {
     select: {
@@ -17,6 +18,11 @@ const publicPostInclude = {
       },
     },
   },
+};
+
+// Heavy include kept for single-post fetches where N+1 doesn't matter
+const publicPostIncludeFull = {
+  ...publicPostInclude,
   reactions: {
     select: { type: true, userId: true },
   },
@@ -152,11 +158,18 @@ export const getPublicFeed = async (limit = 20, viewerUserId?: string, city?: st
     andClauses.push(countryClause);
   }
 
+  // Build the geo-filter block, but always include the viewer's own posts
+  const geoFilter = andClauses.length > 0
+    ? viewerUserId
+      ? { OR: [{ authorId: viewerUserId }, { AND: andClauses }] }
+      : { AND: andClauses }
+    : {};
+
   const posts = await prisma.soKinPost.findMany({
     where: {
       status: "ACTIVE",
       OR: [{ scheduledAt: null }, { scheduledAt: { lte: new Date() } }],
-      ...(andClauses.length > 0 ? { AND: andClauses } : {}),
+      ...geoFilter,
       author: {
         role: { notIn: ["ADMIN", "SUPER_ADMIN"] },
       },
@@ -166,7 +179,41 @@ export const getPublicFeed = async (limit = 20, viewerUserId?: string, city?: st
     include: publicPostInclude,
   });
 
-  return posts.map((post) => mapPublicPost(post, viewerUserId));
+  // Single grouped query for all reaction counts instead of loading all reactions per post
+  const postIds = posts.map((p) => p.id);
+  const [reactionGroups, viewerReactions] = await Promise.all([
+    postIds.length > 0
+      ? prisma.soKinReaction.groupBy({
+          by: ["postId", "type"],
+          where: { postId: { in: postIds } },
+          _count: { id: true },
+        })
+      : Promise.resolve([]),
+    viewerUserId && postIds.length > 0
+      ? prisma.soKinReaction.findMany({
+          where: { postId: { in: postIds }, userId: viewerUserId },
+          select: { postId: true, type: true },
+        })
+      : Promise.resolve([]),
+  ]);
+
+  // Build lookup maps
+  const countsByPost = new Map<string, Record<string, number>>();
+  for (const g of reactionGroups) {
+    const existing = countsByPost.get(g.postId) ?? {};
+    existing[g.type] = g._count.id;
+    countsByPost.set(g.postId, existing);
+  }
+  const viewerReactionMap = new Map(viewerReactions.map((r) => [r.postId, r.type]));
+
+  return posts.map((post) => {
+    const { ...rest } = post;
+    return {
+      ...rest,
+      reactionCounts: countsByPost.get(post.id) ?? {},
+      myReaction: viewerReactionMap.get(post.id) ?? null,
+    };
+  });
 };
 
 export const getPublicPostById = async (postId: string, viewerUserId?: string) => {
@@ -178,7 +225,7 @@ export const getPublicPostById = async (postId: string, viewerUserId?: string) =
         role: { notIn: ["ADMIN", "SUPER_ADMIN"] },
       },
     },
-    include: publicPostInclude,
+    include: publicPostIncludeFull,
   });
 
   if (!post) {

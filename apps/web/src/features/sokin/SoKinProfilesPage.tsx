@@ -52,7 +52,13 @@ export function SoKinProfilesPage() {
             kinId: `@${u.username!}`,
             rating: 0,
             reviews: 0,
-            badge: u.verificationStatus === 'VERIFIED' ? 'sokin.verified' : 'sokin.memberBadge',
+            badge: u.verificationStatus === 'VERIFIED' || u.verificationStatus === 'ADMIN_LOCKED_VERIFIED'
+              ? 'sokin.verified'
+              : u.verificationStatus === 'AI_ELIGIBLE'
+                ? 'sokin.aiEligible'
+                : u.verificationStatus === 'PARTIALLY_VERIFIED'
+                  ? 'sokin.activeProfile'
+                  : 'sokin.memberBadge',
             href: `/user/${u.username!}`,
             city: u.city ?? '',
             domain: u.domain ?? u.qualification ?? '',

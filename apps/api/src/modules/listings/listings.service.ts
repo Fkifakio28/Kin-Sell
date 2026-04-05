@@ -5,6 +5,17 @@ import { Role } from "../../types/roles.js";
 import { normalizeImageInput, normalizeImageInputs } from "../../shared/utils/media-storage.js";
 import { resolveCountryCode, resolveCountryTerms, getSameRegionCountries } from "../../shared/geo/country-aliases.js";
 
+/** Optimized include for listing search — only fields needed for cards */
+const listingSearchInclude = {
+  ownerUser: {
+    select: {
+      id: true,
+      profile: { select: { displayName: true, username: true, avatarUrl: true } },
+    },
+  },
+  business: { select: { id: true, publicName: true, slug: true } },
+} as const;
+
 export type ListingType = "PRODUIT" | "SERVICE";
 
 export type CreateListingInput = {
@@ -398,14 +409,7 @@ export const searchListings = async (input: SearchListingsInput) => {
           ]
         : undefined
     },
-    include: {
-      ownerUser: {
-        include: {
-          profile: true
-        }
-      },
-      business: true
-    },
+    include: listingSearchInclude,
     take: Math.max(1, Math.min(input.limit, 100)),
     orderBy: { createdAt: "desc" }
   });
@@ -470,7 +474,7 @@ export const searchListings = async (input: SearchListingsInput) => {
             : undefined,
           scope: { in: ["REGIONAL", "INTERNATIONAL"] },
         },
-        include: { ownerUser: { include: { profile: true } }, business: true },
+        include: listingSearchInclude,
         take: Math.max(1, Math.min(input.limit - enriched.length, 50)),
         orderBy: { createdAt: "desc" },
       });
@@ -508,7 +512,7 @@ export const searchListings = async (input: SearchListingsInput) => {
               ]
             : undefined,
         },
-        include: { ownerUser: { include: { profile: true } }, business: true },
+        include: listingSearchInclude,
         take: Math.max(1, Math.min(input.limit - enriched.length, 30)),
         orderBy: { createdAt: "desc" },
       });

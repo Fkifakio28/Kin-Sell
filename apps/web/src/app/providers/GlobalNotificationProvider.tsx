@@ -4,6 +4,7 @@ import { useAuth } from "./AuthProvider";
 import { useSocketContext } from "./SocketProvider";
 import { isPushSupported, subscribeToPush, onServiceWorkerMessage, registerServiceWorker } from "../../utils/push-notifications";
 import { playCallSound, stopCallSound, refreshCallSoundIfNeeded } from "../../utils/call-sound";
+import { setAppBadge, clearAppBadge } from "../../utils/app-badge";
 import "../../styles/global-notifications.css";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:4000";
@@ -114,6 +115,27 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
 
   /* ── Message toasts ── */
   const [toasts, setToasts] = useState<MessageToast[]>([]);
+  const badgeCountRef = useRef(0);
+
+  /* ── App Badge: increment on each toast, clear when page becomes visible ── */
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        badgeCountRef.current = 0;
+        clearAppBadge();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, []);
+
+  // Update badge when toasts change while page is hidden
+  useEffect(() => {
+    if (toasts.length > 0 && document.visibilityState === "hidden") {
+      badgeCountRef.current += 1;
+      setAppBadge(badgeCountRef.current);
+    }
+  }, [toasts.length]);
 
   /* ── Incoming call overlay (intercepted when NOT on /messaging) ── */
   const [incomingCall, setIncomingCall] = useState<{
@@ -123,6 +145,7 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
     callType: "audio" | "video";
   } | null>(null);
   const incomingCallTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const vibrationIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const navigateInApp = useCallback((targetUrl: string) => {
     if (!targetUrl) return;
@@ -226,7 +249,14 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
       })
       .catch(() => showIncomingCall("Quelqu'un"));
 
-    if ("vibrate" in navigator) navigator.vibrate([400, 200, 400, 200, 400]);
+    if ("vibrate" in navigator) {
+      // Vibration en boucle (simule une vraie sonnerie téléphone)
+      navigator.vibrate([400, 200, 400, 200, 400]);
+      if (vibrationIntervalRef.current) clearInterval(vibrationIntervalRef.current);
+      vibrationIntervalRef.current = setInterval(() => {
+        if ("vibrate" in navigator) navigator.vibrate([400, 200, 400, 200, 400]);
+      }, 2500);
+    }
 
     // Jouer la sonnerie d'appel entrant (WAV selon connectivité réelle)
     void playCallSound("incoming");
@@ -234,6 +264,8 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
     incomingCallTimerRef.current = setTimeout(() => {
       setIncomingCall(null);
       stopCallSound();
+      if (vibrationIntervalRef.current) { clearInterval(vibrationIntervalRef.current); vibrationIntervalRef.current = null; }
+      if ("vibrate" in navigator) navigator.vibrate(0);
     }, 45_000);
   }, []);
 
@@ -250,6 +282,8 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
         setIncomingCall((prev) => {
           if (prev?.conversationId === swMsg.data?.conversationId) {
             stopCallSound();
+            if (vibrationIntervalRef.current) { clearInterval(vibrationIntervalRef.current); vibrationIntervalRef.current = null; }
+            if ("vibrate" in navigator) navigator.vibrate(0);
             return null;
           }
           return prev;
@@ -325,6 +359,8 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
     if (!incomingCall) return;
     if (incomingCallTimerRef.current) clearTimeout(incomingCallTimerRef.current);
     stopCallSound();
+    if (vibrationIntervalRef.current) { clearInterval(vibrationIntervalRef.current); vibrationIntervalRef.current = null; }
+    if ("vibrate" in navigator) navigator.vibrate(0);
     const { conversationId, callerId, callType } = incomingCall;
     const resolvedCallType = preferredCallType ?? callType;
     setIncomingCall(null);
@@ -339,6 +375,8 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
     if (!incomingCall) return;
     if (incomingCallTimerRef.current) clearTimeout(incomingCallTimerRef.current);
     stopCallSound();
+    if (vibrationIntervalRef.current) { clearInterval(vibrationIntervalRef.current); vibrationIntervalRef.current = null; }
+    if ("vibrate" in navigator) navigator.vibrate(0);
     socketRef.current?.emit("call:reject", {
       conversationId: incomingCall.conversationId,
       callerId: incomingCall.callerId,
@@ -399,6 +437,8 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
         if (!prev || prev.conversationId !== data.conversationId) return prev;
         if (incomingCallTimerRef.current) { clearTimeout(incomingCallTimerRef.current); incomingCallTimerRef.current = null; }
         stopCallSound();
+        if (vibrationIntervalRef.current) { clearInterval(vibrationIntervalRef.current); vibrationIntervalRef.current = null; }
+        if ("vibrate" in navigator) navigator.vibrate(0);
         return null;
       });
     };
@@ -582,6 +622,9 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
     return () => {
       if (incomingCallTimerRef.current) {
         clearTimeout(incomingCallTimerRef.current);
+      }
+      if (vibrationIntervalRef.current) {
+        clearInterval(vibrationIntervalRef.current);
       }
     };
   }, []);

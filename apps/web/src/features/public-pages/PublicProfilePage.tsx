@@ -88,6 +88,7 @@ type ProfileData = {
   experience: string;
   workHours: string;
   isVerified: boolean;
+  verificationStatus: string;
   rating: number;
   reviewCount: number;
   listings: CatalogItem[];
@@ -202,7 +203,8 @@ export function PublicProfilePage({ username }: { username: string }) {
           qualification: payload.qualification ?? '',
           experience: payload.experience ?? '',
           workHours: payload.workHours ?? '',
-          isVerified: payload.verificationStatus === 'VERIFIED',
+          isVerified: payload.verificationStatus === 'VERIFIED' || payload.verificationStatus === 'ADMIN_LOCKED_VERIFIED',
+          verificationStatus: payload.verificationStatus ?? 'UNVERIFIED',
           rating: payload.averageRating ?? 0,
           reviewCount: payload.reviewCount ?? 0,
           listings: payload.listings.map(mapItem),
@@ -411,7 +413,9 @@ export function PublicProfilePage({ username }: { username: string }) {
           <div className="up-identity">
             <div className="up-name-row">
               <h1 className="up-name">{profile.displayName}</h1>
-              {profile.isVerified && <span className="up-verified" title="Vérifié">✔</span>}
+              {profile.isVerified && <span className="up-verified" title="Compte vérifié par Kin-Sell" style={{ color: '#5cb85c' }}>✅</span>}
+              {profile.verificationStatus === 'AI_ELIGIBLE' && <span className="up-verified" title="Ce compte présente une activité fiable selon notre analyse automatique" style={{ color: '#6f58ff' }}>🤖</span>}
+              {profile.verificationStatus === 'PARTIALLY_VERIFIED' && <span className="up-verified" title="Profil actif sur la plateforme" style={{ color: '#5bc0de' }}>◐</span>}
               <span className="up-kinid">{profile.kinId}</span>
             </div>
             {profile.domain && <p style={{ margin: '2px 0 0', fontSize: '0.82rem', color: 'rgba(255,255,255,0.5)' }}>{profile.domain}</p>}
@@ -584,6 +588,7 @@ export function PublicProfilePage({ username }: { username: string }) {
               <article key={r.id} className="up-review">
                 <div className="up-review-top">
                   <span className="up-review-author">{r.authorName}</span>
+                  {r.verified && <span style={{ fontSize: '.75rem', color: 'var(--color-primary)', fontWeight: 600, marginLeft: 6 }}>✓ Vérifié</span>}
                   <StarRating value={r.rating} size={14} />
                 </div>
                 {r.text && <p>{r.text}</p>}
@@ -614,6 +619,7 @@ export function PublicProfilePage({ username }: { username: string }) {
                 <article key={r.id} className="up-review" style={{ marginBottom: 10 }}>
                   <div className="up-review-top">
                     <span className="up-review-author">{r.authorName}</span>
+                    {r.verified && <span style={{ fontSize: '.75rem', color: 'var(--color-primary)', fontWeight: 600, marginLeft: 6 }}>✓ Vérifié</span>}
                     <StarRating value={r.rating} size={14} />
                   </div>
                   {r.text && <p>{r.text}</p>}

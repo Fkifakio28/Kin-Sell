@@ -20,10 +20,26 @@ export default defineConfig({
         start_url: "/",
         scope: "/",
         display: "standalone",
+        // Fallback display modes: prefer standalone, then minimal-ui, then browser
+        display_override: ["standalone", "minimal-ui"],
         orientation: "portrait-primary",
         background_color: "#120b2b",
         theme_color: "#6f58ff",
         lang: "fr",
+        // Allow the installed PWA to capture in-scope navigations (links open in app, not browser)
+        launch_handler: {
+          client_mode: "navigate-existing",
+        },
+        // Receive shared content from other apps (e.g. WhatsApp "Share to Kin-Sell")
+        share_target: {
+          action: "/explorer?shared=1",
+          method: "GET",
+          params: {
+            title: "title",
+            text: "text",
+            url: "url",
+          },
+        },
         icons: [
           { src: "/assets/kin-sell/pwa-72.png",  sizes: "72x72",   type: "image/png", purpose: "any" },
           { src: "/assets/kin-sell/pwa-96.png",  sizes: "96x96",   type: "image/png", purpose: "any" },
@@ -84,8 +100,8 @@ export default defineConfig({
             handler: "NetworkFirst",
             options: {
               cacheName: "api-cache",
-              networkTimeoutSeconds: 6,
-              expiration: { maxEntries: 100, maxAgeSeconds: 60 * 5 },
+              networkTimeoutSeconds: 4,
+              expiration: { maxEntries: 100, maxAgeSeconds: 60 * 2 },
               cacheableResponse: { statuses: [0, 200] },
             },
           },

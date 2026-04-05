@@ -1,4 +1,4 @@
-import { request } from "../api-core";
+import { request, mutate } from "../api-core";
 
 export type BusinessAccount = {
   id: string;
@@ -23,23 +23,23 @@ export type BusinessAccount = {
 
 export const businesses = {
   create: (body: { legalName: string; publicName: string; description?: string; city: string }) =>
-    request<BusinessAccount>("/business-accounts", { method: "POST", body }),
+    mutate<BusinessAccount>("/business-accounts", { method: "POST", body }, ["/business-accounts"]),
   me: () => request<BusinessAccount>("/business-accounts/me"),
   updateMe: (body: Record<string, unknown>) =>
-    request<BusinessAccount>("/business-accounts/me", { method: "PATCH", body }),
+    mutate<BusinessAccount>("/business-accounts/me", { method: "PATCH", body }, ["/business-accounts"]),
   getBySlug: (slug: string) =>
     request<BusinessAccount & { listings: unknown[]; _count: { sellerOrders: number } }>(
       `/business-accounts/${encodeURIComponent(slug)}`
     ),
   follow: (businessId: string) =>
-    request<{ following: boolean; followersCount: number }>(
+    mutate<{ following: boolean; followersCount: number }>(
       `/business-accounts/${encodeURIComponent(businessId)}/follow`,
-      { method: "POST" }
+      { method: "POST" }, [`/business-accounts/${encodeURIComponent(businessId)}`]
     ),
   unfollow: (businessId: string) =>
-    request<{ following: boolean; followersCount: number }>(
+    mutate<{ following: boolean; followersCount: number }>(
       `/business-accounts/${encodeURIComponent(businessId)}/follow`,
-      { method: "DELETE" }
+      { method: "DELETE" }, [`/business-accounts/${encodeURIComponent(businessId)}`]
     ),
   isFollowing: (businessId: string) =>
     request<{ following: boolean }>(

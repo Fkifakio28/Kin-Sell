@@ -397,12 +397,14 @@ function PostFeed({
 function CreatorSheet({
   mode,
   isPublishing,
+  publishError,
   onClose,
   onPublish,
   t,
 }: {
   mode: 'wave' | 'post';
   isPublishing: boolean;
+  publishError?: string | null;
   onClose: () => void;
   onPublish: (data: {
     text: string;
@@ -447,8 +449,8 @@ function CreatorSheet({
   };
 
   return (
-    <div className="sk-sheet-overlay" onClick={onClose}>
-      <div className="sk-sheet" onClick={(e) => e.stopPropagation()}>
+    <div className="sk-sheet-overlay sk-sheet-overlay--fullscreen" onClick={onClose}>
+      <div className="sk-sheet sk-sheet--fullscreen" onClick={(e) => e.stopPropagation()}>
         <div className="sk-sheet-head">
           <h3>{mode === 'wave' ? '⚡ Nouvelle Wave (24h)' : '✏️ Nouvelle Publication'}</h3>
           <button type="button" className="sk-sheet-close" onClick={onClose}>✕</button>
@@ -456,6 +458,11 @@ function CreatorSheet({
 
         {step === 'content' ? (
           <div className="sk-sheet-body">
+            {publishError && (
+              <div className="sk-sheet-error">
+                ⚠️ {publishError}
+              </div>
+            )}
             <textarea
               className="sk-sheet-input"
               placeholder={mode === 'wave' ? 'Quoi de neuf ? (disparaît en 24h)' : 'Écrivez votre publication…'}
@@ -796,6 +803,7 @@ function SoKinPageMobile() {
   // Creator state
   const [creatorMode, setCreatorMode] = useState<'wave' | 'post' | null>(null);
   const [isPublishing, setIsPublishing] = useState(false);
+  const [publishError, setPublishError] = useState<string | null>(null);
 
   // Story viewer
   const [storyViewerOpen, setStoryViewerOpen] = useState(false);
@@ -839,16 +847,41 @@ function SoKinPageMobile() {
 
   // Socket listeners
   useEffect(() => {
-    const handlePost = () => void loadFeed(true);
-    const handleStory = () => void loadStories();
+    const handlePost = (payload: { sourceUserId?: string }) => {
+      // Skip own posts — already added to local state via handlePublish
+      if (payload?.sourceUserId === user?.id) return;
+      void loadFeed(true);
+    };
+    const handleStory = (payload: { sourceUserId?: string }) => {
+      if (payload?.sourceUserId === user?.id) return;
+      void loadStories();
+    };
     const handleShare = (p: { postId: string; shares: number }) => {
       setPosts((prev) => prev.map((post) => post.id === p.postId ? { ...post, shares: p.shares } : post));
+    };
+    const handleReacted = (payload: { postId: string; type: string; sourceUserId: string }) => {
+      if (payload.sourceUserId === user?.id) return;
+      setPosts((prev) => prev.map((p) => {
+        if (p.id !== payload.postId) return p;
+        const counts = { ...p.reactionCounts } as Record<string, number>;
+        counts[payload.type] = (counts[payload.type] ?? 0) + 1;
+        return { ...p, reactionCounts: counts as typeof p.reactionCounts, likes: p.likes + 1 };
+      }));
+    };
+    const handleUnreacted = (payload: { postId: string; sourceUserId: string }) => {
+      if (payload.sourceUserId === user?.id) return;
+      setPosts((prev) => prev.map((p) => {
+        if (p.id !== payload.postId) return p;
+        return { ...p, likes: Math.max(0, p.likes - 1) };
+      }));
     };
     on('sokin:post-created', handlePost);
     on('sokin:story-created', handleStory);
     on('sokin:post-shared', handleShare);
-    return () => { off('sokin:post-created', handlePost); off('sokin:story-created', handleStory); off('sokin:post-shared', handleShare); };
-  }, [on, off, loadFeed, loadStories]);
+    on('sokin:post-reacted', handleReacted);
+    on('sokin:post-unreacted', handleUnreacted);
+    return () => { off('sokin:post-created', handlePost); off('sokin:story-created', handleStory); off('sokin:post-shared', handleShare); off('sokin:post-reacted', handleReacted); off('sokin:post-unreacted', handleUnreacted); };
+  }, [on, off, loadFeed, loadStories, user?.id]);
 
   // Infinite scroll observer
   useEffect(() => {
@@ -903,6 +936,7 @@ function SoKinPageMobile() {
   }) => {
     if (isPublishing || !isLoggedIn) return;
     setIsPublishing(true);
+    setPublishError(null);
     try {
       const scheduledAtIso = data.scheduledAt ? new Date(data.scheduledAt).toISOString() : undefined;
 
@@ -950,8 +984,10 @@ function SoKinPageMobile() {
         }
       }
       setCreatorMode(null);
-    } catch { /* */ }
-    finally { setIsPublishing(false); }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Échec de la publication. Veuillez réessayer.';
+      setPublishError(msg);
+    } finally { setIsPublishing(false); }
   };
 
   const openStoryViewer = async (index: number) => {
@@ -1006,7 +1042,8 @@ function SoKinPageMobile() {
         <CreatorSheet
           mode={creatorMode}
           isPublishing={isPublishing}
-          onClose={() => setCreatorMode(null)}
+          publishError={publishError}
+          onClose={() => { setCreatorMode(null); setPublishError(null); }}
           onPublish={handlePublish}
           t={t}
         />

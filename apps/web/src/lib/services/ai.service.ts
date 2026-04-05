@@ -1,4 +1,4 @@
-import { request } from "../api-core";
+import { request, mutate } from "../api-core";
 
 // ── IA Marchand (Negotiation AI) ──
 
@@ -160,13 +160,13 @@ export type AiTrial = {
 
 export const aiRecommendations = {
   getActive: () => request<AiRecommendation[]>("/analytics/ai/recommendations"),
-  dismiss: (id: string) => request<{ ok: boolean }>(`/analytics/ai/recommendations/${id}/dismiss`, { method: "POST" }),
-  click: (id: string) => request<{ ok: boolean }>(`/analytics/ai/recommendations/${id}/click`, { method: "POST" }),
-  accept: (id: string) => request<{ ok: boolean }>(`/analytics/ai/recommendations/${id}/accept`, { method: "POST" }),
+  dismiss: (id: string) => mutate<{ ok: boolean }>(`/analytics/ai/recommendations/${id}/dismiss`, { method: "POST" }, ["/analytics/ai/recommendations"]),
+  click: (id: string) => mutate<{ ok: boolean }>(`/analytics/ai/recommendations/${id}/click`, { method: "POST" }, ["/analytics/ai/recommendations"]),
+  accept: (id: string) => mutate<{ ok: boolean }>(`/analytics/ai/recommendations/${id}/accept`, { method: "POST" }, ["/analytics/ai/recommendations"]),
 };
 
 export const aiTrials = {
   getMyTrials: () => request<AiTrial[]>("/analytics/ai/trials"),
-  activate: (id: string) => request<AiTrial>(`/analytics/ai/trials/${id}/activate`, { method: "POST" }),
-  decline: (id: string) => request<{ ok: boolean }>(`/analytics/ai/trials/${id}/decline`, { method: "POST" }),
+  activate: (id: string) => mutate<AiTrial>(`/analytics/ai/trials/${id}/activate`, { method: "POST" }, ["/analytics/ai/trials"]),
+  decline: (id: string) => mutate<{ ok: boolean }>(`/analytics/ai/trials/${id}/decline`, { method: "POST" }, ["/analytics/ai/trials"]),
 };

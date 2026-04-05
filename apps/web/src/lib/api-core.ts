@@ -34,11 +34,15 @@ function _cacheKey(url: string): string {
 
 function _cacheTtl(path: string): number {
   if (path.startsWith("/explorer")) return 120_000;   // 2 min — données publiques stables
-  if (path.startsWith("/listings")) return 90_000;     // 90s — listings changent modérément
-  if (path.startsWith("/orders") || path.startsWith("/negotiations")) return 20_000;
-  if (path.startsWith("/account/me")) return 60_000;
+  if (path.startsWith("/listings/search")) return 60_000;  // 1 min — résultats de recherche
+  if (path.startsWith("/listings")) return 30_000;     // 30s — listings changent modérément
+  if (path.startsWith("/orders") || path.startsWith("/negotiations")) return 15_000; // 15s
+  if (path.startsWith("/account/me")) return 30_000;   // 30s — identité change rarement
   if (path.startsWith("/billing")) return 120_000;     // Plans changent rarement
-  return 30_000;
+  if (path.startsWith("/messaging")) return 10_000;    // 10s — conversations très dynamiques
+  if (path.startsWith("/sokin")) return 15_000;        // 15s — feed social dynamique
+  if (path.startsWith("/reviews")) return 30_000;      // 30s
+  return 20_000; // 20s par défaut (was 30s)
 }
 
 function _cacheGet<T>(key: string): T | null {
@@ -69,9 +73,28 @@ export function invalidateCache(pathPrefix: string): void {
   }
 }
 
+/** Invalide le cache pour plusieurs préfixes d'un coup */
+export function invalidateCaches(...prefixes: string[]): void {
+  for (const p of prefixes) invalidateCache(p);
+}
+
 /** Vide tout le cache (ex: à la déconnexion) */
 export function clearCache(): void {
   _memCache.clear();
+}
+
+/**
+ * Mutation helper : exécute un POST/PATCH/PUT/DELETE puis invalide les caches concernés.
+ * Évite d'oublier l'invalidation dans chaque service.
+ */
+export async function mutate<T>(
+  path: string,
+  opts: RequestOptions,
+  invalidatePrefixes: string[],
+): Promise<T> {
+  const result = await request<T>(path, opts);
+  for (const prefix of invalidatePrefixes) invalidateCache(prefix);
+  return result;
 }
 
 // ── Background Sync: queue failed mutating requests for retry ──────────────

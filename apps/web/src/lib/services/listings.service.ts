@@ -1,4 +1,4 @@
-import { request } from "../api-core";
+import { request, mutate } from "../api-core";
 
 export type SearchParams = {
   q?: string; type?: string; city?: string; country?: string;
@@ -98,7 +98,7 @@ export const listings = {
   search: (params: SearchParams) =>
     request<ListingSearchResponse>("/listings/search", { params: params as Record<string, string | number | undefined> }),
   create: (body: Record<string, unknown>) =>
-    request<MyListing>("/listings", { method: "POST", body }),
+    mutate<MyListing>("/listings", { method: "POST", body }, ["/listings"]),
   latest: (params?: { type?: string; city?: string; country?: string; limit?: number }) =>
     request<PublicListing[]>("/listings/latest", { params: params as Record<string, string | number | undefined> }),
   mine: (params?: { status?: ListingStatus; type?: string; page?: number; limit?: number }) =>
@@ -108,15 +108,15 @@ export const listings = {
   mineDetail: (id: string) =>
     request<MyListing>(`/listings/mine/${encodeURIComponent(id)}`),
   update: (id: string, body: Record<string, unknown>) =>
-    request<MyListing>(`/listings/${encodeURIComponent(id)}`, { method: "PATCH", body }),
+    mutate<MyListing>(`/listings/${encodeURIComponent(id)}`, { method: "PATCH", body }, ["/listings"]),
   changeStatus: (id: string, status: ListingStatus) =>
-    request<MyListing>(`/listings/${encodeURIComponent(id)}/status`, { method: "PATCH", body: { status } }),
+    mutate<MyListing>(`/listings/${encodeURIComponent(id)}/status`, { method: "PATCH", body: { status } }, ["/listings"]),
   updateStock: (id: string, stockQuantity: number | null) =>
-    request<MyListing>(`/listings/${encodeURIComponent(id)}/stock`, { method: "PATCH", body: { stockQuantity } }),
+    mutate<MyListing>(`/listings/${encodeURIComponent(id)}/stock`, { method: "PATCH", body: { stockQuantity } }, ["/listings"]),
   lockedCategories: () =>
     request<string[]>("/listings/locked-categories"),
   contactSeller: (listingId: string) =>
-    request<{ conversationId: string; listingId: string; sellerUserId: string; message: string }>(
-      `/listings/${encodeURIComponent(listingId)}/contact`, { method: "POST" }
+    mutate<{ conversationId: string; listingId: string; sellerUserId: string; message: string }>(
+      `/listings/${encodeURIComponent(listingId)}/contact`, { method: "POST" }, ["/messaging"]
     ),
 };

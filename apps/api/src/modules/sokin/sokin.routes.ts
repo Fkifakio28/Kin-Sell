@@ -168,6 +168,11 @@ router.post(
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     const { type } = reactionSchema.parse(req.body);
     const result = await reactToPost(req.auth!.userId, req.params.id, type);
+    emitToAll("sokin:post-reacted", {
+      postId: req.params.id,
+      type,
+      sourceUserId: req.auth!.userId,
+    });
     if (result.authorId && result.authorId !== req.auth!.userId && !isUserOnline(result.authorId)) {
       const actor = await prisma.userProfile.findUnique({
         where: { userId: req.auth!.userId },
@@ -190,6 +195,10 @@ router.delete(
   requireAuth,
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     const result = await unreactToPost(req.auth!.userId, req.params.id);
+    emitToAll("sokin:post-unreacted", {
+      postId: req.params.id,
+      sourceUserId: req.auth!.userId,
+    });
     res.json(result);
   })
 );

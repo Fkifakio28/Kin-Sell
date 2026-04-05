@@ -3,6 +3,32 @@
    ═══════════════════════════════════════════════════════════ */
 // @ts-nocheck
 
+/* ── Navigation Preload: faster navigations even with SW ── */
+self.addEventListener("activate", (event) => {
+  event.waitUntil((async () => {
+    if (self.registration.navigationPreload) {
+      await self.registration.navigationPreload.enable();
+    }
+  })());
+});
+
+/* ── App Badge API in SW scope ── */
+let _badgeCount = 0;
+
+function incrementBadge() {
+  _badgeCount++;
+  if (self.navigator && "setAppBadge" in self.navigator) {
+    self.navigator.setAppBadge(_badgeCount).catch(() => {});
+  }
+}
+
+function clearBadge() {
+  _badgeCount = 0;
+  if (self.navigator && "clearAppBadge" in self.navigator) {
+    self.navigator.clearAppBadge().catch(() => {});
+  }
+}
+
 function toAbsoluteUrl(path) {
   return new URL(path || "/", self.location.origin).href;
 }
@@ -43,6 +69,18 @@ function hashPush(data) {
   return `${data?.type || "x"}-${data?.orderId || data?.negotiationId || data?.conversationId || data?.postId || ""}`;
 }
 
+/* ── Persistent ringing state for call notifications ── */
+let _callRingInterval = null;
+let _callRingTag = null;
+
+function stopCallRinging() {
+  if (_callRingInterval) {
+    clearInterval(_callRingInterval);
+    _callRingInterval = null;
+  }
+  _callRingTag = null;
+}
+
 /* ── Push event ── */
 self.addEventListener("push", (event) => {
   if (!event.data) return;
@@ -68,16 +106,19 @@ self.addEventListener("push", (event) => {
   const targetPath = payloadData.url || resolveTargetPath(payloadData);
   const dataWithUrl = { ...payloadData, url: targetPath };
 
+  const isCall = payloadType === "call";
+  const callTag = tag || `kin-sell-call-${payloadData.conversationId || Date.now()}`;
+
   const notificationOptions = {
     body,
     icon: icon || "/assets/kin-sell/pwa-192.png",
     badge: badge || "/assets/kin-sell/badge-72.png",
-    tag: tag || `kin-sell-${payloadType}`,
+    tag: isCall ? callTag : (tag || `kin-sell-${payloadType}`),
     data: dataWithUrl,
     actions: actions || [],
-    vibrate: payloadType === "call" ? [320, 120, 320, 120, 320] : [200, 100, 200],
-    requireInteraction: payloadType === "call",
-    renotify: payloadType === "call",
+    vibrate: isCall ? [300, 150, 300, 150, 300, 150, 300] : [200, 100, 200],
+    requireInteraction: isCall,
+    renotify: true,
     silent: false,
   };
 
@@ -86,20 +127,56 @@ self.addEventListener("push", (event) => {
     const visibleClients = clients.filter((c) => c.visibilityState === "visible");
 
     if (visibleClients.length > 0) {
-      // Parallel postMessage to all visible tabs
+      // App is visible — pass to in-app handler (sound + vibration)
       visibleClients.forEach((c) => {
         c.postMessage({ type: "PUSH_RECEIVED", payload: { title, body, data: dataWithUrl } });
       });
       return;
     }
 
+    // App not visible — show system notification
     await self.registration.showNotification(title, notificationOptions);
+    incrementBadge();
+
+    // For calls: also notify background (non-visible) clients so they can prepare audio
+    if (isCall) {
+      const bgClients = clients.filter((c) => c.visibilityState !== "visible");
+      bgClients.forEach((c) => {
+        c.postMessage({ type: "PUSH_RECEIVED", payload: { title, body, data: dataWithUrl } });
+      });
+
+      // ── Repeated ringing: re-show notification every 3s to re-trigger vibration ──
+      // This simulates a real phone ringing pattern for up to 45 seconds.
+      stopCallRinging();
+      _callRingTag = callTag;
+      let ringCount = 0;
+      const MAX_RINGS = 14; // ~42 seconds (14 * 3s)
+
+      _callRingInterval = setInterval(async () => {
+        ringCount++;
+        if (ringCount >= MAX_RINGS) {
+          stopCallRinging();
+          return;
+        }
+        try {
+          // Re-show the notification with renotify:true to re-trigger vibration
+          await self.registration.showNotification(title, {
+            ...notificationOptions,
+            renotify: true,
+          });
+        } catch {
+          stopCallRinging();
+        }
+      }, 3000);
+    }
   })());
 });
 
 /* ── Notification click ── */
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
+  stopCallRinging(); // Stop ringing loop on any interaction
+  clearBadge(); // Clear app icon badge on interaction
 
   const data = event.notification.data || {};
   let targetUrl = data.url || resolveTargetPath(data);
@@ -158,6 +235,7 @@ self.addEventListener("notificationclick", (event) => {
 self.addEventListener("notificationclose", (event) => {
   const data = event.notification.data || {};
   if (data.type === "call") {
+    stopCallRinging(); // Stop ringing loop when notification dismissed
     self.clients.matchAll({ type: "window" }).then((clients) => {
       for (const client of clients) {
         client.postMessage({ type: "CALL_DISMISSED", data });

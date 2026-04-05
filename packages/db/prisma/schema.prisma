@@ -26,6 +26,11 @@ enum VerificationStatus {
   PENDING
   VERIFIED
   REJECTED
+  AI_ELIGIBLE
+  PARTIALLY_VERIFIED
+  REVOKED
+  ADMIN_LOCKED_VERIFIED
+  ADMIN_LOCKED_REVOKED
 }
 
 enum ListingType {
@@ -232,11 +237,14 @@ model User {
   aiTrials                 AiTrial[]                  @relation("AiTrials")
   adCreatives              AiAdCreative[]             @relation("AiAdCreativeUser")
   adCampaigns              AiAdCampaign[]             @relation("AiAdCampaignUser")
+  verificationRequests      VerificationRequest[]      @relation("VerificationRequests")
+  verificationResolved      VerificationRequest[]      @relation("VerificationResolver")
 
   @@index([role])
   @@index([accountStatus])
   @@index([trustScore])
   @@index([trustLevel])
+  @@index([phone])
 }
 
 model UserProfile {
@@ -295,6 +303,7 @@ model BusinessAccount {
   aiTrials          AiTrial[]          @relation("AiTrialsBusiness")
   adCreatives       AiAdCreative[]     @relation("AiAdCreativeBusiness")
   adCampaigns       AiAdCampaign[]     @relation("AiAdCampaignBusiness")
+  verificationRequests VerificationRequest[] @relation("BusinessVerificationRequests")
 
   @@index([ownerUserId])
 }
@@ -621,6 +630,7 @@ model Order {
   sellerBusiness BusinessAccount? @relation(fields: [sellerBusinessId], references: [id], onDelete: SetNull)
   cart           Cart?            @relation(fields: [cartId], references: [id], onDelete: SetNull)
   items          OrderItem[]
+  reviews        UserReview[]
 
   @@index([buyerUserId, status, createdAt])
   @@index([sellerUserId, status, createdAt])
@@ -801,6 +811,7 @@ model Conversation {
   callLogs     CallLog[]
 
   @@index([updatedAt])
+  @@index([isGroup, updatedAt])
 }
 
 model ConversationParticipant {
@@ -947,6 +958,7 @@ enum AdminPermission {
   MESSAGING
   LISTINGS
   NEGOTIATION_RULES
+  VERIFICATION
 }
 
 model AdminProfile {
@@ -1377,6 +1389,7 @@ model SoKinLiveParticipant {
   @@unique([liveId, userId])
   @@index([liveId])
   @@index([userId])
+  @@index([liveId, leftAt])
 }
 
 model SoKinLiveChat {
@@ -1498,17 +1511,21 @@ model UserReview {
   id         String   @id @default(cuid())
   authorId   String
   targetId   String
+  orderId    String?  // lié à une commande réelle (avis vérifié)
   rating     Int      // 1–5
   text       String?
+  verified   Boolean  @default(false) // true si lié à une transaction réelle
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  author User @relation("ReviewsGiven", fields: [authorId], references: [id], onDelete: Cascade)
-  target User @relation("ReviewsReceived", fields: [targetId], references: [id], onDelete: Cascade)
+  author User  @relation("ReviewsGiven", fields: [authorId], references: [id], onDelete: Cascade)
+  target User  @relation("ReviewsReceived", fields: [targetId], references: [id], onDelete: Cascade)
+  order  Order? @relation(fields: [orderId], references: [id], onDelete: SetNull)
 
-  @@unique([authorId, targetId])
+  @@unique([authorId, targetId, orderId]) // un avis par personne par transaction
   @@index([targetId, createdAt])
   @@index([authorId])
+  @@index([orderId])
 }
 
 // ══════════════════════════════════════════════
@@ -1789,6 +1806,63 @@ model SoKinConnection {
 }
 
 // ══════════════════════════════════════════════
+// VERIFICATION BADGE SYSTEM — Badges vérifiés utilisateurs & entreprises
+// ══════════════════════════════════════════════
+
+enum VerificationRequestSource {
+  USER_REQUEST    // Demande manuelle depuis le dashboard
+  AI_AUTO         // Recommandation/attribution automatique IA
+  ADMIN_MANUAL    // Action directe d'un admin
+}
+
+model VerificationRequest {
+  id              String                    @id @default(cuid())
+  userId          String?                   // Null si c'est une entreprise
+  businessId      String?                   // Null si c'est un utilisateur
+  source          VerificationRequestSource @default(USER_REQUEST)
+  status          VerificationStatus        @default(PENDING)
+  adminLocked     Boolean                   @default(false)  // true = l'IA ne peut plus modifier
+  aiScore         Float?                    // Score de crédibilité IA (0-100)
+  aiRecommendation String?                  // Texte de recommandation IA
+  aiEvaluatedAt   DateTime?
+  adminNote       String?                   // Note de l'admin
+  resolvedBy      String?                   // ID de l'admin qui a pris la décision
+  resolvedAt      DateTime?
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+
+  // Métriques figées au moment de la demande / évaluation
+  metricsSnapshot Json?                     // { completedOrders, avgRating, reviewCount, avgResponseTime, avgTransactionTime, disputeCount, reportCount, accountAge }
+
+  user     User?            @relation("VerificationRequests", fields: [userId], references: [id], onDelete: Cascade)
+  business BusinessAccount? @relation("BusinessVerificationRequests", fields: [businessId], references: [id], onDelete: Cascade)
+  resolver User?            @relation("VerificationResolver", fields: [resolvedBy], references: [id], onDelete: SetNull)
+  history  VerificationHistory[]
+
+  @@index([userId, status])
+  @@index([businessId, status])
+  @@index([status, createdAt])
+  @@index([resolvedBy])
+}
+
+model VerificationHistory {
+  id            String                    @id @default(cuid())
+  requestId     String
+  action        String                    // REQUESTED, APPROVED, REJECTED, REVOKED, AI_ELIGIBLE, AI_PARTIAL, ADMIN_LOCKED, REACTIVATED
+  fromStatus    VerificationStatus
+  toStatus      VerificationStatus
+  source        VerificationRequestSource
+  performedBy   String?                   // ID admin ou "SYSTEM" pour IA
+  reason        String?
+  metadata      Json?
+  createdAt     DateTime                  @default(now())
+
+  request VerificationRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([requestId, createdAt])
+}
+
+// ══════════════════════════════════════════════
 // SO-KIN REACTIONS — Réactions Facebook sur les posts
 // ══════════════════════════════════════════════
 
@@ -1843,6 +1917,7 @@ model SoKinStory {
 
   @@index([authorId])
   @@index([expiresAt])
+  @@index([authorId, expiresAt])
 }
 
 model SoKinStoryView {

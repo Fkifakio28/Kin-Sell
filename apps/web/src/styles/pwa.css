@@ -334,3 +334,65 @@
     padding-bottom: 0;
   }
 }
+
+/* ════════════════════════════════════════════════════════
+   Standalone Mode — App installée (PWA)
+   Optimisations visuelles pour une expérience native
+   ════════════════════════════════════════════════════════ */
+
+/* Utilise les safe areas iOS (notch, Dynamic Island, home indicator) */
+@media all and (display-mode: standalone) {
+  /* Padding top pour éviter la barre de statut iOS / Android */
+  body {
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    /* Empêche le overscroll "pull-to-refresh" du navigateur (natif) */
+    overscroll-behavior-y: contain;
+  }
+
+  /* Désactive la sélection de texte longue-pression (comportement natif) */
+  * {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  /* Mais autorise la sélection dans les inputs et textareas */
+  input, textarea, [contenteditable="true"] {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+
+  /* Empêche le text-size-adjust en mode standalone */
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  /* Cacher le bouton d'installation dans la PWA (déjà installée) */
+  .pwa-install-btn,
+  .ks-install-banner {
+    display: none !important;
+  }
+
+  /* Smooth scroll pour un feeling natif */
+  html, body {
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Empêche le bounce effet iOS en standalone */
+  #root {
+    min-height: 100dvh;
+    overflow: auto;
+    overscroll-behavior: none;
+  }
+
+  /* Tap highlight invisible (natif) */
+  a, button, [role="button"] {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+/* iOS standalone detection fallback */
+@media all and (display-mode: standalone), all and (-webkit-device-pixel-ratio) and (not (display-mode: browser)) {
+  .pwa-install-btn { display: none !important; }
+}

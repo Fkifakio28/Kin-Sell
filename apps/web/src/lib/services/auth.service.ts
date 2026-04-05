@@ -1,4 +1,4 @@
-import { request, setToken, setRefreshToken, setSessionId, clearAuthSession, ApiError, getRefreshToken, type AccountUser } from "../api-core";
+import { request, mutate, setToken, setRefreshToken, setSessionId, clearAuthSession, ApiError, getRefreshToken, type AccountUser } from "../api-core";
 import type { LocationVisibility } from "./geo.service";
 
 type AccountAuthResponse = {
@@ -106,7 +106,7 @@ export const auth = {
     longitude?: number;
     placeId?: string;
     locationVisibility?: LocationVisibility;
-  }) => request<AccountUser>("/account/profile/complete", { method: "PATCH", body }),
+  }) => mutate<AccountUser>("/account/profile/complete", { method: "PATCH", body }, ["/account/me", "/users/me"]),
   sessions: () => request<{ sessions: Array<{
     id: string;
     deviceId?: string;

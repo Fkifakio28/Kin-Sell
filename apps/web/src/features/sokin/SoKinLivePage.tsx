@@ -13,6 +13,7 @@ import {
   type MyListing,
 } from '../../lib/api-client';
 import { getDashboardPath } from '../../utils/role-routing';
+import { useWakeLock } from '../../hooks/useWakeLock';
 import { Header } from '../../components/Header';
 import Hls from 'hls.js';
 import './sokin-live.css';
@@ -30,7 +31,7 @@ function isHls(url: string) {
  * Mobile/tablette → portrait 720p ou 540p ou 480p
  * Desktop → 720p paysage (webcam standard)
  */
-async function getAdaptiveStream(isMobileOrTablet: boolean): Promise<MediaStream> {
+async function getAdaptiveStream(isMobileOrTablet: boolean, facing: 'user' | 'environment' = 'user'): Promise<MediaStream> {
   const audioConstraints: MediaTrackConstraints = {
     echoCancellation: true,
     noiseSuppression: true,
@@ -41,10 +42,10 @@ async function getAdaptiveStream(isMobileOrTablet: boolean): Promise<MediaStream
   const profiles: MediaTrackConstraints[] = isMobileOrTablet
     ? [
         // Mobile/Tablette : portrait, qualité décroissante
-        { facingMode: 'user', width: { ideal: 720 }, height: { ideal: 1280 }, frameRate: { ideal: 30, max: 30 } },
-        { facingMode: 'user', width: { ideal: 540 }, height: { ideal: 960 },  frameRate: { ideal: 24, max: 30 } },
-        { facingMode: 'user', width: { ideal: 480 }, height: { ideal: 640 },  frameRate: { ideal: 24, max: 24 } },
-        { facingMode: 'user' }, // dernier recours
+        { facingMode: facing, width: { ideal: 720 }, height: { ideal: 1280 }, frameRate: { ideal: 30, max: 30 } },
+        { facingMode: facing, width: { ideal: 540 }, height: { ideal: 960 },  frameRate: { ideal: 24, max: 30 } },
+        { facingMode: facing, width: { ideal: 480 }, height: { ideal: 640 },  frameRate: { ideal: 24, max: 24 } },
+        { facingMode: facing }, // dernier recours
       ]
     : [
         // Desktop : paysage, webcam standard
@@ -92,6 +93,7 @@ function LiveCreator({
   const streamRef = useRef<MediaStream | null>(null);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [cameraFacing, setCameraFacing] = useState<'user' | 'environment'>('user');
 
   // Step 1: camera preview, Step 2: details
   const [step, setStep] = useState<1 | 2>(1);
@@ -102,7 +104,7 @@ function LiveCreator({
     let cancelled = false;
     (async () => {
       try {
-        const stream = await getAdaptiveStream(isMobileOrTablet);
+        const stream = await getAdaptiveStream(isMobileOrTablet, cameraFacing);
         if (cancelled) { stream.getTracks().forEach((t) => t.stop()); return; }
         streamRef.current = stream;
         if (videoRef.current) videoRef.current.srcObject = stream;
@@ -116,7 +118,7 @@ function LiveCreator({
       streamRef.current?.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
     };
-  }, [t]);
+  }, [t, cameraFacing]);
 
   const toggleTag = (val: string) => {
     setSelectedTags((prev) => prev.includes(val) ? prev.filter((t) => t !== val) : [...prev, val]);
@@ -159,6 +161,11 @@ function LiveCreator({
       {ready && step === 1 && (
         <div className="lv-creator-overlay">
           <div className="lv-creator-top-right">
+            {isMobileOrTablet && (
+              <button type="button" className="lv-creator-cam-switch" onClick={() => setCameraFacing((f) => f === 'user' ? 'environment' : 'user')} aria-label="Changer caméra">
+                🔄
+              </button>
+            )}
             <button type="button" className="lv-creator-start-btn" onClick={() => setStep(2)}>
               Suivant →
             </button>
@@ -237,7 +244,7 @@ function LiveViewer({
 }) {
   const { isLoggedIn, user } = useAuth();
   const { t, formatMoneyFromUsdCents } = useLocaleCurrency();
-  const { on, off } = useSocket();
+  const { emit, on, off } = useSocket();
 
   const [liveData, setLiveData] = useState(live);
   const [status, setStatus] = useState(live.status);
@@ -247,6 +254,7 @@ function LiveViewer({
   const heartId = useRef(0);
   const [sound, setSound] = useState(false);
   const [showSupport, setShowSupport] = useState(false);
+  const [cameraFacing, setCameraFacing] = useState<'user' | 'environment'>('user');
 
   // Chat
   const [messages, setMessages] = useState<SoKinLiveChatMsg[]>([]);
@@ -261,66 +269,108 @@ function LiveViewer({
   const hostVideoRef = useRef<HTMLVideoElement>(null);
   const hostStreamRef = useRef<MediaStream | null>(null);
 
+  // WebRTC refs for broadcast (host sends, viewers receive)
+  const peerConnectionsRef = useRef<Map<string, RTCPeerConnection>>(new Map());
+  const remoteVideoRef = useRef<HTMLVideoElement>(null);
+
   const playbackUrl = liveData.replayUrl?.trim() || null;
   const canPlay = Boolean(playbackUrl) && status !== 'WAITING' && status !== 'CANCELED';
   const hostProfile = liveData.host?.profile;
   const hostOwns = liveData.hostId === user?.id;
 
-  // Join/leave
+  // ── Socket join/leave (replaces REST-only join/leave) ──
   useEffect(() => {
-    if (isLoggedIn && !isHost) sokinLive.join(live.id).catch(() => {});
-    return () => { if (isLoggedIn && !isHost) sokinLive.leave(live.id).catch(() => {}); };
-  }, [isLoggedIn, isHost, live.id]);
+    if (!isLoggedIn) return;
+    // Join via socket (which persists in DB + broadcasts to room)
+    emit('live:join', { liveId: live.id });
+    return () => {
+      emit('live:leave', { liveId: live.id });
+    };
+  }, [isLoggedIn, live.id, emit]);
 
-  // Unified polling: status (every 2 ticks = 8s) + chat (every tick = 4s)
-  // Reduces from 3 intervals to 1 → fewer re-renders, lighter on CPU/battery (mobile priority)
-  const pollTickRef = useRef(0);
+  // ── Socket event listeners for real-time updates ──
   useEffect(() => {
-    let c = false;
-    let pollInterval: ReturnType<typeof setInterval> | null = null;
-    const fetchChat = async () => {
-      try {
-        const d = await sokinLive.chat(live.id, 80);
-        if (!c) setMessages(d.messages.reverse());
-      } catch { /* */ }
+    const handleViewerJoined = (data: { liveId: string; viewerCount: number }) => {
+      if (data.liveId === live.id) setViewers(data.viewerCount);
     };
-    const fetchStatus = async () => {
-      try {
-        const u = await sokinLive.get(live.id);
-        if (c) return;
-        setLiveData(u);
-        setViewers(u.viewerCount);
-        setLikes(u.likesCount);
-        setStatus((prev) => prev === 'LIVE' && u.status === 'WAITING' ? prev : u.status);
-      } catch { /* */ }
+    const handleViewerLeft = (data: { liveId: string; viewerCount: number }) => {
+      if (data.liveId === live.id) setViewers(data.viewerCount);
     };
-    // Initial fetch
-    void fetchChat();
-    void fetchStatus();
-    const startPolling = () => {
-      if (pollInterval) return;
-      pollInterval = setInterval(() => {
-        pollTickRef.current++;
-        void fetchChat();
-        if (pollTickRef.current % 2 === 0) void fetchStatus();
-      }, 4000);
-    };
-    const stopPolling = () => {
-      if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
-    };
-    startPolling();
-    // Pause polling when tab is hidden (save battery/bandwidth)
-    const onVisChange = () => {
-      if (document.visibilityState === 'visible') {
-        void fetchChat();
-        void fetchStatus();
-        startPolling();
-      } else {
-        stopPolling();
+    const handleChatNew = (data: { id: string; liveId: string; userId: string; text: string; isGift: boolean; giftType: string | null; isPinned: boolean; createdAt: string; user: { profile: { displayName: string; avatarUrl: string | null } } }) => {
+      if (data.liveId === live.id) {
+        setMessages((prev) => {
+          // Deduplicate by id
+          if (prev.some((m) => m.id === data.id)) return prev;
+          return [...prev, data as unknown as SoKinLiveChatMsg];
+        });
       }
     };
-    document.addEventListener('visibilitychange', onVisChange);
-    return () => { c = true; stopPolling(); document.removeEventListener('visibilitychange', onVisChange); };
+    const handleLiked = (data: { liveId: string; userId: string; likesCount: number }) => {
+      if (data.liveId === live.id) {
+        setLikes(data.likesCount);
+        if (data.userId !== user?.id) {
+          // Spawn heart for remote likes
+          const id = ++heartId.current;
+          const x = Math.random() * 60 + 20;
+          setHearts((p) => [...p, { id, x }]);
+          setTimeout(() => setHearts((p) => p.filter((h) => h.id !== id)), 1500);
+        }
+      }
+    };
+    const handleStarted = (data: { liveId: string }) => {
+      if (data.liveId === live.id) setStatus('LIVE');
+    };
+    const handleEnded = (data: { liveId: string }) => {
+      if (data.liveId === live.id) setStatus('ENDED');
+    };
+
+    on('live:viewer-joined', handleViewerJoined);
+    on('live:viewer-left', handleViewerLeft);
+    on('live:chat:new', handleChatNew);
+    on('live:liked', handleLiked);
+    on('live:started', handleStarted);
+    on('live:ended', handleEnded);
+
+    return () => {
+      off('live:viewer-joined', handleViewerJoined);
+      off('live:viewer-left', handleViewerLeft);
+      off('live:chat:new', handleChatNew);
+      off('live:liked', handleLiked);
+      off('live:started', handleStarted);
+      off('live:ended', handleEnded);
+    };
+  }, [live.id, user?.id, on, off]);
+
+  // ── Backup polling (every 30s for reconciliation, NOT primary) ──
+  useEffect(() => {
+    let c = false;
+    const reconcile = async () => {
+      try {
+        const [chatRes, statusRes] = await Promise.all([
+          sokinLive.chat(live.id, 80),
+          sokinLive.get(live.id),
+        ]);
+        if (c) return;
+        // Reconcile chat (merge, don't replace)
+        setMessages((prev) => {
+          const existingIds = new Set(prev.map((m) => m.id));
+          const newMsgs = chatRes.messages.filter((m: SoKinLiveChatMsg) => !existingIds.has(m.id));
+          if (newMsgs.length === 0) return prev;
+          return [...prev, ...newMsgs].sort((a, b) =>
+            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+          );
+        });
+        // Reconcile status
+        setLiveData(statusRes);
+        setViewers(statusRes.viewerCount);
+        setLikes(statusRes.likesCount);
+        if (statusRes.status === 'ENDED') setStatus('ENDED');
+      } catch { /* ignore */ }
+    };
+    // Initial fetch
+    void reconcile();
+    const int = setInterval(reconcile, 30_000);
+    return () => { c = true; clearInterval(int); };
   }, [live.id]);
 
   // Auto-scroll chat (using requestAnimationFrame for smoothness)
@@ -330,20 +380,158 @@ function LiveViewer({
     });
   }, [messages]);
 
-  // Host camera preview (when no stream URL)
+  // Host camera preview (with facingMode support)
   useEffect(() => {
     if (!isHost || canPlay || status === 'ENDED') return;
     let c = false;
     (async () => {
       try {
-        const stream = await getAdaptiveStream(isMobileOrTablet);
+        const stream = await getAdaptiveStream(isMobileOrTablet, cameraFacing);
         if (c) { stream.getTracks().forEach((t) => t.stop()); return; }
         hostStreamRef.current = stream;
         if (hostVideoRef.current) hostVideoRef.current.srcObject = stream;
+
+        // Replace video track in all peer connections (for camera switch)
+        const videoTrack = stream.getVideoTracks()[0];
+        if (videoTrack) {
+          for (const pc of peerConnectionsRef.current.values()) {
+            const sender = pc.getSenders().find((s) => s.track?.kind === 'video');
+            if (sender) void sender.replaceTrack(videoTrack);
+          }
+        }
       } catch { /* */ }
     })();
     return () => { c = true; hostStreamRef.current?.getTracks().forEach((t) => t.stop()); hostStreamRef.current = null; };
-  }, [canPlay, isHost, status, isMobileOrTablet]);
+  }, [canPlay, isHost, status, isMobileOrTablet, cameraFacing]);
+
+  // ── WebRTC broadcast: Host creates peer connections for each joining viewer ──
+  useEffect(() => {
+    if (!isHost || status === 'ENDED') return;
+
+    const ICE_SERVERS: RTCIceServer[] = [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+    ];
+
+    const handleViewerJoinedForWebRTC = (data: { liveId: string; userId: string }) => {
+      if (data.liveId !== live.id || data.userId === user?.id) return;
+      const stream = hostStreamRef.current;
+      if (!stream) return;
+
+      const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+      peerConnectionsRef.current.set(data.userId, pc);
+
+      // Add host tracks to peer connection
+      for (const track of stream.getTracks()) {
+        pc.addTrack(track, stream);
+      }
+
+      pc.onicecandidate = (e) => {
+        if (e.candidate) {
+          emit('live:webrtc:ice-candidate', { liveId: live.id, targetUserId: data.userId, candidate: e.candidate.toJSON() });
+        }
+      };
+
+      pc.onnegotiationneeded = async () => {
+        try {
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          emit('live:webrtc:offer', { liveId: live.id, targetUserId: data.userId, sdp: pc.localDescription! });
+        } catch { /* */ }
+      };
+    };
+
+    const handleAnswerFromViewer = async (data: { liveId: string; viewerId: string; sdp: RTCSessionDescriptionInit }) => {
+      if (data.liveId !== live.id) return;
+      const pc = peerConnectionsRef.current.get(data.viewerId);
+      if (pc) {
+        try { await pc.setRemoteDescription(new RTCSessionDescription(data.sdp)); } catch { /* */ }
+      }
+    };
+
+    const handleIceCandidateFromViewer = async (data: { liveId: string; fromUserId: string; candidate: RTCIceCandidateInit }) => {
+      if (data.liveId !== live.id) return;
+      const pc = peerConnectionsRef.current.get(data.fromUserId);
+      if (pc) {
+        try { await pc.addIceCandidate(new RTCIceCandidate(data.candidate)); } catch { /* */ }
+      }
+    };
+
+    const handleViewerLeftForWebRTC = (data: { liveId: string; userId: string }) => {
+      if (data.liveId !== live.id) return;
+      const pc = peerConnectionsRef.current.get(data.userId);
+      if (pc) { pc.close(); peerConnectionsRef.current.delete(data.userId); }
+    };
+
+    on('live:viewer-joined', handleViewerJoinedForWebRTC);
+    on('live:viewer-left', handleViewerLeftForWebRTC);
+    on('live:webrtc:answer', handleAnswerFromViewer);
+    on('live:webrtc:ice-candidate', handleIceCandidateFromViewer);
+
+    return () => {
+      off('live:viewer-joined', handleViewerJoinedForWebRTC);
+      off('live:viewer-left', handleViewerLeftForWebRTC);
+      off('live:webrtc:answer', handleAnswerFromViewer);
+      off('live:webrtc:ice-candidate', handleIceCandidateFromViewer);
+      // Cleanup all peer connections
+      for (const pc of peerConnectionsRef.current.values()) pc.close();
+      peerConnectionsRef.current.clear();
+    };
+  }, [isHost, live.id, status, user?.id, emit, on, off]);
+
+  // ── WebRTC receive: Viewer receives stream from host ──
+  useEffect(() => {
+    if (isHost || status === 'ENDED') return;
+
+    const ICE_SERVERS: RTCIceServer[] = [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+    ];
+
+    let viewerPC: RTCPeerConnection | null = null;
+
+    const handleOfferFromHost = async (data: { liveId: string; hostId: string; sdp: RTCSessionDescriptionInit }) => {
+      if (data.liveId !== live.id) return;
+
+      // Close existing connection if any
+      if (viewerPC) { viewerPC.close(); viewerPC = null; }
+
+      viewerPC = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+
+      viewerPC.ontrack = (e) => {
+        if (remoteVideoRef.current && e.streams[0]) {
+          remoteVideoRef.current.srcObject = e.streams[0];
+        }
+      };
+
+      viewerPC.onicecandidate = (e) => {
+        if (e.candidate) {
+          emit('live:webrtc:ice-candidate', { liveId: live.id, targetUserId: data.hostId, candidate: e.candidate.toJSON() });
+        }
+      };
+
+      try {
+        await viewerPC.setRemoteDescription(new RTCSessionDescription(data.sdp));
+        const answer = await viewerPC.createAnswer();
+        await viewerPC.setLocalDescription(answer);
+        emit('live:webrtc:answer', { liveId: live.id, targetUserId: data.hostId, sdp: viewerPC.localDescription! });
+      } catch { /* */ }
+    };
+
+    const handleIceCandidateFromHost = async (data: { liveId: string; fromUserId: string; candidate: RTCIceCandidateInit }) => {
+      if (data.liveId !== live.id || !viewerPC) return;
+      try { await viewerPC.addIceCandidate(new RTCIceCandidate(data.candidate)); } catch { /* */ }
+    };
+
+    on('live:webrtc:offer', handleOfferFromHost);
+    on('live:webrtc:ice-candidate', handleIceCandidateFromHost);
+
+    return () => {
+      off('live:webrtc:offer', handleOfferFromHost);
+      off('live:webrtc:ice-candidate', handleIceCandidateFromHost);
+      if (viewerPC) { viewerPC.close(); viewerPC = null; }
+    };
+  }, [isHost, live.id, status, emit, on, off]);
 
   // Video playback (HLS or direct)
   useEffect(() => {
@@ -439,11 +627,8 @@ function LiveViewer({
     if (!isLoggedIn) return;
     setLikes((n) => n + 1);
     spawnHeart();
-    try {
-      const r = await sokinLive.like(live.id);
-      setLikes((c) => Math.max(c, r.likesCount));
-    } catch { setLikes((c) => Math.max(0, c - 1)); }
-  }, [isLoggedIn, live.id, spawnHeart]);
+    emit('live:like', { liveId: live.id });
+  }, [isLoggedIn, live.id, spawnHeart, emit]);
 
   const handleSendChat = useCallback(async () => {
     const text = chatInput.trim();
@@ -451,19 +636,19 @@ function LiveViewer({
     const fullText = replyTo ? `@${replyTo} ${text}` : text;
     setChatInput('');
     setReplyTo(null);
-    try {
-      const msg = await sokinLive.sendChat(live.id, { text: fullText });
-      setMessages((p) => [...p, msg]);
-    } catch { /* */ }
-  }, [chatInput, isLoggedIn, live.id, replyTo]);
+    // Send via socket (persisted + broadcast in backend)
+    emit('live:chat', { liveId: live.id, text: fullText });
+  }, [chatInput, isLoggedIn, live.id, replyTo, emit]);
 
   const handleEnd = useCallback(async () => {
-    try { await sokinLive.end(live.id); setStatus('ENDED'); } catch { /* */ }
-  }, [live.id]);
+    emit('live:end', { liveId: live.id });
+    setStatus('ENDED');
+  }, [live.id, emit]);
 
   const handleStart = useCallback(async () => {
-    try { await sokinLive.start(live.id); setStatus('LIVE'); } catch { /* */ }
-  }, [live.id]);
+    emit('live:start', { liveId: live.id });
+    setStatus('LIVE');
+  }, [live.id, emit]);
 
   const handleShare = useCallback(async () => {
     const url = `${window.location.origin}/sokin/live?watch=${encodeURIComponent(live.id)}`;
@@ -491,7 +676,10 @@ function LiveViewer({
         {!canPlay && isHost && status !== 'ENDED' && (
           <video ref={hostVideoRef} className="lv-viewer-video" autoPlay muted playsInline disablePictureInPicture />
         )}
-        {!canPlay && !isHost && liveData.thumbnailUrl && (
+        {!canPlay && !isHost && status !== 'ENDED' && (
+          <video ref={remoteVideoRef} className="lv-viewer-video" autoPlay playsInline muted={!sound} disablePictureInPicture />
+        )}
+        {!canPlay && !isHost && status === 'ENDED' && liveData.thumbnailUrl && (
           <img src={liveData.thumbnailUrl} alt={liveData.title} className="lv-viewer-poster" />
         )}
         <div className="lv-viewer-shade" />
@@ -527,8 +715,13 @@ function LiveViewer({
         )}
       </div>
 
-      {/* Top-right: share (+ host edit tags) */}
+      {/* Top-right: share + camera switch */}
       <div className="lv-viewer-top-right">
+        {isHost && isMobileOrTablet && status !== 'ENDED' && (
+          <button type="button" className="lv-icon-btn" onClick={() => setCameraFacing((f) => f === 'user' ? 'environment' : 'user')} aria-label="Changer caméra">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16"/><circle cx="12" cy="11" r="3"/></svg>
+          </button>
+        )}
         <button type="button" className="lv-icon-btn" onClick={handleShare} aria-label="Partager">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><line x1="8.59" y1="13.51" x2="15.42" y2="17.49" /><line x1="15.41" y1="6.51" x2="8.59" y2="10.49" /></svg>
         </button>
@@ -769,6 +962,9 @@ export function SoKinLivePage() {
   const [lives, setLives] = useState<SoKinLiveData[]>([]);
   const [selectedLive, setSelectedLive] = useState<SoKinLiveData | null>(null);
   const [isCreatingLive, setIsCreatingLive] = useState(false);
+
+  // Keep screen awake while watching or creating a live
+  useWakeLock(view === 'watch' || view === 'create');
 
   // Auto-open from URL ?watch=xxx or ?create=1
   useEffect(() => {

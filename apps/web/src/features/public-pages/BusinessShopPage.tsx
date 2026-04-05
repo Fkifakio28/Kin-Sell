@@ -41,7 +41,7 @@ type PublicBusiness = {
 };
 
 type Quality = { id: string; icon: string; name: string; description: string };
-type Review  = { id: string; author: string; score: number; text: string; date: string };
+type Review  = { id: string; author: string; score: number; text: string; date: string; verified: boolean };
 type Report  = { id: string; author: string; reason: string; detail: string; date: string };
 
 // ─── Helpers ──────────────────────────────────────────────
@@ -201,6 +201,7 @@ export function BusinessShopPage({ slug }: BusinessShopPageProps) {
           score: rv.rating,
           text: rv.text ?? '',
           date: new Date(rv.createdAt).toLocaleDateString('fr-FR'),
+          verified: rv.verified,
         })));
       })
       .catch(() => setReviews([]));
@@ -229,6 +230,7 @@ export function BusinessShopPage({ slug }: BusinessShopPageProps) {
         score: rv.rating,
         text: rv.text ?? '',
         date: new Date(rv.createdAt).toLocaleDateString('fr-FR'),
+        verified: rv.verified,
       })));
       setReviewDraft({ score: 5, text: '' });
       setReviewMsg('✓ Merci pour votre avis !');
@@ -300,9 +302,12 @@ export function BusinessShopPage({ slug }: BusinessShopPageProps) {
   const salesCount       = business._count.sellerOrders;
   const city             = shop?.city ?? 'Kinshasa';
   const publicDesc       = shop?.publicDescription ?? '';
-  const isVerified       = business.verificationStatus === 'VERIFIED';
+  const isVerified       = business.verificationStatus === 'VERIFIED' || business.verificationStatus === 'ADMIN_LOCKED_VERIFIED';
+  const isAIEligible     = business.verificationStatus === 'AI_ELIGIBLE';
+  const isPartial        = business.verificationStatus === 'PARTIALLY_VERIFIED';
   const isPremium        = business.subscriptionStatus !== 'FREE';
-  const tierLabel        = isVerified ? 'Vérifié ✓' : isPremium ? 'Premium' : 'Standard';
+  const tierLabel        = isVerified ? 'Vérifié Kin-Sell ✅' : isAIEligible ? 'Crédibilité IA 🤖' : isPartial ? 'Profil actif ◐' : isPremium ? 'Premium' : 'Standard';
+  const tierTitle        = isVerified ? 'Compte vérifié par Kin-Sell' : isAIEligible ? 'Ce compte présente une activité fiable selon notre analyse automatique' : isPartial ? 'Profil actif sur la plateforme' : '';
   const activePromo      = productListings.find(l => l.priceUsdCents > 0);
   const isOnline         = shop?.active !== false;
 
@@ -360,7 +365,7 @@ export function BusinessShopPage({ slug }: BusinessShopPageProps) {
           <div className="business-lux-identity-center">
             <div className="business-lux-title-row">
               <h1 className="public-title">{business.publicName}</h1>
-              <span className="business-lux-verified">{tierLabel}</span>
+              <span className="business-lux-verified" title={tierTitle}>{tierLabel}</span>
             </div>
             <p className="business-lux-domain">{publicDesc || ''}</p>
             <div className="business-lux-meta-row">
@@ -503,6 +508,7 @@ export function BusinessShopPage({ slug }: BusinessShopPageProps) {
                   <div className="biz-review-avatar">{review.author.slice(0, 1)}</div>
                   <div>
                     <strong>{review.author}</strong>
+                    {review.verified && <span style={{ fontSize: '.72rem', color: 'var(--color-primary)', fontWeight: 600, marginLeft: 4 }}>✓ Vérifié</span>}
                     <span>{'⭐'.repeat(Math.round(review.score))} {review.score.toFixed(1)}</span>
                   </div>
                   <small style={{ marginLeft: 'auto', color: 'var(--color-text-secondary)', fontSize: '.78rem' }}>{review.date}</small>

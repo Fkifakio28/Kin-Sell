@@ -82,9 +82,29 @@ type SocketEvents = {
     sourceUserId: string;
     updatedAt: string;
   }) => void;
+  "sokin:post-reacted": (data: {
+    postId: string;
+    type: string;
+    sourceUserId: string;
+  }) => void;
+  "sokin:post-unreacted": (data: {
+    postId: string;
+    sourceUserId: string;
+  }) => void;
   "webrtc:offer": (data: { callerId: string; sdp: RTCSessionDescriptionInit }) => void;
   "webrtc:answer": (data: { answererId: string; sdp: RTCSessionDescriptionInit }) => void;
   "webrtc:ice-candidate": (data: { fromUserId: string; candidate: RTCIceCandidateInit }) => void;
+
+  /* ── Live streaming events ── */
+  "live:viewer-joined": (data: { liveId: string; userId: string; displayName: string; avatarUrl: string | null; viewerCount: number }) => void;
+  "live:viewer-left": (data: { liveId: string; userId: string; viewerCount: number }) => void;
+  "live:chat:new": (data: { id: string; liveId: string; userId: string; text: string; isGift: boolean; giftType: string | null; isPinned: boolean; createdAt: string; user: { profile: { displayName: string; avatarUrl: string | null } } }) => void;
+  "live:liked": (data: { liveId: string; userId: string; likesCount: number }) => void;
+  "live:started": (data: { liveId: string; hostId: string }) => void;
+  "live:ended": (data: { liveId: string; hostId: string }) => void;
+  "live:webrtc:offer": (data: { liveId: string; hostId: string; sdp: RTCSessionDescriptionInit }) => void;
+  "live:webrtc:answer": (data: { liveId: string; viewerId: string; sdp: RTCSessionDescriptionInit }) => void;
+  "live:webrtc:ice-candidate": (data: { liveId: string; fromUserId: string; candidate: RTCIceCandidateInit }) => void;
 };
 
 /**

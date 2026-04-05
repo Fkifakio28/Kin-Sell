@@ -7,6 +7,7 @@ import { SuspensionGuard } from "../providers/AuthProvider";
 import { InstallBanner } from "../../components/InstallBanner";
 import { CookieConsent } from "../../components/CookieConsent";
 import { useIsMobile } from "../../hooks/useIsMobile";
+import { TutorialProvider, TutorialOverlay, TutorialHelpButton } from "../../features/tutorial";
 
 /** Routes où la musique de fond doit être stoppée (caméra/micro/live actifs). */
 const MUSIC_OFF_ROUTES = ["/sokin", "/sokin/live"];
@@ -37,6 +38,7 @@ export function RootLayout() {
   }
 
   return (
+    <TutorialProvider>
     <div className="live-background-shell">
       <div className="live-background-media" aria-hidden="true">
         <video autoPlay loop muted playsInline preload="none" poster="/assets/kin-sell/live-background-poster.webp">
@@ -63,6 +65,9 @@ export function RootLayout() {
       <BackgroundMusic playing={musicPlaying} />
       <InstallBanner />
       <CookieConsent />
+      <TutorialOverlay />
+      <TutorialHelpButton />
     </div>
+    </TutorialProvider>
   );
 }

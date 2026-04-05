@@ -21,6 +21,7 @@ import {
   QUALITY_POOR, QUALITY_FAIR, UPGRADE_STREAK, DOWNGRADE_STREAK,
   ICE_RESTART_DELAYS, ICE_MAX_ATTEMPTS,
 } from "../../utils/webrtc-config";
+import { useWakeLock } from "../../hooks/useWakeLock";
 import "./messaging.css";
 
 /* ═══════════════════════════════════════════
@@ -285,6 +286,10 @@ export function MessagingPage() {
 
   /* ── Call state ── */
   const [callState, setCallState] = useState<null | { type: "audio" | "video"; conversationId: string; remoteUserId: string; direction: "incoming" | "outgoing"; status: "ringing" | "connected" | "ended" }>(null);
+
+  // Keep screen awake during active calls (ringing or connected)
+  useWakeLock(callState != null && callState.status !== "ended");
+
   const [isMuted, setIsMuted] = useState(false);
   const [isCameraOff, setIsCameraOff] = useState(false);
   const [isSpeakerOn, setIsSpeakerOn] = useState(true);
@@ -637,7 +642,21 @@ export function MessagingPage() {
         iceRestartAttemptRef.current = 0;
       }
       const attemptRestart = () => {
-        if (iceRestartAttemptRef.current >= ICE_MAX_ATTEMPTS) return;
+        if (iceRestartAttemptRef.current >= ICE_MAX_ATTEMPTS) {
+          // Max attempts reached — end the call gracefully
+          if (callStateRef.current) {
+            emit("call:end", { conversationId: callStateRef.current.conversationId, targetUserId: callStateRef.current.remoteUserId });
+          }
+          // Inline cleanup (same as cleanupCall)
+          pc.close();
+          peerConnectionRef.current = null;
+          if (callQualityTimerRef.current) { clearInterval(callQualityTimerRef.current); callQualityTimerRef.current = null; }
+          localStreamRef.current?.getTracks().forEach((t) => t.stop());
+          localStreamRef.current = null;
+          remoteStreamRef.current = null;
+          setCallState(null);
+          return;
+        }
         const delay = ICE_RESTART_DELAYS[Math.min(iceRestartAttemptRef.current, ICE_RESTART_DELAYS.length - 1)];
         setTimeout(() => {
           if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") return;

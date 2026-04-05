@@ -30,6 +30,7 @@ import {
   type OrderSummary,
   type OrderStatus,
   users as usersApi,
+  reviews as reviewsApi,
   resolveMediaUrl
 } from '../../lib/api-client';
 import { NegotiationRespondPopup } from '../negotiations/NegotiationRespondPopup';
@@ -52,6 +53,7 @@ import {
   DashboardAiSettings,
   DashboardAnalyticsInsights,
   DashboardContactsSection,
+  DashboardVerificationSection,
 } from './sections';
 import './dashboard.css';
 
@@ -68,6 +70,7 @@ type HubSection =
   | 'sokin'
   | 'my-profile-page'
   | 'public-profile'
+  | 'verification'
   | 'analytics'
   | 'kinsell'
   | 'settings';
@@ -129,6 +132,7 @@ const SECTION_DEFS: Array<{ key: HubSection; labelKey: string; icon: string }> =
   { key: 'sokin', labelKey: 'sokin.home', icon: '✦' },
   { key: 'my-profile-page', labelKey: 'user.myProfile', icon: '🪪' },
   { key: 'public-profile', labelKey: 'user.publicProfile', icon: '👤' },
+  { key: 'verification', labelKey: 'user.verification', icon: '✅' },
   { key: 'analytics', labelKey: 'user.analytics', icon: '📊' },
   { key: 'kinsell', labelKey: 'Kin-Sell', icon: '🧠' },
   { key: 'settings', labelKey: 'user.settings', icon: '⚙' },
@@ -303,6 +307,13 @@ export function UserDashboard() {
   const [purchasesFilter, setPurchasesFilter] = useState<OrderStatus | ''>('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  // ── Review / rating state ──
+  const [reviewModalOrder, setReviewModalOrder] = useState<{ orderId: string } | null>(null);
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewText, setReviewText] = useState('');
+  const [reviewBusy, setReviewBusy] = useState(false);
+  const [reviewedOrders, setReviewedOrders] = useState<Set<string>>(new Set());
 
   // ── Negotiations state ──
   const [negFilter, setNegFilter] = useState<NegotiationStatus | ''>('');
@@ -1529,6 +1540,28 @@ export function UserDashboard() {
     await handleCheckout(notesPayload);
   };
 
+  const handleSubmitOrderReview = async () => {
+    if (!reviewModalOrder || reviewBusy) return;
+    setReviewBusy(true);
+    setErrorMessage(null);
+    try {
+      await reviewsApi.createForOrder({
+        orderId: reviewModalOrder.orderId,
+        rating: reviewRating,
+        text: reviewText.trim() || undefined,
+      });
+      setReviewedOrders(prev => new Set(prev).add(reviewModalOrder.orderId));
+      setSuccessMessage('✓ Merci pour votre avis !');
+      setReviewModalOrder(null);
+      setReviewRating(5);
+      setReviewText('');
+    } catch (e) {
+      setErrorMessage(e instanceof ApiError ? e.message : 'Erreur lors de l\'envoi de l\'avis.');
+    } finally {
+      setReviewBusy(false);
+    }
+  };
+
   const handleOrderDetail = async (orderId: string) => {
     setErrorMessage(null);
     try {
@@ -2327,6 +2360,19 @@ export function UserDashboard() {
                             {validationCodeBusyId === order.id ? '...' : '🔑 QR / Code'}
                           </button>
                         )}
+                        {order.status === 'DELIVERED' && !reviewedOrders.has(order.id) && (
+                          <button
+                            type="button"
+                            className="ud-ord-action ud-ord-action--confirm"
+                            title="Laisser un avis"
+                            onClick={() => { setReviewModalOrder({ orderId: order.id }); setReviewRating(5); setReviewText(''); }}
+                          >
+                            ⭐ Avis
+                          </button>
+                        )}
+                        {order.status === 'DELIVERED' && reviewedOrders.has(order.id) && (
+                          <span style={{ fontSize: '.75rem', color: 'var(--color-primary)', padding: '4px 8px' }}>✓ Avis envoyé</span>
+                        )}
                       </div>
                     </article>
                   ))}
@@ -2646,6 +2692,19 @@ export function UserDashboard() {
                             📬 {t('user.confirmReceptionShort')}
                           </button>
                         )}
+                        {order.status === 'DELIVERED' && !reviewedOrders.has(order.id) && (
+                          <button
+                            type="button"
+                            className="ud-ord-action ud-ord-action--confirm"
+                            title="Laisser un avis"
+                            onClick={() => { setReviewModalOrder({ orderId: order.id }); setReviewRating(5); setReviewText(''); }}
+                          >
+                            ⭐ Avis
+                          </button>
+                        )}
+                        {order.status === 'DELIVERED' && reviewedOrders.has(order.id) && (
+                          <span style={{ fontSize: '.75rem', color: 'var(--color-primary)', padding: '4px 8px' }}>✓ Avis envoyé</span>
+                        )}
                       </div>
                     </article>
                   ))}
@@ -2723,6 +2782,50 @@ export function UserDashboard() {
             closeLabel={t('common.close')}
             onClose={() => setSellerValidationQr(null)}
           />
+        )}
+
+        {/* ── Review / rating modal ── */}
+        {reviewModalOrder && (
+          <div className="ud-checkout-modal-overlay" onClick={() => setReviewModalOrder(null)}>
+            <div className="ud-checkout-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 420 }}>
+              <h3>⭐ Laisser un avis</h3>
+              <p className="ud-checkout-modal-help">Commande #{reviewModalOrder.orderId.slice(0, 8).toUpperCase()}</p>
+              <div style={{ display: 'flex', gap: 6, justifyContent: 'center', margin: '12px 0' }}>
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setReviewRating(n)}
+                    style={{
+                      background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.6rem',
+                      opacity: reviewRating >= n ? 1 : 0.3,
+                      transform: reviewRating >= n ? 'scale(1.15)' : 'scale(1)',
+                      transition: 'all .15s ease',
+                    }}
+                  >⭐</button>
+                ))}
+              </div>
+              <textarea
+                value={reviewText}
+                onChange={(e) => setReviewText(e.target.value)}
+                placeholder="Votre commentaire (optionnel)…"
+                maxLength={500}
+                rows={3}
+                style={{ width: '100%', borderRadius: 8, padding: 10, background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--glass-border-color)', resize: 'vertical' }}
+              />
+              <div className="ud-checkout-modal-actions" style={{ marginTop: 12 }}>
+                <button type="button" onClick={() => setReviewModalOrder(null)}>Annuler</button>
+                <button
+                  type="button"
+                  className="ud-art-publish-btn"
+                  disabled={reviewBusy || reviewRating < 1}
+                  onClick={() => void handleSubmitOrderReview()}
+                >
+                  {reviewBusy ? '⏳ Envoi…' : '✓ Publier mon avis'}
+                </button>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* ── Buyer confirm delivery popup ── */}
@@ -3472,6 +3575,11 @@ export function UserDashboard() {
               </section>
             ) : null}
           </div>
+        )}
+
+        {/* ═══════════════  VERIFICATION BADGE  ═══════════════ */}
+        {activeSection === 'verification' && (
+          <DashboardVerificationSection t={t} userId={user.id} accountType="USER" />
         )}
 
         {/* ═══════════════  KIN-SELL ANALYTIQUE  ═══════════════ */}

@@ -1,4 +1,4 @@
-import { request, invalidateCache } from "../api-core";
+import { request, mutate } from "../api-core";
 
 export type NegotiationStatus = "PENDING" | "ACCEPTED" | "REFUSED" | "EXPIRED" | "COUNTERED";
 
@@ -106,12 +106,8 @@ export type BundleDetailSummary = {
 };
 
 export const negotiations = {
-  create: async (body: { listingId: string; proposedPriceUsdCents: number; quantity?: number; message?: string; type?: "SIMPLE" | "QUANTITY" | "GROUPED"; minBuyers?: number }) => {
-    const result = await request<NegotiationSummary>("/negotiations", { method: "POST", body });
-    invalidateCache("/negotiations/");
-    invalidateCache("/orders/buyer/cart");
-    return result;
-  },
+  create: (body: { listingId: string; proposedPriceUsdCents: number; quantity?: number; message?: string; type?: "SIMPLE" | "QUANTITY" | "GROUPED"; minBuyers?: number }) =>
+    mutate<NegotiationSummary>("/negotiations", { method: "POST", body }, ["/negotiations/", "/orders/buyer/cart"]),
 
   buyerList: (params?: { page?: number; limit?: number; status?: NegotiationStatus }) =>
     request<{ page: number; limit: number; total: number; totalPages: number; negotiations: NegotiationSummary[] }>("/negotiations/buyer", { params }),
@@ -122,19 +118,11 @@ export const negotiations = {
   detail: (negotiationId: string) =>
     request<NegotiationSummary>(`/negotiations/${encodeURIComponent(negotiationId)}`),
 
-  respond: async (negotiationId: string, body: { action: "ACCEPT" | "REFUSE" | "COUNTER"; counterPriceUsdCents?: number; message?: string }) => {
-    const result = await request<NegotiationSummary>(`/negotiations/${encodeURIComponent(negotiationId)}/respond`, { method: "POST", body });
-    invalidateCache("/negotiations/");
-    invalidateCache("/orders/buyer/cart");
-    return result;
-  },
+  respond: (negotiationId: string, body: { action: "ACCEPT" | "REFUSE" | "COUNTER"; counterPriceUsdCents?: number; message?: string }) =>
+    mutate<NegotiationSummary>(`/negotiations/${encodeURIComponent(negotiationId)}/respond`, { method: "POST", body }, ["/negotiations/", "/orders/buyer/cart"]),
 
-  cancel: async (negotiationId: string) => {
-    const result = await request<NegotiationSummary>(`/negotiations/${encodeURIComponent(negotiationId)}`, { method: "DELETE" });
-    invalidateCache("/negotiations/");
-    invalidateCache("/orders/buyer/cart");
-    return result;
-  },
+  cancel: (negotiationId: string) =>
+    mutate<NegotiationSummary>(`/negotiations/${encodeURIComponent(negotiationId)}`, { method: "DELETE" }, ["/negotiations/", "/orders/buyer/cart"]),
 
   listOpenGroups: (params?: { listingId?: string; page?: number; limit?: number }) =>
     request<{ page: number; limit: number; total: number; totalPages: number; groups: GroupNegotiationSummary[] }>("/negotiations/groups", { params }),
@@ -142,19 +130,11 @@ export const negotiations = {
   groupDetails: (groupId: string) =>
     request<GroupDetailSummary>(`/negotiations/groups/${encodeURIComponent(groupId)}`),
 
-  joinGroup: async (groupId: string, body: { proposedPriceUsdCents: number; quantity?: number; message?: string }) => {
-    const result = await request<NegotiationSummary>(`/negotiations/groups/${encodeURIComponent(groupId)}/join`, { method: "POST", body });
-    invalidateCache("/negotiations/");
-    invalidateCache("/orders/buyer/cart");
-    return result;
-  },
+  joinGroup: (groupId: string, body: { proposedPriceUsdCents: number; quantity?: number; message?: string }) =>
+    mutate<NegotiationSummary>(`/negotiations/groups/${encodeURIComponent(groupId)}/join`, { method: "POST", body }, ["/negotiations/", "/orders/buyer/cart"]),
 
-  createBundle: async (body: { items: { listingId: string; quantity: number }[]; proposedTotalUsdCents: number; message?: string; type?: "SIMPLE" | "QUANTITY" | "GROUPED"; minBuyers?: number }) => {
-    const result = await request<BundleNegotiationResult>("/negotiations/bundle", { method: "POST", body });
-    invalidateCache("/negotiations/");
-    invalidateCache("/orders/buyer/cart");
-    return result;
-  },
+  createBundle: (body: { items: { listingId: string; quantity: number }[]; proposedTotalUsdCents: number; message?: string; type?: "SIMPLE" | "QUANTITY" | "GROUPED"; minBuyers?: number }) =>
+    mutate<BundleNegotiationResult>("/negotiations/bundle", { method: "POST", body }, ["/negotiations/", "/orders/buyer/cart"]),
 
   bundleDetails: (bundleId: string) =>
     request<BundleDetailSummary>(`/negotiations/bundle/${encodeURIComponent(bundleId)}`),

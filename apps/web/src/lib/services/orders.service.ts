@@ -1,4 +1,4 @@
-import { request, invalidateCache } from "../api-core";
+import { request, mutate, invalidateCache } from "../api-core";
 import type { NegotiationStatus } from "./negotiations.service";
 
 export type OrderStatus = "PENDING" | "CONFIRMED" | "PROCESSING" | "SHIPPED" | "DELIVERED" | "CANCELED";
@@ -79,26 +79,14 @@ export type OrderSummary = {
 
 export const orders = {
   buyerCart: () => request<CartSummary>("/orders/buyer/cart"),
-  addCartItem: async (body: { listingId: string; quantity?: number; unitPriceUsdCents?: number }) => {
-    const result = await request<CartSummary>("/orders/buyer/cart/items", { method: "POST", body });
-    invalidateCache("/orders/buyer/cart");
-    return result;
-  },
-  updateCartItem: async (itemId: string, body: { quantity?: number; unitPriceUsdCents?: number }) => {
-    const result = await request<CartSummary>(`/orders/buyer/cart/items/${encodeURIComponent(itemId)}`, { method: "PATCH", body });
-    invalidateCache("/orders/buyer/cart");
-    return result;
-  },
-  removeCartItem: async (itemId: string) => {
-    const result = await request<CartSummary>(`/orders/buyer/cart/items/${encodeURIComponent(itemId)}`, { method: "DELETE" });
-    invalidateCache("/orders/buyer/cart");
-    return result;
-  },
-  checkoutBuyerCart: async (body?: { notes?: string; deliveryAddress?: string; deliveryCity?: string; deliveryCountry?: string; deliveryLatitude?: number; deliveryLongitude?: number; deliveryPlaceId?: string; deliveryFormattedAddress?: string }) => {
-    const result = await request<{ message: string; orders: OrderSummary[] }>("/orders/buyer/checkout", { method: "POST", body });
-    invalidateCache("/orders/");
-    return result;
-  },
+  addCartItem: (body: { listingId: string; quantity?: number; unitPriceUsdCents?: number }) =>
+    mutate<CartSummary>("/orders/buyer/cart/items", { method: "POST", body }, ["/orders/buyer/cart"]),
+  updateCartItem: (itemId: string, body: { quantity?: number; unitPriceUsdCents?: number }) =>
+    mutate<CartSummary>(`/orders/buyer/cart/items/${encodeURIComponent(itemId)}`, { method: "PATCH", body }, ["/orders/buyer/cart"]),
+  removeCartItem: (itemId: string) =>
+    mutate<CartSummary>(`/orders/buyer/cart/items/${encodeURIComponent(itemId)}`, { method: "DELETE" }, ["/orders/buyer/cart"]),
+  checkoutBuyerCart: (body?: { notes?: string; deliveryAddress?: string; deliveryCity?: string; deliveryCountry?: string; deliveryLatitude?: number; deliveryLongitude?: number; deliveryPlaceId?: string; deliveryFormattedAddress?: string }) =>
+    mutate<{ message: string; orders: OrderSummary[] }>("/orders/buyer/checkout", { method: "POST", body }, ["/orders/"]),
   buyerOrders: (params?: { page?: number; limit?: number; status?: OrderStatus; inProgressOnly?: boolean }) =>
     request<{ page: number; limit: number; total: number; totalPages: number; orders: OrderSummary[] }>("/orders/buyer/orders", {
       params: params
@@ -122,16 +110,10 @@ export const orders = {
         : undefined
     }),
   detail: (orderId: string) => request<OrderSummary>(`/orders/${encodeURIComponent(orderId)}`),
-  updateSellerOrderStatus: async (orderId: string, body: { status: OrderStatus }) => {
-    const result = await request<OrderSummary>(`/orders/${encodeURIComponent(orderId)}/status`, { method: "PATCH", body });
-    invalidateCache("/orders/");
-    return result;
-  },
+  updateSellerOrderStatus: (orderId: string, body: { status: OrderStatus }) =>
+    mutate<OrderSummary>(`/orders/${encodeURIComponent(orderId)}/status`, { method: "PATCH", body }, ["/orders/"]),
   getValidationCode: (orderId: string) =>
     request<{ validationCode: string }>(`/orders/${encodeURIComponent(orderId)}/validation-code`),
-  buyerConfirmDelivery: async (orderId: string, body: { code: string }) => {
-    const result = await request<OrderSummary>(`/orders/${encodeURIComponent(orderId)}/buyer-confirm`, { method: "POST", body });
-    invalidateCache("/orders/");
-    return result;
-  }
+  buyerConfirmDelivery: (orderId: string, body: { code: string }) =>
+    mutate<OrderSummary>(`/orders/${encodeURIComponent(orderId)}/buyer-confirm`, { method: "POST", body }, ["/orders/"]),
 };

@@ -1,4 +1,4 @@
-import { request } from "../api-core";
+import { request, mutate } from "../api-core";
 
 // ── So-Kin Posts ──
 export type SoKinApiPost = {
@@ -69,11 +69,11 @@ export const sokin = {
   myPosts: () =>
     request<{ posts: SoKinApiPost[] }>('/sokin/posts/mine'),
   createPost: (body: { text: string; mediaUrls?: string[]; location?: string; tags?: string[]; hashtags?: string[]; scheduledAt?: string }) =>
-    request<SoKinApiPost>('/sokin/posts', { method: 'POST', body }),
+    mutate<SoKinApiPost>('/sokin/posts', { method: 'POST', body }, ['/sokin/posts']),
   archivePost: (id: string) =>
-    request<SoKinApiPost>(`/sokin/posts/${encodeURIComponent(id)}/archive`, { method: 'PATCH' }),
+    mutate<SoKinApiPost>(`/sokin/posts/${encodeURIComponent(id)}/archive`, { method: 'PATCH' }, ['/sokin/posts']),
   deletePost: (id: string) =>
-    request<{ success: boolean }>(`/sokin/posts/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+    mutate<{ success: boolean }>(`/sokin/posts/${encodeURIComponent(id)}`, { method: 'DELETE' }, ['/sokin/posts']),
   publicFeed: (params?: { limit?: number; city?: string; country?: string }) =>
     request<{ posts: SoKinApiFeedPost[] }>('/sokin/posts', {
       params: {
@@ -89,19 +89,19 @@ export const sokin = {
       params: params as Record<string, string | undefined>,
     }),
   reactToPost: (id: string, type: SoKinReactionType) =>
-    request<{ ok: boolean; type: string }>(`/sokin/posts/${encodeURIComponent(id)}/react`, { method: 'POST', body: { type } }),
+    mutate<{ ok: boolean; type: string }>(`/sokin/posts/${encodeURIComponent(id)}/react`, { method: 'POST', body: { type } }, [`/sokin/posts/${encodeURIComponent(id)}`]),
   unreactToPost: (id: string) =>
-    request<{ ok: boolean }>(`/sokin/posts/${encodeURIComponent(id)}/react`, { method: 'DELETE' }),
+    mutate<{ ok: boolean }>(`/sokin/posts/${encodeURIComponent(id)}/react`, { method: 'DELETE' }, [`/sokin/posts/${encodeURIComponent(id)}`]),
   sharePost: (id: string) =>
-    request<{ ok: boolean; shares: number }>(`/sokin/posts/${encodeURIComponent(id)}/share`, { method: 'POST' }),
+    mutate<{ ok: boolean; shares: number }>(`/sokin/posts/${encodeURIComponent(id)}/share`, { method: 'POST' }, [`/sokin/posts/${encodeURIComponent(id)}`]),
   stories: () =>
     request<{ stories: SoKinStory[] }>('/sokin/stories'),
   createStory: (body: { mediaUrl?: string; mediaType?: 'IMAGE' | 'VIDEO' | 'TEXT'; caption?: string; bgColor?: string; scheduledAt?: string }) =>
-    request<SoKinStory>('/sokin/stories', { method: 'POST', body }),
+    mutate<SoKinStory>('/sokin/stories', { method: 'POST', body }, ['/sokin/stories']),
   viewStory: (id: string) =>
-    request<{ ok: boolean }>(`/sokin/stories/${encodeURIComponent(id)}/view`, { method: 'POST' }),
+    mutate<{ ok: boolean }>(`/sokin/stories/${encodeURIComponent(id)}/view`, { method: 'POST' }, ['/sokin/stories']),
   deleteStory: (id: string) =>
-    request<{ ok: boolean }>(`/sokin/stories/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+    mutate<{ ok: boolean }>(`/sokin/stories/${encodeURIComponent(id)}`, { method: 'DELETE' }, ['/sokin/stories']),
 };
 
 // ── So-Kin Live ──
@@ -173,15 +173,15 @@ export const sokinLive = {
   get: (id: string) =>
     request<SoKinLiveData>(`/sokin/lives/${encodeURIComponent(id)}`),
   create: (body: { title: string; description?: string; aspect: 'LANDSCAPE' | 'PORTRAIT'; tags?: string[]; city?: string; thumbnailUrl?: string; featuredListingId?: string }) =>
-    request<SoKinLiveData>('/sokin/lives', { method: 'POST', body }),
+    mutate<SoKinLiveData>('/sokin/lives', { method: 'POST', body }, ['/sokin/lives']),
   start: (id: string) =>
-    request<SoKinLiveData>(`/sokin/lives/${encodeURIComponent(id)}/start`, { method: 'PATCH' }),
+    mutate<SoKinLiveData>(`/sokin/lives/${encodeURIComponent(id)}/start`, { method: 'PATCH' }, ['/sokin/lives']),
   end: (id: string) =>
-    request<SoKinLiveData>(`/sokin/lives/${encodeURIComponent(id)}/end`, { method: 'PATCH' }),
+    mutate<SoKinLiveData>(`/sokin/lives/${encodeURIComponent(id)}/end`, { method: 'PATCH' }, ['/sokin/lives']),
   join: (id: string) =>
-    request<{ id: string }>(`/sokin/lives/${encodeURIComponent(id)}/join`, { method: 'POST' }),
+    mutate<{ id: string }>(`/sokin/lives/${encodeURIComponent(id)}/join`, { method: 'POST' }, [`/sokin/lives/${encodeURIComponent(id)}`]),
   leave: (id: string) =>
-    request<{ success: boolean }>(`/sokin/lives/${encodeURIComponent(id)}/leave`, { method: 'POST' }),
+    mutate<{ success: boolean }>(`/sokin/lives/${encodeURIComponent(id)}/leave`, { method: 'POST' }, [`/sokin/lives/${encodeURIComponent(id)}`]),
   requestGuest: (id: string) =>
     request<{ id: string; role: string }>(`/sokin/lives/${encodeURIComponent(id)}/request-guest`, { method: 'POST' }),
   chat: (id: string, limit?: number) =>
@@ -189,13 +189,13 @@ export const sokinLive = {
       params: limit ? { limit } : undefined,
     }),
   sendChat: (id: string, body: { text: string; isGift?: boolean; giftType?: string }) =>
-    request<SoKinLiveChatMsg>(`/sokin/lives/${encodeURIComponent(id)}/chat`, { method: 'POST', body }),
+    mutate<SoKinLiveChatMsg>(`/sokin/lives/${encodeURIComponent(id)}/chat`, { method: 'POST', body }, [`/sokin/lives/${encodeURIComponent(id)}/chat`]),
   like: (id: string) =>
-    request<{ likesCount: number }>(`/sokin/lives/${encodeURIComponent(id)}/like`, { method: 'POST' }),
+    mutate<{ likesCount: number }>(`/sokin/lives/${encodeURIComponent(id)}/like`, { method: 'POST' }, [`/sokin/lives/${encodeURIComponent(id)}`]),
   myListings: (id: string) =>
     request<{ listings: Array<{ id: string; title: string; priceUsdCents: number; city: string; imageUrl: string | null; type: 'PRODUIT' | 'SERVICE' }> }>(`/sokin/lives/${encodeURIComponent(id)}/my-listings`),
   setFeaturedListing: (id: string, listingId: string | null) =>
-    request<SoKinLiveData>(`/sokin/lives/${encodeURIComponent(id)}/featured-listing`, { method: 'PATCH', body: { listingId } }),
+    mutate<SoKinLiveData>(`/sokin/lives/${encodeURIComponent(id)}/featured-listing`, { method: 'PATCH', body: { listingId } }, [`/sokin/lives/${encodeURIComponent(id)}`]),
 };
 
 // ── Blog ──

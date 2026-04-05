@@ -1,4 +1,4 @@
-import { request } from "../api-core";
+import { request, mutate } from "../api-core";
 
 export type MessageUser = {
   id: string;
@@ -73,25 +73,25 @@ export const messaging = {
     request<{ conversations: ConversationSummary[] }>("/messaging/conversations"),
 
   createDM: (targetUserId: string) =>
-    request<{ conversation: ConversationSummary }>("/messaging/conversations/dm", { method: "POST", body: { targetUserId } }),
+    mutate<{ conversation: ConversationSummary }>("/messaging/conversations/dm", { method: "POST", body: { targetUserId } }, ["/messaging/conversations"]),
 
   createGroup: (memberIds: string[], groupName: string) =>
-    request<{ conversation: ConversationSummary }>("/messaging/conversations/group", { method: "POST", body: { memberIds, groupName } }),
+    mutate<{ conversation: ConversationSummary }>("/messaging/conversations/group", { method: "POST", body: { memberIds, groupName } }, ["/messaging/conversations"]),
 
   messages: (conversationId: string, cursor?: string) =>
     request<{ messages: ChatMessage[] }>(`/messaging/conversations/${conversationId}/messages`, { params: { cursor, limit: 50 } }),
 
   sendMessage: (conversationId: string, body: { content?: string; type?: string; mediaUrl?: string; fileName?: string; replyToId?: string }) =>
-    request<{ message: ChatMessage }>(`/messaging/conversations/${conversationId}/messages`, { method: "POST", body }),
+    mutate<{ message: ChatMessage }>(`/messaging/conversations/${conversationId}/messages`, { method: "POST", body }, [`/messaging/conversations/${conversationId}`, "/messaging/conversations"]),
 
   editMessage: (messageId: string, content: string) =>
-    request<{ message: ChatMessage }>(`/messaging/messages/${messageId}`, { method: "PATCH", body: { content } }),
+    mutate<{ message: ChatMessage }>(`/messaging/messages/${messageId}`, { method: "PATCH", body: { content } }, ["/messaging"]),
 
   deleteMessage: (messageId: string) =>
-    request<{ ok: boolean }>(`/messaging/messages/${messageId}`, { method: "DELETE" }),
+    mutate<{ ok: boolean }>(`/messaging/messages/${messageId}`, { method: "DELETE" }, ["/messaging"]),
 
   markRead: (conversationId: string) =>
-    request<{ ok: boolean }>(`/messaging/conversations/${conversationId}/read`, { method: "POST" }),
+    mutate<{ ok: boolean }>(`/messaging/conversations/${conversationId}/read`, { method: "POST" }, [`/messaging/conversations`]),
 
   searchUsers: (q: string) =>
     request<{ users: Array<{ id: string; profile: { displayName: string; avatarUrl: string | null; username: string | null; city: string | null } }> }>("/messaging/users/search", { params: { q } }),

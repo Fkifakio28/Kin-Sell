@@ -24,7 +24,7 @@ import './dashboard.css';
 type BizSection =
   | 'dashboard' | 'boutique' | 'produits' | 'services'
   | 'commandes' | 'clients' | 'messages' | 'contacts'
-  | 'avis' | 'sokin' | 'analytics'
+  | 'avis' | 'sokin' | 'analytics' | 'verification'
   | 'publicite' | 'kinsell' | 'parametres';
 
 type AbonnementTier = 'based' | 'medium' | 'premium';
@@ -32,7 +32,7 @@ type AbonnementTier = 'based' | 'medium' | 'premium';
 /* ─── Helpers devise ───────────────────────────────────────── */
 import { USD_TO_CDF_RATE, usdCentsToCdf, formatCdfCompact } from '../../shared/constants/currencies';
 import { SK_BIZ_AI_ADVICE, SK_BIZ_AI_AUTO_NEGO, SK_BIZ_AI_COMMANDE } from '../../shared/constants/storage-keys';
-import { DashboardSecurityBlock, DashboardAiSettings } from './sections';
+import { DashboardSecurityBlock, DashboardAiSettings, DashboardVerificationSection } from './sections';
 const USD_TO_CDF = USD_TO_CDF_RATE;
 const toCdf = usdCentsToCdf;
 const fmtK = formatCdfCompact;
@@ -217,6 +217,7 @@ export function BusinessDashboard() {
     { key: 'avis',         labelKey: 'biz.navAvis',        icon: '⭐' },
     { key: 'sokin',        labelKey: 'biz.navSokin',       icon: '✦' },
     { key: 'analytics',    labelKey: 'biz.navAnalytics',   icon: '📊' },
+    { key: 'verification', labelKey: 'biz.navVerification', icon: '✅' },
     { key: 'publicite',    labelKey: 'biz.navPublicite',   icon: '🎯' },
     { key: 'kinsell',      labelKey: 'Kin-Sell',            icon: '🧠' },
     { key: 'parametres',   labelKey: 'biz.navParametres',  icon: '⚙' },
@@ -1914,6 +1915,11 @@ export function BusinessDashboard() {
               )}
             </section>
           </div>
+        )}
+
+        {/* ── VERIFICATION ── */}
+        {activeSection === 'verification' && business && (
+          <DashboardVerificationSection t={t} userId={user!.id} businessId={business.id} accountType="BUSINESS" />
         )}
 
         {/* ── ANALYTICS ── */}

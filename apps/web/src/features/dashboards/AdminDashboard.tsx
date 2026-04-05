@@ -47,6 +47,7 @@ import {
   type AdminIaAdsStats,
   type AdminIaPerformance,
 } from '../../lib/api-client';
+import { verification, type VerificationRequestData, type VerificationListResponse } from '../../lib/services/verification.service';
 import { DashboardMessaging } from './DashboardMessaging';
 import { AdBanner } from '../../components/AdBanner';
 import './dashboard.css';
@@ -58,7 +59,7 @@ type AdminSection =
   | 'reports' | 'feed' | 'donations' | 'ads' | 'advertisements' | 'listings' | 'negotiation-rules'
   | 'security' | 'antifraud' | 'security-ai' | 'ai-management'
   | 'rankings' | 'admins' | 'currency' | 'audit'
-  | 'settings' | 'messaging' | 'appeals' | 'subscriptions' | 'ia-ads';
+  | 'settings' | 'messaging' | 'appeals' | 'subscriptions' | 'ia-ads' | 'verification';
 
 type ModalType =
   | null | 'user-detail' | 'user-role' | 'user-message' | 'user-suspend'
@@ -71,7 +72,7 @@ const ALL_PERMISSIONS = [
   'DONATIONS', 'ADS', 'ADVERTISEMENTS', 'LISTINGS', 'NEGOTIATION_RULES',
   'SECURITY', 'ANTIFRAUD', 'SECURITY_AI',
   'AI_MANAGEMENT', 'RANKINGS', 'ADMINS', 'CURRENCY', 'AUDIT',
-  'SETTINGS', 'MESSAGING', 'SUBSCRIPTIONS', 'IA_ADS',
+  'SETTINGS', 'MESSAGING', 'SUBSCRIPTIONS', 'IA_ADS', 'VERIFICATION',
 ];
 
 const LEVEL_DEFAULT_PERMS: Record<string, string[]> = {
@@ -113,6 +114,7 @@ const SECTION_DEFS: Array<{
   { key: 'messaging',     label: 'Messagerie',         icon: '💬', permission: 'MESSAGING',     group: 'Système' },
   { key: 'subscriptions',  label: 'Abonnements & IA',   icon: '💳', permission: 'SUBSCRIPTIONS', group: 'Outils' },
   { key: 'ia-ads',         label: 'IA Ads & Studio',    icon: '🎯', permission: 'IA_ADS',        group: 'IA' },
+  { key: 'verification',   label: 'Vérifications',      icon: '✅', permission: 'VERIFICATION',  group: 'Outils' },
 ];
 
 function roleBadgeClass(role: string) {
@@ -3168,6 +3170,225 @@ export function AdminDashboard() {
     );
   };
 
+  // ═══════════════════════════  VERIFICATION ADMIN  ═══════════════════════════
+
+  const renderVerification = () => {
+    const [verRequests, setVerRequests] = useState<VerificationListResponse | null>(null);
+    const [verLoading, setVerLoading] = useState(true);
+    const [verFilter, setVerFilter] = useState('');
+    const [verPage, setVerPage] = useState(1);
+    const [verDetail, setVerDetail] = useState<VerificationRequestData | null>(null);
+    const [verActionNote, setVerActionNote] = useState('');
+    const [verActing, setVerActing] = useState(false);
+    const [verScanResult, setVerScanResult] = useState<string | null>(null);
+
+    const loadVerRequests = async () => {
+      setVerLoading(true);
+      try {
+        const data = await verification.admin.getRequests({ status: verFilter || undefined, page: verPage, limit: 20 });
+        setVerRequests(data);
+      } catch { /* ignore */ }
+      setVerLoading(false);
+    };
+
+    useEffect(() => { void loadVerRequests(); }, [verFilter, verPage]);
+
+    const handleVerAction = async (id: string, action: 'approve' | 'reject' | 'revoke' | 'lockVerified' | 'lockRevoked' | 'reactivate') => {
+      setVerActing(true);
+      try {
+        await verification.admin[action](id, verActionNote || undefined);
+        setVerActionNote('');
+        setVerDetail(null);
+        await loadVerRequests();
+      } catch { /* ignore */ }
+      setVerActing(false);
+    };
+
+    const handleAiScan = async () => {
+      setVerActing(true);
+      try {
+        const result = await verification.admin.runAiScan();
+        setVerScanResult(JSON.stringify(result, null, 2));
+        await loadVerRequests();
+      } catch { /* ignore */ }
+      setVerActing(false);
+    };
+
+    const loadDetail = async (id: string) => {
+      try {
+        const data = await verification.admin.getDetail(id);
+        setVerDetail(data);
+      } catch { /* ignore */ }
+    };
+
+    const STATUS_COLORS: Record<string, string> = {
+      UNVERIFIED: '#888', PENDING: '#f0ad4e', VERIFIED: '#5cb85c', REJECTED: '#d9534f',
+      AI_ELIGIBLE: '#6f58ff', PARTIALLY_VERIFIED: '#5bc0de', REVOKED: '#d9534f',
+      ADMIN_LOCKED_VERIFIED: '#5cb85c', ADMIN_LOCKED_REVOKED: '#d9534f',
+    };
+
+    return (
+      <div className="ad-section">
+        <div className="ad-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <h2>✅ Vérifications</h2>
+          <button className="ad-btn ad-btn--primary" onClick={handleAiScan} disabled={verActing} style={{ fontSize: 13 }}>
+            {verActing ? '...' : '🤖 Lancer scan IA'}
+          </button>
+        </div>
+
+        {verScanResult && (
+          <pre style={{ background: 'rgba(111,88,255,0.08)', padding: 12, borderRadius: 8, fontSize: 12, marginBottom: 16, maxHeight: 200, overflow: 'auto' }}>
+            {verScanResult}
+          </pre>
+        )}
+
+        {/* Filtre */}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+          {['', 'PENDING', 'VERIFIED', 'AI_ELIGIBLE', 'PARTIALLY_VERIFIED', 'REJECTED', 'REVOKED', 'ADMIN_LOCKED_VERIFIED', 'ADMIN_LOCKED_REVOKED'].map(s => (
+            <button
+              key={s}
+              onClick={() => { setVerFilter(s); setVerPage(1); }}
+              style={{
+                padding: '6px 14px', borderRadius: 8, fontSize: 12, cursor: 'pointer',
+                background: verFilter === s ? 'var(--color-accent)' : 'rgba(255,255,255,0.06)',
+                color: verFilter === s ? '#fff' : 'var(--color-text-muted)',
+                border: 'none',
+              }}
+            >
+              {s || 'Tous'}
+            </button>
+          ))}
+        </div>
+
+        {/* Detail modal */}
+        {verDetail && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+            onClick={() => setVerDetail(null)}>
+            <div onClick={e => e.stopPropagation()} style={{ background: 'var(--color-bg-primary)', borderRadius: 16, padding: 24, maxWidth: 600, width: '100%', maxHeight: '80vh', overflow: 'auto' }}>
+              <h3 style={{ marginBottom: 12 }}>Demande #{verDetail.id.slice(-6)}</h3>
+
+              <div style={{ display: 'grid', gap: 8, fontSize: 13, marginBottom: 16 }}>
+                <div><b>Utilisateur:</b> {verDetail.user?.profile?.displayName ?? verDetail.business?.publicName ?? '—'}</div>
+                <div><b>Statut:</b> <span style={{ color: STATUS_COLORS[verDetail.status] }}>{verDetail.status}</span></div>
+                <div><b>Source:</b> {verDetail.source}</div>
+                <div><b>Score IA:</b> {verDetail.freshAiScore ?? verDetail.aiScore ?? '—'}/100</div>
+                <div><b>Recommandation IA:</b> {verDetail.freshRecommendation ?? verDetail.aiRecommendation ?? '—'}</div>
+                <div><b>Admin lock:</b> {verDetail.adminLocked ? '🔒 Oui' : 'Non'}</div>
+                {verDetail.adminNote && <div><b>Note admin:</b> {verDetail.adminNote}</div>}
+              </div>
+
+              {/* Metrics */}
+              {verDetail.freshMetrics && (
+                <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 10, padding: 12, marginBottom: 16 }}>
+                  <h4 style={{ marginBottom: 8, fontSize: 13 }}>Métriques actuelles</h4>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6, fontSize: 12 }}>
+                    <div>📦 Transactions: {verDetail.freshMetrics.completedOrders}</div>
+                    <div>⭐ Note: {verDetail.freshMetrics.avgRating}/5</div>
+                    <div>💬 Avis: {verDetail.freshMetrics.reviewCount}</div>
+                    <div>📅 Ancienneté: {verDetail.freshMetrics.accountAgeDays}j</div>
+                    <div>🚨 Litiges: {verDetail.freshMetrics.disputeCount}</div>
+                    <div>🔥 Activité: {verDetail.freshMetrics.activityScore}/100</div>
+                  </div>
+                </div>
+              )}
+
+              {/* History */}
+              {verDetail.history?.length > 0 && (
+                <div style={{ marginBottom: 16 }}>
+                  <h4 style={{ marginBottom: 8, fontSize: 13 }}>Historique</h4>
+                  {verDetail.history.map(h => (
+                    <div key={h.id} style={{ fontSize: 12, padding: '4px 0', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                      <span style={{ color: STATUS_COLORS[h.toStatus] }}>{h.action}</span>
+                      {h.reason && <span style={{ color: 'var(--color-text-muted)' }}> — {h.reason}</span>}
+                      <span style={{ float: 'right', color: 'var(--color-text-muted)' }}>{new Date(h.createdAt).toLocaleDateString('fr-FR')}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Admin actions */}
+              <textarea
+                value={verActionNote}
+                onChange={e => setVerActionNote(e.target.value)}
+                placeholder="Note admin (optionnel)..."
+                style={{ width: '100%', minHeight: 60, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, padding: 8, color: 'inherit', fontSize: 13, marginBottom: 12 }}
+              />
+
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button className="ad-btn ad-btn--primary" onClick={() => handleVerAction(verDetail.id, 'approve')} disabled={verActing}>✅ Approuver</button>
+                <button className="ad-btn" onClick={() => handleVerAction(verDetail.id, 'reject')} disabled={verActing} style={{ background: '#d9534f', color: '#fff' }}>✕ Rejeter</button>
+                <button className="ad-btn" onClick={() => handleVerAction(verDetail.id, 'revoke')} disabled={verActing} style={{ background: '#d9534f', color: '#fff' }}>⊘ Révoquer</button>
+                <button className="ad-btn" onClick={() => handleVerAction(verDetail.id, 'lockVerified')} disabled={verActing} style={{ background: '#5cb85c', color: '#fff' }}>🔒 Lock Vérifié</button>
+                <button className="ad-btn" onClick={() => handleVerAction(verDetail.id, 'lockRevoked')} disabled={verActing} style={{ background: '#888', color: '#fff' }}>🔒 Lock Révoqué</button>
+                <button className="ad-btn" onClick={() => handleVerAction(verDetail.id, 'reactivate')} disabled={verActing} style={{ background: '#6f58ff', color: '#fff' }}>♻ Réactiver</button>
+              </div>
+
+              <button onClick={() => setVerDetail(null)} style={{ marginTop: 16, background: 'none', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer' }}>Fermer</button>
+            </div>
+          </div>
+        )}
+
+        {/* Table */}
+        {verLoading ? (
+          <div style={{ textAlign: 'center', padding: 32 }}>Chargement...</div>
+        ) : (
+          <>
+            <table className="ad-table" style={{ width: '100%', fontSize: 13 }}>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Nom</th>
+                  <th>Type</th>
+                  <th>Statut</th>
+                  <th>Score IA</th>
+                  <th>Source</th>
+                  <th>Date</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {verRequests?.requests.map(r => (
+                  <tr key={r.id}>
+                    <td style={{ fontFamily: 'monospace', fontSize: 11 }}>#{r.id.slice(-6)}</td>
+                    <td>{r.user?.profile?.displayName ?? r.business?.publicName ?? '—'}</td>
+                    <td>{r.userId ? '👤 User' : '🏪 Business'}</td>
+                    <td><span style={{ color: STATUS_COLORS[r.status], fontWeight: 600 }}>{r.status}</span></td>
+                    <td>{r.aiScore != null ? `${r.aiScore}/100` : '—'}</td>
+                    <td>{r.source}</td>
+                    <td>{new Date(r.createdAt).toLocaleDateString('fr-FR')}</td>
+                    <td>
+                      <button className="ad-btn ad-btn--sm" onClick={() => loadDetail(r.id)}>Détails</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            {/* Pagination */}
+            {verRequests && verRequests.pages > 1 && (
+              <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 16 }}>
+                {Array.from({ length: verRequests.pages }, (_, i) => (
+                  <button
+                    key={i + 1}
+                    onClick={() => setVerPage(i + 1)}
+                    style={{
+                      padding: '4px 12px', borderRadius: 6,
+                      background: verPage === i + 1 ? 'var(--color-accent)' : 'rgba(255,255,255,0.06)',
+                      color: verPage === i + 1 ? '#fff' : 'var(--color-text-muted)',
+                      border: 'none', cursor: 'pointer',
+                    }}
+                  >
+                    {i + 1}
+                  </button>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    );
+  };
+
   const renderSection = () => {
     switch (activeSection) {
       case 'dashboard': return renderDashboard();
@@ -3194,6 +3415,7 @@ export function AdminDashboard() {
       case 'messaging': return renderMessaging();
       case 'subscriptions': return renderSubscriptions();
       case 'ia-ads': return renderIaAds();
+      case 'verification': return renderVerification();
       default: return null;
     }
   };
