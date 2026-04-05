@@ -249,6 +249,12 @@ export const changeUserRole = async (userId: string, newRole: string) => {
     });
   }
 
+  // Revoke all active sessions so the user must re-login with the new role in the JWT
+  await prisma.userSession.updateMany({
+    where: { userId, status: "ACTIVE" },
+    data: { status: "REVOKED", revokedAt: new Date() },
+  });
+
   return { id: user.id, role: user.role };
 };
 
