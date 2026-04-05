@@ -250,18 +250,13 @@ export async function deleteMessage(messageId: string, userId: string) {
 }
 
 export async function markConversationRead(conversationId: string, userId: string) {
-  await prisma.conversationParticipant.update({
-    where: { conversationId_userId: { conversationId, userId } },
-    data: { lastReadAt: new Date() },
-  });
+  await prisma.$transaction(async (tx) => {
+    await tx.conversationParticipant.update({
+      where: { conversationId_userId: { conversationId, userId } },
+      data: { lastReadAt: new Date() },
+    });
 
-  // Create read receipts for unread messages
-  const participant = await prisma.conversationParticipant.findUnique({
-    where: { conversationId_userId: { conversationId, userId } },
-  });
-
-  if (participant) {
-    const unreadMessages = await prisma.message.findMany({
+    const unreadMessages = await tx.message.findMany({
       where: {
         conversationId,
         senderId: { not: userId },
@@ -271,12 +266,12 @@ export async function markConversationRead(conversationId: string, userId: strin
     });
 
     if (unreadMessages.length > 0) {
-      await prisma.messageReadReceipt.createMany({
+      await tx.messageReadReceipt.createMany({
         data: unreadMessages.map((m) => ({ messageId: m.id, userId })),
         skipDuplicates: true,
       });
     }
-  }
+  });
 }
 
 export async function searchUsers(query: string, currentUserId: string, limit = 20) {

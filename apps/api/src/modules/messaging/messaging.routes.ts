@@ -26,6 +26,7 @@ const dmSchema = z.object({ targetUserId: z.string().min(1) });
 router.post(
   "/conversations/dm",
   requireAuth,
+  rateLimit(RateLimits.LOGIN),
   asyncHandler(async (req, res) => {
     const { userId } = (req as AuthenticatedRequest).auth!;
     const { targetUserId } = dmSchema.parse(req.body);

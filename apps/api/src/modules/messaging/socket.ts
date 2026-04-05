@@ -18,6 +18,10 @@ const socketMessageRates = new Map<string, { count: number; resetAt: number }>()
 const SOCKET_MSG_MAX = 40; // max 40 messages par fenêtre
 const SOCKET_MSG_WINDOW_MS = 60_000; // fenêtre de 60 secondes
 
+/** userId → last typing event timestamp (throttle typing indicators) */
+const typingRates = new Map<string, number>();
+const TYPING_MIN_INTERVAL_MS = 2_000; // max 1 typing event par 2s
+
 /** conversationId → active call log ID (tracks in-progress calls) */
 const activeCallLogs = new Map<string, string>();
 /** userId → pending offline timeout (grace period for mobile/background transitions) */
@@ -98,8 +102,12 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
       }
     });
 
-    /* ── Typing indicators ── */
+    /* ── Typing indicators (rate-limited) ── */
     socket.on("typing:start", (data: { conversationId: string }) => {
+      const now = Date.now();
+      const last = typingRates.get(userId) ?? 0;
+      if (now - last < TYPING_MIN_INTERVAL_MS) return;
+      typingRates.set(userId, now);
       socket.to(`conv:${data.conversationId}`).emit("typing:start", { conversationId: data.conversationId, userId });
     });
 

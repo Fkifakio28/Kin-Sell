@@ -656,12 +656,7 @@ export function MessagingPage() {
             emit("call:end", { conversationId: callStateRef.current.conversationId, targetUserId: callStateRef.current.remoteUserId });
           }
           // Inline cleanup (same as cleanupCall)
-          pc.close();
-          peerConnectionRef.current = null;
-          if (callQualityTimerRef.current) { clearInterval(callQualityTimerRef.current); callQualityTimerRef.current = null; }
-          localStreamRef.current?.getTracks().forEach((t) => t.stop());
-          localStreamRef.current = null;
-          remoteStreamRef.current = null;
+          cleanupCall();
           setCallState(null);
           return;
         }
@@ -1135,6 +1130,11 @@ export function MessagingPage() {
   const handleTouchEnd = useCallback(() => {
     if (longPressTimerRef.current) { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; }
     longPressMsgRef.current = null;
+  }, []);
+
+  // Cleanup longpress timer on unmount
+  useEffect(() => () => {
+    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
   }, []);
 
   /* ── Invite candidates for call ── */

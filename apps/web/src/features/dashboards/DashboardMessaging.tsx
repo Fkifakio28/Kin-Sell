@@ -561,10 +561,10 @@ export function DashboardMessaging() {
     setGifLoading(true);
     const t = setTimeout(async () => {
       try {
-        const key = "AIzaSyBxfaT9GsIdFh7wVVRmBJjJr1nEzHKqxXU";
+        const key = import.meta.env.VITE_TENOR_API_KEY ?? "";
         const res = await fetch(`https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(gifQuery)}&key=${key}&client_key=kinsell&limit=20&media_filter=tinygif,gif`);
         const data = await res.json() as { results?: Array<{ id: string; media_formats: { gif: { url: string }; tinygif: { url: string } } }> };
-        setGifResults((data.results ?? []).map(r => ({ id: r.id, url: r.media_formats.gif.url, preview: r.media_formats.tinygif.url })));
+        setGifResults((data.results ?? []).map(r => ({ id: r.id, url: r.media_formats?.gif?.url ?? "", preview: r.media_formats?.tinygif?.url ?? "" })));
       } catch { setGifResults([]); }
       finally { setGifLoading(false); }
     }, 400);
