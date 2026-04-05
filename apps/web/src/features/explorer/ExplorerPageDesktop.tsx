@@ -395,11 +395,15 @@ export function ExplorerPageDesktop() {
           listingsApi.search({
             type: 'PRODUIT',
             q: normalizedQuery || undefined,
+            country: effectiveCountry,
+            city: defaultCity,
             limit: 24,
           }),
           listingsApi.search({
             type: 'SERVICE',
             q: normalizedQuery || undefined,
+            country: effectiveCountry,
+            city: defaultCity,
             limit: 24,
           }),
         ]);
@@ -442,7 +446,7 @@ export function ExplorerPageDesktop() {
     const poll = setInterval(() => { void loadArticles(); }, 60_000);
 
     return () => { cancelled = true; clearInterval(poll); };
-  }, [formatPriceLabelFromUsdCents, debouncedQuery]);
+  }, [formatPriceLabelFromUsdCents, debouncedQuery, effectiveCountry, defaultCity]);
 
   return (
     <>

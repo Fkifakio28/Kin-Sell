@@ -404,8 +404,8 @@ function ExplorerPageMobile() {
       try {
         const q = debouncedQuery.trim() || undefined;
         const [pRes, sRes] = await Promise.all([
-          listingsApi.search({ type: 'PRODUIT', q, limit: 24 }),
-          listingsApi.search({ type: 'SERVICE', q, limit: 24 }),
+          listingsApi.search({ type: 'PRODUIT', q, country: effectiveCountry, city: defaultCity, limit: 24 }),
+          listingsApi.search({ type: 'SERVICE', q, country: effectiveCountry, city: defaultCity, limit: 24 }),
         ]);
         const map = (item: (typeof pRes.results)[number]): ExplorerArticlePreview => ({
           id: item.id, title: item.title, priceLabel: formatPriceLabelFromUsdCents(item.priceUsdCents), priceUsdCents: item.priceUsdCents,
@@ -423,7 +423,7 @@ function ExplorerPageMobile() {
     void load();
     const poll = setInterval(() => { void load(); }, 60_000);
     return () => { cancelled = true; clearInterval(poll); };
-  }, [formatPriceLabelFromUsdCents, debouncedQuery]);
+  }, [formatPriceLabelFromUsdCents, debouncedQuery, effectiveCountry, defaultCity]);
 
   /* ── Render ── */
   return (
