@@ -107,8 +107,7 @@ export function SoKinProfilesPage() {
       [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
     }
     return shuffled.slice(0, 3);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profiles.length, sliderPage]);
+  }, [profiles, sliderPage, pageProfiles]);
 
   return (
     <section className="skd-shell skd-shell-users animate-fade-in">

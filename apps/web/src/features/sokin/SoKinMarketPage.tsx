@@ -36,6 +36,11 @@ export function SoKinMarketPage() {
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const shopProfileHover = useHoverPopup<ProfileHoverData>();
 
+  // Cleanup hoverTimer on unmount
+  useEffect(() => {
+    return () => { if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current); };
+  }, []);
+
   /* ── Load real shops from API ── */
   useEffect(() => {
     let cancelled = false;

@@ -559,16 +559,17 @@ export function DashboardMessaging() {
   useEffect(() => {
     if (pickerTab !== "gif" || gifQuery.length < 2) { setGifResults([]); return; }
     setGifLoading(true);
+    const controller = new AbortController();
     const t = setTimeout(async () => {
       try {
         const key = import.meta.env.VITE_TENOR_API_KEY ?? "";
-        const res = await fetch(`https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(gifQuery)}&key=${key}&client_key=kinsell&limit=20&media_filter=tinygif,gif`);
+        const res = await fetch(`https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(gifQuery)}&key=${key}&client_key=kinsell&limit=20&media_filter=tinygif,gif`, { signal: controller.signal });
         const data = await res.json() as { results?: Array<{ id: string; media_formats: { gif: { url: string }; tinygif: { url: string } } }> };
         setGifResults((data.results ?? []).map(r => ({ id: r.id, url: r.media_formats?.gif?.url ?? "", preview: r.media_formats?.tinygif?.url ?? "" })));
-      } catch { setGifResults([]); }
-      finally { setGifLoading(false); }
+      } catch { if (!controller.signal.aborted) setGifResults([]); }
+      finally { if (!controller.signal.aborted) setGifLoading(false); }
     }, 400);
-    return () => clearTimeout(t);
+    return () => { clearTimeout(t); controller.abort(); };
   }, [gifQuery, pickerTab]);
 
   /* ── Search users ── */

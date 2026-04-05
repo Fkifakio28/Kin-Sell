@@ -131,9 +131,11 @@ export async function analyzeContent(
     }
   }
 
-  // CAPS LOCK excessif
-  const uppercaseRatio = (text.match(/[A-Z]/g) ?? []).length / Math.max(text.length, 1);
-  if (text.length > 20 && uppercaseRatio > 0.6) {
+  // CAPS LOCK excessif (calculé uniquement sur les lettres)
+  const alphaCount = (text.match(/[A-Za-z]/g) ?? []).length;
+  const upperCount = (text.match(/[A-Z]/g) ?? []).length;
+  const uppercaseRatio = alphaCount > 0 ? upperCount / alphaCount : 0;
+  if (alphaCount > 10 && uppercaseRatio > 0.6) {
     triggers.push("excessive_caps");
     bonusScore += 10;
   }
@@ -189,7 +191,7 @@ export async function analyzeContent(
       } as any,
       warningShown: warningMessage,
     },
-  }).catch(() => {});
+  }).catch((e) => console.error("ContentGuard log failed:", e));
 
   return { verdict, score: finalScore, triggers, warningMessage };
 }
