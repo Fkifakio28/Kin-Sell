@@ -1057,16 +1057,27 @@ model CurrencyRate {
 }
 
 model AiAgent {
-  id          String     @id @default(cuid())
-  name        String
-  domain      String
-  description String?
-  action      String?
-  level       AdminLevel @default(LEVEL_1)
-  enabled     Boolean    @default(true)
-  config      Json?
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  id           String     @id @default(cuid())
+  name         String
+  slug         String     @unique
+  domain       String
+  type         String     @default("general") // moderation, pricing, quality, negotiation, ordering, advertising, analytics, orchestration, security
+  description  String?
+  action       String?
+  icon         String     @default("🤖")
+  version      String     @default("1.0.0")
+  status       String     @default("ACTIVE") // ACTIVE, INACTIVE, PAUSED, MAINTENANCE, ERROR
+  level        AdminLevel @default(LEVEL_1)
+  enabled      Boolean    @default(true)
+  config       Json?      // rich metadata: mission, zones, targets, uiEntryPoints, interventionType, requiredPlan, premiumOptions, dataUsed, outputs, subFunctions
+  lastActiveAt DateTime?
+  lastError    String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@index([status])
+  @@index([domain])
+  @@index([type])
 }
 
 model SiteSetting {

@@ -20,6 +20,9 @@ import {
   type AdminMember,
   type AdminRanking,
   type AdminAiAgent,
+  type AiAgentDetail,
+  type AiManagementStats,
+  type AiLogEntry,
   type AdminCurrencyRate,
   type AdminMe,
   type SecurityDashboard,
@@ -54,7 +57,7 @@ type ModalType =
   | null | 'user-detail' | 'user-role' | 'user-message' | 'user-suspend'
   | 'user-create' | 'report-detail' | 'blog-edit' | 'ad-edit'
   | 'admin-edit' | 'admin-create' | 'currency-edit' | 'feed-moderate' | 'advertisement-edit'
-  | 'blog-preview';
+  | 'blog-preview' | 'ai-detail';
 
 const ALL_PERMISSIONS = [
   'DASHBOARD', 'USERS', 'BLOG', 'TRANSACTIONS', 'REPORTS', 'FEED',
@@ -211,8 +214,17 @@ export function AdminDashboard() {
   const [adForm, setAdForm] = useState({ name: '', description: '', priceUsdCents: 0, durationDays: 30, features: '' });
   const [editingAdId, setEditingAdId] = useState<string | null>(null);
 
-  // AI
+  // AI Management
   const [aiAgents, setAiAgents] = useState<AdminAiAgent[]>([]);
+  const [aiStats, setAiStats] = useState<AiManagementStats | null>(null);
+  const [aiSelectedAgent, setAiSelectedAgent] = useState<AiAgentDetail | null>(null);
+  const [aiStatusFilter, setAiStatusFilter] = useState('');
+  const [aiDomainFilter, setAiDomainFilter] = useState('');
+  const [aiTypeFilter, setAiTypeFilter] = useState('');
+  const [aiDetailTab, setAiDetailTab] = useState<'mission' | 'zones' | 'users' | 'data' | 'performance' | 'logs' | 'plans'>('mission');
+  const [aiLogsPage, setAiLogsPage] = useState(1);
+  const [aiLogs, setAiLogs] = useState<AiLogEntry[]>([]);
+  const [aiLogsTotal, setAiLogsTotal] = useState(0);
 
   // MessageGuard AI
   const [mgDashboard, setMgDashboard] = useState<MessageGuardDashboard | null>(null);
@@ -423,8 +435,12 @@ export function AdminDashboard() {
           break;
         }
         case 'ai-management': {
-          const res = await admin.aiAgents();
-          setAiAgents(res);
+          const [agents, stats] = await Promise.all([
+            admin.aiAgents({ status: aiStatusFilter || undefined, domain: aiDomainFilter || undefined, type: aiTypeFilter || undefined }),
+            admin.aiAgentStats(),
+          ]);
+          setAiAgents(agents);
+          setAiStats(stats);
           // Also load MessageGuard dashboard
           try {
             const mgd = await admin.messageGuardDashboard();
@@ -495,7 +511,7 @@ export function AdminDashboard() {
     } catch (e: any) {
       setError(e?.message ?? 'Erreur de chargement');
     }
-  }, [activeSection, usersPage, usersSearch, usersRoleFilter, usersStatusFilter, blogPage, blogStatusFilter, blogCategoryFilter, blogSearch, blogSortBy, txPage, txStatusFilter, reportsPage, reportsStatusFilter, rankPeriod, rankType, auditPage, secEventsPage, fraudPage, fraudFilter, restrictionsPage, restrictionsFilter, mgLogsPage, mgVerdictFilter, feedPage, feedStatusFilter, feedSearch, donationsPage, donationsStatusFilter, donationsTypeFilter, advPage, advStatusFilter, advTypeFilter, advSearch, adminListingsPage, adminListingsStatusFilter, adminListingsTypeFilter, adminListingsSearch, appealsPage]);
+  }, [activeSection, usersPage, usersSearch, usersRoleFilter, usersStatusFilter, blogPage, blogStatusFilter, blogCategoryFilter, blogSearch, blogSortBy, txPage, txStatusFilter, reportsPage, reportsStatusFilter, rankPeriod, rankType, auditPage, secEventsPage, fraudPage, fraudFilter, restrictionsPage, restrictionsFilter, mgLogsPage, mgVerdictFilter, aiStatusFilter, aiDomainFilter, aiTypeFilter, feedPage, feedStatusFilter, feedSearch, donationsPage, donationsStatusFilter, donationsTypeFilter, advPage, advStatusFilter, advTypeFilter, advSearch, adminListingsPage, adminListingsStatusFilter, adminListingsTypeFilter, adminListingsSearch, appealsPage]);
 
   useEffect(() => { if (isLoggedIn) loadSectionData(); }, [loadSectionData, isLoggedIn]);
 
@@ -1703,43 +1719,204 @@ export function AdminDashboard() {
     </>
   );
 
+  const handleOpenAiDetail = async (agentId: string) => {
+    try {
+      const detail = await admin.aiAgentDetail(agentId);
+      setAiSelectedAgent(detail);
+      setAiDetailTab('mission');
+      setModal('ai-detail');
+    } catch (e: any) { setError(e?.message); }
+  };
+
+  const handleToggleAiStatus = async (agent: AdminAiAgent) => {
+    if (!isSuperAdmin) return;
+    const newStatus = agent.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+    try {
+      await admin.updateAiAgent(agent.id, { status: newStatus, enabled: newStatus === 'ACTIVE' });
+      invalidateCache('/admin/ai');
+      loadSectionData();
+    } catch (e: any) { setError(e?.message); }
+  };
+
+  const handleLoadAiLogs = async (agentId: string, page = 1) => {
+    try {
+      const res = await admin.aiAgentLogs(agentId, { page, limit: 20 });
+      setAiLogs(res.logs);
+      setAiLogsTotal(res.total);
+      setAiLogsPage(res.page);
+    } catch { /* ignore */ }
+  };
+
+  const aiStatusColor = (s: string) => {
+    switch (s) {
+      case 'ACTIVE': return 'var(--ad-success, #4caf50)';
+      case 'INACTIVE': return 'var(--ad-text-3, #888)';
+      case 'PAUSED': return '#ff9800';
+      case 'MAINTENANCE': return '#2196f3';
+      case 'ERROR': return 'var(--ad-danger, #e53935)';
+      default: return 'var(--ad-text-3)';
+    }
+  };
+  const aiStatusLabel = (s: string) => {
+    switch (s) {
+      case 'ACTIVE': return '🟢 Active';
+      case 'INACTIVE': return '⚫ Inactive';
+      case 'PAUSED': return '⏸️ Pause';
+      case 'MAINTENANCE': return '🔧 Maintenance';
+      case 'ERROR': return '🔴 Erreur';
+      default: return s;
+    }
+  };
+
   const renderAiManagement = () => (
     <>
-      <div className="ad-panel-head"><h3 className="ad-panel-title">Gestion des IA — {aiAgents.length} agent{aiAgents.length > 1 ? 's' : ''}</h3></div>
+      {/* ═══ HEADER + GLOBAL STATUS ═══ */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <div>
+          <h2 style={{ margin: 0, fontSize: 20, color: 'var(--ad-text-1)' }}>🤖 Gestion des IA</h2>
+          <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--ad-text-3)' }}>Pilotage, suivi et contrôle des intelligences artificielles de Kin-Sell</p>
+        </div>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+          {aiStats && (
+            <span style={{
+              padding: '6px 14px', borderRadius: 20, fontSize: 12, fontWeight: 700,
+              background: aiStats.systemStatus === 'active' ? 'rgba(76,175,80,0.15)' : aiStats.systemStatus === 'degraded' ? 'rgba(255,152,0,0.15)' : 'rgba(229,57,53,0.15)',
+              color: aiStats.systemStatus === 'active' ? '#4caf50' : aiStats.systemStatus === 'degraded' ? '#ff9800' : '#e53935',
+            }}>
+              {aiStats.systemStatus === 'active' ? '🟢 Système IA opérationnel' : aiStats.systemStatus === 'degraded' ? '🟡 Partiellement dégradé' : '🔴 Hors service'}
+            </span>
+          )}
+          <button className="ad-btn ad-btn--sm" onClick={() => loadSectionData()}>🔄 Refresh</button>
+        </div>
+      </div>
+
+      {/* ═══ STATS CARDS ═══ */}
+      {aiStats && (
+        <div className="ad-stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', marginBottom: 20 }}>
+          <div className="ad-stat-card">
+            <div className="ad-stat-label">Total IA</div>
+            <div className="ad-stat-value">{aiStats.total}</div>
+          </div>
+          <div className="ad-stat-card">
+            <div className="ad-stat-label">🟢 Actives</div>
+            <div className="ad-stat-value" style={{ color: '#4caf50' }}>{aiStats.active}</div>
+          </div>
+          <div className="ad-stat-card">
+            <div className="ad-stat-label">⚫ Inactives</div>
+            <div className="ad-stat-value">{aiStats.inactive}</div>
+          </div>
+          <div className="ad-stat-card">
+            <div className="ad-stat-label">🔧 Maintenance</div>
+            <div className="ad-stat-value" style={{ color: '#2196f3' }}>{aiStats.maintenance}</div>
+          </div>
+          <div className="ad-stat-card">
+            <div className="ad-stat-label">🔴 Erreurs</div>
+            <div className="ad-stat-value" style={{ color: '#e53935' }}>{aiStats.errors}</div>
+          </div>
+          <div className="ad-stat-card">
+            <div className="ad-stat-label">💼 Liées forfaits</div>
+            <div className="ad-stat-value">{aiStats.linkedToPlans}</div>
+          </div>
+          <div className="ad-stat-card">
+            <div className="ad-stat-label">👥 Comptes IA</div>
+            <div className="ad-stat-value">{aiStats.accountsUsingAi}</div>
+          </div>
+          <div className="ad-stat-card">
+            <div className="ad-stat-label">📊 Usage (7j)</div>
+            <div className="ad-stat-value">{aiStats.weekUsage}</div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ FILTERS ═══ */}
+      <div className="ad-panel" style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', padding: '10px 16px' }}>
+        <select className="ad-select" value={aiStatusFilter} onChange={e => setAiStatusFilter(e.target.value)} style={{ minWidth: 130 }}>
+          <option value="">Tous les statuts</option>
+          <option value="ACTIVE">🟢 Active</option>
+          <option value="INACTIVE">⚫ Inactive</option>
+          <option value="PAUSED">⏸️ Pause</option>
+          <option value="MAINTENANCE">🔧 Maintenance</option>
+          <option value="ERROR">🔴 Erreur</option>
+        </select>
+        <select className="ad-select" value={aiDomainFilter} onChange={e => setAiDomainFilter(e.target.value)} style={{ minWidth: 130 }}>
+          <option value="">Tous les domaines</option>
+          <option value="messaging">Messagerie</option>
+          <option value="pricing">Tarification</option>
+          <option value="listings">Annonces</option>
+          <option value="content">Contenu</option>
+          <option value="negotiations">Négociations</option>
+          <option value="orders">Commandes</option>
+          <option value="advertising">Publicité</option>
+          <option value="analytics">Analytics</option>
+          <option value="system">Système</option>
+        </select>
+        <select className="ad-select" value={aiTypeFilter} onChange={e => setAiTypeFilter(e.target.value)} style={{ minWidth: 130 }}>
+          <option value="">Tous les types</option>
+          <option value="moderation">Modération</option>
+          <option value="pricing">Tarification</option>
+          <option value="quality">Qualité</option>
+          <option value="negotiation">Négociation</option>
+          <option value="ordering">Commandes</option>
+          <option value="advertising">Publicité</option>
+          <option value="analytics">Analytics</option>
+          <option value="orchestration">Orchestration</option>
+        </select>
+      </div>
+
+      {/* ═══ AI AGENTS GRID ═══ */}
       {aiAgents.length === 0 ? (
-        <div className="ad-panel">
-          <div className="ad-empty"><div className="ad-empty-icon">🧠</div><p className="ad-empty-msg">Aucune IA configurée. Les agents IA seront ajoutés ici.</p></div>
+        <div className="ad-panel" style={{ marginTop: 16 }}>
+          <div className="ad-empty"><div className="ad-empty-icon">🧠</div><p className="ad-empty-msg">Aucune IA trouvée avec ces filtres.</p></div>
         </div>
       ) : (
-        <div className="ad-panel">
-          <div className="ad-table-wrap">
-            <table className="ad-table">
-              <thead><tr><th>Nom</th><th>Domaine</th><th>Niveau</th><th>Statut</th><th>Actions</th></tr></thead>
-              <tbody>
-                {aiAgents.map(a => (
-                  <tr key={a.id}>
-                    <td style={{ fontWeight: 600, color: 'var(--ad-text-1)' }}>{a.name}</td>
-                    <td>{a.domain}</td>
-                    <td><span className="ad-badge">{a.level}</span></td>
-                    <td>
-                      <div className={`ad-toggle ${a.enabled ? 'ad-toggle--on' : ''}`} onClick={() => { if (isSuperAdmin) admin.updateAiAgent(a.id, { enabled: !a.enabled }).then(() => { invalidateCache('/admin/ai'); loadSectionData(); }); }} />
-                    </td>
-                    <td>
-                      {isSuperAdmin && (
-                        <select className="ad-select" value={a.level} onChange={e => admin.updateAiAgent(a.id, { level: e.target.value }).then(() => { invalidateCache('/admin/ai'); loadSectionData(); })} style={{ padding: '4px 8px', fontSize: 12 }}>
-                          <option value="LEVEL_1">Niveau 1</option>
-                          <option value="LEVEL_2">Niveau 2</option>
-                          <option value="LEVEL_3">Niveau 3</option>
-                          <option value="LEVEL_4">Niveau 4</option>
-                          <option value="LEVEL_5">Niveau 5</option>
-                        </select>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 16, marginTop: 16 }}>
+          {aiAgents.map(a => {
+            const cfg = a.config as Record<string, unknown> | null;
+            return (
+              <div key={a.id} className="ad-panel" style={{ padding: 16, position: 'relative', borderLeft: `3px solid ${aiStatusColor(a.status)}` }}>
+                {/* Header */}
+                <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', marginBottom: 10 }}>
+                  <div style={{ fontSize: 28, lineHeight: 1 }}>{a.icon}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <h4 style={{ margin: 0, fontSize: 15, color: 'var(--ad-text-1)' }}>{a.name}</h4>
+                      <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, background: 'rgba(111,88,255,0.1)', color: 'var(--color-accent, #6f58ff)' }}>v{a.version}</span>
+                    </div>
+                    <p style={{ margin: '3px 0 0', fontSize: 11, color: 'var(--ad-text-3)', lineHeight: 1.4 }}>{a.description?.substring(0, 100)}{(a.description?.length ?? 0) > 100 ? '…' : ''}</p>
+                  </div>
+                </div>
+
+                {/* Meta row */}
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+                  <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: 'rgba(111,88,255,0.08)', color: 'var(--ad-text-2)' }}>{a.domain}</span>
+                  <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: 'rgba(111,88,255,0.08)', color: 'var(--ad-text-2)', textTransform: 'capitalize' }}>{a.type}</span>
+                  <span className="ad-badge">{a.level.replace('LEVEL_', 'Niv ')}</span>
+                  {cfg?.requiredPlan && <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, background: 'rgba(255,152,0,0.1)', color: '#ff9800' }}>💼 {String(cfg.requiredPlan)}</span>}
+                </div>
+
+                {/* Status + actions */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: aiStatusColor(a.status) }}>{aiStatusLabel(a.status)}</span>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button className="ad-btn ad-btn--sm" onClick={() => handleOpenAiDetail(a.id)} title="Détails">🔎 Détails</button>
+                    {isSuperAdmin && (
+                      <button
+                        className={`ad-btn ad-btn--sm ${a.status === 'ACTIVE' ? '' : 'ad-btn--primary'}`}
+                        onClick={() => handleToggleAiStatus(a)}
+                        title={a.status === 'ACTIVE' ? 'Désactiver' : 'Activer'}
+                      >
+                        {a.status === 'ACTIVE' ? '⏸️' : '▶️'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Last activity */}
+                {a.lastActiveAt && <div style={{ marginTop: 8, fontSize: 10, color: 'var(--ad-text-3)' }}>Dernière activité : {fmtDate(a.lastActiveAt)}</div>}
+                {a.lastError && <div style={{ marginTop: 4, fontSize: 10, color: '#e53935' }}>⚠ {a.lastError}</div>}
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -2827,6 +3004,352 @@ export function AdminDashboard() {
               </div>
             </>
           )}
+
+          {/* AI Detail Modal */}
+          {modal === 'ai-detail' && aiSelectedAgent && (() => {
+            const ag = aiSelectedAgent;
+            const cfg = ag.config as Record<string, unknown> | null;
+            const zones = (cfg?.zones as string[]) ?? [];
+            const targets = (cfg?.targets as string[]) ?? [];
+            const uiEntryPoints = (cfg?.uiEntryPoints as string[]) ?? [];
+            const outputs = (cfg?.outputs as string[]) ?? [];
+            const subFunctions = (cfg?.subFunctions as string[]) ?? [];
+            const premiumOptions = (cfg?.premiumOptions as string[]) ?? [];
+            const dataUsed = cfg?.dataUsed as { read?: string[]; generated?: string[]; suggested?: string[]; actionable?: string[] } | undefined;
+            return (
+              <>
+                <div className="ad-modal-head">
+                  <h2 className="ad-modal-title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ fontSize: 28 }}>{ag.icon}</span>
+                    {ag.name}
+                    <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: 'rgba(111,88,255,0.1)', color: 'var(--color-accent, #6f58ff)' }}>v{ag.version}</span>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: aiStatusColor(ag.status), marginLeft: 8 }}>{aiStatusLabel(ag.status)}</span>
+                  </h2>
+                  <button className="ad-modal-close" onClick={() => { setModal(null); setAiSelectedAgent(null); }}>✕</button>
+                </div>
+                <div className="ad-modal-body" style={{ maxHeight: '72vh', overflowY: 'auto' }}>
+                  {/* Meta header */}
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+                    <span className="ad-badge">{ag.domain}</span>
+                    <span className="ad-badge" style={{ textTransform: 'capitalize' }}>{ag.type}</span>
+                    <span className="ad-badge">{ag.level.replace('LEVEL_', 'Niveau ')}</span>
+                    {cfg?.requiredPlan && <span style={{ fontSize: 11, padding: '3px 10px', borderRadius: 12, background: 'rgba(255,152,0,0.12)', color: '#ff9800', fontWeight: 600 }}>💼 Forfait min : {String(cfg.requiredPlan)}</span>}
+                    {cfg?.interventionType && <span className="ad-badge">{cfg.interventionType === 'visible' ? '👁 Visible' : cfg.interventionType === 'hidden' ? '🔒 Backend' : '🔄 Hybride'}</span>}
+                  </div>
+                  <p style={{ color: 'var(--ad-text-2)', fontSize: 13, lineHeight: 1.6, marginBottom: 16 }}>{ag.description}</p>
+
+                  {/* ═══ Stats cards ═══ */}
+                  <div className="ad-stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', marginBottom: 20 }}>
+                    <div className="ad-stat-card"><div className="ad-stat-label">Total</div><div className="ad-stat-value">{ag.stats.totalUsage}</div></div>
+                    <div className="ad-stat-card"><div className="ad-stat-label">Aujourd&apos;hui</div><div className="ad-stat-value">{ag.stats.todayUsage}</div></div>
+                    <div className="ad-stat-card"><div className="ad-stat-label">7 jours</div><div className="ad-stat-value">{ag.stats.weekUsage}</div></div>
+                    <div className="ad-stat-card"><div className="ad-stat-label">30 jours</div><div className="ad-stat-value">{ag.stats.monthUsage}</div></div>
+                    <div className="ad-stat-card"><div className="ad-stat-label">✅ Succès</div><div className="ad-stat-value" style={{ color: '#4caf50' }}>{ag.stats.successRate}%</div></div>
+                    <div className="ad-stat-card"><div className="ad-stat-label">❌ Erreurs</div><div className="ad-stat-value" style={{ color: '#e53935' }}>{ag.stats.errorRate}%</div></div>
+                  </div>
+
+                  {/* ═══ TABS ═══ */}
+                  <div className="ad-tabs" style={{ marginBottom: 16 }}>
+                    {(['mission', 'zones', 'users', 'data', 'performance', 'logs', 'plans'] as const).map(t => (
+                      <button key={t} className={`ad-tab ${aiDetailTab === t ? 'ad-tab--active' : ''}`} onClick={() => {
+                        setAiDetailTab(t);
+                        if (t === 'logs') handleLoadAiLogs(ag.id);
+                      }}>
+                        {t === 'mission' && '🎯 Mission'}
+                        {t === 'zones' && '📍 Zones'}
+                        {t === 'users' && '👥 Comptes'}
+                        {t === 'data' && '📊 Données'}
+                        {t === 'performance' && '⚡ Performance'}
+                        {t === 'logs' && '📋 Logs'}
+                        {t === 'plans' && '💼 Forfaits'}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* TAB: Mission */}
+                  {aiDetailTab === 'mission' && (
+                    <div>
+                      {cfg?.mission && (
+                        <div className="ad-panel" style={{ marginBottom: 12, padding: 14 }}>
+                          <h4 style={{ margin: '0 0 8px', fontSize: 14, color: 'var(--ad-text-1)' }}>🎯 Mission principale</h4>
+                          <p style={{ margin: 0, fontSize: 13, color: 'var(--ad-text-2)', lineHeight: 1.6 }}>{String(cfg.mission)}</p>
+                        </div>
+                      )}
+                      {cfg?.doesNot && (
+                        <div className="ad-panel" style={{ marginBottom: 12, padding: 14, borderLeft: '3px solid #ff9800' }}>
+                          <h4 style={{ margin: '0 0 8px', fontSize: 14, color: '#ff9800' }}>🚫 Ce que cette IA ne fait PAS</h4>
+                          <p style={{ margin: 0, fontSize: 13, color: 'var(--ad-text-2)', lineHeight: 1.6 }}>{String(cfg.doesNot)}</p>
+                        </div>
+                      )}
+                      {ag.action && (
+                        <div className="ad-panel" style={{ padding: 14 }}>
+                          <h4 style={{ margin: '0 0 8px', fontSize: 14, color: 'var(--ad-text-1)' }}>⚙️ Action principale</h4>
+                          <p style={{ margin: 0, fontSize: 13, color: 'var(--ad-text-2)' }}>{ag.action}</p>
+                        </div>
+                      )}
+                      {subFunctions.length > 0 && (
+                        <div className="ad-panel" style={{ marginTop: 12, padding: 14 }}>
+                          <h4 style={{ margin: '0 0 8px', fontSize: 14, color: 'var(--ad-text-1)' }}>🔧 Sous-fonctions</h4>
+                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                            {subFunctions.map(sf => <span key={sf} style={{ fontSize: 12, padding: '4px 10px', borderRadius: 12, background: 'rgba(111,88,255,0.08)', color: 'var(--ad-text-2)' }}>{sf}</span>)}
+                          </div>
+                        </div>
+                      )}
+                      {outputs.length > 0 && (
+                        <div className="ad-panel" style={{ marginTop: 12, padding: 14 }}>
+                          <h4 style={{ margin: '0 0 8px', fontSize: 14, color: 'var(--ad-text-1)' }}>📤 Résultats / Impact</h4>
+                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                            {outputs.map(o => <span key={o} style={{ fontSize: 12, padding: '4px 10px', borderRadius: 12, background: 'rgba(76,175,80,0.08)', color: '#4caf50' }}>{o}</span>)}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* TAB: Zones */}
+                  {aiDetailTab === 'zones' && (
+                    <div>
+                      <div className="ad-panel" style={{ padding: 14, marginBottom: 12 }}>
+                        <h4 style={{ margin: '0 0 8px', fontSize: 14 }}>📍 Pages / Modules</h4>
+                        {zones.length > 0 ? (
+                          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                            {zones.map(z => <span key={z} className="ad-badge" style={{ textTransform: 'capitalize' }}>{z.replace(/-/g, ' ')}</span>)}
+                          </div>
+                        ) : <p style={{ color: 'var(--ad-text-3)', fontSize: 13 }}>Aucune zone définie</p>}
+                      </div>
+                      <div className="ad-panel" style={{ padding: 14, marginBottom: 12 }}>
+                        <h4 style={{ margin: '0 0 8px', fontSize: 14 }}>🖱️ Points d&apos;entrée UI</h4>
+                        {uiEntryPoints.length > 0 ? (
+                          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                            {uiEntryPoints.map(u => <span key={u} className="ad-badge" style={{ textTransform: 'capitalize' }}>{u.replace(/-/g, ' ')}</span>)}
+                          </div>
+                        ) : <p style={{ color: 'var(--ad-text-3)', fontSize: 13 }}>Aucun point d&apos;entrée défini</p>}
+                      </div>
+                      <div className="ad-panel" style={{ padding: 14 }}>
+                        <h4 style={{ margin: '0 0 8px', fontSize: 14 }}>🔮 Type d&apos;intervention</h4>
+                        <span className="ad-badge" style={{ fontSize: 13 }}>
+                          {cfg?.interventionType === 'visible' ? '👁 Visible (interface utilisateur)' : cfg?.interventionType === 'hidden' ? '🔒 Cachée (backend uniquement)' : '🔄 Hybride (visible + backend)'}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* TAB: Comptes / Users */}
+                  {aiDetailTab === 'users' && (
+                    <div>
+                      <div className="ad-panel" style={{ padding: 14, marginBottom: 12 }}>
+                        <h4 style={{ margin: '0 0 8px', fontSize: 14 }}>🎯 Cibles / Rôles</h4>
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                          {targets.map(t => <span key={t} className="ad-badge">{t === 'USER' ? '👤 Utilisateurs' : t === 'BUSINESS' ? '🏢 Entreprises' : t === 'ADMIN' ? '🔑 Admins' : t}</span>)}
+                        </div>
+                      </div>
+                      {ag.topUsers.length > 0 && (
+                        <div className="ad-panel" style={{ padding: 14 }}>
+                          <h4 style={{ margin: '0 0 8px', fontSize: 14 }}>🏆 Top utilisateurs</h4>
+                          <div className="ad-table-wrap">
+                            <table className="ad-table">
+                              <thead><tr><th>Utilisateur</th><th>Rôle</th><th>Utilisations</th></tr></thead>
+                              <tbody>
+                                {ag.topUsers.map(u => (
+                                  <tr key={u.userId}>
+                                    <td style={{ fontWeight: 600 }}>{u.displayName}</td>
+                                    <td><span className="ad-badge">{u.role}</span></td>
+                                    <td><span className="ad-badge ad-badge--primary">{u.usageCount}</span></td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+                      {ag.topUsers.length === 0 && (
+                        <div className="ad-panel" style={{ padding: 14 }}>
+                          <p style={{ color: 'var(--ad-text-3)', fontSize: 13, textAlign: 'center' }}>Aucun utilisateur enregistré pour cette IA.</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* TAB: Données utilisées */}
+                  {aiDetailTab === 'data' && (
+                    <div>
+                      {dataUsed && (
+                        <>
+                          {dataUsed.read && dataUsed.read.length > 0 && (
+                            <div className="ad-panel" style={{ padding: 14, marginBottom: 12, borderLeft: '3px solid #2196f3' }}>
+                              <h4 style={{ margin: '0 0 8px', fontSize: 14, color: '#2196f3' }}>📖 Données lues</h4>
+                              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                                {dataUsed.read.map(d => <span key={d} style={{ fontSize: 12, padding: '3px 10px', borderRadius: 12, background: 'rgba(33,150,243,0.08)', color: '#2196f3' }}>{d}</span>)}
+                              </div>
+                            </div>
+                          )}
+                          {dataUsed.generated && dataUsed.generated.length > 0 && (
+                            <div className="ad-panel" style={{ padding: 14, marginBottom: 12, borderLeft: '3px solid #4caf50' }}>
+                              <h4 style={{ margin: '0 0 8px', fontSize: 14, color: '#4caf50' }}>🔄 Données générées</h4>
+                              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                                {dataUsed.generated.map(d => <span key={d} style={{ fontSize: 12, padding: '3px 10px', borderRadius: 12, background: 'rgba(76,175,80,0.08)', color: '#4caf50' }}>{d}</span>)}
+                              </div>
+                            </div>
+                          )}
+                          {dataUsed.suggested && dataUsed.suggested.length > 0 && (
+                            <div className="ad-panel" style={{ padding: 14, marginBottom: 12, borderLeft: '3px solid #ff9800' }}>
+                              <h4 style={{ margin: '0 0 8px', fontSize: 14, color: '#ff9800' }}>💡 Données suggérées</h4>
+                              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                                {dataUsed.suggested.map(d => <span key={d} style={{ fontSize: 12, padding: '3px 10px', borderRadius: 12, background: 'rgba(255,152,0,0.08)', color: '#ff9800' }}>{d}</span>)}
+                              </div>
+                            </div>
+                          )}
+                          {dataUsed.actionable && dataUsed.actionable.length > 0 && (
+                            <div className="ad-panel" style={{ padding: 14, borderLeft: '3px solid #e53935' }}>
+                              <h4 style={{ margin: '0 0 8px', fontSize: 14, color: '#e53935' }}>⚡ Actions déclenchables</h4>
+                              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                                {dataUsed.actionable.map(d => <span key={d} style={{ fontSize: 12, padding: '3px 10px', borderRadius: 12, background: 'rgba(229,57,53,0.08)', color: '#e53935' }}>{d}</span>)}
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      )}
+                      {!dataUsed && (
+                        <div className="ad-panel" style={{ padding: 14 }}>
+                          <p style={{ color: 'var(--ad-text-3)', fontSize: 13 }}>Aucune donnée configurée pour cette IA.</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* TAB: Performance */}
+                  {aiDetailTab === 'performance' && (
+                    <div>
+                      <div className="ad-stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', marginBottom: 16 }}>
+                        <div className="ad-stat-card"><div className="ad-stat-label">Utilisations totales</div><div className="ad-stat-value">{ag.stats.totalUsage}</div></div>
+                        <div className="ad-stat-card"><div className="ad-stat-label">Aujourd&apos;hui</div><div className="ad-stat-value">{ag.stats.todayUsage}</div></div>
+                        <div className="ad-stat-card"><div className="ad-stat-label">Cette semaine</div><div className="ad-stat-value">{ag.stats.weekUsage}</div></div>
+                        <div className="ad-stat-card"><div className="ad-stat-label">Ce mois</div><div className="ad-stat-value">{ag.stats.monthUsage}</div></div>
+                      </div>
+                      <div className="ad-panel" style={{ padding: 14, marginBottom: 12 }}>
+                        <h4 style={{ margin: '0 0 12px', fontSize: 14 }}>📊 Taux de succès / erreur</h4>
+                        <div style={{ display: 'flex', gap: 20, alignItems: 'center' }}>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
+                              <span>Succès</span><span style={{ fontWeight: 700, color: '#4caf50' }}>{ag.stats.successRate}%</span>
+                            </div>
+                            <div style={{ height: 8, borderRadius: 4, background: 'rgba(255,255,255,0.05)' }}>
+                              <div style={{ height: '100%', borderRadius: 4, background: '#4caf50', width: `${ag.stats.successRate}%`, transition: 'width 0.5s' }} />
+                            </div>
+                          </div>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
+                              <span>Erreurs</span><span style={{ fontWeight: 700, color: '#e53935' }}>{ag.stats.errorRate}%</span>
+                            </div>
+                            <div style={{ height: 8, borderRadius: 4, background: 'rgba(255,255,255,0.05)' }}>
+                              <div style={{ height: '100%', borderRadius: 4, background: '#e53935', width: `${ag.stats.errorRate}%`, transition: 'width 0.5s' }} />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      {ag.lastError && (
+                        <div className="ad-panel" style={{ padding: 14, borderLeft: '3px solid #e53935' }}>
+                          <h4 style={{ margin: '0 0 6px', fontSize: 14, color: '#e53935' }}>⚠ Dernière erreur</h4>
+                          <p style={{ margin: 0, fontSize: 12, color: 'var(--ad-text-2)' }}>{ag.lastError}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* TAB: Logs */}
+                  {aiDetailTab === 'logs' && (
+                    <div>
+                      {aiLogs.length === 0 ? (
+                        <div className="ad-panel" style={{ padding: 14 }}>
+                          <p style={{ color: 'var(--ad-text-3)', fontSize: 13, textAlign: 'center' }}>Aucun log enregistré pour cette IA.</p>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="ad-table-wrap">
+                            <table className="ad-table">
+                              <thead><tr><th>Date</th><th>Utilisateur</th><th>Action</th><th>Décision</th><th>Statut</th></tr></thead>
+                              <tbody>
+                                {aiLogs.map(l => (
+                                  <tr key={l.id}>
+                                    <td style={{ fontSize: 11, whiteSpace: 'nowrap' }}>{fmtDate(l.createdAt)}</td>
+                                    <td style={{ fontWeight: 600, fontSize: 12 }}>{l.targetUserName ?? '—'}</td>
+                                    <td><span className="ad-badge" style={{ fontSize: 10 }}>{l.actionType}</span></td>
+                                    <td style={{ fontSize: 12, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.decision}</td>
+                                    <td>{l.success ? <span style={{ color: '#4caf50' }}>✅</span> : <span style={{ color: '#e53935' }}>❌</span>}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                          {aiLogsTotal > 20 && (
+                            <div className="ad-pagination" style={{ marginTop: 8 }}>
+                              <button className="ad-btn ad-btn--sm" disabled={aiLogsPage <= 1} onClick={() => handleLoadAiLogs(ag.id, aiLogsPage - 1)}>← Précédent</button>
+                              <span style={{ fontSize: 12 }}>Page {aiLogsPage} / {Math.ceil(aiLogsTotal / 20)}</span>
+                              <button className="ad-btn ad-btn--sm" disabled={aiLogsPage >= Math.ceil(aiLogsTotal / 20)} onClick={() => handleLoadAiLogs(ag.id, aiLogsPage + 1)}>Suivant →</button>
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )}
+
+                  {/* TAB: Forfaits */}
+                  {aiDetailTab === 'plans' && (
+                    <div>
+                      <div className="ad-panel" style={{ padding: 14, marginBottom: 12 }}>
+                        <h4 style={{ margin: '0 0 8px', fontSize: 14 }}>💼 Forfait minimum requis</h4>
+                        <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--color-accent, #6f58ff)' }}>{cfg?.requiredPlan ? String(cfg.requiredPlan) : 'FREE (accès libre)'}</span>
+                      </div>
+                      {premiumOptions.length > 0 && (
+                        <div className="ad-panel" style={{ padding: 14, marginBottom: 12 }}>
+                          <h4 style={{ margin: '0 0 8px', fontSize: 14 }}>⭐ Options premium</h4>
+                          {premiumOptions.map(opt => (
+                            <div key={opt} style={{ padding: '8px 12px', marginBottom: 6, borderRadius: 8, background: 'rgba(255,152,0,0.06)', fontSize: 13, color: 'var(--ad-text-2)' }}>
+                              {opt}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <div className="ad-panel" style={{ padding: 14 }}>
+                        <h4 style={{ margin: '0 0 8px', fontSize: 14 }}>🔐 Accès</h4>
+                        <p style={{ margin: 0, fontSize: 13, color: 'var(--ad-text-2)' }}>
+                          {(!cfg?.requiredPlan || cfg.requiredPlan === 'FREE') ? '✅ Accès libre — disponible pour tous les utilisateurs' : `🔒 Accès restreint — nécessite le forfait ${String(cfg.requiredPlan)} ou supérieur`}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Footer */}
+                <div className="ad-modal-footer">
+                  <button className="ad-btn" onClick={() => { setModal(null); setAiSelectedAgent(null); }}>Fermer</button>
+                  {isSuperAdmin && (
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      {ag.status !== 'MAINTENANCE' && (
+                        <button className="ad-btn" onClick={async () => {
+                          await admin.updateAiAgent(ag.id, { status: 'MAINTENANCE' });
+                          invalidateCache('/admin/ai');
+                          setModal(null); setAiSelectedAgent(null);
+                          loadSectionData();
+                        }}>🔧 Maintenance</button>
+                      )}
+                      <button
+                        className={`ad-btn ${ag.status === 'ACTIVE' ? '' : 'ad-btn--primary'}`}
+                        onClick={async () => {
+                          await admin.updateAiAgent(ag.id, { status: ag.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE' });
+                          invalidateCache('/admin/ai');
+                          setModal(null); setAiSelectedAgent(null);
+                          loadSectionData();
+                        }}
+                      >
+                        {ag.status === 'ACTIVE' ? '⏸️ Désactiver' : '▶️ Activer'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </>
+            );
+          })()}
 
           {/* Blog Preview */}
           {modal === 'blog-preview' && blogPreview && (

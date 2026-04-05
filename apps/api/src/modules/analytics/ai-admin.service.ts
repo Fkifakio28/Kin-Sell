@@ -155,7 +155,7 @@ export async function toggleAgent(agentName: string, enabled: boolean) {
   if (!agent) {
     // Créer l'agent s'il n'existe pas
     return prisma.aiAgent.create({
-      data: { name: agentName, domain: "auto", enabled, description: `Agent ${agentName}` },
+      data: { name: agentName, slug: agentName.toLowerCase().replace(/[^a-z0-9]+/g, '-'), domain: "auto", enabled, description: `Agent ${agentName}` },
     });
   }
   return prisma.aiAgent.update({
@@ -168,7 +168,7 @@ export async function updateAgentConfig(agentName: string, config: Record<string
   const agent = await prisma.aiAgent.findFirst({ where: { name: agentName } });
   if (!agent) {
     return prisma.aiAgent.create({
-      data: { name: agentName, domain: "auto", config: config as any, description: `Agent ${agentName}` },
+      data: { name: agentName, slug: agentName.toLowerCase().replace(/[^a-z0-9]+/g, '-'), domain: "auto", config: config as any, description: `Agent ${agentName}` },
     });
   }
   // Merge existing config with new values
@@ -363,7 +363,7 @@ export async function seedDefaultAgents(): Promise<void> {
   for (const agent of defaults) {
     const existing = await prisma.aiAgent.findFirst({ where: { name: agent.name } });
     if (!existing) {
-      await prisma.aiAgent.create({ data: { ...agent, config: agent.config } });
+      await prisma.aiAgent.create({ data: { ...agent, slug: agent.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'), config: agent.config } });
     }
   }
 }

@@ -238,11 +238,76 @@ export type AdminRanking = {
 export type AdminAiAgent = {
   id: string;
   name: string;
+  slug: string;
   domain: string;
+  type: string;
   description: string | null;
   action: string | null;
+  icon: string;
+  version: string;
+  status: string;
   level: string;
   enabled: boolean;
+  config: AiAgentConfig | null;
+  lastActiveAt: string | null;
+  lastError: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AiAgentConfig = {
+  mission?: string;
+  doesNot?: string;
+  zones?: string[];
+  targets?: string[];
+  uiEntryPoints?: string[];
+  interventionType?: string;
+  requiredPlan?: string;
+  premiumOptions?: string[];
+  dataUsed?: { read?: string[]; generated?: string[]; suggested?: string[]; actionable?: string[] };
+  outputs?: string[];
+  subFunctions?: string[];
+  [key: string]: unknown;
+};
+
+export type AiAgentDetail = AdminAiAgent & {
+  stats: {
+    totalUsage: number;
+    todayUsage: number;
+    weekUsage: number;
+    monthUsage: number;
+    successRate: number;
+    errorRate: number;
+  };
+  recentLogs: AiLogEntry[];
+  topUsers: { userId: string; displayName: string; role: string; usageCount: number }[];
+};
+
+export type AiLogEntry = {
+  id: string;
+  actionType: string;
+  targetUserId: string | null;
+  targetUserName: string | null;
+  targetUserRole: string | null;
+  decision: string;
+  reasoning: string | null;
+  success: boolean;
+  metadata: unknown;
+  createdAt: string;
+};
+
+export type AiManagementStats = {
+  total: number;
+  active: number;
+  inactive: number;
+  maintenance: number;
+  paused: number;
+  errors: number;
+  linkedToPlans: number;
+  accountsUsingAi: number;
+  totalUsage: number;
+  weekUsage: number;
+  systemStatus: 'active' | 'degraded' | 'offline';
 };
 
 export type AdminCurrencyRate = {
@@ -480,9 +545,17 @@ export const admin = {
   deleteAdOffer: (id: string) =>
     request<{ success: boolean }>(`/admin/ads/${encodeURIComponent(id)}`, { method: "DELETE" }),
 
-  // AI Agents
-  aiAgents: () => request<AdminAiAgent[]>("/admin/ai-agents"),
-  updateAiAgent: (id: string, body: { enabled?: boolean; level?: string }) =>
+  // AI Agents — Centre de pilotage
+  aiAgents: (params?: { status?: string; domain?: string; type?: string }) =>
+    request<AdminAiAgent[]>("/admin/ai-agents", { params: params as Record<string, string | number | undefined> }),
+  aiAgentStats: () => request<AiManagementStats>("/admin/ai-agents/stats"),
+  aiAgentDetail: (id: string) => request<AiAgentDetail>(`/admin/ai-agents/${encodeURIComponent(id)}`),
+  aiAgentLogs: (id: string, params?: { page?: number; limit?: number; success?: string; actionType?: string }) =>
+    request<{ logs: AiLogEntry[]; total: number; page: number; totalPages: number }>(
+      `/admin/ai-agents/${encodeURIComponent(id)}/logs`,
+      { params: params as Record<string, string | number | undefined> }
+    ),
+  updateAiAgent: (id: string, body: { enabled?: boolean; level?: string; status?: string; name?: string; description?: string; icon?: string; version?: string; config?: Record<string, unknown> }) =>
     request<AdminAiAgent>(`/admin/ai-agents/${encodeURIComponent(id)}`, { method: "PATCH", body }),
 
   // Rankings

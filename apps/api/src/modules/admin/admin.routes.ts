@@ -262,12 +262,43 @@ router.delete("/ads/:id", asyncHandler(async (req: AuthenticatedRequest, res) =>
 }));
 
 // ════════════════════════════════════════════
-// 12. IA MANAGEMENT (SUPER_ADMIN only for toggle)
+// 12. IA MANAGEMENT — Centre de pilotage complet
 // ════════════════════════════════════════════
 
 router.get("/ai-agents", asyncHandler(async (req: AuthenticatedRequest, res) => {
   await checkPermission(req, "AI_MANAGEMENT");
-  const result = await adminService.listAiAgents();
+  const { status, domain, type } = z.object({
+    status: z.string().optional(),
+    domain: z.string().optional(),
+    type: z.string().optional(),
+  }).parse(req.query);
+  const result = await adminService.listAiAgents({ status, domain, type });
+  res.json(result);
+}));
+
+router.get("/ai-agents/stats", asyncHandler(async (req: AuthenticatedRequest, res) => {
+  await checkPermission(req, "AI_MANAGEMENT");
+  const result = await adminService.getAiManagementStats();
+  res.json(result);
+}));
+
+router.get("/ai-agents/:id", asyncHandler(async (req: AuthenticatedRequest, res) => {
+  await checkPermission(req, "AI_MANAGEMENT");
+  const result = await adminService.getAiAgentDetail(req.params.id);
+  res.json(result);
+}));
+
+router.get("/ai-agents/:id/logs", asyncHandler(async (req: AuthenticatedRequest, res) => {
+  await checkPermission(req, "AI_MANAGEMENT");
+  // Get slug from the agent first
+  const agent = await adminService.getAiAgentDetail(req.params.id);
+  const { page, limit, success, actionType } = z.object({
+    page: z.coerce.number().optional(),
+    limit: z.coerce.number().optional(),
+    success: z.enum(["true", "false"]).optional().transform(v => v === undefined ? undefined : v === "true"),
+    actionType: z.string().optional(),
+  }).parse(req.query);
+  const result = await adminService.getAiAgentLogs(agent.slug, { page, limit, success, actionType });
   res.json(result);
 }));
 
@@ -278,6 +309,12 @@ router.patch("/ai-agents/:id", asyncHandler(async (req: AuthenticatedRequest, re
   const body = z.object({
     enabled: z.boolean().optional(),
     level: z.string().optional(),
+    status: z.string().optional(),
+    name: z.string().min(2).optional(),
+    description: z.string().optional(),
+    icon: z.string().optional(),
+    version: z.string().optional(),
+    config: z.record(z.unknown()).optional(),
   }).parse(req.body);
   const result = await adminService.updateAiAgent(req.params.id, body);
   res.json(result);

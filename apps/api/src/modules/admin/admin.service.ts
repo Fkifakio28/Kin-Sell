@@ -743,15 +743,195 @@ export const deleteAdOffer = async (id: string) => {
 };
 
 // ════════════════════════════════════════════
-// 12. GESTION DES IA
+// 12. GESTION DES IA — Centre de pilotage complet
 // ════════════════════════════════════════════
 
-export const listAiAgents = async () => {
-  return prisma.aiAgent.findMany({ orderBy: { createdAt: "desc" }, take: 50 });
+export const listAiAgents = async (filters?: { status?: string; domain?: string; type?: string }) => {
+  const where: Record<string, unknown> = {};
+  if (filters?.status) where.status = filters.status;
+  if (filters?.domain) where.domain = filters.domain;
+  if (filters?.type) where.type = filters.type;
+  return prisma.aiAgent.findMany({ where: where as any, orderBy: { createdAt: "asc" } });
 };
 
-export const updateAiAgent = async (id: string, data: { enabled?: boolean; level?: string }) => {
-  return prisma.aiAgent.update({ where: { id }, data: data as any });
+export const getAiAgentDetail = async (id: string) => {
+  const agent = await prisma.aiAgent.findUnique({ where: { id } });
+  if (!agent) throw new HttpError(404, "Agent IA introuvable");
+
+  // Stats from AiAutonomyLog
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const weekStart = new Date(todayStart);
+  weekStart.setDate(weekStart.getDate() - 7);
+  const monthStart = new Date(todayStart);
+  monthStart.setDate(monthStart.getDate() - 30);
+
+  const [totalUsage, todayUsage, weekUsage, monthUsage, successCount, errorCount, recentLogs, topUsers] = await Promise.all([
+    prisma.aiAutonomyLog.count({ where: { agentName: agent.slug } }),
+    prisma.aiAutonomyLog.count({ where: { agentName: agent.slug, createdAt: { gte: todayStart } } }),
+    prisma.aiAutonomyLog.count({ where: { agentName: agent.slug, createdAt: { gte: weekStart } } }),
+    prisma.aiAutonomyLog.count({ where: { agentName: agent.slug, createdAt: { gte: monthStart } } }),
+    prisma.aiAutonomyLog.count({ where: { agentName: agent.slug, success: true } }),
+    prisma.aiAutonomyLog.count({ where: { agentName: agent.slug, success: false } }),
+    prisma.aiAutonomyLog.findMany({
+      where: { agentName: agent.slug },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+      include: { targetUser: { select: { id: true, role: true, profile: { select: { displayName: true, username: true } } } } },
+    }),
+    prisma.aiAutonomyLog.groupBy({
+      by: ["targetUserId"],
+      where: { agentName: agent.slug, targetUserId: { not: null } },
+      _count: { id: true },
+      orderBy: { _count: { id: "desc" } },
+      take: 10,
+    }),
+  ]);
+
+  // Resolve top user names
+  const topUserIds = topUsers.filter(u => u.targetUserId).map(u => u.targetUserId!);
+  const topUserProfiles = topUserIds.length > 0 ? await prisma.user.findMany({
+    where: { id: { in: topUserIds } },
+    select: { id: true, role: true, profile: { select: { displayName: true, username: true } } },
+  }) : [];
+  const userMap = new Map(topUserProfiles.map(u => [u.id, u]));
+
+  return {
+    ...agent,
+    stats: {
+      totalUsage,
+      todayUsage,
+      weekUsage,
+      monthUsage,
+      successRate: totalUsage > 0 ? Math.round((successCount / totalUsage) * 100) : 100,
+      errorRate: totalUsage > 0 ? Math.round((errorCount / totalUsage) * 100) : 0,
+    },
+    recentLogs: recentLogs.map(l => ({
+      id: l.id,
+      actionType: l.actionType,
+      targetUserId: l.targetUserId,
+      targetUserName: l.targetUser?.profile?.displayName ?? null,
+      targetUserRole: l.targetUser?.role ?? null,
+      decision: l.decision,
+      reasoning: l.reasoning,
+      success: l.success,
+      metadata: l.metadata,
+      createdAt: l.createdAt,
+    })),
+    topUsers: topUsers.map(u => ({
+      userId: u.targetUserId,
+      displayName: userMap.get(u.targetUserId!)?.profile?.displayName ?? "Inconnu",
+      role: userMap.get(u.targetUserId!)?.role ?? "USER",
+      usageCount: u._count.id,
+    })),
+  };
+};
+
+export const getAiManagementStats = async () => {
+  const agents = await prisma.aiAgent.findMany();
+  const totalLogs = await prisma.aiAutonomyLog.count();
+  const now = new Date();
+  const weekStart = new Date(now);
+  weekStart.setDate(weekStart.getDate() - 7);
+  const weekLogs = await prisma.aiAutonomyLog.count({ where: { createdAt: { gte: weekStart } } });
+
+  // Count unique users who have AI logs
+  const uniqueUsers = await prisma.aiAutonomyLog.groupBy({ by: ["targetUserId"], where: { targetUserId: { not: null } } });
+
+  const total = agents.length;
+  const active = agents.filter(a => a.status === "ACTIVE" && a.enabled).length;
+  const inactive = agents.filter(a => a.status === "INACTIVE" || !a.enabled).length;
+  const maintenance = agents.filter(a => a.status === "MAINTENANCE").length;
+  const paused = agents.filter(a => a.status === "PAUSED").length;
+  const errors = agents.filter(a => a.status === "ERROR").length;
+  const linkedToPlans = agents.filter(a => {
+    const cfg = a.config as Record<string, unknown> | null;
+    return cfg?.requiredPlan && cfg.requiredPlan !== "FREE";
+  }).length;
+
+  // Global system status
+  let systemStatus: "active" | "degraded" | "offline" = "active";
+  if (errors > 0 || maintenance > 0) systemStatus = "degraded";
+  if (active === 0) systemStatus = "offline";
+
+  return {
+    total, active, inactive, maintenance, paused, errors,
+    linkedToPlans,
+    accountsUsingAi: uniqueUsers.length,
+    totalUsage: totalLogs,
+    weekUsage: weekLogs,
+    systemStatus,
+  };
+};
+
+export const getAiAgentLogs = async (agentSlug: string, params?: { page?: number; limit?: number; success?: boolean; actionType?: string }) => {
+  const page = params?.page ?? 1;
+  const limit = params?.limit ?? 20;
+  const where: Record<string, unknown> = { agentName: agentSlug };
+  if (params?.success !== undefined) where.success = params.success;
+  if (params?.actionType) where.actionType = params.actionType;
+
+  const [logs, total] = await Promise.all([
+    prisma.aiAutonomyLog.findMany({
+      where: where as any,
+      orderBy: { createdAt: "desc" },
+      skip: (page - 1) * limit,
+      take: limit,
+      include: { targetUser: { select: { id: true, role: true, profile: { select: { displayName: true, username: true } } } } },
+    }),
+    prisma.aiAutonomyLog.count({ where: where as any }),
+  ]);
+
+  return {
+    logs: logs.map(l => ({
+      id: l.id,
+      actionType: l.actionType,
+      targetUserId: l.targetUserId,
+      targetUserName: l.targetUser?.profile?.displayName ?? null,
+      targetUserRole: l.targetUser?.role ?? null,
+      decision: l.decision,
+      reasoning: l.reasoning,
+      success: l.success,
+      metadata: l.metadata,
+      createdAt: l.createdAt,
+    })),
+    total,
+    page,
+    totalPages: Math.ceil(total / limit),
+  };
+};
+
+export const updateAiAgent = async (id: string, data: {
+  enabled?: boolean;
+  level?: string;
+  status?: string;
+  name?: string;
+  description?: string;
+  icon?: string;
+  version?: string;
+  config?: Record<string, unknown>;
+}) => {
+  const updateData: Record<string, unknown> = {};
+  if (data.enabled !== undefined) updateData.enabled = data.enabled;
+  if (data.level !== undefined) updateData.level = data.level;
+  if (data.status !== undefined) updateData.status = data.status;
+  if (data.name !== undefined) updateData.name = data.name;
+  if (data.description !== undefined) updateData.description = data.description;
+  if (data.icon !== undefined) updateData.icon = data.icon;
+  if (data.version !== undefined) updateData.version = data.version;
+  if (data.config !== undefined) {
+    // Merge with existing config
+    const existing = await prisma.aiAgent.findUnique({ where: { id }, select: { config: true } });
+    const existingConfig = (existing?.config as Record<string, unknown>) ?? {};
+    updateData.config = { ...existingConfig, ...data.config };
+  }
+  // Sync enabled / status
+  if (data.status === "ACTIVE" && data.enabled === undefined) updateData.enabled = true;
+  if (data.status === "INACTIVE" && data.enabled === undefined) updateData.enabled = false;
+  if (data.enabled === false && data.status === undefined) updateData.status = "INACTIVE";
+  if (data.enabled === true && data.status === undefined) updateData.status = "ACTIVE";
+
+  return prisma.aiAgent.update({ where: { id }, data: updateData as any });
 };
 
 // ════════════════════════════════════════════
