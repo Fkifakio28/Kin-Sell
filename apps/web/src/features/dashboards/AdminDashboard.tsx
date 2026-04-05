@@ -1891,7 +1891,7 @@ export function AdminDashboard() {
                   <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: 'rgba(111,88,255,0.08)', color: 'var(--ad-text-2)' }}>{a.domain}</span>
                   <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: 'rgba(111,88,255,0.08)', color: 'var(--ad-text-2)', textTransform: 'capitalize' }}>{a.type}</span>
                   <span className="ad-badge">{a.level.replace('LEVEL_', 'Niv ')}</span>
-                  {cfg?.requiredPlan && <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, background: 'rgba(255,152,0,0.1)', color: '#ff9800' }}>💼 {String(cfg.requiredPlan)}</span>}
+                  {!!cfg?.requiredPlan && <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, background: 'rgba(255,152,0,0.1)', color: '#ff9800' }}>💼 {String(cfg.requiredPlan)}</span>}
                 </div>
 
                 {/* Status + actions */}
@@ -3033,8 +3033,8 @@ export function AdminDashboard() {
                     <span className="ad-badge">{ag.domain}</span>
                     <span className="ad-badge" style={{ textTransform: 'capitalize' }}>{ag.type}</span>
                     <span className="ad-badge">{ag.level.replace('LEVEL_', 'Niveau ')}</span>
-                    {cfg?.requiredPlan && <span style={{ fontSize: 11, padding: '3px 10px', borderRadius: 12, background: 'rgba(255,152,0,0.12)', color: '#ff9800', fontWeight: 600 }}>💼 Forfait min : {String(cfg.requiredPlan)}</span>}
-                    {cfg?.interventionType && <span className="ad-badge">{cfg.interventionType === 'visible' ? '👁 Visible' : cfg.interventionType === 'hidden' ? '🔒 Backend' : '🔄 Hybride'}</span>}
+                    {!!cfg?.requiredPlan && <span style={{ fontSize: 11, padding: '3px 10px', borderRadius: 12, background: 'rgba(255,152,0,0.12)', color: '#ff9800', fontWeight: 600 }}>💼 Forfait min : {String(cfg.requiredPlan)}</span>}
+                    {!!cfg?.interventionType && <span className="ad-badge">{cfg.interventionType === 'visible' ? '👁 Visible' : cfg.interventionType === 'hidden' ? '🔒 Backend' : '🔄 Hybride'}</span>}
                   </div>
                   <p style={{ color: 'var(--ad-text-2)', fontSize: 13, lineHeight: 1.6, marginBottom: 16 }}>{ag.description}</p>
 
@@ -3069,13 +3069,13 @@ export function AdminDashboard() {
                   {/* TAB: Mission */}
                   {aiDetailTab === 'mission' && (
                     <div>
-                      {cfg?.mission && (
+                      {!!cfg?.mission && (
                         <div className="ad-panel" style={{ marginBottom: 12, padding: 14 }}>
                           <h4 style={{ margin: '0 0 8px', fontSize: 14, color: 'var(--ad-text-1)' }}>🎯 Mission principale</h4>
                           <p style={{ margin: 0, fontSize: 13, color: 'var(--ad-text-2)', lineHeight: 1.6 }}>{String(cfg.mission)}</p>
                         </div>
                       )}
-                      {cfg?.doesNot && (
+                      {!!cfg?.doesNot && (
                         <div className="ad-panel" style={{ marginBottom: 12, padding: 14, borderLeft: '3px solid #ff9800' }}>
                           <h4 style={{ margin: '0 0 8px', fontSize: 14, color: '#ff9800' }}>🚫 Ce que cette IA ne fait PAS</h4>
                           <p style={{ margin: 0, fontSize: 13, color: 'var(--ad-text-2)', lineHeight: 1.6 }}>{String(cfg.doesNot)}</p>
