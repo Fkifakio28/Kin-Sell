@@ -273,6 +273,34 @@ router.get("/admins", asyncHandler(async (req: AuthenticatedRequest, res) => {
   res.json(result);
 }));
 
+router.post("/admins/create", asyncHandler(async (req: AuthenticatedRequest, res) => {
+  await checkPermission(req, "ADMINS");
+  // Only SUPER_ADMIN can create admins
+  if (req.auth!.role !== Role.SUPER_ADMIN) {
+    throw new HttpError(403, "Seul le Super Admin peut créer des comptes admin");
+  }
+  const body = z.object({
+    email: z.string().email(),
+    password: z.string().min(6),
+    displayName: z.string().min(2),
+    level: z.string().optional(),
+    permissions: z.array(z.string()).optional(),
+  }).parse(req.body);
+  const result = await adminService.createAdmin(body);
+
+  await prisma.auditLog.create({
+    data: {
+      actorUserId: req.auth!.userId,
+      action: "CREATE_ADMIN",
+      entityType: "User",
+      entityId: result.id,
+      metadata: { email: body.email, level: body.level ?? "LEVEL_5" },
+    },
+  });
+
+  res.json(result);
+}));
+
 router.patch("/admins/:id/profile", asyncHandler(async (req: AuthenticatedRequest, res) => {
   await checkPermission(req, "ADMINS");
   const body = z.object({
@@ -312,6 +340,20 @@ router.get("/admins/level-permissions/:level", asyncHandler(async (req: Authenti
   await checkPermission(req, "ADMINS");
   const perms = adminService.getDefaultPermissionsForLevel(req.params.level);
   res.json({ level: req.params.level, permissions: perms });
+}));
+
+// ════════════════════════════════════════════
+// 14b. APPELS DE SUSPENSION
+// ════════════════════════════════════════════
+
+router.get("/appeals", asyncHandler(async (req: AuthenticatedRequest, res) => {
+  await checkPermission(req, "USERS");
+  const params = z.object({
+    page: z.coerce.number().optional(),
+    limit: z.coerce.number().optional(),
+  }).parse(req.query);
+  const result = await adminService.listAppeals(params);
+  res.json(result);
 }));
 
 // ════════════════════════════════════════════

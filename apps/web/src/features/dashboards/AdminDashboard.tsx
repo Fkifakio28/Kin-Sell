@@ -33,6 +33,7 @@ import {
   type AdminAdvertisement,
   type AdminListingItem,
   type CategoryNegotiationRule,
+  type AdminAppeal,
 } from '../../lib/api-client';
 import { DashboardMessaging } from './DashboardMessaging';
 import { AdBanner } from '../../components/AdBanner';
@@ -45,12 +46,12 @@ type AdminSection =
   | 'reports' | 'feed' | 'donations' | 'ads' | 'advertisements' | 'listings' | 'negotiation-rules'
   | 'security' | 'antifraud' | 'security-ai' | 'ai-management'
   | 'rankings' | 'admins' | 'currency' | 'audit'
-  | 'settings' | 'messaging';
+  | 'settings' | 'messaging' | 'appeals';
 
 type ModalType =
   | null | 'user-detail' | 'user-role' | 'user-message' | 'user-suspend'
   | 'user-create' | 'report-detail' | 'blog-edit' | 'ad-edit'
-  | 'admin-edit' | 'currency-edit' | 'feed-moderate' | 'advertisement-edit';
+  | 'admin-edit' | 'admin-create' | 'currency-edit' | 'feed-moderate' | 'advertisement-edit';
 
 const ALL_PERMISSIONS = [
   'DASHBOARD', 'USERS', 'BLOG', 'TRANSACTIONS', 'REPORTS', 'FEED',
@@ -94,6 +95,7 @@ const SECTION_DEFS: Array<{
   { key: 'admins',        label: 'Administrateurs',    icon: '🔑', permission: 'ADMINS',        group: 'Outils' },
   { key: 'currency',      label: 'Devis',              icon: '💱', permission: 'CURRENCY',      group: 'Outils' },
   { key: 'audit',         label: "Journal d'audit",    icon: '📋', permission: 'AUDIT',         group: 'Outils' },
+  { key: 'appeals',       label: 'Appels',             icon: '📩', permission: 'USERS',         group: 'Général' },
   { key: 'settings',      label: 'Paramètres',         icon: '⚙️', permission: 'SETTINGS',      group: 'Système' },
   { key: 'messaging',     label: 'Messagerie',         icon: '💬', permission: 'MESSAGING',     group: 'Système' },
 ];
@@ -217,6 +219,15 @@ export function AdminDashboard() {
   const [editingAdmin, setEditingAdmin] = useState<AdminMember | null>(null);
   const [adminLevel, setAdminLevel] = useState('LEVEL_5');
   const [adminPermissions, setAdminPermissions] = useState<string[]>([]);
+
+  // Admin Create
+  const [createAdminForm, setCreateAdminForm] = useState({ email: '', password: '', displayName: '', level: 'LEVEL_5' });
+  const [createAdminPermissions, setCreateAdminPermissions] = useState<string[]>(LEVEL_DEFAULT_PERMS['LEVEL_5'] ?? ['DASHBOARD']);
+
+  // Appeals
+  const [appealsList, setAppealsList] = useState<AdminAppeal[]>([]);
+  const [appealsTotal, setAppealsTotal] = useState(0);
+  const [appealsPage, setAppealsPage] = useState(1);
 
   // Currency
   const [currencyRates, setCurrencyRates] = useState<AdminCurrencyRate[]>([]);
@@ -412,6 +423,12 @@ export function AdminDashboard() {
           setAdminsList(res);
           break;
         }
+        case 'appeals': {
+          const res = await admin.appeals({ page: appealsPage, limit: 20 });
+          setAppealsList(res.appeals);
+          setAppealsTotal(res.total);
+          break;
+        }
         case 'currency': {
           const res = await admin.currencyRates();
           setCurrencyRates(res);
@@ -454,7 +471,7 @@ export function AdminDashboard() {
     } catch (e: any) {
       setError(e?.message ?? 'Erreur de chargement');
     }
-  }, [activeSection, usersPage, usersSearch, usersRoleFilter, usersStatusFilter, blogPage, txPage, txStatusFilter, reportsPage, reportsStatusFilter, rankPeriod, rankType, auditPage, secEventsPage, fraudPage, fraudFilter, restrictionsPage, restrictionsFilter, mgLogsPage, mgVerdictFilter, feedPage, feedStatusFilter, feedSearch, donationsPage, donationsStatusFilter, donationsTypeFilter, advPage, advStatusFilter, advTypeFilter, advSearch, adminListingsPage, adminListingsStatusFilter, adminListingsTypeFilter, adminListingsSearch]);
+  }, [activeSection, usersPage, usersSearch, usersRoleFilter, usersStatusFilter, blogPage, txPage, txStatusFilter, reportsPage, reportsStatusFilter, rankPeriod, rankType, auditPage, secEventsPage, fraudPage, fraudFilter, restrictionsPage, restrictionsFilter, mgLogsPage, mgVerdictFilter, feedPage, feedStatusFilter, feedSearch, donationsPage, donationsStatusFilter, donationsTypeFilter, advPage, advStatusFilter, advTypeFilter, advSearch, adminListingsPage, adminListingsStatusFilter, adminListingsTypeFilter, adminListingsSearch, appealsPage]);
 
   useEffect(() => { if (isLoggedIn) loadSectionData(); }, [loadSectionData, isLoggedIn]);
 
@@ -609,6 +626,23 @@ export function AdminDashboard() {
       invalidateCache('/admin/admins');
       loadSectionData();
       setSuccess('Admin rétrogradé');
+    } catch (e: any) { setError(e?.message); } finally { setBusy(false); }
+  };
+
+  const handleCreateAdmin = async () => {
+    if (!createAdminForm.email || !createAdminForm.password || !createAdminForm.displayName) return;
+    setBusy(true);
+    try {
+      await admin.createAdmin({
+        ...createAdminForm,
+        permissions: createAdminPermissions,
+      });
+      setModal(null);
+      setCreateAdminForm({ email: '', password: '', displayName: '', level: 'LEVEL_5' });
+      setCreateAdminPermissions(LEVEL_DEFAULT_PERMS['LEVEL_5'] ?? ['DASHBOARD']);
+      invalidateCache('/admin/admins');
+      loadSectionData();
+      setSuccess('Compte admin créé avec succès');
     } catch (e: any) { setError(e?.message); } finally { setBusy(false); }
   };
 
@@ -1727,6 +1761,13 @@ export function AdminDashboard() {
     <>
       <div className="ad-panel-head">
         <h3 className="ad-panel-title">Administrateurs — {adminsList.length}</h3>
+        {isSuperAdmin && (
+          <button className="ad-btn ad-btn--primary" onClick={() => {
+            setCreateAdminForm({ email: '', password: '', displayName: '', level: 'LEVEL_5' });
+            setCreateAdminPermissions(LEVEL_DEFAULT_PERMS['LEVEL_5'] ?? ['DASHBOARD']);
+            setModal('admin-create');
+          }}>+ Créer un admin</button>
+        )}
       </div>
       <div className="ad-panel">
         <div className="ad-table-wrap">
@@ -1761,6 +1802,58 @@ export function AdminDashboard() {
             </tbody>
           </table>
         </div>
+      </div>
+    </>
+  );
+
+  const renderAppeals = () => (
+    <>
+      <div className="ad-panel-head">
+        <h3 className="ad-panel-title">Appels de suspension — {appealsTotal}</h3>
+      </div>
+      <div className="ad-panel">
+        {appealsList.length === 0 ? (
+          <div className="ad-empty"><div className="ad-empty-icon">📩</div><p className="ad-empty-msg">Aucun appel de suspension</p></div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {appealsList.map(a => (
+              <div key={a.id} style={{ padding: 16, background: 'var(--ad-card-bg, rgba(255,255,255,0.05))', borderRadius: 12, border: '1px solid var(--ad-border, rgba(255,255,255,0.08))' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+                  <div className="ad-table-avatar">{a.avatarUrl ? <img src={resolveMediaUrl(a.avatarUrl)} alt="" /> : initials(a.displayName)}</div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 600, color: 'var(--ad-text-1)' }}>{a.displayName}</div>
+                    <div style={{ fontSize: 12, color: 'var(--ad-text-3)' }}>{a.email}</div>
+                  </div>
+                  <span className={`ad-badge ${a.accountStatus === 'SUSPENDED' ? 'ad-badge--danger' : 'ad-badge--success'}`}>{a.accountStatus}</span>
+                  <span style={{ fontSize: 11, color: 'var(--ad-text-3)' }}>{new Date(a.submittedAt).toLocaleString('fr-FR')}</span>
+                </div>
+                <div style={{ padding: 12, background: 'rgba(111,88,255,0.06)', borderRadius: 8, color: 'var(--ad-text-2)', fontSize: 13, lineHeight: 1.5 }}>
+                  {a.message}
+                </div>
+                {a.accountStatus === 'SUSPENDED' && (
+                  <div style={{ marginTop: 10, display: 'flex', gap: 8 }}>
+                    <button className="ad-btn ad-btn--sm ad-btn--primary" onClick={async () => {
+                      setBusy(true);
+                      try {
+                        await admin.unsuspendUser(a.userId);
+                        invalidateCache('/admin/appeals');
+                        loadSectionData();
+                        setSuccess('Utilisateur réactivé');
+                      } catch (e: any) { setError(e?.message); } finally { setBusy(false); }
+                    }} disabled={busy}>✅ Lever la suspension</button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+        {appealsTotal > 20 && (
+          <div className="ad-pagination" style={{ marginTop: 16 }}>
+            <button className="ad-btn ad-btn--sm" disabled={appealsPage <= 1} onClick={() => setAppealsPage(p => p - 1)}>← Précédent</button>
+            <span style={{ fontSize: 12, color: 'var(--ad-text-3)' }}>Page {appealsPage} / {Math.ceil(appealsTotal / 20)}</span>
+            <button className="ad-btn ad-btn--sm" disabled={appealsPage >= Math.ceil(appealsTotal / 20)} onClick={() => setAppealsPage(p => p + 1)}>Suivant →</button>
+          </div>
+        )}
       </div>
     </>
   );
@@ -2168,6 +2261,7 @@ export function AdminDashboard() {
       case 'ai-management': return renderAiManagement();
       case 'rankings': return renderRankings();
       case 'admins': return renderAdmins();
+      case 'appeals': return renderAppeals();
       case 'currency': return renderCurrency();
       case 'audit': return renderAudit();
       case 'settings': return renderSettings();
@@ -2514,6 +2608,58 @@ export function AdminDashboard() {
               <div className="ad-modal-footer">
                 <button className="ad-btn" onClick={() => setModal(null)}>Annuler</button>
                 <button className="ad-btn ad-btn--primary" onClick={handleSaveAdminProfile} disabled={busy}>{busy ? '…' : 'Sauvegarder'}</button>
+              </div>
+            </>
+          )}
+
+          {/* Admin create */}
+          {modal === 'admin-create' && (
+            <>
+              <div className="ad-modal-head">
+                <h2 className="ad-modal-title">Créer un compte admin</h2>
+                <button className="ad-modal-close" onClick={() => setModal(null)}>✕</button>
+              </div>
+              <div className="ad-modal-body">
+                <div className="ad-field">
+                  <label className="ad-label">Email</label>
+                  <input className="ad-input" type="email" value={createAdminForm.email} onChange={e => setCreateAdminForm(f => ({ ...f, email: e.target.value }))} placeholder="admin@example.com" />
+                </div>
+                <div className="ad-field">
+                  <label className="ad-label">Mot de passe</label>
+                  <input className="ad-input" type="password" value={createAdminForm.password} onChange={e => setCreateAdminForm(f => ({ ...f, password: e.target.value }))} placeholder="Min. 6 caractères" />
+                </div>
+                <div className="ad-field">
+                  <label className="ad-label">Nom d'affichage</label>
+                  <input className="ad-input" value={createAdminForm.displayName} onChange={e => setCreateAdminForm(f => ({ ...f, displayName: e.target.value }))} placeholder="Prénom Nom" />
+                </div>
+                <div className="ad-field">
+                  <label className="ad-label">Niveau d'accréditation</label>
+                  <select className="ad-select" value={createAdminForm.level} onChange={e => { setCreateAdminForm(f => ({ ...f, level: e.target.value })); setCreateAdminPermissions(LEVEL_DEFAULT_PERMS[e.target.value] ?? ['DASHBOARD']); }}>
+                    <option value="LEVEL_1">Niveau 1 — Chef Admin</option>
+                    <option value="LEVEL_2">Niveau 2 — Admin Sécurité</option>
+                    <option value="LEVEL_3">Niveau 3 — Admin Opérationnel</option>
+                    <option value="LEVEL_4">Niveau 4 — Modérateur</option>
+                    <option value="LEVEL_5">Niveau 5 — Observateur</option>
+                  </select>
+                </div>
+                <div className="ad-field">
+                  <label className="ad-label">Permissions</label>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                    {ALL_PERMISSIONS.map(p => (
+                      <label key={p} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer' }}>
+                        <input type="checkbox" className="ad-checkbox" checked={createAdminPermissions.includes(p)} onChange={e => {
+                          if (e.target.checked) setCreateAdminPermissions(prev => [...prev, p]);
+                          else setCreateAdminPermissions(prev => prev.filter(x => x !== p));
+                        }} />
+                        {p}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div className="ad-modal-footer">
+                <button className="ad-btn" onClick={() => setModal(null)}>Annuler</button>
+                <button className="ad-btn ad-btn--primary" onClick={handleCreateAdmin} disabled={busy || !createAdminForm.email || !createAdminForm.password || !createAdminForm.displayName}>{busy ? '…' : 'Créer'}</button>
               </div>
             </>
           )}

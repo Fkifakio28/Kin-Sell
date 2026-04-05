@@ -1264,3 +1264,86 @@ export const getLockedCategories = async (): Promise<string[]> => {
   });
   return rules.map((r) => r.category);
 };
+
+// ════════════════════════════════════════════
+// APPELS DE SUSPENSION
+// ════════════════════════════════════════════
+
+export const listAppeals = async (params: { page?: number; limit?: number }) => {
+  const page = params.page ?? 1;
+  const limit = Math.min(params.limit ?? 20, 100);
+  const skip = (page - 1) * limit;
+
+  const where = { action: "SUSPENSION_APPEAL_SUBMITTED" as any };
+
+  const [total, logs] = await Promise.all([
+    prisma.auditLog.count({ where }),
+    prisma.auditLog.findMany({
+      where,
+      include: { actor: { include: { profile: true } } },
+      orderBy: { createdAt: "desc" },
+      skip,
+      take: limit,
+    }),
+  ]);
+
+  return {
+    total,
+    page,
+    totalPages: Math.max(1, Math.ceil(total / limit)),
+    appeals: logs.map((l) => ({
+      id: l.id,
+      userId: l.actorUserId,
+      displayName: l.actor?.profile?.displayName ?? "—",
+      email: l.actor?.email ?? "—",
+      avatarUrl: l.actor?.profile?.avatarUrl ?? null,
+      accountStatus: l.actor?.accountStatus ?? "UNKNOWN",
+      message: (l.metadata as any)?.message ?? "",
+      submittedAt: (l.metadata as any)?.submittedAt ?? l.createdAt.toISOString(),
+      createdAt: l.createdAt.toISOString(),
+    })),
+  };
+};
+
+// ════════════════════════════════════════════
+// CREATION ADMIN (avec profil)
+// ════════════════════════════════════════════
+
+export const createAdmin = async (data: {
+  email: string;
+  password: string;
+  displayName: string;
+  level?: string;
+  permissions?: string[];
+}) => {
+  const existing = await prisma.user.findUnique({ where: { email: data.email } });
+  if (existing) throw new HttpError(409, "Un compte avec cet email existe déjà");
+
+  const hash = await hashPassword(data.password);
+  const level = data.level ?? "LEVEL_5";
+  const permissions = data.permissions ?? getDefaultPermissionsForLevel(level);
+
+  const user = await prisma.user.create({
+    data: {
+      email: data.email,
+      passwordHash: hash,
+      role: "ADMIN",
+      profile: {
+        create: { displayName: data.displayName },
+      },
+      adminProfile: {
+        create: { level: level as any, permissions: permissions as any },
+      },
+    },
+    include: { profile: true, adminProfile: true },
+  });
+
+  return {
+    id: user.id,
+    email: user.email,
+    role: user.role,
+    displayName: user.profile?.displayName,
+    level: user.adminProfile?.level,
+    permissions: user.adminProfile?.permissions,
+  };
+};

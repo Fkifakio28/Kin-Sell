@@ -240,6 +240,18 @@ export type AdminMe = {
   permissions: string[];
 };
 
+export type AdminAppeal = {
+  id: string;
+  userId: string;
+  displayName: string;
+  email: string;
+  avatarUrl: string | null;
+  accountStatus: string;
+  message: string;
+  submittedAt: string;
+  createdAt: string;
+};
+
 /* ── MessageGuard AI Types ── */
 export type MessageGuardLogEntry = {
   id: string;
@@ -548,4 +560,12 @@ export const admin = {
     request<CategoryNegotiationRule[]>("/admin/negotiation-rules"),
   toggleCategoryNegotiation: (category: string, locked: boolean) =>
     request<unknown>("/admin/negotiation-rules/toggle", { method: "POST", body: { category, locked } }),
+
+  // Appeals
+  appeals: (params?: { page?: number; limit?: number }) =>
+    request<{ total: number; page: number; totalPages: number; appeals: AdminAppeal[] }>("/admin/appeals", { params: params as Record<string, string | number | undefined> }),
+
+  // Create admin
+  createAdmin: (body: { email: string; password: string; displayName: string; level?: string; permissions?: string[] }) =>
+    request<{ id: string; email: string; role: string; displayName: string; level: string; permissions: string[] }>("/admin/admins/create", { method: "POST", body }),
 };
