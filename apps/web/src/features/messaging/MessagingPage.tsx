@@ -501,11 +501,19 @@ export function MessagingPage() {
     const handleNewMessage = (data: { message: ChatMessage }) => {
       const msg = data.message as ChatMessage;
       setMessages((prev) => prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]);
-      setConversations((prev) =>
-        prev.map((c) =>
-          c.id === msg.conversationId ? { ...c, messages: [msg], updatedAt: msg.createdAt, unreadCount: c.id === activeConv?.id ? c.unreadCount : (c.unreadCount ?? 0) + 1 } : c
-        ).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
-      );
+      setConversations((prev) => {
+        const exists = prev.some((c) => c.id === msg.conversationId);
+        if (exists) {
+          return prev.map((c) =>
+            c.id === msg.conversationId ? { ...c, messages: [msg], updatedAt: msg.createdAt, unreadCount: c.id === activeConv?.id ? c.unreadCount : (c.unreadCount ?? 0) + 1 } : c
+          ).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+        }
+        // New conversation not in list — fetch it from API
+        messaging.conversations().then((res) => {
+          setConversations(res.conversations ?? res);
+        }).catch(() => {});
+        return prev;
+      });
       if (msg.conversationId === activeConv?.id && msg.senderId !== myId) {
         void messaging.markRead(msg.conversationId);
         emit("conversation:read", { conversationId: msg.conversationId });

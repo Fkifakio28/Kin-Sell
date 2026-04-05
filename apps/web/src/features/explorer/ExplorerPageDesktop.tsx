@@ -438,7 +438,10 @@ export function ExplorerPageDesktop() {
 
     void loadArticles();
 
-    return () => { cancelled = true; };
+    // Auto-refresh results every 60s
+    const poll = setInterval(() => { void loadArticles(); }, 60_000);
+
+    return () => { cancelled = true; clearInterval(poll); };
   }, [formatPriceLabelFromUsdCents, debouncedQuery]);
 
   return (

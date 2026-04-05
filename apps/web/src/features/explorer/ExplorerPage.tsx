@@ -421,7 +421,8 @@ function ExplorerPageMobile() {
       } catch { if (!cancelled) setLiveArticles([]); } finally { if (!cancelled) setIsLoadingArticles(false); }
     };
     void load();
-    return () => { cancelled = true; };
+    const poll = setInterval(() => { void load(); }, 60_000);
+    return () => { cancelled = true; clearInterval(poll); };
   }, [formatPriceLabelFromUsdCents, debouncedQuery]);
 
   /* ── Render ── */

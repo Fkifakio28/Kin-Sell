@@ -787,7 +787,7 @@ function SoKinPageMobile() {
   const { t } = useLocaleCurrency();
   const { effectiveCountry, getCountryConfig } = useMarketPreference();
   const defaultCity = getCountryConfig(effectiveCountry).defaultCity;
-  const { on, off } = useSocket();
+  const { on, off, isConnected } = useSocket();
   const isMobile = useIsMobile();
   const scrollDir = useScrollDirection();
 
@@ -893,6 +893,13 @@ function SoKinPageMobile() {
     obs.observe(sentinelRef.current);
     return () => obs.disconnect();
   }, [hasMore, loadFeed]);
+
+  // Polling fallback when socket is offline
+  useEffect(() => {
+    if (isConnected) return; // socket handles live updates
+    const poll = setInterval(() => { void loadFeed(true); }, 30_000);
+    return () => clearInterval(poll);
+  }, [isConnected, loadFeed]);
 
 
 

@@ -192,24 +192,21 @@ export function HomePage() {
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
-      try {
-        const [shopsData, profilesData, feedData, blogData] = await Promise.all([
-          explorerApi.shops({ limit: 3, city: defaultCity, country: effectiveCountry }),
-          explorerApi.profiles({ limit: 3, city: defaultCity, country: effectiveCountry }),
-          sokinApi.publicFeed({ limit: 4, city: defaultCity, country: effectiveCountry }),
-          blogApi.publicPosts({ limit: 3 }),
-        ]);
-        if (!cancelled) {
-          setTrendingShops(shopsData);
-          setTrendingProfiles(profilesData);
-          setSokinFeed(feedData.posts);
-          setBlogPosts(blogData.posts);
-          setSokinIndex(0);
-        }
-      } catch { /* API indisponible */ }
+      const [shopsRes, profilesRes, feedRes, blogRes] = await Promise.allSettled([
+        explorerApi.shops({ limit: 3, city: defaultCity, country: effectiveCountry }),
+        explorerApi.profiles({ limit: 3, city: defaultCity, country: effectiveCountry }),
+        sokinApi.publicFeed({ limit: 4, city: defaultCity, country: effectiveCountry }),
+        blogApi.publicPosts({ limit: 3 }),
+      ]);
+      if (cancelled) return;
+      if (shopsRes.status === 'fulfilled') setTrendingShops(shopsRes.value);
+      if (profilesRes.status === 'fulfilled') setTrendingProfiles(profilesRes.value);
+      if (feedRes.status === 'fulfilled') { setSokinFeed(feedRes.value.posts); setSokinIndex(0); }
+      if (blogRes.status === 'fulfilled') setBlogPosts(blogRes.value.posts);
     };
     void load();
-    return () => { cancelled = true; };
+    const poll = setInterval(() => { void load(); }, 120_000); // refresh sidebar every 2min
+    return () => { cancelled = true; clearInterval(poll); };
   }, [defaultCity, effectiveCountry]);
 
   // Load cart, seller stats, last buyer order
@@ -262,7 +259,8 @@ export function HomePage() {
       } catch { /* ignore */ }
     };
     void loadDash();
-    return () => { cancelled = true; };
+    const poll = setInterval(() => { void loadDash(); }, 60_000); // refresh every 60s
+    return () => { cancelled = true; clearInterval(poll); };
   }, [isLoggedIn]);
 
   useEffect(() => {

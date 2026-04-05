@@ -90,7 +90,8 @@ export function CartPage() {
     };
 
     void load();
-    return () => { cancelled = true; };
+    const poll = setInterval(() => { void load(); }, 30_000); // refresh cart every 30s
+    return () => { cancelled = true; clearInterval(poll); };
   }, [isLoggedIn, authLoading]);
 
   useEffect(() => {
@@ -151,6 +152,13 @@ export function CartPage() {
     if (busy) return;
     setBusy(true);
     setError(null);
+    // Optimistic update — instant UI feedback
+    const prevCart = cart;
+    if (next < 1) {
+      setCart((c) => c ? { ...c, items: c.items.filter((i) => i.id !== itemId) } : c);
+    } else {
+      setCart((c) => c ? { ...c, items: c.items.map((i) => i.id === itemId ? { ...i, quantity: next } : i) } : c);
+    }
     try {
       if (next < 1) {
         const updated = await orders.removeCartItem(itemId);
@@ -160,11 +168,12 @@ export function CartPage() {
         setCart(updated);
       }
     } catch (err) {
+      setCart(prevCart); // rollback on error
       setError(err instanceof ApiError ? ((err.data as { error?: string })?.error ?? t('cart.qtyError')) : t('cart.qtyError'));
     } finally {
       setBusy(false);
     }
-  }, [busy]);
+  }, [busy, cart]);
 
   const handlePriceSave = useCallback(async (itemId: string) => {
     const raw = draftPrices[itemId];
