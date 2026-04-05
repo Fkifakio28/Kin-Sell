@@ -8,6 +8,7 @@ import { asyncHandler } from "../../shared/utils/async-handler.js";
 import { getBasicInsights, getDeepInsights } from "./analytics-ai.service.js";
 import { runDiagnostic } from "./ai-orchestrator.service.js";
 import * as aiMemory from "./ai-memory.service.js";
+import * as aiTrigger from "./ai-trigger.service.js";
 import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
 
@@ -111,6 +112,106 @@ router.get(
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     const trends = await aiMemory.analyzeTrends(req.auth!.userId);
     res.json(trends);
+  })
+);
+
+// ══════════════════════════════════════════════
+// AI RECOMMENDATIONS — Smart suggestions
+// ══════════════════════════════════════════════
+
+/**
+ * GET /analytics/ai/recommendations
+ * Récupère les recommandations actives pour l'utilisateur connecté
+ */
+router.get(
+  "/ai/recommendations",
+  requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const recs = await aiTrigger.getActiveRecommendations(req.auth!.userId);
+    res.json(recs);
+  })
+);
+
+/**
+ * POST /analytics/ai/recommendations/:id/dismiss
+ * Fermer une recommandation
+ */
+router.post(
+  "/ai/recommendations/:id/dismiss",
+  requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    await aiTrigger.dismissRecommendation(req.auth!.userId, req.params.id);
+    res.json({ ok: true });
+  })
+);
+
+/**
+ * POST /analytics/ai/recommendations/:id/click
+ * L'utilisateur a cliqué sur la recommandation
+ */
+router.post(
+  "/ai/recommendations/:id/click",
+  requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    await aiTrigger.clickRecommendation(req.auth!.userId, req.params.id);
+    res.json({ ok: true });
+  })
+);
+
+/**
+ * POST /analytics/ai/recommendations/:id/accept
+ * L'utilisateur accepte la recommandation
+ */
+router.post(
+  "/ai/recommendations/:id/accept",
+  requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    await aiTrigger.acceptRecommendation(req.auth!.userId, req.params.id);
+    res.json({ ok: true });
+  })
+);
+
+// ══════════════════════════════════════════════
+// AI TRIALS — Périodes d'essai
+// ══════════════════════════════════════════════
+
+/**
+ * GET /analytics/ai/trials
+ * Mes essais IA (proposés, actifs, expirés)
+ */
+router.get(
+  "/ai/trials",
+  requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const trials = await aiTrigger.getMyTrials(req.auth!.userId);
+    res.json(trials);
+  })
+);
+
+/**
+ * POST /analytics/ai/trials/:id/activate
+ * Activer un essai proposé
+ */
+router.post(
+  "/ai/trials/:id/activate",
+  requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const result = await aiTrigger.activateTrial(req.auth!.userId, req.params.id);
+    if (!result) throw new HttpError(404, "Essai introuvable ou déjà activé.");
+    res.json(result);
+  })
+);
+
+/**
+ * POST /analytics/ai/trials/:id/decline
+ * Refuser un essai
+ */
+router.post(
+  "/ai/trials/:id/decline",
+  requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    await aiTrigger.declineTrial(req.auth!.userId, req.params.id);
+    res.json({ ok: true });
   })
 );
 

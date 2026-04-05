@@ -7,10 +7,11 @@ import { useLocaleCurrency } from '../../app/providers/LocaleCurrencyProvider';
 import { compressAndEncodeMedia } from '../../utils/media-compress';
 import { DashboardMessaging } from './DashboardMessaging';
 import {
-  ApiError, auth as authApi, businesses, listings, orders, billing, messaging, sokin, invalidateCache, analyticsAi,
+  ApiError, auth as authApi, businesses, listings, orders, billing, messaging, sokin, invalidateCache, analyticsAi, aiRecommendations, aiTrials,
   type BusinessAccount, type MyListing, type MyListingsStats,
   type OrderSummary, type BillingPlanSummary, type OrderStatus,
   type SoKinApiPost, type BasicInsights, type DeepInsights,
+  type AiRecommendation, type AiTrial,
 } from '../../lib/api-client';
 import { OrderValidationQrModal } from '../../components/OrderValidationQrModal';
 import { useSocket } from '../../hooks/useSocket';
@@ -23,7 +24,7 @@ type BizSection =
   | 'dashboard' | 'boutique' | 'produits' | 'services'
   | 'commandes' | 'clients' | 'messages' | 'contacts'
   | 'avis' | 'sokin' | 'analytics'
-  | 'publicite' | 'parametres';
+  | 'publicite' | 'kinsell' | 'parametres';
 
 type AbonnementTier = 'based' | 'medium' | 'premium';
 
@@ -106,6 +107,9 @@ export function BusinessDashboard() {
   const [bizAiAdviceEnabled, setBizAiAdviceEnabled] = useState(() => localStorage.getItem(SK_BIZ_AI_ADVICE) !== 'off');
   const [bizAiAutoNegoEnabled, setBizAiAutoNegoEnabled] = useState(() => localStorage.getItem(SK_BIZ_AI_AUTO_NEGO) === 'on');
   const [bizAiCommandeEnabled, setBizAiCommandeEnabled] = useState(() => localStorage.getItem(SK_BIZ_AI_COMMANDE) !== 'off');
+  const [ksRecommendations, setKsRecommendations] = useState<AiRecommendation[]>([]);
+  const [ksTrials, setKsTrials] = useState<AiTrial[]>([]);
+  const [ksLoading, setKsLoading] = useState(false);
   const [validationCodeBusyId, setValidationCodeBusyId] = useState<string | null>(null);
   const [sellerValidationQr, setSellerValidationQr] = useState<{ orderId: string; code: string } | null>(null);
 
@@ -213,6 +217,7 @@ export function BusinessDashboard() {
     { key: 'sokin',        labelKey: 'biz.navSokin',       icon: '✦' },
     { key: 'analytics',    labelKey: 'biz.navAnalytics',   icon: '📊' },
     { key: 'publicite',    labelKey: 'biz.navPublicite',   icon: '🎯' },
+    { key: 'kinsell',      labelKey: 'Kin-Sell',            icon: '🧠' },
     { key: 'parametres',   labelKey: 'biz.navParametres',  icon: '⚙' },
   ];
 
@@ -388,6 +393,20 @@ export function BusinessDashboard() {
     void load();
     return () => { cancelled = true; };
   }, [activeSection, bizHasAnalytics, bizHasPremium, bizBasicInsights]);
+
+  // ── Kin-Sell tab data ──
+  useEffect(() => {
+    if (activeSection !== 'kinsell') return;
+    let cancelled = false;
+    setKsLoading(true);
+    Promise.all([aiRecommendations.getActive(), aiTrials.getMyTrials()])
+      .then(([recs, trials]) => {
+        if (!cancelled) { setKsRecommendations(recs); setKsTrials(trials); }
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setKsLoading(false); });
+    return () => { cancelled = true; };
+  }, [activeSection]);
 
   /* ── AI plan gating for business ── */
   const bizHasIaMarchandPlan = useMemo(() => {
@@ -2359,6 +2378,186 @@ export function BusinessDashboard() {
               autoNegoActive={bizAutoNegoActive}
             />
 
+          </div>
+        )}
+
+        {/* ═══════════════  ONGLET KIN-SELL (BUSINESS)  ═══════════════ */}
+        {activeSection === 'kinsell' && (
+          <div className="ud-section animate-fade-in">
+            <section className="ud-glass-panel">
+              <div className="ud-panel-head">
+                <h2 className="ud-panel-title">🧠 Kin-Sell</h2>
+              </div>
+
+              {/* Forfait actif */}
+              <div style={{ background: 'rgba(111,88,255,0.06)', borderRadius: 12, padding: 16, marginBottom: 16, border: '1px solid rgba(111,88,255,0.12)' }}>
+                <h3 style={{ margin: '0 0 8px', fontSize: 15, color: 'var(--color-text-primary, #fff)' }}>📋 Forfait Business</h3>
+                {myPlan ? (
+                  <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+                    <div>
+                      <span style={{ fontSize: 22, fontWeight: 700, color: '#6f58ff' }}>{myPlan.planName}</span>
+                      <span style={{ fontSize: 12, color: 'var(--color-text-secondary, #aaa)', marginLeft: 8 }}>
+                        {myPlan.status === 'ACTIVE' ? '✅ Actif' : myPlan.status}
+                      </span>
+                    </div>
+                    {myPlan.priceUsdCents > 0 && (
+                      <span style={{ fontSize: 13, color: 'var(--color-text-secondary, #aaa)' }}>
+                        {(myPlan.priceUsdCents / 100).toFixed(2)}$/mois
+                      </span>
+                    )}
+                    <Link to="/pricing" style={{ fontSize: 12, color: '#6f58ff', fontWeight: 600, textDecoration: 'none' }}>
+                      {myPlan.planCode === 'STARTER' ? '🚀 Passer à Business/Scale' : '⚙ Gérer mon forfait'}
+                    </Link>
+                  </div>
+                ) : (
+                  <p style={{ color: 'var(--color-text-secondary, #aaa)', fontSize: 13 }}>
+                    Aucun forfait actif. <Link to="/pricing" style={{ color: '#6f58ff' }}>Voir les forfaits</Link>
+                  </p>
+                )}
+              </div>
+
+              {/* IA disponibles */}
+              <div style={{ marginBottom: 16 }}>
+                <h3 style={{ margin: '0 0 10px', fontSize: 15, color: 'var(--color-text-primary, #fff)' }}>🤖 IA disponibles</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 10 }}>
+                  {[
+                    { name: 'IA Marchande', icon: '🤝', desc: 'Négociation automatisée', active: bizAiAutoNegoEnabled, locked: !bizHasIaMarchandPlan },
+                    { name: 'IA Ads', icon: '📢', desc: 'Boost articles & boutique', active: bizAiAdviceEnabled, locked: false },
+                    { name: 'Kin-Sell Analytique', icon: '📊', desc: 'Analyses marché avancées', active: bizHasAnalytics, locked: !bizHasAnalytics },
+                    { name: 'IA Commande', icon: '📦', desc: 'Automatisation des ventes', active: bizAiCommandeEnabled, locked: !bizHasIaOrderPlan },
+                  ].map((ia) => (
+                    <div key={ia.name} style={{
+                      background: ia.locked ? 'rgba(255,255,255,0.02)' : 'rgba(111,88,255,0.05)',
+                      border: `1px solid ${ia.locked ? 'rgba(255,255,255,0.06)' : 'rgba(111,88,255,0.15)'}`,
+                      borderRadius: 10, padding: '12px 14px', opacity: ia.locked ? 0.6 : 1,
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                        <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text-primary, #fff)' }}>{ia.icon} {ia.name}</span>
+                        <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 6, background: ia.active && !ia.locked ? 'rgba(76,175,80,0.15)' : 'rgba(255,255,255,0.06)', color: ia.active && !ia.locked ? '#4caf50' : '#888' }}>
+                          {ia.locked ? '🔒 Forfait requis' : ia.active ? '✅ Active' : '⏸ Inactive'}
+                        </span>
+                      </div>
+                      <p style={{ margin: 0, fontSize: 12, color: 'var(--color-text-secondary, #aaa)' }}>{ia.desc}</p>
+                      {ia.locked && (
+                        <Link to="/pricing" style={{ fontSize: 11, color: '#6f58ff', marginTop: 4, display: 'inline-block' }}>Débloquer →</Link>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Essais IA */}
+              {ksTrials.filter(tr => tr.status === 'PROPOSED' || tr.status === 'ACTIVE').length > 0 && (
+                <div style={{ marginBottom: 16 }}>
+                  <h3 style={{ margin: '0 0 10px', fontSize: 15, color: 'var(--color-text-primary, #fff)' }}>🎁 Essais gratuits</h3>
+                  {ksTrials.filter(tr => tr.status === 'PROPOSED' || tr.status === 'ACTIVE').map((trial) => (
+                    <div key={trial.id} style={{
+                      background: trial.status === 'ACTIVE' ? 'rgba(76,175,80,0.08)' : 'rgba(255,152,0,0.08)',
+                      border: `1px solid ${trial.status === 'ACTIVE' ? 'rgba(76,175,80,0.2)' : 'rgba(255,152,0,0.2)'}`,
+                      borderRadius: 10, padding: 14, marginBottom: 8,
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--color-text-primary, #fff)' }}>
+                            Forfait {trial.planCode} — {trial.status === 'ACTIVE' ? '✅ En cours' : '⏳ Proposé'}
+                          </span>
+                          <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--color-text-secondary, #aaa)' }}>{trial.reason}</p>
+                          {trial.endsAt && trial.status === 'ACTIVE' && (
+                            <p style={{ margin: '4px 0 0', fontSize: 11, color: '#ff9800' }}>
+                              Expire le {new Date(trial.endsAt).toLocaleDateString('fr-FR')}
+                            </p>
+                          )}
+                        </div>
+                        {trial.status === 'PROPOSED' && (
+                          <button
+                            onClick={async () => {
+                              try {
+                                await aiTrials.activate(trial.id);
+                                const [recs, trials] = await Promise.all([aiRecommendations.getActive(), aiTrials.getMyTrials()]);
+                                setKsRecommendations(recs);
+                                setKsTrials(trials);
+                              } catch { /* silent */ }
+                            }}
+                            style={{ padding: '8px 16px', fontSize: 12, fontWeight: 600, border: 'none', borderRadius: 8, background: 'linear-gradient(135deg, #6f58ff, #9b7aff)', color: '#fff', cursor: 'pointer' }}
+                          >
+                            Activer l'essai
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Recommandations IA actives */}
+              <div style={{ marginBottom: 16 }}>
+                <h3 style={{ margin: '0 0 10px', fontSize: 15, color: 'var(--color-text-primary, #fff)' }}>💡 Recommandations</h3>
+                {ksLoading ? (
+                  <p style={{ color: 'var(--color-text-secondary, #aaa)', fontSize: 13 }}>Chargement…</p>
+                ) : ksRecommendations.length === 0 ? (
+                  <p style={{ color: 'var(--color-text-secondary, #aaa)', fontSize: 13, fontStyle: 'italic' }}>Aucune recommandation en cours. Vos IA travaillent en arrière-plan.</p>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {ksRecommendations.map((rec) => (
+                      <div key={rec.id} style={{
+                        background: 'rgba(111,88,255,0.04)',
+                        border: '1px solid rgba(111,88,255,0.1)',
+                        borderRadius: 10, padding: 14,
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                          <div style={{ flex: 1 }}>
+                            <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--color-text-primary, #fff)' }}>{rec.title}</span>
+                            <p style={{ margin: '4px 0 8px', fontSize: 12, color: 'var(--color-text-secondary, #aaa)', lineHeight: 1.5, whiteSpace: 'pre-line' }}>{rec.message}</p>
+                            <div style={{ display: 'flex', gap: 6 }}>
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    await aiRecommendations.accept(rec.id);
+                                    if (rec.actionType === 'ACTIVATE_TRIAL' && rec.actionTarget) {
+                                      await aiTrials.activate(rec.actionTarget);
+                                    }
+                                    navigate(rec.actionType === 'VIEW_ANALYTICS' ? '/business?tab=analytics' : '/pricing');
+                                  } catch { /* silent */ }
+                                }}
+                                style={{ padding: '6px 12px', fontSize: 11, fontWeight: 600, border: 'none', borderRadius: 6, background: 'linear-gradient(135deg, #6f58ff, #9b7aff)', color: '#fff', cursor: 'pointer' }}
+                              >
+                                {rec.actionType === 'BOOST_ARTICLE' ? 'Booster' : rec.actionType === 'ACTIVATE_TRIAL' ? 'Activer l\'essai' : rec.actionType === 'VIEW_ANALYTICS' ? 'Voir mes analyses' : 'Voir les forfaits'}
+                              </button>
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    await aiRecommendations.dismiss(rec.id);
+                                    setKsRecommendations(prev => prev.filter(r => r.id !== rec.id));
+                                  } catch { /* silent */ }
+                                }}
+                                style={{ padding: '6px 12px', fontSize: 11, border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, background: 'transparent', color: 'rgba(255,255,255,0.5)', cursor: 'pointer' }}
+                              >
+                                Ignorer
+                              </button>
+                            </div>
+                          </div>
+                          <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, background: 'rgba(111,88,255,0.1)', color: '#6f58ff', whiteSpace: 'nowrap', marginLeft: 8 }}>
+                            {rec.engineKey === 'ads' ? '📢 Ads' : rec.engineKey === 'analytics' ? '📊 Analytique' : rec.engineKey === 'order' ? '📦 Commande' : rec.engineKey === 'negotiation' ? '🤝 Marchand' : '🧠 IA'}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* CTA */}
+              <div style={{ textAlign: 'center', padding: '16px 0' }}>
+                <Link to="/pricing" style={{
+                  display: 'inline-block', padding: '10px 24px', borderRadius: 10,
+                  background: 'linear-gradient(135deg, #6f58ff, #9b7aff)', color: '#fff',
+                  fontWeight: 600, fontSize: 14, textDecoration: 'none',
+                  boxShadow: '0 4px 16px rgba(111,88,255,0.3)',
+                }}>
+                  🚀 Voir tous les forfaits Business
+                </Link>
+              </div>
+            </section>
           </div>
         )}
 

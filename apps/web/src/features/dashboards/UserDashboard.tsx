@@ -13,6 +13,10 @@ import {
   negotiations as negotiationsApi,
   orders,
   analyticsAi,
+  aiRecommendations,
+  aiTrials,
+  type AiRecommendation,
+  type AiTrial,
   type BillingPlanSummary,
   type BasicInsights,
   type DeepInsights,
@@ -64,6 +68,7 @@ type HubSection =
   | 'my-profile-page'
   | 'public-profile'
   | 'analytics'
+  | 'kinsell'
   | 'settings';
 
 type PublicListing = {
@@ -124,6 +129,7 @@ const SECTION_DEFS: Array<{ key: HubSection; labelKey: string; icon: string }> =
   { key: 'my-profile-page', labelKey: 'user.myProfile', icon: '🪪' },
   { key: 'public-profile', labelKey: 'user.publicProfile', icon: '👤' },
   { key: 'analytics', labelKey: 'user.analytics', icon: '📊' },
+  { key: 'kinsell', labelKey: 'Kin-Sell', icon: '🧠' },
   { key: 'settings', labelKey: 'user.settings', icon: '⚙' },
 ];
 
@@ -244,6 +250,10 @@ export function UserDashboard() {
   const [basicInsights, setBasicInsights] = useState<BasicInsights | null>(null);
   const [deepInsights, setDeepInsights] = useState<DeepInsights | null>(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  // ── Kin-Sell tab state ──
+  const [ksRecommendations, setKsRecommendations] = useState<AiRecommendation[]>([]);
+  const [ksTrials, setKsTrials] = useState<AiTrial[]>([]);
+  const [ksLoading, setKsLoading] = useState(false);
   // ── AI preferences (localStorage-persisted) ──
   const [aiAdviceEnabled, setAiAdviceEnabled] = useState(() => localStorage.getItem(SK_AI_ADVICE) !== 'off');
   const [aiAutoNegoEnabled, setAiAutoNegoEnabled] = useState(() => localStorage.getItem(SK_AI_AUTO_NEGO) === 'on');
@@ -526,6 +536,28 @@ export function UserDashboard() {
     void load();
     return () => { cancelled = true; };
   }, [activeSection, hasAnalytics, hasPremiumAnalytics, basicInsights]);
+
+  // ── Kin-Sell tab: load recommendations + trials ──
+  useEffect(() => {
+    if (activeSection !== 'kinsell') return;
+    let cancelled = false;
+    setKsLoading(true);
+    const load = async () => {
+      try {
+        const [recs, trials] = await Promise.all([
+          aiRecommendations.getActive(),
+          aiTrials.getMyTrials(),
+        ]);
+        if (!cancelled) {
+          setKsRecommendations(recs);
+          setKsTrials(trials);
+        }
+      } catch { /* silent */ }
+      finally { if (!cancelled) setKsLoading(false); }
+    };
+    void load();
+    return () => { cancelled = true; };
+  }, [activeSection]);
 
   useEffect(() => {
     if (!isLoggedIn || !user?.profile.username) {
@@ -3452,6 +3484,188 @@ export function UserDashboard() {
               hasPremiumAnalytics={hasPremiumAnalytics}
               formatMoney={formatMoneyFromUsdCents}
             />
+          </div>
+        )}
+
+        {/* ═══════════════  ONGLET KIN-SELL  ═══════════════ */}
+        {activeSection === 'kinsell' && (
+          <div className="ud-section animate-fade-in">
+            <section className="ud-glass-panel">
+              <div className="ud-panel-head">
+                <h2 className="ud-panel-title">🧠 Kin-Sell</h2>
+              </div>
+
+              {/* Forfait actif */}
+              <div style={{ background: 'rgba(111,88,255,0.06)', borderRadius: 12, padding: 16, marginBottom: 16, border: '1px solid rgba(111,88,255,0.12)' }}>
+                <h3 style={{ margin: '0 0 8px', fontSize: 15, color: 'var(--color-text-primary, #fff)' }}>📋 Mon forfait</h3>
+                {loadingPlan ? (
+                  <p style={{ color: 'var(--color-text-secondary, #aaa)', fontSize: 13 }}>Chargement…</p>
+                ) : activePlan ? (
+                  <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+                    <div>
+                      <span style={{ fontSize: 22, fontWeight: 700, color: '#6f58ff' }}>{activePlan.planName}</span>
+                      <span style={{ fontSize: 12, color: 'var(--color-text-secondary, #aaa)', marginLeft: 8 }}>
+                        {activePlan.status === 'ACTIVE' ? '✅ Actif' : activePlan.status}
+                      </span>
+                    </div>
+                    {activePlan.priceUsdCents > 0 && (
+                      <span style={{ fontSize: 13, color: 'var(--color-text-secondary, #aaa)' }}>
+                        {(activePlan.priceUsdCents / 100).toFixed(2)}$/mois
+                      </span>
+                    )}
+                    <Link to="/pricing" style={{ fontSize: 12, color: '#6f58ff', fontWeight: 600, textDecoration: 'none' }}>
+                      {activePlan.planCode === 'FREE' || activePlan.planCode === 'STARTER' ? '🚀 Passer à un forfait supérieur' : '⚙ Gérer mon forfait'}
+                    </Link>
+                  </div>
+                ) : (
+                  <p style={{ color: 'var(--color-text-secondary, #aaa)', fontSize: 13 }}>
+                    Aucun forfait actif. <Link to="/pricing" style={{ color: '#6f58ff' }}>Voir les forfaits</Link>
+                  </p>
+                )}
+              </div>
+
+              {/* IA disponibles */}
+              <div style={{ marginBottom: 16 }}>
+                <h3 style={{ margin: '0 0 10px', fontSize: 15, color: 'var(--color-text-primary, #fff)' }}>🤖 IA disponibles</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 10 }}>
+                  {[
+                    { name: 'IA Marchande', icon: '🤝', desc: 'Aide à la négociation', active: true, locked: false },
+                    { name: 'IA Ads', icon: '📢', desc: 'Boost articles & boutique', active: aiAdviceEnabled, locked: false },
+                    { name: 'Kin-Sell Analytique', icon: '📊', desc: 'Analyses marché & conseils', active: hasAnalytics, locked: !hasAnalytics },
+                    { name: 'IA Commande', icon: '📦', desc: 'Automatisation des ventes', active: aiCommandeEnabled && (activePlan?.features?.includes('IA_ORDER') ?? false), locked: !(activePlan?.features?.includes('IA_ORDER') ?? false) },
+                  ].map((ia) => (
+                    <div key={ia.name} style={{
+                      background: ia.locked ? 'rgba(255,255,255,0.02)' : 'rgba(111,88,255,0.05)',
+                      border: `1px solid ${ia.locked ? 'rgba(255,255,255,0.06)' : 'rgba(111,88,255,0.15)'}`,
+                      borderRadius: 10, padding: '12px 14px', opacity: ia.locked ? 0.6 : 1,
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                        <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text-primary, #fff)' }}>{ia.icon} {ia.name}</span>
+                        <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 6, background: ia.active && !ia.locked ? 'rgba(76,175,80,0.15)' : 'rgba(255,255,255,0.06)', color: ia.active && !ia.locked ? '#4caf50' : '#888' }}>
+                          {ia.locked ? '🔒 Forfait requis' : ia.active ? '✅ Active' : '⏸ Inactive'}
+                        </span>
+                      </div>
+                      <p style={{ margin: 0, fontSize: 12, color: 'var(--color-text-secondary, #aaa)' }}>{ia.desc}</p>
+                      {ia.locked && (
+                        <Link to="/pricing" style={{ fontSize: 11, color: '#6f58ff', marginTop: 4, display: 'inline-block' }}>Débloquer →</Link>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Essais IA */}
+              {ksTrials.filter(t => t.status === 'PROPOSED' || t.status === 'ACTIVE').length > 0 && (
+                <div style={{ marginBottom: 16 }}>
+                  <h3 style={{ margin: '0 0 10px', fontSize: 15, color: 'var(--color-text-primary, #fff)' }}>🎁 Essais gratuits</h3>
+                  {ksTrials.filter(t => t.status === 'PROPOSED' || t.status === 'ACTIVE').map((trial) => (
+                    <div key={trial.id} style={{
+                      background: trial.status === 'ACTIVE' ? 'rgba(76,175,80,0.08)' : 'rgba(255,152,0,0.08)',
+                      border: `1px solid ${trial.status === 'ACTIVE' ? 'rgba(76,175,80,0.2)' : 'rgba(255,152,0,0.2)'}`,
+                      borderRadius: 10, padding: 14, marginBottom: 8,
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--color-text-primary, #fff)' }}>
+                            Forfait {trial.planCode} — {trial.status === 'ACTIVE' ? '✅ En cours' : '⏳ Proposé'}
+                          </span>
+                          <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--color-text-secondary, #aaa)' }}>{trial.reason}</p>
+                          {trial.endsAt && trial.status === 'ACTIVE' && (
+                            <p style={{ margin: '4px 0 0', fontSize: 11, color: '#ff9800' }}>
+                              Expire le {new Date(trial.endsAt).toLocaleDateString('fr-FR')}
+                            </p>
+                          )}
+                        </div>
+                        {trial.status === 'PROPOSED' && (
+                          <button
+                            onClick={async () => {
+                              try {
+                                await aiTrials.activate(trial.id);
+                                const [recs, trials] = await Promise.all([aiRecommendations.getActive(), aiTrials.getMyTrials()]);
+                                setKsRecommendations(recs);
+                                setKsTrials(trials);
+                              } catch { /* silent */ }
+                            }}
+                            style={{ padding: '8px 16px', fontSize: 12, fontWeight: 600, border: 'none', borderRadius: 8, background: 'linear-gradient(135deg, #6f58ff, #9b7aff)', color: '#fff', cursor: 'pointer' }}
+                          >
+                            Activer l'essai
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Recommandations IA actives */}
+              <div style={{ marginBottom: 16 }}>
+                <h3 style={{ margin: '0 0 10px', fontSize: 15, color: 'var(--color-text-primary, #fff)' }}>💡 Recommandations</h3>
+                {ksLoading ? (
+                  <p style={{ color: 'var(--color-text-secondary, #aaa)', fontSize: 13 }}>Chargement…</p>
+                ) : ksRecommendations.length === 0 ? (
+                  <p style={{ color: 'var(--color-text-secondary, #aaa)', fontSize: 13, fontStyle: 'italic' }}>Aucune recommandation en cours. Continuez à vendre pour recevoir des suggestions.</p>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {ksRecommendations.map((rec) => (
+                      <div key={rec.id} style={{
+                        background: 'rgba(111,88,255,0.04)',
+                        border: '1px solid rgba(111,88,255,0.1)',
+                        borderRadius: 10, padding: 14,
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                          <div style={{ flex: 1 }}>
+                            <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--color-text-primary, #fff)' }}>{rec.title}</span>
+                            <p style={{ margin: '4px 0 8px', fontSize: 12, color: 'var(--color-text-secondary, #aaa)', lineHeight: 1.5, whiteSpace: 'pre-line' }}>{rec.message}</p>
+                            <div style={{ display: 'flex', gap: 6 }}>
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    await aiRecommendations.accept(rec.id);
+                                    if (rec.actionType === 'ACTIVATE_TRIAL' && rec.actionTarget) {
+                                      await aiTrials.activate(rec.actionTarget);
+                                    }
+                                    navigate(rec.actionType === 'VIEW_ANALYTICS' ? '/dashboard?tab=analytics' : '/pricing');
+                                  } catch { /* silent */ }
+                                }}
+                                style={{ padding: '6px 12px', fontSize: 11, fontWeight: 600, border: 'none', borderRadius: 6, background: 'linear-gradient(135deg, #6f58ff, #9b7aff)', color: '#fff', cursor: 'pointer' }}
+                              >
+                                {rec.actionType === 'BOOST_ARTICLE' ? 'Booster' : rec.actionType === 'ACTIVATE_TRIAL' ? 'Activer l\'essai' : rec.actionType === 'VIEW_ANALYTICS' ? 'Voir mes analyses' : 'Voir les forfaits'}
+                              </button>
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    await aiRecommendations.dismiss(rec.id);
+                                    setKsRecommendations(prev => prev.filter(r => r.id !== rec.id));
+                                  } catch { /* silent */ }
+                                }}
+                                style={{ padding: '6px 12px', fontSize: 11, border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, background: 'transparent', color: 'rgba(255,255,255,0.5)', cursor: 'pointer' }}
+                              >
+                                Ignorer
+                              </button>
+                            </div>
+                          </div>
+                          <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, background: 'rgba(111,88,255,0.1)', color: '#6f58ff', whiteSpace: 'nowrap', marginLeft: 8 }}>
+                            {rec.engineKey === 'ads' ? '📢 Ads' : rec.engineKey === 'analytics' ? '📊 Analytique' : rec.engineKey === 'order' ? '📦 Commande' : '🤖 IA'}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* CTA Forfaits */}
+              <div style={{ textAlign: 'center', padding: '16px 0' }}>
+                <Link to="/pricing" style={{
+                  display: 'inline-block', padding: '10px 24px', borderRadius: 10,
+                  background: 'linear-gradient(135deg, #6f58ff, #9b7aff)', color: '#fff',
+                  fontWeight: 600, fontSize: 14, textDecoration: 'none',
+                  boxShadow: '0 4px 16px rgba(111,88,255,0.3)',
+                }}>
+                  🚀 Voir tous les forfaits
+                </Link>
+              </div>
+            </section>
           </div>
         )}
       </main>

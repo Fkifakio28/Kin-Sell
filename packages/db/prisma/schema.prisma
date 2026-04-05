@@ -228,6 +228,8 @@ model User {
   soKinStories             SoKinStory[]              @relation("SoKinStories")
   soKinStoryViews          SoKinStoryView[]
   businessFollows          BusinessFollow[]           @relation("BusinessFollows")
+  aiRecommendations        AiRecommendation[]         @relation("AiRecommendations")
+  aiTrials                 AiTrial[]                  @relation("AiTrials")
 
   @@index([role])
   @@index([accountStatus])
@@ -287,6 +289,8 @@ model BusinessAccount {
   sellerOrders   Order[]
   advertisements Advertisement[] @relation("BusinessAds")
   followers      BusinessFollow[] @relation("BusinessFollowers")
+  aiRecommendations AiRecommendation[] @relation("AiRecommendationsBusiness")
+  aiTrials          AiTrial[]          @relation("AiTrialsBusiness")
 
   @@index([ownerUserId])
 }
@@ -1866,4 +1870,68 @@ model BusinessFollow {
   @@unique([userId, businessId])
   @@index([businessId])
   @@index([userId])
+}
+
+// ══════════════════════════════════════════════
+// AI RECOMMENDATIONS — Suggestions intelligentes
+// ══════════════════════════════════════════════
+
+model AiRecommendation {
+  id            String    @id @default(cuid())
+  engineKey     String    // ads, analytics, negotiation, order, orchestrator
+  userId        String
+  businessId    String?
+  accountType   String    @default("USER") // USER | BUSINESS
+  triggerType   String    // LISTING_PUBLISHED, MULTI_LISTINGS, SALES_GROWTH, SHOP_CREATED, STAGNATION, TRIAL_SUGGEST, UPSELL
+  title         String
+  message       String    @db.Text
+  actionType    String    // BOOST_ARTICLE, BOOST_SHOP, UPGRADE_PLAN, ACTIVATE_TRIAL, VIEW_ANALYTICS, ENABLE_AUTO_SALES, PRICE_ADVICE
+  actionTarget  String?   // URL or plan code or listing ID
+  actionData    Json?     // extra context (listingId, suggestedPlan, etc.)
+  priority      Int       @default(5) // 1=low, 10=critical
+  dismissed     Boolean   @default(false)
+  clicked       Boolean   @default(false)
+  accepted      Boolean   @default(false)
+  displayedAt   DateTime?
+  expiresAt     DateTime?
+  createdAt     DateTime  @default(now())
+
+  user     User             @relation("AiRecommendations", fields: [userId], references: [id], onDelete: Cascade)
+  business BusinessAccount? @relation("AiRecommendationsBusiness", fields: [businessId], references: [id], onDelete: SetNull)
+
+  @@index([userId, dismissed, createdAt])
+  @@index([businessId, dismissed, createdAt])
+  @@index([engineKey, triggerType])
+  @@index([userId, triggerType])
+  @@index([expiresAt])
+}
+
+// ══════════════════════════════════════════════
+// AI TRIALS — Périodes d'essai intelligentes
+// ══════════════════════════════════════════════
+
+model AiTrial {
+  id            String   @id @default(cuid())
+  userId        String
+  businessId    String?
+  accountType   String   @default("USER") // USER | BUSINESS
+  planCode      String   // plan proposé (BUSINESS, SCALE, PRO_VENDOR, etc.)
+  sourceEngine  String   // quelle IA a proposé (analytics, ads, orchestrator)
+  reason        String   // why this trial was proposed
+  status        String   @default("PROPOSED") // PROPOSED, ACTIVE, EXPIRED, DECLINED, CONVERTED
+  startsAt      DateTime?
+  endsAt        DateTime?
+  activatedAt   DateTime?
+  activatedBy   String?  // userId who activated (or SYSTEM)
+  convertedAt   DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user     User             @relation("AiTrials", fields: [userId], references: [id], onDelete: Cascade)
+  business BusinessAccount? @relation("AiTrialsBusiness", fields: [businessId], references: [id], onDelete: SetNull)
+
+  @@index([userId, status])
+  @@index([businessId, status])
+  @@index([status, endsAt])
+  @@index([sourceEngine])
 }

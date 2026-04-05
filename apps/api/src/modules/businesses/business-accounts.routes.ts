@@ -53,6 +53,12 @@ router.post(
   asyncHandler(async (request: AuthenticatedRequest, response) => {
     const payload = createSchema.parse(request.body);
     const result = await businessService.createBusinessAccount(request.auth!.userId, payload);
+
+    // ── AI Trigger: boutique créée → IA Analytics (fire-and-forget) ──
+    import("../analytics/ai-trigger.service.js")
+      .then((t) => t.onShopCreated(request.auth!.userId, result.id))
+      .catch(() => {});
+
     response.status(201).json(result);
   })
 );

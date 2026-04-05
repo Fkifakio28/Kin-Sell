@@ -169,6 +169,11 @@ router.post(
 
     const result = await listingsService.createListing(request.auth!.userId, payload);
 
+    // ── AI Trigger: recommandation post-publication (fire-and-forget) ──
+    import("../analytics/ai-trigger.service.js")
+      .then((t) => t.onListingPublished(request.auth!.userId, result.id))
+      .catch(() => {});
+
     if (guard.verdict === "WARN") {
       response.status(201).json({ ...result, _contentWarning: guard.warningMessage });
     } else {

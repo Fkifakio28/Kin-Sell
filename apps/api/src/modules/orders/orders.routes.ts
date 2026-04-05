@@ -299,6 +299,12 @@ router.post(
       sourceUserId: request.auth!.userId,
       updatedAt: new Date().toISOString(),
     });
+
+    // ── AI Trigger: vente complétée → recommandations vendeur (fire-and-forget) ──
+    import("../analytics/ai-trigger.service.js")
+      .then((t) => t.onSaleCompleted(data.seller.userId, data.id))
+      .catch(() => {});
+
     response.json(data);
   })
 );

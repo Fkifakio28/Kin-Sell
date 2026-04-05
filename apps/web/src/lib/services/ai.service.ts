@@ -117,3 +117,56 @@ export const analyticsAi = {
   diagnostic: () => request<DiagnosticReport>("/analytics/ai/diagnostic"),
   memory: () => request<MemoryReport>("/analytics/ai/memory"),
 };
+
+// ── AI Recommendations (Smart Triggers) ──
+
+export type AiRecommendation = {
+  id: string;
+  engineKey: string;
+  userId: string;
+  businessId: string | null;
+  accountType: string;
+  triggerType: string;
+  title: string;
+  message: string;
+  actionType: string;
+  actionTarget: string | null;
+  actionData: Record<string, unknown> | null;
+  priority: number;
+  dismissed: boolean;
+  clicked: boolean;
+  accepted: boolean;
+  displayedAt: string | null;
+  expiresAt: string | null;
+  createdAt: string;
+};
+
+export type AiTrial = {
+  id: string;
+  userId: string;
+  businessId: string | null;
+  accountType: string;
+  planCode: string;
+  sourceEngine: string;
+  reason: string;
+  status: string;
+  startsAt: string | null;
+  endsAt: string | null;
+  activatedAt: string | null;
+  activatedBy: string | null;
+  convertedAt: string | null;
+  createdAt: string;
+};
+
+export const aiRecommendations = {
+  getActive: () => request<AiRecommendation[]>("/analytics/ai/recommendations"),
+  dismiss: (id: string) => request<{ ok: boolean }>(`/analytics/ai/recommendations/${id}/dismiss`, { method: "POST" }),
+  click: (id: string) => request<{ ok: boolean }>(`/analytics/ai/recommendations/${id}/click`, { method: "POST" }),
+  accept: (id: string) => request<{ ok: boolean }>(`/analytics/ai/recommendations/${id}/accept`, { method: "POST" }),
+};
+
+export const aiTrials = {
+  getMyTrials: () => request<AiTrial[]>("/analytics/ai/trials"),
+  activate: (id: string) => request<AiTrial>(`/analytics/ai/trials/${id}/activate`, { method: "POST" }),
+  decline: (id: string) => request<{ ok: boolean }>(`/analytics/ai/trials/${id}/decline`, { method: "POST" }),
+};

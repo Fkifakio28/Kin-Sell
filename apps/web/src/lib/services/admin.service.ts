@@ -673,4 +673,59 @@ export const admin = {
   // Create admin
   createAdmin: (body: { email: string; password: string; displayName: string; level?: string; permissions?: string[] }) =>
     request<{ id: string; email: string; role: string; displayName: string; level: string; permissions: string[] }>("/admin/admins/create", { method: "POST", body }),
+
+  // ── Subscriptions & AI Trials ──
+  aiRecommendationStats: () =>
+    request<AdminAiRecommendationStats>("/admin/ai-recommendations/stats"),
+  subscriptions: (params?: { page?: number; limit?: number; status?: string; scope?: string }) =>
+    request<AdminSubscriptionList>("/admin/subscriptions", { params: params as Record<string, string | number | undefined> }),
+  aiTrials: (params?: { page?: number; limit?: number; status?: string }) =>
+    request<AdminAiTrialList>("/admin/ai-trials", { params: params as Record<string, string | number | undefined> }),
+  activatePlan: (body: { userId: string; planCode: string; durationDays?: number; reason: string; exempt?: boolean }) =>
+    request<unknown>("/admin/subscriptions/activate", { method: "POST", body }),
 };
+
+// ── Admin AI/Subscription types ──
+export type AdminAiRecommendationStats = {
+  total: number;
+  active: number;
+  clicked: number;
+  accepted: number;
+  dismissed: number;
+  byEngine: Record<string, number>;
+  byTrigger: Record<string, number>;
+  trials: { total: number; active: number; converted: number; expired: number; declined: number };
+};
+
+export type AdminSubscriptionItem = {
+  id: string;
+  userId: string;
+  planCode: string;
+  planName: string;
+  status: string;
+  priceUsdCents: number;
+  startsAt: string;
+  endsAt: string | null;
+  metadata: unknown;
+  user?: { displayName: string; email: string };
+  business?: { publicName: string } | null;
+  addons?: { addonCode: string; label: string; priceUsdCents: number }[];
+};
+export type AdminSubscriptionList = { total: number; page: number; totalPages: number; subscriptions: AdminSubscriptionItem[] };
+
+export type AdminAiTrialItem = {
+  id: string;
+  userId: string;
+  businessId: string | null;
+  accountType: string;
+  planCode: string;
+  sourceEngine: string;
+  reason: string;
+  status: string;
+  startsAt: string | null;
+  endsAt: string | null;
+  activatedAt: string | null;
+  convertedAt: string | null;
+  user?: { displayName: string; email: string };
+};
+export type AdminAiTrialList = { total: number; page: number; totalPages: number; trials: AdminAiTrialItem[] };

@@ -39,6 +39,9 @@ import {
   type AdminListingItem,
   type CategoryNegotiationRule,
   type AdminAppeal,
+  type AdminAiRecommendationStats,
+  type AdminSubscriptionItem,
+  type AdminAiTrialItem,
 } from '../../lib/api-client';
 import { DashboardMessaging } from './DashboardMessaging';
 import { AdBanner } from '../../components/AdBanner';
@@ -51,7 +54,7 @@ type AdminSection =
   | 'reports' | 'feed' | 'donations' | 'ads' | 'advertisements' | 'listings' | 'negotiation-rules'
   | 'security' | 'antifraud' | 'security-ai' | 'ai-management'
   | 'rankings' | 'admins' | 'currency' | 'audit'
-  | 'settings' | 'messaging' | 'appeals';
+  | 'settings' | 'messaging' | 'appeals' | 'subscriptions';
 
 type ModalType =
   | null | 'user-detail' | 'user-role' | 'user-message' | 'user-suspend'
@@ -64,7 +67,7 @@ const ALL_PERMISSIONS = [
   'DONATIONS', 'ADS', 'ADVERTISEMENTS', 'LISTINGS', 'NEGOTIATION_RULES',
   'SECURITY', 'ANTIFRAUD', 'SECURITY_AI',
   'AI_MANAGEMENT', 'RANKINGS', 'ADMINS', 'CURRENCY', 'AUDIT',
-  'SETTINGS', 'MESSAGING',
+  'SETTINGS', 'MESSAGING', 'SUBSCRIPTIONS',
 ];
 
 const LEVEL_DEFAULT_PERMS: Record<string, string[]> = {
@@ -104,6 +107,7 @@ const SECTION_DEFS: Array<{
   { key: 'appeals',       label: 'Appels',             icon: '📩', permission: 'USERS',         group: 'Général' },
   { key: 'settings',      label: 'Paramètres',         icon: '⚙️', permission: 'SETTINGS',      group: 'Système' },
   { key: 'messaging',     label: 'Messagerie',         icon: '💬', permission: 'MESSAGING',     group: 'Système' },
+  { key: 'subscriptions',  label: 'Abonnements & IA',   icon: '💳', permission: 'SUBSCRIPTIONS', group: 'Outils' },
 ];
 
 function roleBadgeClass(role: string) {
@@ -254,6 +258,18 @@ export function AdminDashboard() {
   const [appealsList, setAppealsList] = useState<AdminAppeal[]>([]);
   const [appealsTotal, setAppealsTotal] = useState(0);
   const [appealsPage, setAppealsPage] = useState(1);
+
+  // Subscriptions & AI Trials
+  const [subStats, setSubStats] = useState<AdminAiRecommendationStats | null>(null);
+  const [subList, setSubList] = useState<AdminSubscriptionItem[]>([]);
+  const [subTotal, setSubTotal] = useState(0);
+  const [subPage, setSubPage] = useState(1);
+  const [trialList, setTrialList] = useState<AdminAiTrialItem[]>([]);
+  const [trialTotal, setTrialTotal] = useState(0);
+  const [trialPage, setTrialPage] = useState(1);
+  const [subSubTab, setSubSubTab] = useState<'stats' | 'subs' | 'trials' | 'activate'>('stats');
+  const [activateForm, setActivateForm] = useState({ userId: '', planCode: 'BOOST', durationDays: 30, reason: '', exempt: false });
+  const [activateMsg, setActivateMsg] = useState<string | null>(null);
 
   // Currency
   const [currencyRates, setCurrencyRates] = useState<AdminCurrencyRate[]>([]);
@@ -507,11 +523,24 @@ export function AdminDashboard() {
           setRestrictionsTotal(res.total);
           break;
         }
+        case 'subscriptions': {
+          const [stats, subs, trials] = await Promise.all([
+            admin.aiRecommendationStats(),
+            admin.subscriptions({ page: subPage, limit: 20 }),
+            admin.aiTrials({ page: trialPage, limit: 20 }),
+          ]);
+          setSubStats(stats);
+          setSubList(subs.subscriptions);
+          setSubTotal(subs.total);
+          setTrialList(trials.trials);
+          setTrialTotal(trials.total);
+          break;
+        }
       }
     } catch (e: any) {
       setError(e?.message ?? 'Erreur de chargement');
     }
-  }, [activeSection, usersPage, usersSearch, usersRoleFilter, usersStatusFilter, blogPage, blogStatusFilter, blogCategoryFilter, blogSearch, blogSortBy, txPage, txStatusFilter, reportsPage, reportsStatusFilter, rankPeriod, rankType, auditPage, secEventsPage, fraudPage, fraudFilter, restrictionsPage, restrictionsFilter, mgLogsPage, mgVerdictFilter, aiStatusFilter, aiDomainFilter, aiTypeFilter, feedPage, feedStatusFilter, feedSearch, donationsPage, donationsStatusFilter, donationsTypeFilter, advPage, advStatusFilter, advTypeFilter, advSearch, adminListingsPage, adminListingsStatusFilter, adminListingsTypeFilter, adminListingsSearch, appealsPage]);
+  }, [activeSection, usersPage, usersSearch, usersRoleFilter, usersStatusFilter, blogPage, blogStatusFilter, blogCategoryFilter, blogSearch, blogSortBy, txPage, txStatusFilter, reportsPage, reportsStatusFilter, rankPeriod, rankType, auditPage, secEventsPage, fraudPage, fraudFilter, restrictionsPage, restrictionsFilter, mgLogsPage, mgVerdictFilter, aiStatusFilter, aiDomainFilter, aiTypeFilter, feedPage, feedStatusFilter, feedSearch, donationsPage, donationsStatusFilter, donationsTypeFilter, advPage, advStatusFilter, advTypeFilter, advSearch, adminListingsPage, adminListingsStatusFilter, adminListingsTypeFilter, adminListingsSearch, appealsPage, subPage, trialPage]);
 
   useEffect(() => { if (isLoggedIn) loadSectionData(); }, [loadSectionData, isLoggedIn]);
 
@@ -2584,6 +2613,212 @@ export function AdminDashboard() {
     );
   };
 
+  /* ══════════════════════════════════════
+     SUBSCRIPTIONS & AI TRIALS
+     ══════════════════════════════════════ */
+  const renderSubscriptions = () => {
+    const handleActivate = async () => {
+      if (!activateForm.userId || !activateForm.reason) return;
+      setActivateMsg(null);
+      try {
+        await admin.activatePlan(activateForm);
+        setActivateMsg('✅ Forfait activé avec succès');
+        setActivateForm({ userId: '', planCode: 'BOOST', durationDays: 30, reason: '', exempt: false });
+      } catch (e: any) {
+        setActivateMsg('❌ ' + (e?.message || 'Erreur'));
+      }
+    };
+
+    return (
+      <div className="ad-section animate-fade-in">
+        <h2 className="ad-section-title">💳 Abonnements & Essais IA</h2>
+
+        {/* Sub tabs */}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
+          {([
+            { k: 'stats' as const, l: '📊 Stats' },
+            { k: 'subs' as const, l: '💳 Abonnements' },
+            { k: 'trials' as const, l: '🎁 Essais IA' },
+            { k: 'activate' as const, l: '🔑 Activer manuellement' },
+          ]).map(st => (
+            <button key={st.k} onClick={() => setSubSubTab(st.k)}
+              style={{ padding: '6px 14px', fontSize: 12, fontWeight: 600, border: 'none', borderRadius: 8,
+                background: subSubTab === st.k ? 'rgba(111,88,255,0.3)' : 'rgba(255,255,255,0.06)',
+                color: subSubTab === st.k ? '#fff' : 'rgba(255,255,255,0.6)', cursor: 'pointer',
+              }}>{st.l}</button>
+          ))}
+        </div>
+
+        {/* Stats */}
+        {subSubTab === 'stats' && subStats && (
+          <div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 12, marginBottom: 20 }}>
+              {[
+                { label: 'Recommandations totales', val: subStats.total },
+                { label: 'Actives', val: subStats.active },
+                { label: 'Cliquées', val: subStats.clicked },
+                { label: 'Acceptées', val: subStats.accepted },
+                { label: 'Ignorées', val: subStats.dismissed },
+              ].map(s => (
+                <div key={s.label} style={{ background: 'rgba(111,88,255,0.06)', borderRadius: 10, padding: 14, textAlign: 'center' }}>
+                  <div style={{ fontSize: 22, fontWeight: 700, color: '#6f58ff' }}>{s.val}</div>
+                  <div style={{ fontSize: 11, color: 'var(--color-text-secondary, #aaa)', marginTop: 4 }}>{s.label}</div>
+                </div>
+              ))}
+            </div>
+
+            <h4 style={{ color: 'var(--color-text-primary, #fff)', marginBottom: 8 }}>Par moteur IA</h4>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+              {Object.entries(subStats.byEngine).map(([k, v]) => (
+                <span key={k} style={{ padding: '4px 10px', borderRadius: 6, background: 'rgba(111,88,255,0.08)', color: '#6f58ff', fontSize: 12 }}>{k}: {v}</span>
+              ))}
+            </div>
+
+            <h4 style={{ color: 'var(--color-text-primary, #fff)', marginBottom: 8 }}>Essais IA</h4>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {Object.entries(subStats.trials).map(([k, v]) => (
+                <span key={k} style={{ padding: '4px 10px', borderRadius: 6, background: 'rgba(76,175,80,0.1)', color: '#4caf50', fontSize: 12 }}>{k}: {v}</span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Subscriptions list */}
+        {subSubTab === 'subs' && (
+          <div>
+            <table className="ad-table" style={{ width: '100%', fontSize: 12 }}>
+              <thead>
+                <tr>
+                  <th>Utilisateur</th>
+                  <th>Forfait</th>
+                  <th>Statut</th>
+                  <th>Prix</th>
+                  <th>Début</th>
+                  <th>Fin</th>
+                </tr>
+              </thead>
+              <tbody>
+                {subList.map(s => (
+                  <tr key={s.id}>
+                    <td>{s.user?.displayName || s.userId}<br/><span style={{ fontSize: 10, color: '#888' }}>{s.user?.email}</span></td>
+                    <td style={{ fontWeight: 600, color: '#6f58ff' }}>{s.planCode}</td>
+                    <td><span style={{ padding: '2px 6px', borderRadius: 4, fontSize: 10, background: s.status === 'ACTIVE' ? 'rgba(76,175,80,0.15)' : 'rgba(255,152,0,0.15)', color: s.status === 'ACTIVE' ? '#4caf50' : '#ff9800' }}>{s.status}</span></td>
+                    <td>{s.priceUsdCents > 0 ? `${(s.priceUsdCents / 100).toFixed(2)}$` : 'Gratuit'}</td>
+                    <td>{new Date(s.startsAt).toLocaleDateString('fr-FR')}</td>
+                    <td>{s.endsAt ? new Date(s.endsAt).toLocaleDateString('fr-FR') : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {subTotal > 20 && (
+              <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 12 }}>
+                <button disabled={subPage <= 1} onClick={() => setSubPage(p => p - 1)} className="ad-btn ad-btn--sm">◀</button>
+                <span style={{ fontSize: 12, color: '#aaa', alignSelf: 'center' }}>Page {subPage}</span>
+                <button disabled={subList.length < 20} onClick={() => setSubPage(p => p + 1)} className="ad-btn ad-btn--sm">▶</button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Trials list */}
+        {subSubTab === 'trials' && (
+          <div>
+            <table className="ad-table" style={{ width: '100%', fontSize: 12 }}>
+              <thead>
+                <tr>
+                  <th>Utilisateur</th>
+                  <th>Forfait</th>
+                  <th>Moteur</th>
+                  <th>Statut</th>
+                  <th>Raison</th>
+                  <th>Dates</th>
+                </tr>
+              </thead>
+              <tbody>
+                {trialList.map(t => (
+                  <tr key={t.id}>
+                    <td>{t.user?.displayName || t.userId}<br/><span style={{ fontSize: 10, color: '#888' }}>{t.user?.email}</span></td>
+                    <td style={{ fontWeight: 600, color: '#6f58ff' }}>{t.planCode}</td>
+                    <td>{t.sourceEngine}</td>
+                    <td><span style={{ padding: '2px 6px', borderRadius: 4, fontSize: 10,
+                      background: t.status === 'ACTIVE' ? 'rgba(76,175,80,0.15)' : t.status === 'PROPOSED' ? 'rgba(255,152,0,0.15)' : 'rgba(255,255,255,0.06)',
+                      color: t.status === 'ACTIVE' ? '#4caf50' : t.status === 'PROPOSED' ? '#ff9800' : '#888',
+                    }}>{t.status}</span></td>
+                    <td style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.reason}</td>
+                    <td style={{ fontSize: 10 }}>
+                      {t.startsAt ? new Date(t.startsAt).toLocaleDateString('fr-FR') : '—'}
+                      {t.endsAt ? ` → ${new Date(t.endsAt).toLocaleDateString('fr-FR')}` : ''}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {trialTotal > 20 && (
+              <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 12 }}>
+                <button disabled={trialPage <= 1} onClick={() => setTrialPage(p => p - 1)} className="ad-btn ad-btn--sm">◀</button>
+                <span style={{ fontSize: 12, color: '#aaa', alignSelf: 'center' }}>Page {trialPage}</span>
+                <button disabled={trialList.length < 20} onClick={() => setTrialPage(p => p + 1)} className="ad-btn ad-btn--sm">▶</button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Manual activate */}
+        {subSubTab === 'activate' && (
+          <div style={{ maxWidth: 440 }}>
+            <h3 style={{ fontSize: 15, color: 'var(--color-text-primary, #fff)', marginBottom: 12 }}>🔑 Activer un forfait manuellement</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <input
+                placeholder="ID utilisateur"
+                value={activateForm.userId}
+                onChange={e => setActivateForm(f => ({ ...f, userId: e.target.value }))}
+                style={{ padding: 8, borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#fff', fontSize: 13 }}
+              />
+              <select
+                value={activateForm.planCode}
+                onChange={e => setActivateForm(f => ({ ...f, planCode: e.target.value }))}
+                style={{ padding: 8, borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#fff', fontSize: 13 }}
+              >
+                {['FREE', 'BOOST', 'AUTO', 'PRO_VENDOR', 'STARTER', 'BUSINESS', 'SCALE'].map(p => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
+              </select>
+              <input
+                type="number"
+                placeholder="Durée (jours)"
+                value={activateForm.durationDays}
+                onChange={e => setActivateForm(f => ({ ...f, durationDays: Number(e.target.value) }))}
+                style={{ padding: 8, borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#fff', fontSize: 13 }}
+              />
+              <input
+                placeholder="Raison de l'activation"
+                value={activateForm.reason}
+                onChange={e => setActivateForm(f => ({ ...f, reason: e.target.value }))}
+                style={{ padding: 8, borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#fff', fontSize: 13 }}
+              />
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--color-text-secondary, #aaa)' }}>
+                <input
+                  type="checkbox"
+                  checked={activateForm.exempt}
+                  onChange={e => setActivateForm(f => ({ ...f, exempt: e.target.checked }))}
+                />
+                Exempter du paiement (gratuit)
+              </label>
+              <button
+                onClick={handleActivate}
+                disabled={!activateForm.userId || !activateForm.reason}
+                style={{ padding: '10px 20px', fontSize: 13, fontWeight: 600, border: 'none', borderRadius: 8, background: 'linear-gradient(135deg, #6f58ff, #9b7aff)', color: '#fff', cursor: 'pointer', opacity: (!activateForm.userId || !activateForm.reason) ? 0.5 : 1 }}
+              >
+                Activer le forfait
+              </button>
+              {activateMsg && <p style={{ fontSize: 12, color: activateMsg.startsWith('✅') ? '#4caf50' : '#ff5252' }}>{activateMsg}</p>}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const renderSection = () => {
     switch (activeSection) {
       case 'dashboard': return renderDashboard();
@@ -2608,6 +2843,7 @@ export function AdminDashboard() {
       case 'audit': return renderAudit();
       case 'settings': return renderSettings();
       case 'messaging': return renderMessaging();
+      case 'subscriptions': return renderSubscriptions();
       default: return null;
     }
   };

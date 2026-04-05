@@ -8,6 +8,7 @@ import { prisma } from "../../shared/db/prisma.js";
 import * as adminService from "./admin.service.js";
 import * as messageGuardService from "../message-guard/message-guard.service.js";
 import * as adsService from "../ads/ads.service.js";
+import * as aiTrigger from "../analytics/ai-trigger.service.js";
 import aiAdminRoutes from "../analytics/ai-admin.routes.js";
 
 const router = Router();
@@ -734,6 +735,89 @@ router.get("/negotiation-rules/locked-categories", asyncHandler(async (req: Auth
   // Pas de permission admin requise — endpoint public pour enforcement frontend
   const locked = await adminService.getLockedCategories();
   res.json(locked);
+}));
+
+// ══════════════════════════════════════════════
+// AI RECOMMENDATIONS & TRIALS — Admin stats
+// ══════════════════════════════════════════════
+
+router.get("/ai-recommendations/stats", asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const stats = await aiTrigger.getRecommendationStats();
+  res.json(stats);
+}));
+
+// ── Admin manual plan activation ──
+const adminActivateSchema = z.object({
+  userId: z.string().min(1),
+  planCode: z.string().min(1),
+  durationDays: z.number().int().min(1).max(365).default(30),
+  reason: z.string().min(1).max(500),
+  exempt: z.boolean().default(false),
+});
+
+router.post("/subscriptions/activate", asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const payload = adminActivateSchema.parse(req.body);
+  const result = await aiTrigger.adminActivatePlan({
+    ...payload,
+    activatedBy: req.auth!.userId,
+  });
+  if (!result) throw new HttpError(404, "Utilisateur introuvable.");
+  res.json(result);
+}));
+
+// ── Admin list all subscriptions ──
+router.get("/subscriptions", asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const page = Number(req.query.page) || 1;
+  const limit = Math.min(Number(req.query.limit) || 20, 100);
+  const status = req.query.status as string | undefined;
+  const scope = req.query.scope as string | undefined;
+
+  const where: Record<string, unknown> = {};
+  if (status) where.status = status;
+  if (scope) where.scope = scope;
+
+  const [items, total] = await Promise.all([
+    prisma.subscription.findMany({
+      where,
+      include: {
+        user: { select: { id: true, email: true, role: true, profile: { select: { displayName: true } } } },
+        business: { select: { id: true, publicName: true } },
+        addons: true,
+      },
+      orderBy: { createdAt: "desc" },
+      skip: (page - 1) * limit,
+      take: limit,
+    }),
+    prisma.subscription.count({ where }),
+  ]);
+
+  res.json({ items, total, page, limit });
+}));
+
+// ── Admin list all trials ──
+router.get("/ai-trials", asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const page = Number(req.query.page) || 1;
+  const limit = Math.min(Number(req.query.limit) || 20, 100);
+  const status = req.query.status as string | undefined;
+
+  const where: Record<string, unknown> = {};
+  if (status) where.status = status;
+
+  const [items, total] = await Promise.all([
+    prisma.aiTrial.findMany({
+      where,
+      include: {
+        user: { select: { id: true, email: true, role: true, profile: { select: { displayName: true } } } },
+        business: { select: { id: true, publicName: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      skip: (page - 1) * limit,
+      take: limit,
+    }),
+    prisma.aiTrial.count({ where }),
+  ]);
+
+  res.json({ items, total, page, limit });
 }));
 
 export default router;

@@ -701,6 +701,127 @@ export function PricingPage() {
         </p>
         {!isLoggedIn ? <Link to="/register" className="pricing-cta">Créer un compte Kin-Sell</Link> : null}
       </section>
+
+      {/* ═══════════════  MATRICE DE COMPARAISON  ═══════════════ */}
+      <section className="glass-container" style={{ marginTop: 32, padding: '24px 20px' }}>
+        <h2 style={{ textAlign: 'center', fontSize: 20, fontWeight: 700, color: 'var(--color-text-primary, #fff)', marginBottom: 24 }}>
+          📊 Comparaison des forfaits
+        </h2>
+
+        {/* ── Forfaits Utilisateurs ── */}
+        <h3 style={{ fontSize: 16, fontWeight: 600, color: '#6f58ff', marginBottom: 12 }}>Forfaits Utilisateurs</h3>
+        <div style={{ overflowX: 'auto', marginBottom: 28 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <thead>
+              <tr style={{ borderBottom: '2px solid rgba(111,88,255,0.2)' }}>
+                <th style={{ textAlign: 'left', padding: '10px 12px', color: 'var(--color-text-secondary, #aaa)' }}>Fonctionnalité</th>
+                {['FREE', 'BOOST', 'AUTO', 'PRO VENDEUR'].map(p => (
+                  <th key={p} style={{ textAlign: 'center', padding: '10px 8px', color: 'var(--color-text-primary, #fff)', fontWeight: 600, minWidth: 80 }}>{p}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                { feat: 'Publications', vals: ['3/jour', '10/jour', '15/jour', 'Illimité'] },
+                { feat: 'Négociations IA', vals: ['❌', '❌', '✅ Assistée', '✅ Avancée'] },
+                { feat: 'IA Ads (conseils boost)', vals: ['❌', '✅ Basic', '✅ Avancé', '✅ Premium'] },
+                { feat: 'IA Commande', vals: ['❌', '❌', 'Add-on', '✅ Inclus'] },
+                { feat: 'Kin-Sell Analytique', vals: ['❌', '❌', '❌', '✅ Medium'] },
+                { feat: 'Boost visibilité', vals: ['❌', '✅', '✅', '✅'] },
+                { feat: 'Badge vendeur', vals: ['❌', '❌', '✅', '✅ Pro'] },
+                { feat: 'Support prioritaire', vals: ['❌', '❌', '❌', '✅'] },
+              ].map((row, i) => (
+                <tr key={row.feat} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', background: i % 2 === 0 ? 'rgba(111,88,255,0.02)' : 'transparent' }}>
+                  <td style={{ padding: '8px 12px', color: 'var(--color-text-primary, #fff)', fontWeight: 500 }}>{row.feat}</td>
+                  {row.vals.map((v, j) => (
+                    <td key={j} style={{ textAlign: 'center', padding: '8px 6px', color: v.startsWith('❌') ? 'rgba(255,255,255,0.3)' : v.startsWith('✅') ? '#4caf50' : 'var(--color-text-secondary, #aaa)' }}>{v}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* ── Forfaits Business ── */}
+        <h3 style={{ fontSize: 16, fontWeight: 600, color: '#6f58ff', marginBottom: 12 }}>Forfaits Business</h3>
+        <div style={{ overflowX: 'auto', marginBottom: 28 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <thead>
+              <tr style={{ borderBottom: '2px solid rgba(111,88,255,0.2)' }}>
+                <th style={{ textAlign: 'left', padding: '10px 12px', color: 'var(--color-text-secondary, #aaa)' }}>Fonctionnalité</th>
+                {['STARTER', 'BUSINESS', 'SCALE'].map(p => (
+                  <th key={p} style={{ textAlign: 'center', padding: '10px 8px', color: 'var(--color-text-primary, #fff)', fontWeight: 600, minWidth: 100 }}>{p}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                { feat: 'Boutique en ligne', vals: ['✅', '✅', '✅'] },
+                { feat: 'Publications', vals: ['15/jour', '50/jour', 'Illimité'] },
+                { feat: 'IA Marchande (auto-négo)', vals: ['❌', '✅ Inclus', '✅ Inclus'] },
+                { feat: 'IA Commande (auto-vente)', vals: ['❌', 'Add-on', '✅ Inclus'] },
+                { feat: 'IA Ads (conseils boost)', vals: ['✅ Basic', '✅ Avancé', '✅ Premium'] },
+                { feat: 'Kin-Sell Analytique', vals: ['❌', '✅ Medium', '✅ Premium'] },
+                { feat: 'Panneau de stats avancé', vals: ['✅ Basic', '✅ Avancé', '✅ Premium'] },
+                { feat: 'Support prioritaire', vals: ['❌', '✅', '✅ Dédié'] },
+                { feat: 'Badge entreprise', vals: ['✅', '✅ Gold', '✅ Diamond'] },
+              ].map((row, i) => (
+                <tr key={row.feat} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', background: i % 2 === 0 ? 'rgba(111,88,255,0.02)' : 'transparent' }}>
+                  <td style={{ padding: '8px 12px', color: 'var(--color-text-primary, #fff)', fontWeight: 500 }}>{row.feat}</td>
+                  {row.vals.map((v, j) => (
+                    <td key={j} style={{ textAlign: 'center', padding: '8px 6px', color: v.startsWith('❌') ? 'rgba(255,255,255,0.3)' : v.startsWith('✅') ? '#4caf50' : 'var(--color-text-secondary, #aaa)' }}>{v}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {/* ═══════════════  IA INCLUSES PAR PLAN  ═══════════════ */}
+      <section className="glass-container" style={{ marginTop: 24, padding: '24px 20px' }}>
+        <h2 style={{ textAlign: 'center', fontSize: 20, fontWeight: 700, color: 'var(--color-text-primary, #fff)', marginBottom: 20 }}>
+          🤖 Intelligences Artificielles par forfait
+        </h2>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
+          {[
+            { name: 'IA Marchande', icon: '🤝', desc: 'Répond et négocie automatiquement en vous représentant.', plans: 'BUSINESS, SCALE', addon: 'IA_MERCHANT (3$/mois)' },
+            { name: 'IA Commande', icon: '📦', desc: 'Automatise les confirmations de vente, relances et suivi.', plans: 'PRO VENDEUR, SCALE', addon: 'IA_ORDER (7$/mois)' },
+            { name: 'IA Ads', icon: '📢', desc: 'Conseils personnalisés pour booster articles et boutique.', plans: 'BOOST+', addon: null },
+            { name: 'Kin-Sell Analytique', icon: '📊', desc: 'Analyses marché, tendances prix, diagnostics de performance.', plans: 'PRO VENDEUR (Medium), BUSINESS (Medium), SCALE (Premium)', addon: null },
+          ].map(ia => (
+            <div key={ia.name} style={{ background: 'rgba(111,88,255,0.05)', border: '1px solid rgba(111,88,255,0.12)', borderRadius: 12, padding: 16 }}>
+              <div style={{ fontSize: 28, marginBottom: 8 }}>{ia.icon}</div>
+              <h3 style={{ margin: '0 0 6px', fontSize: 15, fontWeight: 600, color: 'var(--color-text-primary, #fff)' }}>{ia.name}</h3>
+              <p style={{ margin: '0 0 10px', fontSize: 12, color: 'var(--color-text-secondary, #aaa)', lineHeight: 1.5 }}>{ia.desc}</p>
+              <div style={{ fontSize: 11, color: '#4caf50', marginBottom: 4 }}>✅ Inclus dans : {ia.plans}</div>
+              {ia.addon && <div style={{ fontSize: 11, color: '#ff9800' }}>🔌 Ou en add-on : {ia.addon}</div>}
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ═══════════════  RÉSULTATS ATTENDUS  ═══════════════ */}
+      <section className="glass-container" style={{ marginTop: 24, padding: '24px 20px', marginBottom: 40 }}>
+        <h2 style={{ textAlign: 'center', fontSize: 20, fontWeight: 700, color: 'var(--color-text-primary, #fff)', marginBottom: 20 }}>
+          📈 Résultats attendus
+        </h2>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 14 }}>
+          {[
+            { plan: 'BOOST', result: '+40% de visibilité', detail: 'Vos articles remontent dans les résultats, plus de vues et contacts.' },
+            { plan: 'AUTO', result: '+60% ventes auto', detail: 'L\'IA négocie et assiste vos acheteurs, moins d\'effort pour plus de ventes.' },
+            { plan: 'PRO VENDEUR', result: 'Insights marché', detail: 'Comprenez les tendances, ajustez vos prix, optimisez votre catalogue.' },
+            { plan: 'BUSINESS', result: '+2x croissance', detail: 'Boutique pro, IA marchande, analytics : votre business en pilote auto.' },
+            { plan: 'SCALE', result: 'Automatisation totale', detail: 'Toutes les IA, analytics premium, support dédié : scalez sans limite.' },
+          ].map(r => (
+            <div key={r.plan} style={{ background: 'rgba(111,88,255,0.04)', border: '1px solid rgba(111,88,255,0.1)', borderRadius: 10, padding: 14 }}>
+              <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 6, background: 'rgba(111,88,255,0.15)', color: '#6f58ff', fontSize: 11, fontWeight: 600, marginBottom: 8 }}>{r.plan}</span>
+              <h4 style={{ margin: '0 0 4px', fontSize: 16, fontWeight: 700, color: '#4caf50' }}>{r.result}</h4>
+              <p style={{ margin: 0, fontSize: 12, color: 'var(--color-text-secondary, #aaa)', lineHeight: 1.5 }}>{r.detail}</p>
+            </div>
+          ))}
+        </div>
+      </section>
     </section>
   );
 }
