@@ -37,7 +37,6 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     const socket = io(API_BASE, {
       path: "/ws",
       auth: { token },
-      transports: ["websocket", "polling"],
       reconnection: true,
       reconnectionAttempts: 20,
       reconnectionDelay: 1000,

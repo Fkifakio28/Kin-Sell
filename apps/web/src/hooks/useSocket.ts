@@ -68,29 +68,6 @@ type SocketEvents = {
     createdAt: string;
     sourceUserId: string;
   }) => void;
-  "sokin:story-created": (data: {
-    type: "SOKIN_STORY_CREATED";
-    storyId: string;
-    authorId: string;
-    createdAt: string;
-    sourceUserId: string;
-  }) => void;
-  "sokin:post-shared": (data: {
-    type: "SOKIN_POST_SHARED";
-    postId: string;
-    shares: number;
-    sourceUserId: string;
-    updatedAt: string;
-  }) => void;
-  "sokin:post-reacted": (data: {
-    postId: string;
-    type: string;
-    sourceUserId: string;
-  }) => void;
-  "sokin:post-unreacted": (data: {
-    postId: string;
-    sourceUserId: string;
-  }) => void;
   "webrtc:offer": (data: { callerId: string; sdp: RTCSessionDescriptionInit }) => void;
   "webrtc:answer": (data: { answererId: string; sdp: RTCSessionDescriptionInit }) => void;
   "webrtc:ice-candidate": (data: { fromUserId: string; candidate: RTCIceCandidateInit }) => void;

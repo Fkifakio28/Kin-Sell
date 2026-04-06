@@ -10,7 +10,6 @@ export const SK_SESSION_ID = "kin-sell.session-id";
 
 /* ── UI / UX ── */
 export const SK_THEME = "kin-sell.theme";
-export const SK_COOKIE_CONSENT = "kin-sell.cookie-consent";
 export const SK_MUSIC_STOPPED = "ks-music-stopped";
 export const SK_PUSH_BANNER_DISMISSED = "kinsell.push.banner.dismissedAt";
 

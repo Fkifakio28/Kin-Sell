@@ -1,7 +1,7 @@
 import {
   useEffect, useState, useRef, useCallback, useMemo, type CSSProperties, type FormEvent, type TouchEvent as ReactTouchEvent,
 } from "react";
-import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
+import { Link, Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../../app/providers/AuthProvider";
 import {
   messaging,
@@ -23,6 +23,15 @@ import {
 } from "../../utils/webrtc-config";
 import { useWakeLock } from "../../hooks/useWakeLock";
 import "./messaging.css";
+
+type SoKinPostRef = {
+  id: string;
+  text: string;
+  mediaUrl: string | null;
+  authorName: string;
+  authorId: string;
+  authorHandle: string;
+};
 
 /* ═══════════════════════════════════════════
    Kin-Sell Messaging — Refonte mobile-first
@@ -100,6 +109,30 @@ function formatLastSeen(iso: string, t: (k: string) => string): string {
   const days = Math.floor(hrs / 24);
   if (days === 1) return t("msg.seenYesterday");
   return t("msg.seenDays").replace("{count}", String(days));
+}
+
+function parseSoKinPostRefFromSystemMessage(msg: ChatMessage): SoKinPostRef | null {
+  if (msg.type !== "SYSTEM" || !msg.fileName || !msg.fileName.startsWith("sokin-post:")) return null;
+  try {
+    const raw = msg.fileName.slice("sokin-post:".length);
+    const payload = JSON.parse(decodeURIComponent(raw)) as {
+      postId?: string;
+      textPreview?: string;
+      mediaUrl?: string | null;
+      author?: { id?: string; name?: string; handle?: string };
+    };
+    if (!payload.postId) return null;
+    return {
+      id: payload.postId,
+      text: payload.textPreview ?? "",
+      mediaUrl: payload.mediaUrl ?? null,
+      authorName: payload.author?.name ?? "Utilisateur",
+      authorId: payload.author?.id ?? "",
+      authorHandle: payload.author?.handle ?? "",
+    };
+  } catch {
+    return null;
+  }
 }
 
 /** Check if a message is within the 30-minute edit window */
@@ -182,7 +215,6 @@ function MgDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
           <button className="mg-drawer-item" onClick={() => go("/")}>🏠 Accueil</button>
           <button className="mg-drawer-item" onClick={() => go("/explorer")}>🔍 Explorer</button>
           <button className="mg-drawer-item" onClick={() => go("/sokin")}>📢 SoKin</button>
-          <button className="mg-drawer-item" onClick={() => go("/sokin/live")}>🔴 SoKin Live</button>
           <button className="mg-drawer-item" onClick={() => go("/forfaits")}>💎 Forfaits</button>
           {isLoggedIn && (
             <>
@@ -230,6 +262,7 @@ export function MessagingPage() {
   const { emit, on, off, isConnected } = useSocket();
   const { setMessagingActive } = useGlobalNotification();
   const navigate = useNavigate();
+  const location = useLocation();
   const { conversationId: urlConvId } = useParams<{ conversationId?: string }>();
   const locale = language === "en" ? "en-US" : language === "ln" ? "fr-CD" : "fr-FR";
 
@@ -255,6 +288,7 @@ export function MessagingPage() {
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; message: ChatMessage } | null>(null);
   const [convContextMenu, setConvContextMenu] = useState<{ x: number; y: number; convId: string } | null>(null);
   const [profileUser, setProfileUser] = useState<{ displayName: string; avatarUrl: string | null; username: string | null; userId: string } | null>(null);
+  const [pinnedSoKinPost, setPinnedSoKinPost] = useState<SoKinPostRef | null>(null);
 
   /* ── Conversation management ── */
   const [archivedConvIds, setArchivedConvIds] = useState<Set<string>>(new Set());
@@ -262,6 +296,23 @@ export function MessagingPage() {
   const [pinnedConvIds, setPinnedConvIds] = useState<Set<string>>(new Set());
   const [mutedConvIds, setMutedConvIds] = useState<Set<string>>(new Set());
   const [blockedConvIds, setBlockedConvIds] = useState<Set<string>>(new Set());
+
+  const pendingSoKinPinRef = useRef<{ conversationId: string; post: SoKinPostRef } | null>(null);
+  const pinRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pinFallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const messagesRef = useRef<ChatMessage[]>([]);
+  const pinnedFromMessages = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      const parsed = parseSoKinPostRefFromSystemMessage(messages[i]);
+      if (parsed) return parsed;
+    }
+    return null;
+  }, [messages]);
+  const effectivePinnedSoKinPost = pinnedSoKinPost ?? pinnedFromMessages;
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   /* ── Presence ── */
   const [typingUsers, setTypingUsers] = useState<Map<string, Set<string>>>(new Map());
@@ -459,6 +510,20 @@ export function MessagingPage() {
       .finally(() => setLoadingConvs(false));
   }, [isLoggedIn]);
 
+  /* ── Capture annonce So-Kin transmise depuis la navigation ── */
+  useEffect(() => {
+    const navState = location.state as { sokinPost?: SoKinPostRef } | null;
+    const incomingPost = navState?.sokinPost;
+    if (!incomingPost) return;
+
+    setPinnedSoKinPost(incomingPost);
+    if (urlConvId) {
+      pendingSoKinPinRef.current = { conversationId: urlConvId, post: incomingPost };
+    }
+
+    navigate(location.pathname + location.search, { replace: true, state: null });
+  }, [location.pathname, location.search, location.state, navigate, urlConvId]);
+
   /* ── Auto-select conversation from URL or pending call ── */
   useEffect(() => {
     if (!conversations.length) return;
@@ -473,6 +538,110 @@ export function MessagingPage() {
       if (conv) setActiveConv(conv);
     }
   }, [conversations, urlConvId, activeConv]);
+
+  /* ── Publier automatiquement le message système d'annonce épinglée ── */
+  useEffect(() => {
+    if (!activeConv || !pendingSoKinPinRef.current) return;
+    const pending = pendingSoKinPinRef.current;
+    if (pending.conversationId !== activeConv.id) return;
+
+    const post = pending.post;
+    const hasPinnedPost = () =>
+      messagesRef.current.some((msg) => parseSoKinPostRefFromSystemMessage(msg)?.id === post.id);
+
+    if (hasPinnedPost()) {
+      pendingSoKinPinRef.current = null;
+      return;
+    }
+
+    const preview = post.text.trim().slice(0, 120) || "(sans texte)";
+    const payload = {
+      source: "sokin",
+      postId: post.id,
+      listingId: post.id,
+      author: {
+        id: post.authorId,
+        name: post.authorName,
+        handle: post.authorHandle,
+      },
+      textPreview: preview,
+      mediaUrl: post.mediaUrl,
+    };
+
+    const messageBody = {
+      type: "SYSTEM",
+      content: `📌 Annonce So-Kin\nAuteur: ${post.authorName}\nID: ${post.id}\nAperçu: ${preview}`,
+      mediaUrl: post.mediaUrl ?? undefined,
+      fileName: `sokin-post:${encodeURIComponent(JSON.stringify(payload))}`,
+    };
+
+    let settled = false;
+
+    const sendViaApiFallback = async () => {
+      if (settled || hasPinnedPost()) {
+        settled = true;
+        return;
+      }
+      try {
+        await messaging.sendMessage(activeConv.id, messageBody);
+      } catch {
+        // no-op: éviter de bloquer l'UI conversation sur une épingle non critique
+      } finally {
+        settled = true;
+      }
+    };
+
+    const sendViaSocket = () => {
+      emit(
+        "message:send",
+        {
+          conversationId: activeConv.id,
+          ...messageBody,
+        },
+        (res: any) => {
+          if (settled) return;
+          if (res && !res.ok) {
+            void sendViaApiFallback();
+            return;
+          }
+          settled = true;
+        }
+      );
+    };
+
+    sendViaSocket();
+
+    if (pinRetryTimerRef.current) clearTimeout(pinRetryTimerRef.current);
+    if (pinFallbackTimerRef.current) clearTimeout(pinFallbackTimerRef.current);
+
+    pinRetryTimerRef.current = setTimeout(() => {
+      if (settled || hasPinnedPost()) {
+        settled = true;
+        return;
+      }
+      sendViaSocket();
+    }, 1400);
+
+    pinFallbackTimerRef.current = setTimeout(() => {
+      if (settled || hasPinnedPost()) {
+        settled = true;
+        return;
+      }
+      void sendViaApiFallback();
+    }, 3200);
+
+    pendingSoKinPinRef.current = null;
+    return () => {
+      if (pinRetryTimerRef.current) {
+        clearTimeout(pinRetryTimerRef.current);
+        pinRetryTimerRef.current = null;
+      }
+      if (pinFallbackTimerRef.current) {
+        clearTimeout(pinFallbackTimerRef.current);
+        pinFallbackTimerRef.current = null;
+      }
+    };
+  }, [activeConv?.id, emit]);
 
   /* ── Load messages when active conversation changes ── */
   useEffect(() => {
@@ -1545,6 +1714,27 @@ export function MessagingPage() {
 
           {/* ── Message Body ── */}
           <div className="mg-messages">
+            {effectivePinnedSoKinPost && (
+              <section className="mg-sokin-pin" aria-label="Annonce So-Kin épinglée">
+                <div className="mg-sokin-pin-head">
+                  <span className="mg-sokin-pin-badge">📌 Annonce liée</span>
+                  <span className="mg-sokin-pin-id">ID: {effectivePinnedSoKinPost.id}</span>
+                </div>
+                <div className="mg-sokin-pin-author">
+                  {effectivePinnedSoKinPost.authorName}
+                  {effectivePinnedSoKinPost.authorHandle ? ` (@${effectivePinnedSoKinPost.authorHandle.replace('@', '')})` : ""}
+                </div>
+                <p className="mg-sokin-pin-preview">{effectivePinnedSoKinPost.text || "(sans texte)"}</p>
+                {effectivePinnedSoKinPost.mediaUrl && (
+                  <img
+                    src={effectivePinnedSoKinPost.mediaUrl}
+                    alt="Média principal de l'annonce"
+                    className="mg-sokin-pin-media"
+                  />
+                )}
+              </section>
+            )}
+
             {loadingMsgs ? (
               <div className="mg-loading-sm">{t("msg.loadingMessages")}</div>
             ) : messages.length === 0 ? (
@@ -1558,6 +1748,7 @@ export function MessagingPage() {
                 const showSender = activeConv.isGroup && !isMine && (idx === 0 || messages[idx - 1].senderId !== msg.senderId);
                 const readByOthers = msg.readReceipts.filter((r) => r.userId !== myId);
                 const isSelected = selectedMsgIds.has(msg.id);
+                const pinnedFromMsg = parseSoKinPostRefFromSystemMessage(msg);
 
                 return (
                   <div
@@ -1590,6 +1781,21 @@ export function MessagingPage() {
                         <video controls src={msg.mediaUrl} className="mg-media-video" />
                       ) : msg.type === "FILE" && msg.mediaUrl ? (
                         <a href={msg.mediaUrl} download={msg.fileName ?? "file"} className="mg-file-link">📎 {msg.fileName ?? t("msg.file")}</a>
+                      ) : pinnedFromMsg ? (
+                        <div className="mg-sokin-pin mg-sokin-pin--inline" aria-label="Annonce So-Kin liée">
+                          <div className="mg-sokin-pin-head">
+                            <span className="mg-sokin-pin-badge">📌 Annonce liée</span>
+                            <span className="mg-sokin-pin-id">ID: {pinnedFromMsg.id}</span>
+                          </div>
+                          <div className="mg-sokin-pin-author">
+                            {pinnedFromMsg.authorName}
+                            {pinnedFromMsg.authorHandle ? ` (@${pinnedFromMsg.authorHandle.replace('@', '')})` : ""}
+                          </div>
+                          <p className="mg-sokin-pin-preview">{pinnedFromMsg.text || "(sans texte)"}</p>
+                          {pinnedFromMsg.mediaUrl && (
+                            <img src={pinnedFromMsg.mediaUrl} alt="Média principal de l'annonce" className="mg-sokin-pin-media" />
+                          )}
+                        </div>
                       ) : (
                         <p className="mg-text">{msg.content}</p>
                       )}

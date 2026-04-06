@@ -28,11 +28,8 @@ import securityRoutes from "./modules/security/security.routes.js";
 import adsRoutes from "./modules/ads/ads.routes.js";
 import blogRoutes from "./modules/blog/blog.routes.js";
 import sokinRoutes from "./modules/sokin/sokin.routes.js";
-import sokinLiveRoutes from "./modules/sokin/sokin-live.routes.js";
-import sokinStoriesRoutes from "./modules/sokin/sokin-stories.routes.js";
 import analyticsRoutes from "./modules/analytics/analytics.routes.js";
 import marketIntelligenceRoutes from "./modules/market-intelligence/market-intelligence.routes.js";
-import sokinTrendsRoutes from "./modules/sokin-trends/sokin-trends.routes.js";
 import contactsRoutes from "./modules/contacts/contacts.routes.js";
 import mobileMoneyRoutes from "./modules/mobile-money/mobile-money.routes.js";
 import geoRoutes from "./modules/geo/geo.routes.js";
@@ -42,7 +39,6 @@ import { startVerificationScheduler } from "./modules/verification/verification.
 import { startAdScheduler } from "./modules/ads/ads.service.js";
 import { setupSocketServer } from "./modules/messaging/socket.js";
 import { errorHandler } from "./shared/errors/error-handler.js";
-import { startAiAutonomyScheduler } from "./modules/analytics/ai-autonomy.service.js";
 import { seedDefaultAgents } from "./modules/analytics/ai-admin.service.js";
 import { getRedis, disconnectRedis } from "./shared/db/redis.js";
 
@@ -68,7 +64,7 @@ app.use(cors({ origin: env.CORS_ORIGIN, credentials: true }));
 app.use((req, res, next) => {
   if (req.method === "GET") {
     // Endpoints publics (explorer, listings, blog) : cache navigateur 5 min
-    if (/^\/(explorer|listings|blog|geo|sokin-trends)/.test(req.path)) {
+    if (/^\/(explorer|listings|blog|geo)/.test(req.path)) {
       res.set("Cache-Control", "public, max-age=300, stale-while-revalidate=60");
     }
     // Données session (account, orders) : cache privé 1 min
@@ -151,11 +147,8 @@ app.use("/admin/security", securityRoutes);
 app.use("/ads", adsRoutes);
 app.use("/blog", blogRoutes);
 app.use("/sokin", sokinRoutes);
-app.use("/sokin/lives", sokinLiveRoutes);
-app.use("/sokin/stories", sokinStoriesRoutes);
 app.use("/analytics", analyticsRoutes);
 app.use("/market", marketIntelligenceRoutes);
-app.use("/sokin-trends", sokinTrendsRoutes);
 app.use("/contacts", contactsRoutes);
 app.use("/mobile-money", mobileMoneyRoutes);
 app.use("/geo", geoRoutes);
@@ -211,9 +204,8 @@ httpServer.listen(env.API_PORT, async () => {
   getRedis();
   startAdScheduler();
   await seedDefaultAgents();
-  startAiAutonomyScheduler();
   startVerificationScheduler();
-  logger.info("[IA] Agents initialisés + Scheduler autonome démarré");
+  logger.info("[IA] Agents initialisés (scheduler autonome désactivé)");
 });
 
 // ── Graceful shutdown ──
@@ -230,3 +222,4 @@ const shutdown = async (signal: string) => {
 };
 process.on("SIGTERM", () => shutdown("SIGTERM"));
 process.on("SIGINT", () => shutdown("SIGINT"));
+

@@ -1,3 +1,14 @@
+/**
+ * So-Kin Routes (Refonte v3 - Annonces uniquement)
+ * 
+ * Routes simplifiées:
+ * - GET /posts - Feed public (annonces localisées)
+ * - GET /posts/:id - Détail d'une annonce
+ * - GET /posts/mine - Mes annonces
+ * - POST /posts - Créer une annonce
+ * - DELETE /posts/:id - Supprimer une annonce
+ */
+
 import { Router } from "express";
 import { z } from "zod";
 import {
@@ -8,96 +19,93 @@ import { asyncHandler } from "../../shared/utils/async-handler.js";
 import {
   createSoKinPost,
   getMySoKinPosts,
-  toggleArchiveSoKinPost,
   deleteSoKinPost,
   getPublicFeed,
   getPublicPostById,
-  getPublicUsers,
-  reactToPost,
-  unreactToPost,
-  sharePost,
+  getPostComments,
+  createPostComment,
 } from "./sokin.service.js";
-import { sendPushToUser } from "../notifications/push.service.js";
-import { prisma } from "../../shared/db/prisma.js";
-import { emitToAll, isUserOnline } from "../messaging/socket.js";
+import { emitToAll } from "../messaging/socket.js";
 import { rateLimit, RateLimits } from "../../shared/middleware/rate-limit.middleware.js";
+
+const isVideoMediaUrl = (value: string) => /\.(mp4|webm|mov|ogg)(\?.*)?$/i.test(value);
 
 const createPostSchema = z.object({
   text: z.string().min(1).max(500),
-  mediaUrls: z.array(z.string()).max(4).optional(),
+  mediaUrls: z
+    .array(z.string().trim().min(1).max(2000))
+    .min(1, "Une annonce doit contenir au moins 1 média")
+    .max(5, "Maximum 5 médias par annonce")
+    .refine((list) => list.filter((url) => isVideoMediaUrl(url)).length <= 2, {
+      message: "Maximum 2 vidéos par annonce",
+    }),
   location: z.string().max(100).optional(),
-  tags: z.array(z.string()).max(10).optional(),
-  hashtags: z.array(z.string()).max(20).optional(),
   scheduledAt: z.string().datetime().optional(),
+});
+
+const createCommentSchema = z.object({
+  content: z.string().trim().min(1).max(500),
+  parentCommentId: z.string().optional(),
 });
 
 const router = Router();
 
-/* ── Routes publiques (pas d'authentification requise) ── */
+/* ─── Routes publiques ─── */
 
+/**
+ * GET /posts
+ * Récupère le fil public d'annonces
+ * Params: limit, offset, city, country, cursor
+ */
 router.get(
   "/posts",
   asyncHandler(async (req, res) => {
-    const raw = req.query.limit;
-    const city = typeof req.query.city === "string" ? req.query.city.slice(0, 100) : undefined;
-    const country = typeof req.query.country === "string" ? req.query.country.slice(0, 100) : undefined;
-    const limit = Math.min(
-      parseInt(typeof raw === "string" ? raw : "20", 10) || 20,
-      50
-    );
-    // Optionnel : passer l'userId connecté pour savoir ses réactions
-    const token = req.headers.authorization?.replace("Bearer ", "");
-    let viewerUserId: string | undefined;
-    if (token) {
-      try {
-        const { verifyAccessToken } = await import("../../shared/auth/jwt.js");
-        const payload = verifyAccessToken(token);
-        viewerUserId = payload.sub;
-      } catch { /* token invalide, on ignore */ }
-    }
-    const posts = await getPublicFeed(limit, viewerUserId, city, country);
+    const limit = Math.min(parseInt(req.query.limit as string) || 20, 50);
+    const offset = parseInt(req.query.offset as string) || 0;
+    const cursor = (req.query.cursor as string | undefined)?.slice(0, 191);
+    const city = (req.query.city as string)?.slice(0, 100);
+    const country = (req.query.country as string)?.slice(0, 100);
+
+    const posts = await getPublicFeed(limit, undefined, city, country, offset, cursor);
     res.json({ posts });
   })
 );
 
+/**
+ * GET /posts/:id
+ * Récupère une annonce spécifique
+ */
 router.get(
   "/posts/:id",
   asyncHandler(async (req, res) => {
-    const token = req.headers.authorization?.replace("Bearer ", "");
-    let viewerUserId: string | undefined;
-    if (token) {
-      try {
-        const { verifyAccessToken } = await import("../../shared/auth/jwt.js");
-        const payload = verifyAccessToken(token);
-        viewerUserId = payload.sub;
-      } catch {
-        // token invalide, on ignore
-      }
+    const post = await getPublicPostById(req.params.id);
+    if (!post) {
+      res.status(404).json({ error: "Annonce non trouvée" });
+      return;
     }
-    const post = await getPublicPostById(req.params.id, viewerUserId);
     res.json({ post });
   })
 );
 
+/**
+ * GET /posts/:id/comments
+ * Liste commentaires (plus récents en premier)
+ */
 router.get(
-  "/users",
+  "/posts/:id/comments",
   asyncHandler(async (req, res) => {
-    const { city: rawCity, search: rawSearch, country: rawCountry } = req.query as Record<string, string | undefined>;
-    const city = rawCity?.slice(0, 100);
-    const search = rawSearch?.slice(0, 100);
-    const country = rawCountry?.slice(0, 100);
-    const raw = req.query.limit;
-    const limit = Math.min(
-      parseInt(typeof raw === "string" ? raw : "50", 10) || 50,
-      100
-    );
-    const users = await getPublicUsers(city, search, limit, country);
-    res.json({ users });
+    const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
+    const comments = await getPostComments(req.params.id, limit);
+    res.json({ comments });
   })
 );
 
-/* ── Routes authentifiées ── */
+/* ─── Routes authentifiées ─── */
 
+/**
+ * GET /posts/mine
+ * Récupère les annonces de l'utilisateur connecté
+ */
 router.get(
   "/posts/mine",
   requireAuth,
@@ -107,16 +115,20 @@ router.get(
   })
 );
 
+/**
+ * POST /posts
+ * Crée une nouvelle annonce
+ */
 router.post(
   "/posts",
   requireAuth,
   rateLimit(RateLimits.SOKIN_POST),
   asyncHandler(async (req: AuthenticatedRequest, res) => {
-    const { text, mediaUrls = [], location, tags, hashtags, scheduledAt } = createPostSchema.parse(req.body);
+    const { text, mediaUrls = [], location, scheduledAt } = createPostSchema.parse(req.body);
 
-    // ── ContentGuard: modération IA avant publication ──
+    // ContentGuard: modération IA avant publication
     const { analyzePost } = await import("./content-guard.service.js");
-    const guard = await analyzePost(text, hashtags ?? [], req.auth!.userId);
+    const guard = await analyzePost(text, [], req.auth!.userId);
     if (guard.verdict === "BLOCK") {
       res.status(422).json({
         error: guard.warningMessage ?? "Publication refusée par le système de modération.",
@@ -126,7 +138,16 @@ router.post(
       return;
     }
 
-    const post = await createSoKinPost(req.auth!.userId, text, mediaUrls, location, tags, hashtags, scheduledAt ? new Date(scheduledAt) : undefined);
+    const post = await createSoKinPost(
+      req.auth!.userId,
+      text,
+      mediaUrls,
+      location,
+      [],
+      [],
+      scheduledAt ? new Date(scheduledAt) : undefined
+    );
+
     emitToAll("sokin:post-created", {
       type: "SOKIN_POST_CREATED",
       postId: post.id,
@@ -135,107 +156,40 @@ router.post(
       sourceUserId: req.auth!.userId,
     });
 
-    if (guard.verdict === "WARN") {
-      res.status(201).json({ ...post, _contentWarning: guard.warningMessage });
-    } else {
-      res.status(201).json(post);
-    }
+    res.status(201).json(post);
   })
 );
 
-router.patch(
-  "/posts/:id/archive",
+/**
+ * POST /posts/:id/comments
+ * Créer un commentaire/réponse
+ */
+router.post(
+  "/posts/:id/comments",
   requireAuth,
+  rateLimit(RateLimits.SOKIN_POST),
   asyncHandler(async (req: AuthenticatedRequest, res) => {
-    const post = await toggleArchiveSoKinPost(req.auth!.userId, req.params.id);
-    res.json(post);
+    const parsed = createCommentSchema.parse(req.body);
+    const comment = await createPostComment(
+      req.auth!.userId,
+      req.params.id,
+      parsed.content,
+      parsed.parentCommentId
+    );
+    res.status(201).json({ comment });
   })
 );
 
+/**
+ * DELETE /posts/:id
+ * Supprime une annonce
+ */
 router.delete(
   "/posts/:id",
   requireAuth,
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     await deleteSoKinPost(req.auth!.userId, req.params.id);
     res.json({ success: true });
-  })
-);
-
-/* ── Réactions style Facebook ── */
-
-const reactionSchema = z.object({
-  type: z.enum(["LIKE", "LOVE", "HAHA", "WOW", "SAD", "ANGRY"]),
-});
-
-router.post(
-  "/posts/:id/react",
-  requireAuth,
-  asyncHandler(async (req: AuthenticatedRequest, res) => {
-    const { type } = reactionSchema.parse(req.body);
-    const result = await reactToPost(req.auth!.userId, req.params.id, type);
-    emitToAll("sokin:post-reacted", {
-      postId: req.params.id,
-      type,
-      sourceUserId: req.auth!.userId,
-    });
-    if (result.authorId && result.authorId !== req.auth!.userId && !isUserOnline(result.authorId)) {
-      const actor = await prisma.userProfile.findUnique({
-        where: { userId: req.auth!.userId },
-        select: { displayName: true },
-      });
-      const label = actor?.displayName ?? "Quelqu'un";
-      void sendPushToUser(result.authorId, {
-        title: "❤️ Nouvelle réaction So-Kin",
-        body: `${label} a réagi à votre publication.`,
-        tag: `sokin-like-${req.params.id}`,
-        data: { type: "like", postId: req.params.id },
-      });
-    }
-    res.json(result);
-  })
-);
-
-router.delete(
-  "/posts/:id/react",
-  requireAuth,
-  asyncHandler(async (req: AuthenticatedRequest, res) => {
-    const result = await unreactToPost(req.auth!.userId, req.params.id);
-    emitToAll("sokin:post-unreacted", {
-      postId: req.params.id,
-      sourceUserId: req.auth!.userId,
-    });
-    res.json(result);
-  })
-);
-
-router.post(
-  "/posts/:id/share",
-  requireAuth,
-  asyncHandler(async (req: AuthenticatedRequest, res) => {
-    const result = await sharePost(req.params.id);
-    emitToAll("sokin:post-shared", {
-      type: "SOKIN_POST_SHARED",
-      postId: req.params.id,
-      shares: result.shares,
-      sourceUserId: req.auth!.userId,
-      updatedAt: new Date().toISOString(),
-    });
-
-    if (result.authorId && result.authorId !== req.auth!.userId && !isUserOnline(result.authorId)) {
-      const actor = await prisma.userProfile.findUnique({
-        where: { userId: req.auth!.userId },
-        select: { displayName: true },
-      });
-      const label = actor?.displayName ?? "Quelqu'un";
-      void sendPushToUser(result.authorId, {
-        title: "🔁 Nouveau partage So-Kin",
-        body: `${label} a partagé votre publication.`,
-        tag: `sokin-share-${req.params.id}`,
-        data: { type: "sokin", postId: req.params.id },
-      });
-    }
-
-    res.json(result);
   })
 );
 

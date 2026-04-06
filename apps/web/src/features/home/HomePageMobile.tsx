@@ -25,7 +25,6 @@ import {
   resolveMediaUrl,
   type PublicListing,
   type SoKinApiFeedPost,
-  type SoKinReactionType,
 } from "../../lib/api-client";
 import { NegotiatePopup } from "../negotiations/NegotiatePopup";
 import { AdBanner } from "../../components/AdBanner";
@@ -770,29 +769,37 @@ function SoKinFeed({
   const sentinelRef = useRef<HTMLDivElement>(null);
   const [hasMore, setHasMore] = useState(true);
   const loadingRef = useRef(false);
+  const offsetRef = useRef(0);
 
   const loadFeed = useCallback(
     async (reset = false) => {
       if (loadingRef.current && !reset) return;
       loadingRef.current = true;
       try {
+        const limit = 12;
+        const currentOffset = reset ? 0 : offsetRef.current;
         const res = await sokinApi.publicFeed({
-          limit: 12,
+          limit,
+          offset: currentOffset,
           city: cityHint,
           country: countryHint,
         });
         if (reset) {
           setPosts(res.posts);
+          offsetRef.current = res.posts.length;
+          setHasMore(res.posts.length >= limit);
         } else {
           setPosts((prev) => {
             const ids = new Set(prev.map((p) => p.id));
+            const fresh = res.posts.filter((p) => !ids.has(p.id));
+            offsetRef.current += fresh.length;
             return [
               ...prev,
-              ...res.posts.filter((p) => !ids.has(p.id)),
+              ...fresh,
             ];
           });
+          setHasMore(res.posts.length >= limit);
         }
-        if (res.posts.length < 12) setHasMore(false);
       } catch {
         /* ignore */
       } finally {
@@ -812,36 +819,9 @@ function SoKinFeed({
     const handleCreated = () => {
       void loadFeed(true);
     };
-    const handleShared = (p: { postId: string; shares: number }) => {
-      setPosts((prev) =>
-        prev.map((post) =>
-          post.id === p.postId ? { ...post, shares: p.shares } : post,
-        ),
-      );
-    };
-    const handleReacted = (payload: { postId: string; type: string; sourceUserId: string }) => {
-      setPosts((prev) => prev.map((p) => {
-        if (p.id !== payload.postId) return p;
-        const counts = { ...(p.reactionCounts ?? {}) } as Record<string, number>;
-        counts[payload.type] = (counts[payload.type] ?? 0) + 1;
-        return { ...p, reactionCounts: counts as typeof p.reactionCounts, likes: (p.likes ?? 0) + 1 };
-      }));
-    };
-    const handleUnreacted = (payload: { postId: string; sourceUserId: string }) => {
-      setPosts((prev) => prev.map((p) => {
-        if (p.id !== payload.postId) return p;
-        return { ...p, likes: Math.max(0, (p.likes ?? 0) - 1) };
-      }));
-    };
     on("sokin:post-created", handleCreated);
-    on("sokin:post-shared", handleShared);
-    on("sokin:post-reacted", handleReacted);
-    on("sokin:post-unreacted", handleUnreacted);
     return () => {
       off("sokin:post-created", handleCreated);
-      off("sokin:post-shared", handleShared);
-      off("sokin:post-reacted", handleReacted);
-      off("sokin:post-unreacted", handleUnreacted);
     };
   }, [on, off, loadFeed]);
 
@@ -859,52 +839,6 @@ function SoKinFeed({
     return () => obs.disconnect();
   }, [hasMore, loadFeed]);
 
-  const handleReact = async (postId: string, type: SoKinReactionType) => {
-    if (!isLoggedIn) return;
-    try {
-      const post = posts.find((p) => p.id === postId);
-      if (post?.myReaction === type) {
-        await sokinApi.unreactToPost(postId);
-        setPosts((prev) =>
-          prev.map((p) =>
-            p.id === postId
-              ? { ...p, myReaction: null, likes: Math.max(0, p.likes - 1) }
-              : p,
-          ),
-        );
-      } else {
-        await sokinApi.reactToPost(postId, type);
-        setPosts((prev) =>
-          prev.map((p) =>
-            p.id === postId
-              ? {
-                  ...p,
-                  myReaction: type,
-                  likes: p.likes + (p.myReaction ? 0 : 1),
-                }
-              : p,
-          ),
-        );
-      }
-    } catch {
-      /* ignore */
-    }
-  };
-
-  const handleShare = async (postId: string) => {
-    if (!isLoggedIn) return;
-    try {
-      const res = await sokinApi.sharePost(postId);
-      setPosts((prev) =>
-        prev.map((p) =>
-          p.id === postId ? { ...p, shares: res.shares } : p,
-        ),
-      );
-    } catch {
-      /* ignore */
-    }
-  };
-
   const renderItems = () => {
     const elements: React.ReactNode[] = [];
     posts.forEach((post, idx) => {
@@ -913,9 +847,6 @@ function SoKinFeed({
           key={post.id}
           post={post}
           t={t}
-          onReact={handleReact}
-          onShare={handleShare}
-          isLoggedIn={isLoggedIn}
         />,
       );
       if ((idx + 1) % 4 === 0) {
@@ -971,15 +902,9 @@ function SoKinFeed({
 function SoKinPostCard({
   post,
   t,
-  onReact,
-  onShare,
-  isLoggedIn,
 }: {
   post: SoKinApiFeedPost;
   t: (k: string) => string;
-  onReact: (id: string, type: SoKinReactionType) => void;
-  onShare: (id: string) => void;
-  isLoggedIn: boolean;
 }) {
   const profile = post.author?.profile;
   const name = profile?.displayName ?? t("home.defaultUser");
@@ -988,7 +913,6 @@ function SoKinPostCard({
   const videoRef = useRef<HTMLVideoElement>(null);
   const [paused, setPaused] = useState(false);
   const tapTimeout = useRef<ReturnType<typeof setTimeout>>();
-  const [liked, setLiked] = useState(false);
 
   const isVideo = (url: string) => /\.(mp4|webm|mov|ogg)(\?|$)/i.test(url);
 
@@ -996,9 +920,6 @@ function SoKinPostCard({
     if (tapTimeout.current) {
       clearTimeout(tapTimeout.current);
       tapTimeout.current = undefined;
-      setLiked(true);
-      setTimeout(() => setLiked(false), 600);
-      onReact(post.id, "LIKE");
     } else {
       tapTimeout.current = setTimeout(() => {
         tapTimeout.current = undefined;
@@ -1037,27 +958,10 @@ function SoKinPostCard({
           <button
             className="hm-letter-icon-btn"
             aria-label={t("home.contact")}
+            onClick={() => window.location.assign("/sokin")}
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-            </svg>
-          </button>
-          <button
-            className="hm-letter-icon-btn"
-            aria-label="Favoris"
-            onClick={() => onReact(post.id, "LOVE")}
-          >
-            <svg
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill={post.myReaction === "LOVE" ? "var(--color-primary)" : "none"}
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
             </svg>
           </button>
         </div>
@@ -1100,48 +1004,13 @@ function SoKinPostCard({
                 />
               );
             })}
-            {liked && (
-              <div className="hm-letter-like-burst">&#x2764;&#xFE0F;</div>
-            )}
           </div>
         )}
       </div>
 
       {/* Pied */}
       <div className="hm-letter-foot">
-        <div className="hm-letter-foot-left">
-          <button
-            className={
-              "hm-letter-react-btn" +
-              (post.myReaction === "LIKE" ? " hm-letter-react-btn--active" : "")
-            }
-            onClick={() => onReact(post.id, "LIKE")}
-          >
-            <svg
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill={post.myReaction === "LIKE" ? "var(--color-primary)" : "none"}
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3" />
-            </svg>
-            <span>{post.likes}</span>
-          </button>
-          <button
-            className="hm-letter-react-btn"
-            onClick={() => onReact(post.id, "SAD")}
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path
-                d="M10 15V9a3 3 0 0 1 3-3l4 9V4H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zM17 2h3a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-3"
-                transform="rotate(180 12 12)"
-              />
-            </svg>
-            <span>{post.reactionCounts?.SAD ?? 0}</span>
-          </button>
-        </div>
+        <div className="hm-letter-foot-left" />
         <div className="hm-letter-foot-right">
           <Link
             to="/sokin"
@@ -1153,20 +1022,6 @@ function SoKinPostCard({
               <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
             </svg>
           </Link>
-          <button
-            className="hm-letter-react-btn"
-            onClick={() => onShare(post.id)}
-            aria-label={t("home.share")}
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="18" cy="5" r="3" />
-              <circle cx="6" cy="12" r="3" />
-              <circle cx="18" cy="19" r="3" />
-              <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
-              <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
-            </svg>
-            {post.shares > 0 && <span>{post.shares}</span>}
-          </button>
         </div>
       </div>
     </article>

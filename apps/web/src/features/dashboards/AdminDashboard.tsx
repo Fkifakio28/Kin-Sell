@@ -42,10 +42,6 @@ import {
   type AdminAiRecommendationStats,
   type AdminSubscriptionItem,
   type AdminAiTrialItem,
-  type AdminIaCreative,
-  type AdminIaCampaign,
-  type AdminIaAdsStats,
-  type AdminIaPerformance,
 } from '../../lib/api-client';
 import { verification, type VerificationRequestData, type VerificationListResponse } from '../../lib/services/verification.service';
 import { DashboardMessaging } from './DashboardMessaging';
@@ -59,7 +55,7 @@ type AdminSection =
   | 'reports' | 'feed' | 'donations' | 'ads' | 'advertisements' | 'listings' | 'negotiation-rules'
   | 'security' | 'antifraud' | 'security-ai' | 'ai-management'
   | 'rankings' | 'admins' | 'currency' | 'audit'
-  | 'settings' | 'messaging' | 'appeals' | 'subscriptions' | 'ia-ads' | 'verification';
+  | 'settings' | 'messaging' | 'appeals' | 'subscriptions' | 'verification';
 
 type ModalType =
   | null | 'user-detail' | 'user-role' | 'user-message' | 'user-suspend'
@@ -72,12 +68,12 @@ const ALL_PERMISSIONS = [
   'DONATIONS', 'ADS', 'ADVERTISEMENTS', 'LISTINGS', 'NEGOTIATION_RULES',
   'SECURITY', 'ANTIFRAUD', 'SECURITY_AI',
   'AI_MANAGEMENT', 'RANKINGS', 'ADMINS', 'CURRENCY', 'AUDIT',
-  'SETTINGS', 'MESSAGING', 'SUBSCRIPTIONS', 'IA_ADS', 'VERIFICATION',
+  'SETTINGS', 'MESSAGING', 'SUBSCRIPTIONS', 'VERIFICATION',
 ];
 
 const LEVEL_DEFAULT_PERMS: Record<string, string[]> = {
   LEVEL_1: [...ALL_PERMISSIONS],
-  LEVEL_2: ['DASHBOARD','USERS','BLOG','TRANSACTIONS','REPORTS','FEED','DONATIONS','ADS','ADVERTISEMENTS','SECURITY','ANTIFRAUD','AI_MANAGEMENT','RANKINGS','CURRENCY','AUDIT','MESSAGING','LISTINGS','NEGOTIATION_RULES','IA_ADS'],
+  LEVEL_2: ['DASHBOARD','USERS','BLOG','TRANSACTIONS','REPORTS','FEED','DONATIONS','ADS','ADVERTISEMENTS','SECURITY','ANTIFRAUD','AI_MANAGEMENT','RANKINGS','CURRENCY','AUDIT','MESSAGING','LISTINGS','NEGOTIATION_RULES'],
   LEVEL_3: ['DASHBOARD','USERS','BLOG','TRANSACTIONS','REPORTS','FEED','DONATIONS','ADS','ADVERTISEMENTS','RANKINGS','MESSAGING','LISTINGS'],
   LEVEL_4: ['DASHBOARD','USERS','BLOG','REPORTS','FEED','MESSAGING'],
   LEVEL_5: ['DASHBOARD'],
@@ -113,7 +109,6 @@ const SECTION_DEFS: Array<{
   { key: 'settings',      label: 'Paramètres',         icon: '⚙️', permission: 'SETTINGS',      group: 'Système' },
   { key: 'messaging',     label: 'Messagerie',         icon: '💬', permission: 'MESSAGING',     group: 'Système' },
   { key: 'subscriptions',  label: 'Abonnements & IA',   icon: '💳', permission: 'SUBSCRIPTIONS', group: 'Outils' },
-  { key: 'ia-ads',         label: 'IA Ads & Studio',    icon: '🎯', permission: 'IA_ADS',        group: 'IA' },
   { key: 'verification',   label: 'Vérifications',      icon: '✅', permission: 'VERIFICATION',  group: 'Outils' },
 ];
 
@@ -277,19 +272,6 @@ export function AdminDashboard() {
   const [subSubTab, setSubSubTab] = useState<'stats' | 'subs' | 'trials' | 'activate'>('stats');
   const [activateForm, setActivateForm] = useState({ userId: '', planCode: 'BOOST', durationDays: 30, reason: '', exempt: false });
   const [activateMsg, setActivateMsg] = useState<string | null>(null);
-
-  // IA Ads & Studio
-  const [iaAdsStats, setIaAdsStats] = useState<AdminIaAdsStats | null>(null);
-  const [iaCreatives, setIaCreatives] = useState<AdminIaCreative[]>([]);
-  const [iaCreativesTotal, setIaCreativesTotal] = useState(0);
-  const [iaCreativesPage, setIaCreativesPage] = useState(1);
-  const [iaCampaigns, setIaCampaigns] = useState<AdminIaCampaign[]>([]);
-  const [iaCampaignsTotal, setIaCampaignsTotal] = useState(0);
-  const [iaCampaignsPage, setIaCampaignsPage] = useState(1);
-  const [iaSubTab, setIaSubTab] = useState<'stats' | 'studio' | 'campaigns' | 'top'>('stats');
-  const [iaGenForm, setIaGenForm] = useState({ adType: 'BOOST_ARTICLE', audienceType: 'ALL', mediaType: 'TEXT', tone: 'premium' });
-  const [iaGenBusy, setIaGenBusy] = useState(false);
-  const [iaTopCampaigns, setIaTopCampaigns] = useState<{ campaignId: string; campaignName: string; impressions: number; clicks: number; ctr: number }[]>([]);
 
   // Currency
   const [currencyRates, setCurrencyRates] = useState<AdminCurrencyRate[]>([]);
@@ -556,26 +538,11 @@ export function AdminDashboard() {
           setTrialTotal(trials.total);
           break;
         }
-        case 'ia-ads': {
-          const [stats, creatives, campaigns, top] = await Promise.all([
-            admin.iaAdsStats(),
-            admin.iaStudioCreatives({ page: iaCreativesPage, limit: 20 }),
-            admin.iaAdsCampaigns({ page: iaCampaignsPage, limit: 20 }),
-            admin.iaAdsTopCampaigns(10),
-          ]);
-          setIaAdsStats(stats);
-          setIaCreatives(creatives.creatives);
-          setIaCreativesTotal(creatives.total);
-          setIaCampaigns(campaigns.campaigns);
-          setIaCampaignsTotal(campaigns.total);
-          setIaTopCampaigns(top);
-          break;
-        }
       }
     } catch (e: any) {
       setError(e?.message ?? 'Erreur de chargement');
     }
-  }, [activeSection, usersPage, usersSearch, usersRoleFilter, usersStatusFilter, blogPage, blogStatusFilter, blogCategoryFilter, blogSearch, blogSortBy, txPage, txStatusFilter, reportsPage, reportsStatusFilter, rankPeriod, rankType, auditPage, secEventsPage, fraudPage, fraudFilter, restrictionsPage, restrictionsFilter, mgLogsPage, mgVerdictFilter, aiStatusFilter, aiDomainFilter, aiTypeFilter, feedPage, feedStatusFilter, feedSearch, donationsPage, donationsStatusFilter, donationsTypeFilter, advPage, advStatusFilter, advTypeFilter, advSearch, adminListingsPage, adminListingsStatusFilter, adminListingsTypeFilter, adminListingsSearch, appealsPage, subPage, trialPage, iaCreativesPage, iaCampaignsPage]);
+  }, [activeSection, usersPage, usersSearch, usersRoleFilter, usersStatusFilter, blogPage, blogStatusFilter, blogCategoryFilter, blogSearch, blogSortBy, txPage, txStatusFilter, reportsPage, reportsStatusFilter, rankPeriod, rankType, auditPage, secEventsPage, fraudPage, fraudFilter, restrictionsPage, restrictionsFilter, mgLogsPage, mgVerdictFilter, aiStatusFilter, aiDomainFilter, aiTypeFilter, feedPage, feedStatusFilter, feedSearch, donationsPage, donationsStatusFilter, donationsTypeFilter, advPage, advStatusFilter, advTypeFilter, advSearch, adminListingsPage, adminListingsStatusFilter, adminListingsTypeFilter, adminListingsSearch, appealsPage, subPage, trialPage]);
 
   useEffect(() => { if (isLoggedIn) loadSectionData(); }, [loadSectionData, isLoggedIn]);
 
@@ -2854,322 +2821,6 @@ export function AdminDashboard() {
     );
   };
 
-  // ══════════════════════════════════════════════════════════════
-  // IA Ads & Studio section
-  // ══════════════════════════════════════════════════════════════
-  const renderIaAds = () => {
-    const handleGenerate = async () => {
-      setIaGenBusy(true);
-      try {
-        await admin.iaStudioGenerate(iaGenForm);
-        setSuccess('✅ Création IA générée');
-        loadSectionData();
-      } catch (e: any) {
-        setError(e?.message || 'Erreur génération');
-      } finally {
-        setIaGenBusy(false);
-      }
-    };
-
-    const handleAutoGenerate = async () => {
-      setIaGenBusy(true);
-      try {
-        const res = await admin.iaStudioAutoGenerate();
-        setSuccess(`✅ ${res.generated} créations auto-générées`);
-        loadSectionData();
-      } catch (e: any) {
-        setError(e?.message || 'Erreur auto-génération');
-      } finally {
-        setIaGenBusy(false);
-      }
-    };
-
-    const handlePublish = async (creativeId: string) => {
-      try {
-        await admin.iaAdsPublish(creativeId);
-        setSuccess('✅ Campagne publiée');
-        loadSectionData();
-      } catch (e: any) {
-        setError(e?.message || 'Erreur publication');
-      }
-    };
-
-    const handleToggle = async (campaignId: string) => {
-      try {
-        await admin.iaAdsToggleCampaign(campaignId);
-        loadSectionData();
-      } catch (e: any) {
-        setError(e?.message || 'Erreur toggle');
-      }
-    };
-
-    const handleDeleteCreative = async (id: string) => {
-      if (!confirm('Supprimer cette création ?')) return;
-      try {
-        await admin.iaStudioDeleteCreative(id);
-        setSuccess('✅ Supprimé');
-        loadSectionData();
-      } catch (e: any) {
-        setError(e?.message || 'Erreur suppression');
-      }
-    };
-
-    const handleDeleteCampaign = async (id: string) => {
-      if (!confirm('Supprimer cette campagne ?')) return;
-      try {
-        await admin.iaAdsDeleteCampaign(id);
-        setSuccess('✅ Campagne supprimée');
-        loadSectionData();
-      } catch (e: any) {
-        setError(e?.message || 'Erreur suppression');
-      }
-    };
-
-    const AD_TYPE_LABELS: Record<string, string> = {
-      BOOST_ARTICLE: '🚀 Boost Article', BOOST_SHOP: '🏪 Boost Shop',
-      FORFAIT: '💎 Forfait', IA_PROMO: '🤖 IA Promo',
-      ESSAI: '🎁 Essai', AUTO_VENTE: '📈 Auto-Vente',
-      UPGRADE: '⬆️ Upgrade', CUSTOM: '✨ Custom',
-    };
-    const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
-      DRAFT: { bg: 'rgba(255,152,0,0.15)', color: '#ff9800' },
-      READY: { bg: 'rgba(33,150,243,0.15)', color: '#2196f3' },
-      PUBLISHED: { bg: 'rgba(76,175,80,0.15)', color: '#4caf50' },
-      ARCHIVED: { bg: 'rgba(255,255,255,0.06)', color: '#888' },
-    };
-
-    return (
-      <div className="ad-section animate-fade-in">
-        <h2 className="ad-section-title">🎯 IA Ads & Studio</h2>
-
-        {/* Sub tabs */}
-        <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
-          {([
-            { k: 'stats' as const, l: '📊 Stats' },
-            { k: 'studio' as const, l: '🎨 Studio Ads' },
-            { k: 'campaigns' as const, l: '📡 Campagnes' },
-            { k: 'top' as const, l: '🏆 Top Campagnes' },
-          ]).map(st => (
-            <button key={st.k} onClick={() => setIaSubTab(st.k)}
-              style={{ padding: '6px 14px', fontSize: 12, fontWeight: 600, border: 'none', borderRadius: 8,
-                background: iaSubTab === st.k ? 'rgba(111,88,255,0.3)' : 'rgba(255,255,255,0.06)',
-                color: iaSubTab === st.k ? '#fff' : 'rgba(255,255,255,0.6)', cursor: 'pointer',
-              }}>{st.l}</button>
-          ))}
-        </div>
-
-        {/* ── Stats ── */}
-        {iaSubTab === 'stats' && iaAdsStats && (
-          <div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 12, marginBottom: 20 }}>
-              {[
-                { label: 'Campagnes totales', val: iaAdsStats.totalCampaigns },
-                { label: 'Actives', val: iaAdsStats.activeCampaigns, color: '#4caf50' },
-                { label: 'Créations totales', val: iaAdsStats.totalCreatives },
-                { label: 'Prêtes', val: iaAdsStats.readyCreatives, color: '#2196f3' },
-                { label: 'Publiées', val: iaAdsStats.publishedCreatives, color: '#4caf50' },
-              ].map(s => (
-                <div key={s.label} style={{ background: 'rgba(111,88,255,0.06)', borderRadius: 10, padding: 14, textAlign: 'center' }}>
-                  <div style={{ fontSize: 22, fontWeight: 700, color: s.color || '#6f58ff' }}>{s.val}</div>
-                  <div style={{ fontSize: 11, color: 'var(--color-text-secondary, #aaa)', marginTop: 4 }}>{s.label}</div>
-                </div>
-              ))}
-            </div>
-
-            <h4 style={{ color: 'var(--color-text-primary, #fff)', marginBottom: 8 }}>Performance globale</h4>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {[
-                { label: 'Impressions', val: iaAdsStats.performance.impressions },
-                { label: 'Clics', val: iaAdsStats.performance.clicks },
-                { label: 'CTR', val: (iaAdsStats.performance.ctr * 100).toFixed(1) + '%', color: '#6f58ff' },
-                { label: 'Conversions', val: iaAdsStats.performance.conversions, color: '#4caf50' },
-                { label: 'Abonnements', val: iaAdsStats.performance.subscriptions, color: '#2196f3' },
-                { label: 'Essais', val: iaAdsStats.performance.trials },
-                { label: 'Rejets', val: iaAdsStats.performance.dismissals, color: '#ff9800' },
-                { label: 'Revenu', val: `${iaAdsStats.performance.revenue.toFixed(2)}$`, color: '#4caf50' },
-              ].map(s => (
-                <span key={s.label} style={{ padding: '6px 12px', borderRadius: 8, background: 'rgba(111,88,255,0.08)', fontSize: 12 }}>
-                  <span style={{ color: 'var(--color-text-secondary, #aaa)' }}>{s.label}: </span>
-                  <span style={{ fontWeight: 700, color: s.color || 'var(--color-text-primary, #fff)' }}>{s.val}</span>
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* ── Studio Ads ── */}
-        {iaSubTab === 'studio' && (
-          <div>
-            {/* Generate form */}
-            <div style={{ background: 'rgba(111,88,255,0.06)', borderRadius: 14, padding: 20, marginBottom: 20, border: '1px solid rgba(111,88,255,0.15)' }}>
-              <h4 style={{ fontSize: 14, color: 'var(--color-text-primary, #fff)', marginBottom: 12 }}>🎨 Générer une création IA</h4>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 10, marginBottom: 12 }}>
-                <select value={iaGenForm.adType} onChange={e => setIaGenForm(f => ({ ...f, adType: e.target.value }))}
-                  style={{ padding: 8, borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#fff', fontSize: 12 }}>
-                  {Object.entries(AD_TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                </select>
-                <select value={iaGenForm.audienceType} onChange={e => setIaGenForm(f => ({ ...f, audienceType: e.target.value }))}
-                  style={{ padding: 8, borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#fff', fontSize: 12 }}>
-                  <option value="ALL">Tous</option><option value="USER">Utilisateurs</option><option value="BUSINESS">Business</option>
-                </select>
-                <select value={iaGenForm.tone} onChange={e => setIaGenForm(f => ({ ...f, tone: e.target.value }))}
-                  style={{ padding: 8, borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#fff', fontSize: 12 }}>
-                  <option value="premium">Premium</option><option value="agressif">Agressif</option><option value="doux">Doux</option>
-                  <option value="vendeur">Vendeur</option><option value="informatif">Informatif</option>
-                </select>
-                <select value={iaGenForm.mediaType} onChange={e => setIaGenForm(f => ({ ...f, mediaType: e.target.value }))}
-                  style={{ padding: 8, borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#fff', fontSize: 12 }}>
-                  <option value="TEXT">Texte</option><option value="BANNER">Bannière</option><option value="CARD">Carte</option>
-                </select>
-              </div>
-              <div style={{ display: 'flex', gap: 10 }}>
-                <button onClick={handleGenerate} disabled={iaGenBusy}
-                  style={{ padding: '8px 18px', fontSize: 12, fontWeight: 600, border: 'none', borderRadius: 8, background: 'linear-gradient(135deg, #6f58ff, #9b7aff)', color: '#fff', cursor: 'pointer', opacity: iaGenBusy ? 0.5 : 1 }}>
-                  {iaGenBusy ? '⏳ Génération...' : '🎨 Générer'}
-                </button>
-                <button onClick={handleAutoGenerate} disabled={iaGenBusy}
-                  style={{ padding: '8px 18px', fontSize: 12, fontWeight: 600, border: 'none', borderRadius: 8, background: 'rgba(76,175,80,0.2)', color: '#4caf50', cursor: 'pointer', opacity: iaGenBusy ? 0.5 : 1 }}>
-                  {iaGenBusy ? '⏳...' : '🤖 Auto-générer tout'}
-                </button>
-              </div>
-            </div>
-
-            {/* Creatives list */}
-            <h4 style={{ fontSize: 14, color: 'var(--color-text-primary, #fff)', marginBottom: 10 }}>📚 Bibliothèque de créations ({iaCreativesTotal})</h4>
-            <table className="ad-table" style={{ width: '100%', fontSize: 12 }}>
-              <thead>
-                <tr>
-                  <th>Type</th>
-                  <th>Titre</th>
-                  <th>Audience</th>
-                  <th>Ton</th>
-                  <th>Statut</th>
-                  <th>Source</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {iaCreatives.map(c => {
-                  const sc = STATUS_COLORS[c.status] || { bg: 'rgba(255,255,255,0.06)', color: '#888' };
-                  return (
-                    <tr key={c.id}>
-                      <td>{AD_TYPE_LABELS[c.adType] || c.adType}</td>
-                      <td style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.title}</td>
-                      <td>{c.audienceType}</td>
-                      <td>{c.tone || '—'}</td>
-                      <td><span style={{ padding: '2px 6px', borderRadius: 4, fontSize: 10, background: sc.bg, color: sc.color }}>{c.status}</span></td>
-                      <td style={{ fontSize: 10, color: '#888' }}>{c.sourceEngine}</td>
-                      <td style={{ display: 'flex', gap: 4 }}>
-                        {c.status === 'DRAFT' && (
-                          <button onClick={() => admin.iaStudioUpdateStatus(c.id, 'READY').then(() => loadSectionData())} className="ad-btn ad-btn--sm" title="Marquer prêt">✅</button>
-                        )}
-                        {(c.status === 'READY' || c.status === 'DRAFT') && (
-                          <button onClick={() => handlePublish(c.id)} className="ad-btn ad-btn--sm" title="Publier">📡</button>
-                        )}
-                        <button onClick={() => handleDeleteCreative(c.id)} className="ad-btn ad-btn--sm ad-btn--danger" title="Supprimer">🗑️</button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-            {iaCreativesTotal > 20 && (
-              <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 12 }}>
-                <button disabled={iaCreativesPage <= 1} onClick={() => setIaCreativesPage(p => p - 1)} className="ad-btn ad-btn--sm">◀</button>
-                <span style={{ fontSize: 12, color: '#aaa', alignSelf: 'center' }}>Page {iaCreativesPage}</span>
-                <button disabled={iaCreatives.length < 20} onClick={() => setIaCreativesPage(p => p + 1)} className="ad-btn ad-btn--sm">▶</button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ── Campaigns ── */}
-        {iaSubTab === 'campaigns' && (
-          <div>
-            <h4 style={{ fontSize: 14, color: 'var(--color-text-primary, #fff)', marginBottom: 10 }}>📡 Campagnes IA ({iaCampaignsTotal})</h4>
-            <table className="ad-table" style={{ width: '100%', fontSize: 12 }}>
-              <thead>
-                <tr>
-                  <th>Campagne</th>
-                  <th>Objectif</th>
-                  <th>Création</th>
-                  <th>Audience</th>
-                  <th>Placements</th>
-                  <th>Statut</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {iaCampaigns.map(camp => (
-                  <tr key={camp.id}>
-                    <td style={{ fontWeight: 600 }}>{camp.campaignName}</td>
-                    <td><span style={{ padding: '2px 6px', borderRadius: 4, fontSize: 10, background: 'rgba(111,88,255,0.1)', color: '#6f58ff' }}>{camp.objective}</span></td>
-                    <td style={{ maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{camp.creative?.title || camp.creativeId.slice(0, 8)}</td>
-                    <td>{camp.audienceRole}</td>
-                    <td>{camp.placements?.length || 0}</td>
-                    <td>
-                      <span style={{ padding: '2px 6px', borderRadius: 4, fontSize: 10,
-                        background: camp.active ? 'rgba(76,175,80,0.15)' : 'rgba(255,152,0,0.15)',
-                        color: camp.active ? '#4caf50' : '#ff9800' }}>
-                        {camp.active ? 'Actif' : 'Inactif'}
-                      </span>
-                    </td>
-                    <td style={{ display: 'flex', gap: 4 }}>
-                      <button onClick={() => handleToggle(camp.id)} className="ad-btn ad-btn--sm" title={camp.active ? 'Désactiver' : 'Activer'}>
-                        {camp.active ? '⏸️' : '▶️'}
-                      </button>
-                      <button onClick={() => handleDeleteCampaign(camp.id)} className="ad-btn ad-btn--sm ad-btn--danger" title="Supprimer">🗑️</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {iaCampaignsTotal > 20 && (
-              <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 12 }}>
-                <button disabled={iaCampaignsPage <= 1} onClick={() => setIaCampaignsPage(p => p - 1)} className="ad-btn ad-btn--sm">◀</button>
-                <span style={{ fontSize: 12, color: '#aaa', alignSelf: 'center' }}>Page {iaCampaignsPage}</span>
-                <button disabled={iaCampaigns.length < 20} onClick={() => setIaCampaignsPage(p => p + 1)} className="ad-btn ad-btn--sm">▶</button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ── Top Campaigns ── */}
-        {iaSubTab === 'top' && (
-          <div>
-            <h4 style={{ fontSize: 14, color: 'var(--color-text-primary, #fff)', marginBottom: 10 }}>🏆 Top Campagnes par CTR</h4>
-            {iaTopCampaigns.length === 0 ? (
-              <p style={{ color: 'var(--color-text-secondary, #aaa)', fontSize: 13 }}>Aucune donnée de performance disponible.</p>
-            ) : (
-              <table className="ad-table" style={{ width: '100%', fontSize: 12 }}>
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th>Campagne</th>
-                    <th>Impressions</th>
-                    <th>Clics</th>
-                    <th>CTR</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {iaTopCampaigns.map((t, i) => (
-                    <tr key={t.campaignId}>
-                      <td style={{ fontWeight: 700, color: i < 3 ? '#6f58ff' : 'var(--color-text-primary, #fff)' }}>{i + 1}</td>
-                      <td>{t.campaignName}</td>
-                      <td>{t.impressions.toLocaleString()}</td>
-                      <td>{t.clicks.toLocaleString()}</td>
-                      <td style={{ fontWeight: 700, color: '#6f58ff' }}>{(t.ctr * 100).toFixed(1)}%</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        )}
-      </div>
-    );
-  };
-
   // ═══════════════════════════  VERIFICATION ADMIN  ═══════════════════════════
 
   const renderVerification = () => {
@@ -3414,7 +3065,6 @@ export function AdminDashboard() {
       case 'settings': return renderSettings();
       case 'messaging': return renderMessaging();
       case 'subscriptions': return renderSubscriptions();
-      case 'ia-ads': return renderIaAds();
       case 'verification': return renderVerification();
       default: return null;
     }

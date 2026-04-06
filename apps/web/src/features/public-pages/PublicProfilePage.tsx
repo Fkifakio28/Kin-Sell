@@ -166,9 +166,6 @@ export function PublicProfilePage({ username }: { username: string }) {
   const [reportDraft, setReportDraft] = useState({ reason: REPORT_REASONS[0], detail: '' });
   const [reportMsg, setReportMsg] = useState('');
 
-  /* ── Favorite (local toggle — no backend yet) ── */
-  const [isFavorited, setIsFavorited] = useState(false);
-
   const isOwnProfile = Boolean(user && profile && user.id === profile.id);
   const isAdmin = user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN';
 
@@ -450,18 +447,6 @@ export function PublicProfilePage({ username }: { username: string }) {
               navigate(`/messaging?newDm=${profile.id}&requestContact=1`);
             }} disabled={isOwnProfile}>
               🤝 Ajouter
-            </button>
-            <button
-              type="button"
-              className={`up-action-btn ${isFavorited ? 'up-action-btn--active' : 'up-action-btn--secondary'}`}
-              onClick={() => {
-                if (!isLoggedIn) { navigate('/login'); return; }
-                setIsFavorited((p) => !p);
-              }}
-              disabled={isOwnProfile}
-              title="Les favoris seront synchronisés prochainement"
-            >
-              {isFavorited ? '♥ Favori' : '♡ Favori'}
             </button>
           </div>
         </div>

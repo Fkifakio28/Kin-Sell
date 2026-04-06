@@ -728,16 +728,11 @@ curl -s https://kin-sell.com/sitemap.xml
 
 ### Vérifications post-déploiement (obligatoires)
 
-1. So-Kin Stories 24h:
-    - Ouvrir So-Kin, publier une story texte puis une story image.
-    - Ouvrir une story depuis un autre compte et vérifier le compteur de vues.
+1. So-Kin annonces (mobile):
+    - Ouvrir So-Kin et vérifier l'affichage d'une annonce à la fois.
+    - Créer une annonce (1 à 5 médias, max 2 vidéos) et vérifier la persistance.
 
-2. So-Kin Live (produit épinglé):
-    - Démarrer un live avec un compte vendeur.
-    - Cliquer "Épingler un produit" dans le viewer host.
-    - Vérifier côté spectateur la carte produit + CTA "Acheter".
-
-3. Messagerie WhatsApp-like:
+2. Messagerie WhatsApp-like:
     - Vérifier `✓` / `✓✓` et le statut "vu il y a ...".
 
 4. SEO:

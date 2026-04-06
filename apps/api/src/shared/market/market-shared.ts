@@ -1,7 +1,7 @@
 /**
  * MARKET SHARED — Source unique de vérité prix & demande
  *
- * Utilisé par : analytics-ai, negotiation-ai, ad-advisor, market-intelligence, sokin-trends
+ * Utilisé par : analytics-ai, negotiation-ai, ad-advisor, market-intelligence
  *
  * Constantes harmonisées :
  * - Seuil position prix  : ±15% de la médiane

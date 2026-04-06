@@ -40,7 +40,6 @@ type PublicBusiness = {
   _count: { sellerOrders: number };
 };
 
-type Quality = { id: string; icon: string; name: string; description: string };
 type Review  = { id: string; author: string; score: number; text: string; date: string; verified: boolean };
 type Report  = { id: string; author: string; reason: string; detail: string; date: string };
 
@@ -169,24 +168,8 @@ export function BusinessShopPage({ slug }: BusinessShopPageProps) {
     return () => clearInterval(timer);
   }, [heroImages.length]);
 
-  // ─── Charger points forts depuis localStorage (vide si rien mis) ──
-  const qualities: Quality[] = useMemo(() => {
-    if (!business) return [];
-    try {
-      const stored = localStorage.getItem(`ks-qualities-${business.id}`);
-      if (stored) { const parsed = JSON.parse(stored); if (Array.isArray(parsed) && parsed.length > 0) return parsed; }
-    } catch { /* ignore */ }
-    return [];
-  }, [business]);
-
-  const shopPhotos: string[] = useMemo(() => {
-    if (!business) return [];
-    try {
-      const stored = localStorage.getItem(`ks-shop-photos-${business.id}`);
-      if (stored) { const parsed = JSON.parse(stored); if (Array.isArray(parsed)) return parsed; }
-    } catch { /* ignore */ }
-    return [];
-  }, [business]);
+  // Utiliser uniquement des sources backend réelles pour la galerie boutique.
+  const shopPhotos: string[] = useMemo(() => heroImages, [heroImages]);
 
   // ─── Avis clients depuis API ───────────────────────────────
   const [reviews, setReviews] = useState<Review[]>([]);
@@ -471,26 +454,6 @@ export function BusinessShopPage({ slug }: BusinessShopPageProps) {
             <h3>Boostez vos ventes avec un placement premium sur Kin-Sell</h3>
             <p>Votre offre apparaîtra ici une fois des articles publiés.</p>
           </article>
-        </section>
-      )}
-
-      {/* ═══ POINTS FORTS ════════════════════════════════════ */}
-      {qualities.length > 0 && (
-        <section className="public-section" aria-label="Points forts">
-          <div className="public-section-head">
-            <h2>✨ Points forts</h2>
-          </div>
-          <div className="business-lux-services-grid">
-            {qualities.map(q => (
-              <article key={q.id} className="business-lux-service-card horizontal">
-                <span className="business-lux-service-icon" aria-hidden="true">{q.icon}</span>
-                <div className="business-lux-service-copy">
-                  <h3>{q.name}</h3>
-                  <p>{q.description}</p>
-                </div>
-              </article>
-            ))}
-          </div>
         </section>
       )}
 

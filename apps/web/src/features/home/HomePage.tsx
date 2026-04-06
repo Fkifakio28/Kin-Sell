@@ -11,7 +11,6 @@ import { useMarketPreference } from "../../app/providers/MarketPreferenceProvide
 import { NegotiatePopup } from "../negotiations/NegotiatePopup";
 import { useLockedCategories, isCategoryLocked } from "../../hooks/useLockedCategories";
 import { AdBanner } from "../../components/AdBanner";
-import { SmartAdSlot } from "../../components/SmartAdSlot";
 import { SeoMeta } from "../../components/SeoMeta";
 import { HOME_PRODUCT_CATEGORIES, HOME_SERVICE_CATEGORIES } from "../../shared/constants/categories";
 import "./home.css";
@@ -274,16 +273,6 @@ export function HomePage() {
       void reloadSokinFeed();
     };
 
-    const handlePostShared = (payload: {
-      type: 'SOKIN_POST_SHARED';
-      postId: string;
-      shares: number;
-      sourceUserId: string;
-      updatedAt: string;
-    }) => {
-      setSokinFeed((prev) => prev.map((post) => (post.id === payload.postId ? { ...post, shares: payload.shares } : post)));
-    };
-
     const handleOrderChanged = (_payload: {
       type: 'ORDER_STATUS_UPDATED' | 'ORDER_CONFIRMATION_COMPLETED';
       orderId: string;
@@ -309,14 +298,12 @@ export function HomePage() {
     };
 
     on('sokin:post-created', handlePostCreated);
-    on('sokin:post-shared', handlePostShared);
     on('order:status-updated', handleOrderChanged);
     on('order:delivery-confirmed', handleOrderChanged);
     on('negotiation:updated', handleNegotiationChanged);
 
     return () => {
       off('sokin:post-created', handlePostCreated);
-      off('sokin:post-shared', handlePostShared);
       off('order:status-updated', handleOrderChanged);
       off('order:delivery-confirmed', handleOrderChanged);
       off('negotiation:updated', handleNegotiationChanged);
@@ -770,7 +757,6 @@ export function HomePage() {
 
           {/* Bannière publicitaire */}
           <AdBanner page="home" />
-          <SmartAdSlot pageKey="home" componentKey="banner_mid" variant="banner" />
 
           {/* Articles Produits — 4×2 grid, scrollable inside glass */}
           <section className="h-articles h-reveal glass-container">

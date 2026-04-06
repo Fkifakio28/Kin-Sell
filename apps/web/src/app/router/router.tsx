@@ -7,9 +7,6 @@ const ExplorerPage = lazy(() => import("../../features/explorer/ExplorerPage").t
 const ExplorerShopsPage = lazy(() => import("../../features/explorer/ExplorerShopsPage").then(m => ({ default: m.ExplorerShopsPage })));
 const ExplorerProfilesPage = lazy(() => import("../../features/explorer/ExplorerProfilesPage").then(m => ({ default: m.ExplorerProfilesPage })));
 const SoKinPage = lazy(() => import("../../features/sokin/SoKinPage").then(m => ({ default: m.SoKinPage })));
-const SoKinProfilesPage = lazy(() => import("../../features/sokin/SoKinProfilesPage").then(m => ({ default: m.SoKinProfilesPage })));
-const SoKinMarketPage = lazy(() => import("../../features/sokin/SoKinMarketPage").then(m => ({ default: m.SoKinMarketPage })));
-const SoKinLivePage = lazy(() => import("../../features/sokin/SoKinLivePage").then(m => ({ default: m.SoKinLivePage })));
 const LoginPage = lazy(() => import("../../features/auth/LoginPage").then(m => ({ default: m.LoginPage })));
 const RegisterPage = lazy(() => import("../../features/auth/RegisterPage").then(m => ({ default: m.RegisterPage })));
 const ForgotPasswordPage = lazy(() => import("../../features/auth/ForgotPasswordPage").then(m => ({ default: m.ForgotPasswordPage })));
@@ -62,9 +59,6 @@ export const router = createBrowserRouter([
       { path: "/suspended", element: <SuspendedPage /> },
       { path: "/offline", element: <OfflinePage /> },
       { path: "/sokin", element: <SoKinPage /> },
-      { path: "/sokin/profiles", element: <SoKinProfilesPage /> },
-      { path: "/sokin/market", element: <SoKinMarketPage /> },
-      { path: "/sokin/live", element: <SoKinLivePage /> },
       { path: "/explorer", element: <ExplorerPage /> },
       { path: "/messaging", element: <MessagingPage /> },
       { path: "/messaging/:conversationId", element: <MessagingPage /> },

@@ -547,36 +547,6 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
       setTimeout(() => setToasts((p) => p.filter((t) => t.id !== toast.id)), 6000);
     };
 
-    const handleSokinStoryCreated = (data: { storyId: string; authorId: string; sourceUserId: string }) => {
-      if (data.sourceUserId === user?.id) return;
-      const toast: MessageToast = {
-        id: `sokin-story-${data.storyId}-${Date.now()}`,
-        kind: "publication",
-        title: "📸 Nouvelle story",
-        content: "Un utilisateur a ajouté une story So-Kin",
-        icon: "📸",
-        targetUrl: "/sokin",
-        timestamp: Date.now(),
-      };
-      setToasts((p) => [toast, ...p].slice(0, 4));
-      setTimeout(() => setToasts((p) => p.filter((t) => t.id !== toast.id)), 6000);
-    };
-
-    const handleSokinPostShared = (data: { postId: string; shares: number; sourceUserId: string }) => {
-      if (data.sourceUserId === user?.id) return;
-      const toast: MessageToast = {
-        id: `sokin-share-${data.postId}-${Date.now()}`,
-        kind: "publication",
-        title: "🔁 Publication partagée",
-        content: "Votre publication a été partagée sur So-Kin",
-        icon: "🔁",
-        targetUrl: "/sokin",
-        timestamp: Date.now(),
-      };
-      setToasts((p) => [toast, ...p].slice(0, 4));
-      setTimeout(() => setToasts((p) => p.filter((t) => t.id !== toast.id)), 6000);
-    };
-
     socket.on("message:new", handleNewMessage);
     socket.on("call:incoming", handleIncomingCall);
     socket.on("call:ended", handleCallEnded);
@@ -588,8 +558,6 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
     socket.on("negotiation:updated", handleNegotiationUpdated);
     socket.on("negotiation:expired", handleNegotiationExpired);
     socket.on("sokin:post-created", handleSokinPostCreated);
-    socket.on("sokin:story-created", handleSokinStoryCreated);
-    socket.on("sokin:post-shared", handleSokinPostShared);
 
     return () => {
       socket.off("message:new", handleNewMessage);
@@ -603,8 +571,6 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
       socket.off("negotiation:updated", handleNegotiationUpdated);
       socket.off("negotiation:expired", handleNegotiationExpired);
       socket.off("sokin:post-created", handleSokinPostCreated);
-      socket.off("sokin:story-created", handleSokinStoryCreated);
-      socket.off("sokin:post-shared", handleSokinPostShared);
     };
   }, [isLoggedIn, user?.id, playMessageSound, presentIncomingCall]);
 

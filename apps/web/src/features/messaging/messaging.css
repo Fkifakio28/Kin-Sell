@@ -476,6 +476,61 @@
 .mg-empty p { margin: 0; }
 .mg-empty p:first-child { font-weight: 600; }
 .mg-empty p:last-child { font-size: 0.82rem; }
+.mg-sokin-pin {
+  margin: 10px 12px 12px;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(185, 166, 255, 0.28);
+  background: linear-gradient(135deg, rgba(111, 88, 255, 0.16), rgba(18, 11, 43, 0.55));
+}
+
+.mg-sokin-pin-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.mg-sokin-pin-badge {
+  font-size: 12px;
+  font-weight: 700;
+  color: #d8ccff;
+}
+
+.mg-sokin-pin-id {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.mg-sokin-pin-author {
+  margin-top: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.mg-sokin-pin-preview {
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.mg-sokin-pin-media {
+  margin-top: 8px;
+  width: 100%;
+  max-height: 170px;
+  object-fit: cover;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  display: block;
+}
+
+.mg-sokin-pin--inline {
+  margin: 0;
+  padding: 8px;
+  border-radius: 10px;
+}
 .mg-empty-sm {
   text-align: center;
   color: var(--color-text-secondary, #a8a0c0);

@@ -1,29 +1,48 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+/**
+ * So-Kin Page — v4 Mobile First
+ *
+ * Structure:
+ * - Flux vertical d'annonces (style Facebook orienté annonces)
+ * - Carte avec en-tête (auteur + contact), corps (texte + collage médias), pied (réponses)
+ * - Collage médias Facebook-style : 1 à 5 médias, max 2 vidéos
+ * - Viewer simple au clic sur un média (pas de galerie complexe)
+ * - Tiroir de réponses inline sous chaque carte
+ * - Mobile uniquement — desktop redirige vers accueil
+ */
+
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../app/providers/AuthProvider';
 import { useLocaleCurrency } from '../../app/providers/LocaleCurrencyProvider';
 import { useMarketPreference } from '../../app/providers/MarketPreferenceProvider';
-import { getDashboardPath } from '../../utils/role-routing';
-import { prepareMediaUrl, prepareMediaUrls } from '../../utils/media-upload';
+import { prepareMediaUrl } from '../../utils/media-upload';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { useSocket } from '../../hooks/useSocket';
-import { useScrollDirection } from '../../hooks/useScrollDirection';
-import {
-  sokin as sokinApi,
-  resolveMediaUrl,
-  type SoKinApiFeedPost,
-  type SoKinStory,
-  type SoKinReactionType,
-} from '../../lib/api-client';
+import { sokin as sokinApi, messaging, users as usersApi, resolveMediaUrl, type SoKinApiFeedPost, type SoKinApiComment } from '../../lib/api-client';
+import { ApiError } from '../../lib/api-core';
 import { AdBanner } from '../../components/AdBanner';
-import { SmartAdSlot } from '../../components/SmartAdSlot';
 import { SeoMeta } from '../../components/SeoMeta';
-import { SoKinPageDesktop } from './SoKinPageDesktop';
 import './sokin.css';
 
-/* ═══════════════════════════════════════════════════
-   HELPERS
-   ═══════════════════════════════════════════════════ */
+/* ─────────────────────────────────────────────────────── */
+/* TYPES LOCAUX                                             */
+/* ─────────────────────────────────────────────────────── */
+
+type MediaItem = { url: string; type: 'image' | 'video' };
+
+/** Référence minimale d'une annonce So-Kin transmise à la messagerie */
+type SoKinPostRef = {
+  id: string;
+  text: string;
+  mediaUrl: string | null;
+  authorName: string;
+  authorId: string;
+  authorHandle: string;
+};
+
+/* ─────────────────────────────────────────────────────── */
+/* HELPERS                                                  */
+/* ─────────────────────────────────────────────────────── */
 
 function relTime(iso: string, t: (k: string) => string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -37,1035 +56,1282 @@ function relTime(iso: string, t: (k: string) => string): string {
   return new Date(iso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
 }
 
-const WAVE_BG_COLORS = [
-  '#241752', '#6f58ff', '#490c80', '#1a0e3a',
-  '#ff4444', '#ff8c00', '#00b894', '#0984e3',
-  '#e84393', '#fdcb6e',
-];
+function isVideoUrl(url: string): boolean {
+  return /\.(mp4|webm|mov|ogg)(\?.*)?$/i.test(url);
+}
 
-const MAX_SCHEDULE_DAYS = 30;
+/** Prépare jusqu'à 5 médias avec max 2 vidéos */
+function categorizeMedia(urls: string[]): MediaItem[] {
+  const limited = (urls ?? [])
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0)
+    .slice(0, 5);
+  let videoCount = 0;
+  const items: MediaItem[] = [];
 
-/* ═══════════════════════════════════════════════════
-   SOKIN TOP BAR (mobile)
-   ═══════════════════════════════════════════════════ */
+  for (const url of limited) {
+    if (isVideoUrl(url)) {
+      if (videoCount >= 2) {
+        continue;
+      }
+      videoCount++;
+      items.push({ url, type: 'video' });
+      continue;
+    }
 
-function SoKinTopBar({ t }: { t: (k: string) => string }) {
-  const nav = useNavigate();
+    items.push({ url, type: 'image' });
+  }
+
+  return items;
+}
+
+/* ─────────────────────────────────────────────────────── */
+/* ICÔNES SVG INLINE                                        */
+/* ─────────────────────────────────────────────────────── */
+
+function IconMessage() {
   return (
-    <header className="sk-topbar" role="banner">
-      <button className="sk-topbar-btn" type="button" onClick={() => nav(-1)} aria-label="Retour">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 5l-7 7 7 7" /></svg>
-      </button>
-      <button className="sk-topbar-logo" type="button" onClick={() => nav('/')} aria-label="Accueil Kin-Sell">
-        <img src="/assets/kin-sell/logo.png" alt="Kin-Sell" className="sk-topbar-logo-img" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-        <span className="sk-topbar-logo-text">So-Kin</span>
-      </button>
-      <button className="sk-topbar-btn" type="button" onClick={() => nav('/explorer')} aria-label={t('common.search')}>
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" /></svg>
-      </button>
-    </header>
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+    </svg>
   );
 }
 
-/* ═══════════════════════════════════════════════════
-   CREATE ZONE
-   ═══════════════════════════════════════════════════ */
-
-function CreateZone({
-  avatarUrl,
-  displayName,
-  isLoggedIn,
-  onWave,
-  onCreer,
-}: {
-  avatarUrl: string;
-  displayName: string;
-  isLoggedIn: boolean;
-  onWave: () => void;
-  onCreer: () => void;
-}) {
-  const nav = useNavigate();
+function IconReply() {
   return (
-    <section className="sk-create" aria-label="Zone de création">
-      <div className="sk-create-row">
-        <div className="sk-create-author">
-          {avatarUrl ? (
-            <img src={avatarUrl} alt={displayName} className="sk-create-avatar" />
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+    </svg>
+  );
+}
+
+function IconBack() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M19 12H5M12 19l-7-7 7-7" />
+    </svg>
+  );
+}
+
+function IconSend() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M2 21l21-9L2 3v7l15 2-15 2v7z" />
+    </svg>
+  );
+}
+
+/* ─────────────────────────────────────────────────────── */
+/* MEDIA VIEWER — popup simple (1 média à la fois)         */
+/* ─────────────────────────────────────────────────────── */
+
+function MediaViewer({ item, onClose }: { item: MediaItem; onClose: () => void }) {
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleKey);
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', handleKey);
+      document.body.style.overflow = '';
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      className="sk-viewer-overlay"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Média en plein écran"
+    >
+      <button
+        type="button"
+        className="sk-viewer-close"
+        onClick={onClose}
+        aria-label="Fermer le media"
+      >
+        ✕
+      </button>
+      <div className="sk-viewer-content" onClick={(e) => e.stopPropagation()}>
+        {item.type === 'video' ? (
+          <video
+            src={resolveMediaUrl(item.url)}
+            controls
+            autoPlay
+            playsInline
+            className="sk-viewer-media"
+          />
+        ) : (
+          <img
+            src={resolveMediaUrl(item.url)}
+            alt=""
+            className="sk-viewer-media"
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────── */
+/* MEDIA COLLAGE — grille Facebook (1-5 médias)            */
+/* ─────────────────────────────────────────────────────── */
+
+function MediaCollage({
+  items,
+  onItemClick,
+}: {
+  items: MediaItem[];
+  onItemClick: (item: MediaItem) => void;
+}) {
+  const count = items.length;
+  if (count === 0) return null;
+
+  return (
+    <div
+      className={`sk-media-grid sk-media-grid--${count}`}
+      role="group"
+      aria-label="Médias de l'annonce"
+    >
+      {items.map((item, i) => (
+        <button
+          key={i}
+          type="button"
+          className="sk-media-item"
+          onClick={() => onItemClick(item)}
+          aria-label={item.type === 'video' ? 'Voir la vidéo' : "Voir l'image"}
+        >
+          {item.type === 'video' ? (
+            <>
+              <video
+                src={resolveMediaUrl(item.url)}
+                muted
+                playsInline
+                preload="none"
+                tabIndex={-1}
+              />
+              <span className="sk-media-play-icon" aria-hidden="true">▶</span>
+            </>
           ) : (
-            <span className="sk-create-avatar sk-create-avatar--placeholder">👤</span>
+            <img
+              src={resolveMediaUrl(item.url)}
+              alt=""
+              loading="lazy"
+            />
           )}
-          <span className="sk-create-name">{displayName}</span>
-        </div>
-        <div className="sk-create-actions">
-          <button className="sk-btn sk-btn--wave" type="button" onClick={() => isLoggedIn ? onWave() : nav('/login')}>
-            ⚡ Wave
-          </button>
-          <button className="sk-btn sk-btn--creer" type="button" onClick={() => isLoggedIn ? onCreer() : nav('/login')}>
-            ✏️ Créer
-          </button>
-        </div>
-      </div>
-    </section>
+        </button>
+      ))}
+    </div>
   );
 }
 
-/* ═══════════════════════════════════════════════════
-   WAVE STRIP (horizontal stories)
-   ═══════════════════════════════════════════════════ */
+/* ─────────────────────────────────────────────────────── */
+/* COMMENTS DRAWER — tiroir mobile plein écran             */
+/* ─────────────────────────────────────────────────────── */
 
-function WaveStrip({
-  stories,
-  t,
-  onOpen,
+type MissingPublicProfile = {
+  avatarUrl: string | null;
+  displayName: string;
+  identifier: string;
+};
+
+type CommentProfileState = {
+  status: 'idle' | 'loading' | 'success' | 'not-available' | 'error';
+  profile: MissingPublicProfile | null;
+  message: string | null;
+};
+
+function CommentsDrawer({
+  post,
+  open,
+  isLoggedIn,
+  comments,
+  loading,
+  draft,
+  submitting,
+  replyTo,
+  profileState,
+  onClose,
+  onDraftChange,
+  onSubmit,
+  onPrepareReply,
+  onOpenProfile,
+  onCloseProfileState,
 }: {
-  stories: SoKinStory[];
-  t: (k: string) => string;
-  onOpen: (idx: number) => void;
+  post: SoKinApiFeedPost | null;
+  open: boolean;
+  isLoggedIn: boolean;
+  comments: SoKinApiComment[];
+  loading: boolean;
+  draft: string;
+  submitting: boolean;
+  replyTo: SoKinApiComment | null;
+  profileState: CommentProfileState;
+  onClose: () => void;
+  onDraftChange: (value: string) => void;
+  onSubmit: () => void;
+  onPrepareReply: (comment: SoKinApiComment) => void;
+  onOpenProfile: (comment: SoKinApiComment) => void;
+  onCloseProfileState: () => void;
 }) {
-  if (stories.length === 0) return null;
+  const [showEmoji, setShowEmoji] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    inputRef.current?.focus();
+    setShowEmoji(false);
+  }, [open]);
+
+  const title = post ? `${post.comments ?? 0} réponse${(post.comments ?? 0) > 1 ? 's' : ''}` : 'Commentaires';
+
   return (
-    <section className="sk-waves" aria-label="Waves">
-      <div className="sk-waves-scroll">
-        {stories.slice(0, 20).map((s, i) => {
-          const name = s.author.profile?.displayName ?? 'User';
-          const hasMedia = Boolean(s.mediaUrl);
-          return (
-            <button
-              key={s.id}
-              type="button"
-              className={`sk-wave-card${s.viewedByMe ? ' sk-wave-card--seen' : ''}`}
-              onClick={() => onOpen(i)}
-            >
-              <div
-                className="sk-wave-card-bg"
-                style={hasMedia
-                  ? { backgroundImage: `linear-gradient(180deg, rgba(10,8,24,0.05), rgba(10,8,24,0.86)), url(${s.mediaUrl})` }
-                  : { background: s.bgColor ?? 'linear-gradient(145deg, rgba(111,88,255,0.85), rgba(36,23,82,0.96))' }
-                }
-              >
-                <span className="sk-wave-card-label">Wave</span>
-                <span className="sk-wave-card-time">{relTime(s.createdAt, t)}</span>
-                <div className="sk-wave-card-author">
-                  {s.author.profile?.avatarUrl
-                    ? <img src={s.author.profile.avatarUrl} alt={name} className="sk-wave-card-av" />
-                    : <span className="sk-wave-card-av">👤</span>
-                  }
-                  <strong>{name.length > 12 ? name.slice(0, 12) + '…' : name}</strong>
+    <aside className={`sk-comments-drawer${open ? ' sk-comments-drawer--open' : ''}`} aria-hidden={!open}>
+      <header className="sk-comments-head">
+        <strong className="sk-comments-title">{title}</strong>
+        <button type="button" className="sk-comments-close" onClick={onClose} aria-label="Fermer les commentaires">-</button>
+      </header>
+
+      <section className="sk-comments-list" aria-label="Liste des commentaires">
+        {loading ? (
+          <p className="sk-comments-empty">Chargement des commentaires…</p>
+        ) : comments.length === 0 ? (
+          <p className="sk-comments-empty">Aucun commentaire pour le moment.</p>
+        ) : (
+          comments.map((comment) => {
+            const name = comment.author.profile?.displayName ?? 'Utilisateur';
+            const idLabel = comment.author.profile?.username ? `@${comment.author.profile.username.replace('@', '')}` : comment.author.id;
+            const avatar = comment.author.profile?.avatarUrl;
+            return (
+              <article key={comment.id} className="sk-comment-item" onClick={() => onPrepareReply(comment)}>
+                <div className="sk-comment-avatar-wrap">
+                  {avatar ? (
+                    <img src={resolveMediaUrl(avatar)} alt={name} className="sk-comment-avatar" />
+                  ) : (
+                    <span className="sk-comment-avatar sk-comment-avatar--empty" aria-hidden="true">{name.charAt(0).toUpperCase()}</span>
+                  )}
                 </div>
-              </div>
-            </button>
-          );
-        })}
-      </div>
-    </section>
+                <div className="sk-comment-main">
+                  <strong className="sk-comment-name">{name}</strong>
+                  <button
+                    type="button"
+                    className="sk-comment-id"
+                    disabled={profileState.status === 'loading'}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onOpenProfile(comment);
+                    }}
+                  >
+                    {idLabel}
+                  </button>
+                  <p className="sk-comment-content">{comment.content}</p>
+                </div>
+              </article>
+            );
+          })
+        )}
+      </section>
+
+      {profileState.status !== 'idle' && profileState.status !== 'success' && profileState.profile && (
+        <section className="sk-missing-profile" aria-label="Profil public non disponible">
+          <div className="sk-missing-profile-box">
+            {profileState.profile.avatarUrl ? (
+              <img src={resolveMediaUrl(profileState.profile.avatarUrl)} alt={profileState.profile.displayName} className="sk-missing-profile-avatar" />
+            ) : (
+              <span className="sk-missing-profile-avatar sk-missing-profile-avatar--empty" aria-hidden="true">{profileState.profile.displayName.charAt(0).toUpperCase()}</span>
+            )}
+            <strong className="sk-missing-profile-name">{profileState.profile.displayName}</strong>
+            <span className="sk-missing-profile-id">{profileState.profile.identifier}</span>
+            <p className="sk-missing-profile-msg">
+              {profileState.message}
+            </p>
+            {profileState.status === 'loading' ? (
+              <button type="button" className="sk-btn sk-btn--outline" disabled>Chargement…</button>
+            ) : (
+              <button type="button" className="sk-btn sk-btn--outline" onClick={onCloseProfileState}>Retour</button>
+            )}
+          </div>
+        </section>
+      )}
+
+      <footer className="sk-comments-compose">
+        {replyTo && (
+          <p className="sk-comments-reply-to">Réponse à {replyTo.author.profile?.displayName ?? 'Utilisateur'}</p>
+        )}
+        {showEmoji && (
+          <div className="sk-comments-emoji-row">
+            {['😀', '👍', '🔥', '👏', '❤️', '🙏'].map((emoji) => (
+              <button
+                key={emoji}
+                type="button"
+                className="sk-comments-emoji-btn"
+                onClick={() => onDraftChange(`${draft}${emoji}`)}
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
+        )}
+        <div className="sk-comments-compose-row">
+          <button type="button" className="sk-comments-emoji-toggle" onClick={() => setShowEmoji((prev) => !prev)} aria-label="Ajouter un emoji">😊</button>
+          <input
+            ref={inputRef}
+            type="text"
+            className="sk-comments-input"
+            placeholder={isLoggedIn ? 'Écrire un commentaire…' : 'Connectez-vous pour commenter'}
+            value={draft}
+            onChange={(e) => onDraftChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') onSubmit();
+            }}
+            maxLength={500}
+            disabled={!isLoggedIn || submitting}
+          />
+          <button type="button" className="sk-comments-send" onClick={onSubmit} disabled={submitting || !draft.trim() || !isLoggedIn} aria-label="Publier le commentaire">
+            <IconSend />
+          </button>
+        </div>
+      </footer>
+    </aside>
   );
 }
 
-/* ═══════════════════════════════════════════════════
-   POST CARD (Reddit-style)
-   ═══════════════════════════════════════════════════ */
+/* ─────────────────────────────────────────────────────── */
+/* ANNOUNCE CARD — carte principale de chaque annonce     */
+/* ─────────────────────────────────────────────────────── */
 
-function PostCard({
+function AnnounceCard({
   post,
   t,
   isLoggedIn,
-  onReact,
-  onShare,
+  onMediaClick,
+  isCommentsOpen,
+  onOpenComments,
+  onContact,
+  isContacting,
 }: {
   post: SoKinApiFeedPost;
   t: (k: string) => string;
   isLoggedIn: boolean;
-  onReact: (postId: string, type: SoKinReactionType) => void;
-  onShare: (postId: string) => void;
+  onMediaClick: (item: MediaItem) => void;
+  isCommentsOpen: boolean;
+  onOpenComments: () => void;
+  onContact: () => void;
+  isContacting: boolean;
 }) {
-  const nav = useNavigate();
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const cardRef = useRef<HTMLElement>(null);
-  const lastTapRef = useRef(0);
-  const longPressRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [liked, setLiked] = useState(post.myReaction === 'LIKE');
-  const [doubleTapAnim, setDoubleTapAnim] = useState(false);
+  const navigate = useNavigate();
 
-  const authorName = post.author.profile?.displayName ?? 'Utilisateur';
-  const authorHandle = post.author.profile?.username ? `@${post.author.profile.username}` : '';
-  const authorAvatar = post.author.profile?.avatarUrl ?? '';
-  const authorCity = post.author.profile?.city ?? 'Kinshasa';
-  const hasVideo = post.mediaUrls.some((u) => /\.(mp4|webm|mov)/i.test(u));
-  const hasImage = post.mediaUrls.length > 0 && !hasVideo;
+  const profile = post.author.profile;
+  const authorName = profile?.displayName ?? 'Utilisateur';
+  const authorHandle = profile?.username ?? post.author.id;
+  const authorAvatar = profile?.avatarUrl;
+  const authorCity = profile?.city;
+  const cleanHandle = authorHandle?.replace('@', '') ?? '';
 
-  // Autoplay video when visible
-  useEffect(() => {
-    const vid = videoRef.current;
-    const card = cardRef.current;
-    if (!vid || !card) return;
-    const obs = new IntersectionObserver(
-      ([e]) => { e.isIntersecting ? vid.play().catch(() => {}) : vid.pause(); },
-      { threshold: 0.6 },
-    );
-    obs.observe(card);
-    return () => obs.disconnect();
-  }, []);
-
-  // Double-tap to like
-  const handleBodyTap = () => {
-    const now = Date.now();
-    if (now - lastTapRef.current < 300) {
-      if (isLoggedIn) {
-        onReact(post.id, 'LIKE');
-        setLiked(true);
-        setDoubleTapAnim(true);
-        setTimeout(() => setDoubleTapAnim(false), 600);
-      }
-    }
-    lastTapRef.current = now;
-  };
-
-  // Long-press speed up
-  const handleTouchStart = () => {
-    longPressRef.current = setTimeout(() => {
-      if (videoRef.current) videoRef.current.playbackRate = 2;
-    }, 500);
-  };
-  const handleTouchEnd = () => {
-    if (longPressRef.current) clearTimeout(longPressRef.current);
-    if (videoRef.current) videoRef.current.playbackRate = 1;
-  };
-
-  // Tap to pause/play
-  const handleVideoTap = () => {
-    const vid = videoRef.current;
-    if (!vid) return;
-    vid.paused ? vid.play().catch(() => {}) : vid.pause();
-  };
-
-  const reactionEmoji = post.myReaction === 'LOVE' ? '❤️' : post.myReaction === 'HAHA' ? '😂' : post.myReaction === 'WOW' ? '😮' : post.myReaction === 'SAD' ? '😢' : post.myReaction === 'ANGRY' ? '😡' : '👍';
+  const mediaItems = categorizeMedia(post.mediaUrls ?? []);
+  const replyCount = post.comments ?? 0;
 
   return (
-    <article ref={cardRef} className="sk-post" id={`sk-post-${post.id}`}>
-      {/* ── Header ── */}
-      <header className="sk-post-head">
-        <div className="sk-post-author" onClick={() => authorHandle && nav(`/user/${authorHandle.replace('@', '')}`)}>
-          {authorAvatar
-            ? <img src={authorAvatar} alt={authorName} className="sk-post-avatar" />
-            : <span className="sk-post-avatar sk-post-avatar--fallback">{authorName.charAt(0)}</span>
-          }
-          <div className="sk-post-author-info">
-            <strong>{authorName}</strong>
-            <span>{authorCity} · {relTime(post.createdAt, t)}</span>
-          </div>
-        </div>
-        <div className="sk-post-head-actions">
-          <button type="button" className="sk-post-action-btn" onClick={() => nav(`/messages?contact=${encodeURIComponent(authorHandle)}`)} title="Contacter">📱</button>
-          <button type="button" className="sk-post-action-btn" title="Favori">⭐</button>
-          <button type="button" className="sk-post-action-btn" title="Signaler">⚠️</button>
-        </div>
-      </header>
-
-      {/* ── Body ── */}
-      <div
-        className="sk-post-body"
-        onClick={handleBodyTap}
-        onTouchStart={handleTouchStart}
-        onTouchEnd={handleTouchEnd}
-      >
-        {post.text && <p className="sk-post-text">{post.text}</p>}
-
-        {hasVideo && (
-          <div className="sk-post-media" onClick={handleVideoTap}>
-            <video
-              ref={videoRef}
-              src={resolveMediaUrl(post.mediaUrls.find((u) => /\.(mp4|webm|mov)/i.test(u)))}
-              loop
-              muted
-              playsInline
-              preload="metadata"
-              className="sk-post-video"
-            />
-          </div>
-        )}
-
-        {hasImage && !hasVideo && (
-          <div className="sk-post-media">
-            {post.mediaUrls.length === 1 ? (
-              <img src={resolveMediaUrl(post.mediaUrls[0])} alt="" className="sk-post-image" />
-            ) : (
-              <div className="sk-post-gallery">
-                {post.mediaUrls.map((url, i) => (
-                  <img key={i} src={resolveMediaUrl(url)} alt="" className="sk-post-gallery-img" />
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {doubleTapAnim && <span className="sk-post-heart-anim">❤️</span>}
-      </div>
-
-      {/* ── Footer ── */}
-      <footer className="sk-post-foot">
-        <div className="sk-post-reactions">
-          <button
-            type="button"
-            className={`sk-post-react-btn${post.myReaction ? ' sk-post-react-btn--active' : ''}`}
-            onClick={() => onReact(post.id, post.myReaction ?? 'LIKE')}
-          >
-            {reactionEmoji} {post.likes > 0 && post.likes}
-          </button>
-          <button
-            type="button"
-            className="sk-post-react-btn"
-            onClick={() => onReact(post.id, 'SAD')}
-            title="Je n'aime pas"
-          >
-            👎
-          </button>
-        </div>
-        <button type="button" className="sk-post-foot-btn" title="Écrire">
-          💬 {post.comments > 0 && post.comments}
-        </button>
+    <article className="sk-card">
+      {/* ── En-tête ── */}
+      <header className="sk-card-header">
+        {/* Gauche : photo + nom + identifiant */}
         <button
           type="button"
-          className="sk-post-foot-btn"
-          onClick={() => onShare(post.id)}
-          title="Partager"
+          className="sk-card-author"
+          onClick={() => navigate(`/user/${cleanHandle}`)}
+          aria-label={`Voir le profil de ${authorName}`}
         >
-          🔁 {post.shares > 0 && post.shares}
+          <div className="sk-card-avatar-wrap">
+            {authorAvatar ? (
+              <img
+                src={resolveMediaUrl(authorAvatar)}
+                alt={authorName}
+                className="sk-card-avatar"
+              />
+            ) : (
+              <span className="sk-card-avatar-empty" aria-hidden="true">
+                {authorName.charAt(0).toUpperCase()}
+              </span>
+            )}
+          </div>
+          <div className="sk-card-author-info">
+            <strong className="sk-card-author-name">{authorName}</strong>
+            <span className="sk-card-author-meta">
+              {cleanHandle && (
+                <span className="sk-card-author-handle">@{cleanHandle}</span>
+              )}
+              {authorCity && <span className="sk-card-author-city"> · {authorCity}</span>}
+              <span className="sk-card-author-time"> · {relTime(post.createdAt, t)}</span>
+            </span>
+          </div>
+        </button>
+
+        {/* Droite : bouton contacter */}
+        <button
+          type="button"
+          className="sk-card-contact-btn"
+          onClick={onContact}
+          disabled={isContacting}
+          aria-busy={isContacting}
+          title="Contacter l'auteur"
+          aria-label="Contacter l'auteur"
+        >
+          {isContacting ? (
+            <span style={{ fontSize: 12, lineHeight: 1 }}>⏳</span>
+          ) : (
+            <IconMessage />
+          )}
+        </button>
+      </header>
+
+      {/* ── Corps : texte ── */}
+      {post.text && (
+        <p className="sk-card-text">{post.text}</p>
+      )}
+
+      {/* ── Corps : collage médias ── */}
+      {mediaItems.length > 0 && (
+        <MediaCollage items={mediaItems} onItemClick={onMediaClick} />
+      )}
+
+      {/* ── Pied de page ── */}
+      <footer className="sk-card-footer">
+        <button
+          type="button"
+          className="sk-card-reply-btn"
+          onClick={onOpenComments}
+          aria-expanded={isCommentsOpen}
+        >
+          <IconReply />
+          <span>
+            {replyCount > 0
+              ? `${replyCount} réponse${replyCount > 1 ? 's' : ''}`
+              : 'Répondre'}
+          </span>
         </button>
       </footer>
     </article>
   );
 }
 
-/* ═══════════════════════════════════════════════════
-   POST FEED (infinite scroll, ads every 4)
-   ═══════════════════════════════════════════════════ */
+/* ─────────────────────────────────────────────────────── */
+/* COMPOSE ZONE — déclencheur de publication               */
+/* ─────────────────────────────────────────────────────── */
 
-function PostFeed({
+function ComposeZone({
+  avatarUrl,
+  displayName,
+  isLoggedIn,
+  onCreatePost,
+}: {
+  avatarUrl: string;
+  displayName: string;
+  isLoggedIn: boolean;
+  onCreatePost: () => void;
+}) {
+  const navigate = useNavigate();
+
+  return (
+    <section className="sk-compose">
+      <div className="sk-compose-inner">
+        {avatarUrl ? (
+          <img
+            src={resolveMediaUrl(avatarUrl)}
+            alt={displayName}
+            className="sk-compose-avatar"
+          />
+        ) : (
+          <span className="sk-compose-avatar sk-compose-avatar--empty" aria-hidden="true">
+            {(displayName.charAt(0) || '?').toUpperCase()}
+          </span>
+        )}
+        <button
+          type="button"
+          className="sk-compose-trigger"
+          onClick={() => {
+            if (!isLoggedIn) navigate('/login');
+            else onCreatePost();
+          }}
+        >
+          {isLoggedIn
+            ? `Publiez une annonce, ${displayName}…`
+            : 'Connectez-vous pour publier…'}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+/* ─────────────────────────────────────────────────────── */
+/* SKELETONS — placeholders de chargement                  */
+/* ─────────────────────────────────────────────────────── */
+
+function FeedSkeletons() {
+  return (
+    <div className="sk-feed sk-feed--loading" aria-busy="true" aria-label="Chargement…">
+      {[1, 2, 3].map((i) => (
+        <div key={i} className="sk-card-skeleton">
+          <div className="sk-skeleton-header">
+            <div className="sk-skeleton-avatar" />
+            <div className="sk-skeleton-lines">
+              <div className="sk-skeleton-line sk-skeleton-line--name" />
+              <div className="sk-skeleton-line sk-skeleton-line--meta" />
+            </div>
+          </div>
+          <div className="sk-skeleton-media" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────── */
+/* ANNOUNCES FEED — fil infini                             */
+/* ─────────────────────────────────────────────────────── */
+
+function AnnouncesFeed({
   posts,
   hasMore,
   loading,
   sentinelRef,
   t,
   isLoggedIn,
-  onReact,
-  onShare,
+  openCommentsPostId,
+  onOpenComments,
+  onMediaClick,
+  onContact,
+  contactingPostId,
 }: {
   posts: SoKinApiFeedPost[];
   hasMore: boolean;
   loading: boolean;
-  sentinelRef: React.RefObject<HTMLDivElement | null>;
+  sentinelRef: React.RefObject<HTMLDivElement>;
   t: (k: string) => string;
   isLoggedIn: boolean;
-  onReact: (postId: string, type: SoKinReactionType) => void;
-  onShare: (postId: string) => void;
+  openCommentsPostId: string | null;
+  onOpenComments: (postId: string) => void;
+  onMediaClick: (item: MediaItem) => void;
+  onContact: (post: SoKinApiFeedPost) => void;
+  contactingPostId: string | null;
 }) {
+  if (loading && posts.length === 0) {
+    return <FeedSkeletons />;
+  }
+
+  if (posts.length === 0) {
+    return (
+      <div className="sk-feed">
+        <div className="sk-feed-empty">
+          <p>
+            📭 Pas encore d'annonces.
+            <br />
+            Soyez le premier à publier !
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   const items: React.ReactNode[] = [];
   posts.forEach((post, idx) => {
     items.push(
-      <PostCard key={post.id} post={post} t={t} isLoggedIn={isLoggedIn} onReact={onReact} onShare={onShare} />,
+      <AnnounceCard
+        key={post.id}
+        post={post}
+        t={t}
+        isLoggedIn={isLoggedIn}
+        onMediaClick={onMediaClick}
+        isCommentsOpen={openCommentsPostId === post.id}
+        onOpenComments={() => onOpenComments(post.id)}
+        onContact={() => onContact(post)}
+        isContacting={contactingPostId === post.id}
+      />
     );
     if ((idx + 1) % 4 === 0) {
-      items.push(<AdBanner key={`ad-${idx}`} page="sokin" variant="slim" hideWhenEmpty />);
-    }
-    if ((idx + 1) % 6 === 0) {
-      items.push(<SmartAdSlot key={`ia-ad-${idx}`} pageKey="sokin" componentKey="feed_inline" variant="inline" />);
+      items.push(
+        <AdBanner key={`ad-${idx}`} page="sokin" variant="slim" hideWhenEmpty />
+      );
     }
   });
 
   return (
-    <section className="sk-feed" aria-label="Fil d'annonces">
-      <h2 className="sk-feed-title">📢 Annonces</h2>
-      {loading && posts.length === 0 ? (
-        <div className="sk-feed-loading">
-          {[1, 2].map((i) => <div key={i} className="sk-skeleton" />)}
-        </div>
-      ) : posts.length === 0 ? (
-        <div className="sk-feed-empty">
-          <p>{t('sokin.noPostYet')}</p>
-        </div>
-      ) : (
-        items
+    <section className="sk-feed" aria-label="Fil d'annonces So-Kin">
+      {items}
+      {hasMore && (
+        <div ref={sentinelRef} className="sk-sentinel" aria-hidden="true" />
       )}
-      {hasMore && <div ref={sentinelRef as React.RefObject<HTMLDivElement>} className="sk-sentinel" />}
+      {!hasMore && posts.length >= 10 && (
+        <p className="sk-feed-end">Vous avez tout vu 🎉</p>
+      )}
     </section>
   );
 }
 
-/* ═══════════════════════════════════════════════════
-   CREATOR BOTTOM SHEET (Wave / Créer)
-   ═══════════════════════════════════════════════════ */
+/* ─────────────────────────────────────────────────────── */
+/* CREATE SCREEN — création d'annonce mobile plein écran   */
+/* ─────────────────────────────────────────────────────── */
 
-function CreatorSheet({
-  mode,
-  isPublishing,
-  publishError,
+function CreateAnnounceScreen({
   onClose,
   onPublish,
-  t,
+  isPublishing,
+  publishError,
 }: {
-  mode: 'wave' | 'post';
-  isPublishing: boolean;
-  publishError?: string | null;
   onClose: () => void;
   onPublish: (data: {
     text: string;
     mediaFiles: File[];
-    location: string;
-    tags: string[];
-    hashtags: string[];
-    bgColor: string;
-    scheduledAt: string;
   }) => void;
-  t: (k: string) => string;
+  isPublishing: boolean;
+  publishError?: string | null;
 }) {
   const [text, setText] = useState('');
   const [mediaFiles, setMediaFiles] = useState<File[]>([]);
-  const [location, setLocation] = useState('');
-  const [tagInput, setTagInput] = useState('');
-  const [tags, setTags] = useState<string[]>([]);
-  const [hashInput, setHashInput] = useState('');
-  const [hashtags, setHashtags] = useState<string[]>([]);
-  const [bgColor, setBgColor] = useState('#241752');
-  const [scheduleDate, setScheduleDate] = useState('');
-  const [step, setStep] = useState<'content' | 'edit'>('content');
+  const [previewUrls, setPreviewUrls] = useState<string[]>([]);
+  const [localError, setLocalError] = useState<string | null>(null);
+  const [mode, setMode] = useState<'edit' | 'preview'>('edit');
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const isTextOnly = mediaFiles.length === 0;
+  const canPreview = text.trim().length > 0 || mediaFiles.length > 0;
+  const canPublish = text.trim().length > 0 && mediaFiles.length >= 1;
+  const imageCount = mediaFiles.filter((f) => !f.type.startsWith('video/')).length;
+  const videoCount = mediaFiles.filter((f) => f.type.startsWith('video/')).length;
 
-  const addTag = () => {
-    const v = tagInput.trim();
-    if (v && !tags.includes(v)) setTags([...tags, v]);
-    setTagInput('');
+  const validateMediaSelection = (files: File[]) => {
+    if (files.length < 1) return 'Ajoutez au moins 1 média à votre annonce.';
+    if (files.length > 5) return 'Maximum 5 médias par annonce.';
+    const videoCount = files.filter((f) => f.type.startsWith('video/')).length;
+    if (videoCount > 2) return 'Maximum 2 vidéos par annonce.';
+    return null;
   };
 
-  const addHashtag = () => {
-    const v = hashInput.trim().replace('#', '');
-    if (v && !hashtags.includes(v)) setHashtags([...hashtags, v]);
-    setHashInput('');
+  // Gère les object URLs pour les aperçus (nettoyage pour éviter les fuites mémoire)
+  useEffect(() => {
+    const urls = mediaFiles.map((f) => URL.createObjectURL(f));
+    setPreviewUrls(urls);
+    return () => urls.forEach((url) => URL.revokeObjectURL(url));
+  }, [mediaFiles]);
+
+  // Bloque le scroll du body
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, []);
+
+  const addFiles = (fileList: FileList) => {
+    setLocalError(null);
+    const current = [...mediaFiles];
+    let videoCount = current.filter((f) => f.type.startsWith('video/')).length;
+    const toAdd: File[] = [];
+    let droppedVideos = 0;
+    let droppedOverflow = 0;
+
+    for (const f of Array.from(fileList)) {
+      if (current.length + toAdd.length >= 5) {
+        droppedOverflow++;
+        continue;
+      }
+      if (f.type.startsWith('video/') && videoCount >= 2) {
+        droppedVideos++;
+        continue;
+      }
+      if (f.type.startsWith('video/')) videoCount++;
+      toAdd.push(f);
+    }
+
+    if (toAdd.length > 0) {
+      setMediaFiles([...current, ...toAdd]);
+    }
+
+    if (droppedVideos > 0) {
+      setLocalError('Maximum 2 vidéos par annonce.');
+      return;
+    }
+
+    if (droppedOverflow > 0) {
+      setLocalError('Maximum 5 médias par annonce.');
+    }
   };
 
-  const handleSubmit = () => {
-    if (!text.trim() && mediaFiles.length === 0) return;
-    onPublish({ text, mediaFiles, location, tags, hashtags, bgColor, scheduledAt: scheduleDate });
+  const removeFile = (idx: number) => {
+    setLocalError(null);
+    setMediaFiles((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  const openPreview = () => {
+    setLocalError(null);
+    if (!canPreview) {
+      setLocalError('Ajoutez un texte ou un média pour prévisualiser.');
+      return;
+    }
+    const mediaError = validateMediaSelection(mediaFiles);
+    if (mediaError) {
+      setLocalError(mediaError);
+      return;
+    }
+    setMode('preview');
+  };
+
+  const submit = () => {
+    setLocalError(null);
+    if (!text.trim()) {
+      setLocalError('Le texte de l’annonce est obligatoire.');
+      setMode('edit');
+      return;
+    }
+    const mediaError = validateMediaSelection(mediaFiles);
+    if (mediaError) {
+      setLocalError(mediaError);
+      setMode('edit');
+      return;
+    }
+    onPublish({ text, mediaFiles });
   };
 
   return (
-    <div className="sk-sheet-overlay sk-sheet-overlay--fullscreen" onClick={onClose}>
-      <div className="sk-sheet sk-sheet--fullscreen" onClick={(e) => e.stopPropagation()}>
-        <div className="sk-sheet-head">
-          <h3>{mode === 'wave' ? '⚡ Nouvelle Wave (24h)' : '✏️ Nouvelle Publication'}</h3>
-          <button type="button" className="sk-sheet-close" onClick={onClose}>✕</button>
-        </div>
+    <section className="sk-create-screen" role="dialog" aria-modal="true" aria-label="Créer une annonce">
+      <header className="sk-create-screen-head">
+        <button type="button" className="sk-btn sk-btn--outline" onClick={onClose} disabled={isPublishing}>Retour</button>
+        <strong>Nouvelle annonce</strong>
+        <button
+          type="button"
+          className="sk-btn sk-btn--sm"
+          onClick={() => setMode((prev) => (prev === 'edit' ? 'preview' : 'edit'))}
+          disabled={!canPreview || isPublishing}
+        >
+          {mode === 'edit' ? 'Prévisualiser' : 'Modifier'}
+        </button>
+      </header>
 
-        {step === 'content' ? (
-          <div className="sk-sheet-body">
-            {publishError && (
-              <div className="sk-sheet-error">
-                ⚠️ {publishError}
+      <div className="sk-create-screen-body">
+        {(publishError || localError) && (
+          <div className="sk-modal-error" role="alert">
+            ⚠️ {publishError ?? localError}
+          </div>
+        )}
+
+        {mode === 'edit' ? (
+          <>
+            <textarea
+              className="sk-modal-textarea"
+              placeholder="Décrivez votre annonce (produit, prix, état, livraison...)"
+              value={text}
+              onChange={(e) => {
+                setText(e.target.value);
+                setLocalError(null);
+              }}
+              rows={6}
+              maxLength={500}
+              autoFocus
+            />
+            <span className="sk-modal-char-count">{text.length}/500</span>
+
+            {mediaFiles.length > 0 && (
+              <div className="sk-modal-previews">
+                {mediaFiles.map((f, i) => (
+                  <div key={i} className="sk-modal-preview-item">
+                    {f.type.startsWith('video/') ? (
+                      <video src={previewUrls[i]} className="sk-modal-preview-thumb" muted playsInline />
+                    ) : (
+                      <img src={previewUrls[i]} alt="" className="sk-modal-preview-thumb" />
+                    )}
+                    <button
+                      type="button"
+                      className="sk-modal-preview-remove"
+                      onClick={() => removeFile(i)}
+                      aria-label="Supprimer ce média"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
               </div>
             )}
-            <textarea
-              className="sk-sheet-input"
-              placeholder={mode === 'wave' ? 'Quoi de neuf ? (disparaît en 24h)' : 'Écrivez votre publication…'}
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              rows={4}
-              maxLength={mode === 'wave' ? 180 : 500}
-            />
-            <span className="sk-sheet-char-count">{text.length}/{mode === 'wave' ? 180 : 500}</span>
 
-            {/* Media picker */}
-            <div className="sk-sheet-media-row">
-              <button type="button" className="sk-btn sk-btn--sm" onClick={() => fileRef.current?.click()}>
-                📷 Photo/Vidéo
+            <div className="sk-modal-media-row">
+              <button
+                type="button"
+                className="sk-btn sk-btn--sm"
+                onClick={() => fileRef.current?.click()}
+                disabled={mediaFiles.length >= 5 || isPublishing}
+              >
+                🖼️ Ajouter médias ({mediaFiles.length}/5)
               </button>
-              {mediaFiles.length > 0 && (
-                <span className="sk-sheet-media-count">{mediaFiles.length} fichier(s)</span>
-              )}
+              <span className="sk-modal-media-hint">Jusqu'à 5 médias, dont 2 vidéos max</span>
+              <span className="sk-media-counter" aria-live="polite">
+                {imageCount} image{imageCount > 1 ? 's' : ''} / {videoCount} vidéo{videoCount > 1 ? 's' : ''}
+              </span>
               <input
                 ref={fileRef}
                 type="file"
                 multiple
-                accept="image/*,video/*,.gif"
+                accept="image/*,video/*"
                 hidden
                 onChange={(e) => {
-                  if (e.target.files) setMediaFiles([...mediaFiles, ...Array.from(e.target.files)]);
+                  if (e.target.files) addFiles(e.target.files);
                 }}
               />
             </div>
-
-            {/* Bg color for text-only waves */}
-            {mode === 'wave' && isTextOnly && (
-              <div className="sk-sheet-colors">
-                <span className="sk-sheet-label">Fond :</span>
-                {WAVE_BG_COLORS.map((c) => (
-                  <button
-                    key={c}
-                    type="button"
-                    className={`sk-color-dot${bgColor === c ? ' sk-color-dot--active' : ''}`}
-                    style={{ background: c }}
-                    onClick={() => setBgColor(c)}
-                  />
-                ))}
-              </div>
-            )}
-
-            <div className="sk-sheet-actions-row">
-              <button type="button" className="sk-btn sk-btn--outline" onClick={() => setStep('edit')}>
-                📍 Éditer détails
-              </button>
-              <button
-                type="button"
-                className="sk-btn sk-btn--primary"
-                onClick={handleSubmit}
-                disabled={isPublishing || (!text.trim() && mediaFiles.length === 0)}
-              >
-                {isPublishing ? '⏳' : '🚀'} {mode === 'wave' ? 'Publier Wave' : 'Publier'}
-              </button>
-            </div>
-          </div>
+          </>
         ) : (
-          <div className="sk-sheet-body">
-            <label className="sk-sheet-label">📍 Localisation</label>
-            <input
-              type="text"
-              className="sk-sheet-field"
-              value={location}
-              onChange={(e) => setLocation(e.target.value)}
-              placeholder="Gombe, Kinshasa"
-            />
-
-            <label className="sk-sheet-label">🏷️ Tags</label>
-            <div className="sk-sheet-tag-row">
-              <input
-                type="text"
-                className="sk-sheet-field sk-sheet-field--flex"
-                value={tagInput}
-                onChange={(e) => setTagInput(e.target.value)}
-                placeholder="Ajouter un tag"
-                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTag(); } }}
-              />
-              <button type="button" className="sk-btn sk-btn--sm" onClick={addTag}>+</button>
-            </div>
-            {tags.length > 0 && (
-              <div className="sk-sheet-chips">
-                {tags.map((tg) => (
-                  <span key={tg} className="sk-chip">
-                    {tg} <button type="button" onClick={() => setTags(tags.filter((x) => x !== tg))}>✕</button>
-                  </span>
+          <article className="sk-create-preview-card" aria-label="Prévisualisation annonce">
+            <h3 className="sk-create-preview-title">Aperçu avant publication</h3>
+            <p className="sk-create-preview-text">{text.trim() || 'Aucun texte saisi.'}</p>
+            {mediaFiles.length > 0 ? (
+              <div className="sk-modal-previews">
+                {mediaFiles.map((f, i) => (
+                  <div key={i} className="sk-modal-preview-item">
+                    {f.type.startsWith('video/') ? (
+                      <video src={previewUrls[i]} className="sk-modal-preview-thumb" muted playsInline controls={false} />
+                    ) : (
+                      <img src={previewUrls[i]} alt="" className="sk-modal-preview-thumb" />
+                    )}
+                  </div>
                 ))}
               </div>
+            ) : (
+              <p className="sk-modal-media-hint">Aucun média ajouté.</p>
             )}
-
-            <label className="sk-sheet-label"># Hashtags</label>
-            <div className="sk-sheet-tag-row">
-              <input
-                type="text"
-                className="sk-sheet-field sk-sheet-field--flex"
-                value={hashInput}
-                onChange={(e) => setHashInput(e.target.value)}
-                placeholder="Sans le #"
-                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addHashtag(); } }}
-              />
-              <button type="button" className="sk-btn sk-btn--sm" onClick={addHashtag}>+</button>
-            </div>
-            {hashtags.length > 0 && (
-              <div className="sk-sheet-chips">
-                {hashtags.map((h) => (
-                  <span key={h} className="sk-chip">
-                    #{h} <button type="button" onClick={() => setHashtags(hashtags.filter((x) => x !== h))}>✕</button>
-                  </span>
-                ))}
-              </div>
-            )}
-
-            <label className="sk-sheet-label">📅 Programmer (max {MAX_SCHEDULE_DAYS}j)</label>
-            <input
-              type="datetime-local"
-              className="sk-sheet-field"
-              value={scheduleDate}
-              onChange={(e) => setScheduleDate(e.target.value)}
-              min={new Date().toISOString().slice(0, 16)}
-              max={new Date(Date.now() + MAX_SCHEDULE_DAYS * 86400_000).toISOString().slice(0, 16)}
-            />
-
-            <div className="sk-sheet-actions-row">
-              <button type="button" className="sk-btn sk-btn--outline" onClick={() => setStep('content')}>
-                ← Retour
-              </button>
-              <button
-                type="button"
-                className="sk-btn sk-btn--primary"
-                onClick={handleSubmit}
-                disabled={isPublishing || (!text.trim() && mediaFiles.length === 0)}
-              >
-                {isPublishing ? '⏳' : '🚀'} {scheduleDate ? 'Programmer' : mode === 'wave' ? 'Publier Wave' : 'Publier'}
-              </button>
-            </div>
-          </div>
+          </article>
         )}
       </div>
-    </div>
-  );
-}
 
-/* ═══════════════════════════════════════════════════
-   STORY VIEWER (fullscreen)
-   ═══════════════════════════════════════════════════ */
-
-function StoryViewer({
-  stories,
-  startIndex,
-  t,
-  onClose,
-  isLoggedIn,
-}: {
-  stories: SoKinStory[];
-  startIndex: number;
-  t: (k: string) => string;
-  onClose: () => void;
-  isLoggedIn: boolean;
-}) {
-  const [index, setIndex] = useState(startIndex);
-  const [paused, setPaused] = useState(false);
-  const touchRef = useRef<{ x: number; y: number } | null>(null);
-  const story = stories[index];
-  if (!story) return null;
-
-  const name = story.author.profile?.displayName ?? 'Utilisateur';
-
-  // Auto-advance for non-video
-  useEffect(() => {
-    if (story.mediaType === 'VIDEO' || paused) return;
-    const timer = setTimeout(() => {
-      if (index < stories.length - 1) setIndex(index + 1);
-      else onClose();
-    }, 5000);
-    return () => clearTimeout(timer);
-  }, [index, paused, story.mediaType, stories.length, onClose]);
-
-  // Mark as viewed
-  useEffect(() => {
-    if (isLoggedIn && !story.viewedByMe) {
-      void sokinApi.viewStory(story.id).catch(() => {});
-    }
-  }, [story.id, story.viewedByMe, isLoggedIn]);
-
-  return (
-    <div className="sk-story-overlay" onClick={onClose}>
-      <div
-        className="sk-story-viewer"
-        onClick={(e) => e.stopPropagation()}
-        onMouseDown={() => setPaused(true)}
-        onMouseUp={() => setPaused(false)}
-        onTouchStart={(e) => {
-          setPaused(true);
-          const t = e.changedTouches[0];
-          touchRef.current = { x: t.clientX, y: t.clientY };
-        }}
-        onTouchEnd={(e) => {
-          setPaused(false);
-          const start = touchRef.current;
-          const t = e.changedTouches[0];
-          if (!start) return;
-          const dx = t.clientX - start.x;
-          const dy = t.clientY - start.y;
-          if (dy > 90) { onClose(); return; }
-          if (dx > 80) setIndex((n) => Math.max(0, n - 1));
-          if (dx < -80) setIndex((n) => Math.min(stories.length - 1, n + 1));
-        }}
-        style={story.mediaType === 'TEXT' ? { background: story.bgColor ?? '#241752' } : undefined}
-      >
-        {/* Progress bars */}
-        <div className="sk-story-progress">
-          {stories.map((s, i) => (
-            <span key={s.id} className={`sk-story-bar${i === index ? ' active' : ''}${i < index ? ' done' : ''}`} />
-          ))}
-        </div>
-
-        {/* Header */}
-        <div className="sk-story-head">
-          <div className="sk-story-author">
-            {story.author.profile?.avatarUrl
-              ? <img src={story.author.profile.avatarUrl} alt={name} />
-              : <span>👤</span>
-            }
-            <div>
-              <strong>{name}</strong>
-              <span>{relTime(story.createdAt, t)} · {story.viewCount} vues</span>
-            </div>
-          </div>
-          <button type="button" className="sk-story-close" onClick={onClose}>✕</button>
-        </div>
-
-        {/* Stage */}
-        <div className="sk-story-stage">
-          {story.mediaType !== 'TEXT' && story.mediaUrl ? (
-            story.mediaType === 'VIDEO'
-              ? <video src={story.mediaUrl} controls autoPlay playsInline />
-              : <img src={story.mediaUrl} alt="Wave" />
-          ) : (
-            <div className="sk-story-text-stage">
-              <p>{story.caption ?? ''}</p>
-            </div>
-          )}
-        </div>
-
-        {story.mediaType !== 'TEXT' && story.caption && (
-          <p className="sk-story-caption">{story.caption}</p>
+      <footer className="sk-create-screen-foot">
+        {mode === 'preview' ? (
+          <button type="button" className="sk-btn sk-btn--outline" onClick={() => setMode('edit')} disabled={isPublishing}>Retour édition</button>
+        ) : (
+          <button type="button" className="sk-btn sk-btn--outline" onClick={openPreview} disabled={!canPreview || isPublishing}>Prévisualiser</button>
         )}
-
-        {/* Nav hotspots */}
-        <button type="button" className="sk-story-hot sk-story-hot--prev" disabled={index <= 0} onClick={() => setIndex((n) => Math.max(0, n - 1))} aria-label="Précédente" />
-        <button type="button" className="sk-story-hot sk-story-hot--next" disabled={index >= stories.length - 1} onClick={() => setIndex((n) => Math.min(stories.length - 1, n + 1))} aria-label="Suivante" />
-      </div>
-    </div>
+        <button type="button" className="sk-btn sk-btn--primary" onClick={submit} disabled={!canPublish || isPublishing}>
+          {isPublishing ? '⏳ Publication…' : 'Publier l’annonce'}
+        </button>
+      </footer>
+    </section>
   );
 }
 
-/* ═══════════════════════════════════════════════════
-   BOTTOM NAV (So-Kin variant: Live au centre)
-   ═══════════════════════════════════════════════════ */
-
-function SoKinBottomNav({
-  hidden,
-  notifCount,
-  t,
-}: {
-  hidden: boolean;
-  notifCount: number;
-  t: (k: string) => string;
-}) {
-  const nav = useNavigate();
-  const { user } = useAuth();
-  const dashPath = getDashboardPath(user?.role);
-
-  return (
-    <nav className={`sk-bottomnav${hidden ? ' sk-bottomnav--hidden' : ''}`} aria-label="Navigation So-Kin">
-      <button className="sk-bnav-item" type="button" onClick={() => nav('/')}>
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z" /></svg>
-        <span>Accueil</span>
-      </button>
-
-      <button className="sk-bnav-item" type="button" onClick={() => nav('/cart')}>
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" /><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" /></svg>
-        <span>{t('nav.cart')}</span>
-      </button>
-
-      {/* Centre: LIVE button */}
-      <button className="sk-bnav-live" type="button" onClick={() => nav('/sokin/live')} aria-label="So-Kin Live">
-        <span className="sk-bnav-live-dot" />
-        <span className="sk-bnav-live-text">Live</span>
-      </button>
-
-      <button className="sk-bnav-item" type="button" onClick={() => { sessionStorage.setItem('ud-section', 'notifications'); nav(dashPath); }}>
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" /></svg>
-        {notifCount > 0 && <span className="sk-bnav-badge">{notifCount}</span>}
-        <span>{t('nav.notifications')}</span>
-      </button>
-
-      <button className="sk-bnav-item" type="button" onClick={() => nav(dashPath)}>
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
-        <span>Compte</span>
-      </button>
-    </nav>
-  );
-}
-
-/* ═══════════════════════════════════════════════════
-   MAIN: SoKinPage
-   ═══════════════════════════════════════════════════ */
+/* ─────────────────────────────────────────────────────── */
+/* MAIN: So-Kin Page                                        */
+/* ─────────────────────────────────────────────────────── */
 
 export function SoKinPage() {
-  const isMobileOrTablet = useIsMobile(1023);
-  if (!isMobileOrTablet) return <SoKinPageDesktop />;
-  return <SoKinPageMobile />;
-}
-
-function SoKinPageMobile() {
   const navigate = useNavigate();
   const { isLoggedIn, user } = useAuth();
   const { t } = useLocaleCurrency();
   const { effectiveCountry, getCountryConfig } = useMarketPreference();
-  const defaultCity = getCountryConfig(effectiveCountry).defaultCity;
-  const { on, off, isConnected } = useSocket();
-  const isMobile = useIsMobile();
-  const scrollDir = useScrollDirection();
+  const { on, off } = useSocket();
+  const isMobile = useIsMobile(1023);
 
-  // ── State ──
+  // ── State — TOUS les hooks avant tout return conditionnel ──
   const [posts, setPosts] = useState<SoKinApiFeedPost[]>([]);
-  const [stories, setStories] = useState<SoKinStory[]>([]);
   const [loadingFeed, setLoadingFeed] = useState(true);
   const [hasMore, setHasMore] = useState(true);
   const loadingRef = useRef(false);
+  const offsetRef = useRef(0);
   const sentinelRef = useRef<HTMLDivElement>(null);
-  const [notifCount, setNotifCount] = useState(0);
 
-  // Creator state
-  const [creatorMode, setCreatorMode] = useState<'wave' | 'post' | null>(null);
+  const [showCreateScreen, setShowCreateScreen] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
 
-  // Story viewer
-  const [storyViewerOpen, setStoryViewerOpen] = useState(false);
-  const [storyViewerIndex, setStoryViewerIndex] = useState(0);
+  // Viewer (géré au niveau page : un seul à la fois)
+  const [viewerItem, setViewerItem] = useState<MediaItem | null>(null);
+  // Commentaires
+  const [openCommentsPostId, setOpenCommentsPostId] = useState<string | null>(null);
+  const [commentsByPost, setCommentsByPost] = useState<Record<string, SoKinApiComment[]>>({});
+  const [loadingCommentsPostId, setLoadingCommentsPostId] = useState<string | null>(null);
+  const [submittingCommentPostId, setSubmittingCommentPostId] = useState<string | null>(null);
+  const [commentDraft, setCommentDraft] = useState('');
+  const [replyToComment, setReplyToComment] = useState<SoKinApiComment | null>(null);
+  const [commentProfileState, setCommentProfileState] = useState<CommentProfileState>({
+    status: 'idle',
+    profile: null,
+    message: null,
+  });
+  // Ouverture messagerie depuis une annonce
+  const [contactingPostId, setContactingPostId] = useState<string | null>(null);
 
-  // ── Data loading ──
+  const city = user?.profile?.city ?? getCountryConfig(effectiveCountry).defaultCity;
+  const country = effectiveCountry;
+  const avatarUrl = user?.profile?.avatarUrl ?? '';
+  const displayName = user?.profile?.displayName ?? 'Utilisateur';
+
+  // ── Redirect desktop (effect, pas de hook conditionnel) ──
+  useEffect(() => {
+    if (!isMobile) navigate('/', { replace: true });
+  }, [isMobile, navigate]);
+
+  // ── Chargement du fil ──
   const loadFeed = useCallback(
     async (reset = false) => {
-      if (loadingRef.current && !reset) return;
+      if (loadingRef.current) return;
+      if (!reset && !hasMore) return;
       loadingRef.current = true;
       try {
-        const res = await sokinApi.publicFeed({ limit: 12, city: defaultCity, country: effectiveCountry });
+        const limit = 20;
+        const currentOffset = reset ? 0 : offsetRef.current;
+        const data = await sokinApi.publicFeed({
+          limit,
+          offset: currentOffset,
+          city,
+          country,
+        });
+        const incoming = data.posts;
         if (reset) {
-          setPosts(res.posts);
+          setPosts(incoming);
+          offsetRef.current = incoming.length;
+          setLoadingFeed(false);
         } else {
           setPosts((prev) => {
             const ids = new Set(prev.map((p) => p.id));
-            return [...prev, ...res.posts.filter((p) => !ids.has(p.id))];
+            const fresh = incoming.filter((p) => !ids.has(p.id));
+            offsetRef.current += fresh.length;
+            return [...prev, ...fresh];
           });
         }
-        if (res.posts.length < 12) setHasMore(false);
-      } catch { /* */ }
-      finally { setLoadingFeed(false); loadingRef.current = false; }
+        setHasMore(incoming.length >= limit);
+      } catch {
+        setHasMore(false);
+        if (reset) setLoadingFeed(false);
+      } finally {
+        loadingRef.current = false;
+      }
     },
-    [defaultCity, effectiveCountry],
+    [hasMore, city, country]
   );
 
-  const loadStories = useCallback(async () => {
-    try {
-      const data = await sokinApi.stories();
-      setStories(data.stories);
-    } catch { setStories([]); }
-  }, []);
-
-  useEffect(() => { setLoadingFeed(true); void loadFeed(true); }, [loadFeed]);
+  // Chargement initial
   useEffect(() => {
-    void loadStories();
-    const timer = setInterval(loadStories, 45_000);
-    return () => clearInterval(timer);
-  }, [loadStories]);
+    void loadFeed(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [city, country]);
 
-  // Socket listeners
-  useEffect(() => {
-    const handlePost = (payload: { sourceUserId?: string }) => {
-      // Skip own posts — already added to local state via handlePublish
-      if (payload?.sourceUserId === user?.id) return;
-      void loadFeed(true);
-    };
-    const handleStory = (payload: { sourceUserId?: string }) => {
-      if (payload?.sourceUserId === user?.id) return;
-      void loadStories();
-    };
-    const handleShare = (p: { postId: string; shares: number }) => {
-      setPosts((prev) => prev.map((post) => post.id === p.postId ? { ...post, shares: p.shares } : post));
-    };
-    const handleReacted = (payload: { postId: string; type: string; sourceUserId: string }) => {
-      if (payload.sourceUserId === user?.id) return;
-      setPosts((prev) => prev.map((p) => {
-        if (p.id !== payload.postId) return p;
-        const counts = { ...p.reactionCounts } as Record<string, number>;
-        counts[payload.type] = (counts[payload.type] ?? 0) + 1;
-        return { ...p, reactionCounts: counts as typeof p.reactionCounts, likes: p.likes + 1 };
-      }));
-    };
-    const handleUnreacted = (payload: { postId: string; sourceUserId: string }) => {
-      if (payload.sourceUserId === user?.id) return;
-      setPosts((prev) => prev.map((p) => {
-        if (p.id !== payload.postId) return p;
-        return { ...p, likes: Math.max(0, p.likes - 1) };
-      }));
-    };
-    on('sokin:post-created', handlePost);
-    on('sokin:story-created', handleStory);
-    on('sokin:post-shared', handleShare);
-    on('sokin:post-reacted', handleReacted);
-    on('sokin:post-unreacted', handleUnreacted);
-    return () => { off('sokin:post-created', handlePost); off('sokin:story-created', handleStory); off('sokin:post-shared', handleShare); off('sokin:post-reacted', handleReacted); off('sokin:post-unreacted', handleUnreacted); };
-  }, [on, off, loadFeed, loadStories, user?.id]);
-
-  // Infinite scroll observer
+  // Scroll infini
   useEffect(() => {
     if (!sentinelRef.current || !hasMore) return;
     const obs = new IntersectionObserver(
-      ([e]) => { if (e.isIntersecting && !loadingRef.current) void loadFeed(); },
-      { rootMargin: '200px' },
+      ([e]) => {
+        if (e.isIntersecting && !loadingRef.current) void loadFeed();
+      },
+      { rootMargin: '300px' }
     );
     obs.observe(sentinelRef.current);
     return () => obs.disconnect();
   }, [hasMore, loadFeed]);
 
-  // Polling fallback when socket is offline
+  // Socket : nouveaux posts en temps réel
   useEffect(() => {
-    if (isConnected) return; // socket handles live updates
-    const poll = setInterval(() => { void loadFeed(true); }, 30_000);
-    return () => clearInterval(poll);
-  }, [isConnected, loadFeed]);
-
-
+    const handleNewPost = (payload: { sourceUserId?: string }) => {
+      if (payload?.sourceUserId === user?.id) return;
+      void loadFeed(true);
+    };
+    on('sokin:post-created', handleNewPost);
+    return () => off('sokin:post-created', handleNewPost);
+  }, [user?.id, on, off, loadFeed]);
 
   // ── Handlers ──
-  const handleReaction = async (postId: string, type: SoKinReactionType) => {
-    if (!isLoggedIn) return;
-    const post = posts.find((p) => p.id === postId);
+  const loadComments = useCallback(async (postId: string) => {
+    setLoadingCommentsPostId(postId);
     try {
-      if (post?.myReaction === type) {
-        await sokinApi.unreactToPost(postId);
-        setPosts((prev) => prev.map((p) => p.id === postId ? { ...p, myReaction: null, likes: Math.max(0, p.likes - 1) } : p));
-      } else {
-        await sokinApi.reactToPost(postId, type);
-        setPosts((prev) => prev.map((p) => p.id === postId ? { ...p, myReaction: type, likes: p.likes + (p.myReaction ? 0 : 1) } : p));
-      }
-    } catch { /* */ }
-  };
+      const data = await sokinApi.postComments(postId, { limit: 100 });
+      setCommentsByPost((prev) => ({ ...prev, [postId]: data.comments ?? [] }));
+    } catch {
+      setCommentsByPost((prev) => ({ ...prev, [postId]: [] }));
+    } finally {
+      setLoadingCommentsPostId((prev) => (prev === postId ? null : prev));
+    }
+  }, []);
 
-  const handleShare = async (postId: string) => {
-    if (!isLoggedIn) return;
-    const shareUrl = `${window.location.origin}/sokin?post=${encodeURIComponent(postId)}`;
+  const handleOpenComments = useCallback((postId: string) => {
+    setOpenCommentsPostId(postId);
+    setReplyToComment(null);
+    setCommentProfileState({ status: 'idle', profile: null, message: null });
+    setCommentDraft('');
+    void loadComments(postId);
+  }, [loadComments]);
+
+  const handleCloseComments = useCallback(() => {
+    setOpenCommentsPostId(null);
+    setReplyToComment(null);
+    setCommentProfileState({ status: 'idle', profile: null, message: null });
+    setCommentDraft('');
+  }, []);
+
+  const handlePrepareReply = useCallback((comment: SoKinApiComment) => {
+    const targetName = comment.author.profile?.displayName ?? 'Utilisateur';
+    const mention = `@${targetName}`;
+    setReplyToComment(comment);
+    setCommentDraft((prev) => {
+      const trimmed = prev.trim();
+      if (trimmed.startsWith(mention)) return prev;
+      if (!trimmed) return `${mention} `;
+      return `${mention} ${trimmed}`;
+    });
+  }, []);
+
+  const handleOpenCommentProfile = useCallback(async (comment: SoKinApiComment) => {
+    const profilePreview: MissingPublicProfile = {
+      avatarUrl: comment.author.profile?.avatarUrl ?? null,
+      displayName: comment.author.profile?.displayName ?? 'Utilisateur',
+      identifier: comment.author.profile?.username ? `@${comment.author.profile.username.replace('@', '')}` : comment.author.id,
+    };
+
+    const normalizeUsername = (value?: string | null) => (value ?? '').replace('@', '').trim();
+    const getErrorStatus = (error: unknown) => {
+      if (error instanceof ApiError) return error.status;
+      return undefined;
+    };
+
+    const openResolvedProfile = (username: string) => {
+      setCommentProfileState({ status: 'success', profile: profilePreview, message: null });
+      navigate(`/user/${username}`);
+    };
+
+    setCommentProfileState({
+      status: 'loading',
+      profile: profilePreview,
+      message: 'Chargement du profil public…',
+    });
+
+    const directUsername = normalizeUsername(comment.author.profile?.username);
+
+    if (directUsername) {
+      try {
+        await usersApi.publicProfile(directUsername);
+        openResolvedProfile(directUsername);
+        return;
+      } catch (error) {
+        const status = getErrorStatus(error);
+        if (status !== 404) {
+          setCommentProfileState({
+            status: 'error',
+            profile: profilePreview,
+            message: 'Erreur technique: impossible d’ouvrir le profil public pour le moment.',
+          });
+          return;
+        }
+      }
+    }
+
     try {
-      if (navigator.share) {
-        await navigator.share({ title: 'So-Kin', url: shareUrl });
-      } else if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(shareUrl);
+      const payload = (await usersApi.publicProfileById(comment.author.id)) as { username?: string | null };
+      const resolved = normalizeUsername(payload?.username);
+      if (resolved) {
+        openResolvedProfile(resolved);
+        return;
       }
-      const res = await sokinApi.sharePost(postId);
-      setPosts((prev) => prev.map((p) => p.id === postId ? { ...p, shares: res.shares } : p));
-    } catch { /* */ }
-  };
 
-  const handlePublish = async (data: {
-    text: string;
-    mediaFiles: File[];
-    location: string;
-    tags: string[];
-    hashtags: string[];
-    bgColor: string;
-    scheduledAt: string;
-  }) => {
+      setCommentProfileState({
+        status: 'not-available',
+        profile: profilePreview,
+        message: 'L\'utilisateur ou l\'entreprise n\'a pas de profil public ou de boutique en ligne.',
+      });
+    } catch (error) {
+      const status = getErrorStatus(error);
+      if (status === 404) {
+        setCommentProfileState({
+          status: 'not-available',
+          profile: profilePreview,
+          message: 'L\'utilisateur ou l\'entreprise n\'a pas de profil public ou de boutique en ligne.',
+        });
+        return;
+      }
+
+      setCommentProfileState({
+        status: 'error',
+        profile: profilePreview,
+        message: 'Erreur technique: impossible d’ouvrir le profil public pour le moment.',
+      });
+    }
+  }, [navigate]);
+
+  const handleSubmitComment = useCallback(async () => {
+    if (!openCommentsPostId) return;
+    if (!isLoggedIn) {
+      navigate('/login');
+      return;
+    }
+    const content = commentDraft.trim();
+    if (!content) return;
+
+    setSubmittingCommentPostId(openCommentsPostId);
+    try {
+      const payload = await sokinApi.createComment(openCommentsPostId, {
+        content,
+        parentCommentId: replyToComment?.id,
+      });
+      const created = payload.comment;
+
+      setCommentsByPost((prev) => ({
+        ...prev,
+        [openCommentsPostId]: [created, ...(prev[openCommentsPostId] ?? [])],
+      }));
+      setPosts((prev) => prev.map((p) => p.id === openCommentsPostId ? { ...p, comments: (p.comments ?? 0) + 1 } : p));
+      setCommentDraft('');
+      setReplyToComment(null);
+    } catch {
+      // no-op UI: conserver le draft pour permettre la ré-émission
+    } finally {
+      setSubmittingCommentPostId((prev) => (prev === openCommentsPostId ? null : prev));
+    }
+  }, [openCommentsPostId, isLoggedIn, navigate, commentDraft, replyToComment]);
+
+  const handleContact = useCallback(async (post: SoKinApiFeedPost) => {
+    if (!isLoggedIn) {
+      navigate('/login');
+      return;
+    }
+    if (!user?.id || post.author.id === user.id) return;
+    if (contactingPostId) return;
+
+    setContactingPostId(post.id);
+    try {
+      const { conversation } = await messaging.createDM(post.author.id);
+      const postRef: SoKinPostRef = {
+        id: post.id,
+        text: (post.text ?? '').slice(0, 120),
+        mediaUrl: post.mediaUrls?.[0] ?? null,
+        authorName: post.author.profile?.displayName ?? 'Utilisateur',
+        authorId: post.author.id,
+        authorHandle: post.author.profile?.username ?? post.author.id,
+      };
+      navigate(`/messaging/${conversation.id}`, { state: { sokinPost: postRef } });
+    } catch {
+      navigate('/messaging');
+    } finally {
+      setContactingPostId(null);
+    }
+  }, [isLoggedIn, user?.id, contactingPostId, navigate]);
+
+  const handlePublish = async (data: { text: string; mediaFiles: File[] }) => {
     if (isPublishing || !isLoggedIn) return;
     setIsPublishing(true);
     setPublishError(null);
     try {
-      const scheduledAtIso = data.scheduledAt ? new Date(data.scheduledAt).toISOString() : undefined;
-
-      if (creatorMode === 'wave') {
-        // Create as story (Wave = 24h)
-        const mediaUrl = data.mediaFiles.length > 0 ? await prepareMediaUrl(data.mediaFiles[0]) : undefined;
-        const mediaType = data.mediaFiles.length > 0
-          ? (data.mediaFiles[0].type.startsWith('video/') ? 'VIDEO' : 'IMAGE')
-          : 'TEXT';
-        const created = await sokinApi.createStory({
-          mediaUrl,
-          mediaType,
-          caption: data.text || undefined,
-          bgColor: mediaType === 'TEXT' ? data.bgColor : undefined,
-          scheduledAt: scheduledAtIso,
-        });
-        setStories((prev) => [created, ...prev]);
-      } else {
-        // Create as post (permanent)
-        const mediaUrls = data.mediaFiles.length > 0 ? await prepareMediaUrls(data.mediaFiles) : undefined;
-        const newPost = await sokinApi.createPost({
-          text: data.text,
-          mediaUrls,
-          location: data.location || undefined,
-          tags: data.tags.length > 0 ? data.tags : undefined,
-          hashtags: data.hashtags.length > 0 ? data.hashtags : undefined,
-          scheduledAt: scheduledAtIso,
-        });
-        // Add to feed immediately (only if not scheduled)
-        if (!scheduledAtIso) {
-          setPosts((prev) => [{
-            ...newPost,
-            author: {
-              id: newPost.authorId,
-              profile: {
-                username: user?.profile.username ?? null,
-                displayName: user?.profile.displayName ?? 'Moi',
-                avatarUrl: user?.profile.avatarUrl ?? null,
-                city: user?.profile.city ?? null,
-              },
-            },
-            reactionCounts: {},
-            myReaction: null,
-          }, ...prev]);
-        }
+      if (!data.text.trim()) {
+        throw new Error('Le texte de l’annonce est obligatoire.');
       }
-      setCreatorMode(null);
+
+      const mediaUrls = await Promise.all(
+        data.mediaFiles.map((f) => prepareMediaUrl(f))
+      );
+
+      const created = await sokinApi.createPost({
+        text: data.text,
+        mediaUrls,
+      });
+
+      if (!created?.id) {
+        throw new Error('Publication non confirmée par le serveur.');
+      }
+
+      setShowCreateScreen(false);
+
+      try {
+        const full = await sokinApi.publicPost(created.id);
+        setPosts((prev) => [full.post, ...prev.filter((item) => item.id !== full.post.id)]);
+      } catch {
+        void loadFeed(true);
+      }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Échec de la publication. Veuillez réessayer.';
-      setPublishError(msg);
-    } finally { setIsPublishing(false); }
+      setPublishError(
+        err instanceof Error ? err.message : 'Erreur lors de la publication'
+      );
+    } finally {
+      setIsPublishing(false);
+    }
   };
 
-  const openStoryViewer = async (index: number) => {
-    setStoryViewerIndex(index);
-    setStoryViewerOpen(true);
-  };
-
-  const currentName = user?.profile.displayName ?? 'Vous';
-  const currentAvatar = user?.profile.avatarUrl ?? '';
+  // Desktop : rien à rendre (la redirection est dans l'effect ci-dessus)
+  if (!isMobile) return null;
 
   return (
     <>
       <SeoMeta
-        title="So-Kin — Le réseau social de Kinshasa"
-        description="Partagez vos actualités, suivez vos contacts et découvrez les lives et tendances sur So-Kin, le réseau social de Kin-Sell."
+        title="So-Kin — Annonces Kin-Sell"
+        description="Publiez et découvrez des annonces à Kinshasa et en RDC."
         canonical="https://kin-sell.com/sokin"
       />
 
       <div className="sk-page">
-        <SoKinTopBar t={t} />
+        {/* ── Barre supérieure ── */}
+        <header className="sk-topbar">
+          <button
+            type="button"
+            className="sk-topbar-back"
+            onClick={() => navigate('/')}
+            aria-label="Retour à l'accueil"
+          >
+            <IconBack />
+          </button>
+          <div className="sk-topbar-center">
+            <span className="sk-topbar-title">So-Kin</span>
+            <span className="sk-topbar-sub">Annonces</span>
+          </div>
+          {/* Espace symétrique droit (à utiliser pour filter/search futur) */}
+          <div className="sk-topbar-end" aria-hidden="true" />
+        </header>
 
-        <CreateZone
-          avatarUrl={currentAvatar}
-          displayName={currentName}
+        {/* ── Zone composer ── */}
+        <ComposeZone
+          avatarUrl={avatarUrl}
+          displayName={displayName}
           isLoggedIn={isLoggedIn}
-          onWave={() => setCreatorMode('wave')}
-          onCreer={() => setCreatorMode('post')}
+          onCreatePost={() => setShowCreateScreen(true)}
         />
 
-        <WaveStrip stories={stories} t={t} onOpen={openStoryViewer} />
-
-        <PostFeed
+        {/* ── Fil d'annonces ── */}
+        <AnnouncesFeed
           posts={posts}
           hasMore={hasMore}
           loading={loadingFeed}
           sentinelRef={sentinelRef}
           t={t}
           isLoggedIn={isLoggedIn}
-          onReact={handleReaction}
-          onShare={handleShare}
+          openCommentsPostId={openCommentsPostId}
+          onOpenComments={handleOpenComments}
+          onMediaClick={(item) => setViewerItem(item)}
+          onContact={handleContact}
+          contactingPostId={contactingPostId}
         />
-
-        <div className="sk-bottom-spacer" aria-hidden="true" />
-
-        {isMobile && (
-          <SoKinBottomNav hidden={scrollDir === 'down'} notifCount={notifCount} t={t} />
-        )}
       </div>
 
-      {/* Creator bottom sheet */}
-      {creatorMode && (
-        <CreatorSheet
-          mode={creatorMode}
+      <CommentsDrawer
+        post={posts.find((p) => p.id === openCommentsPostId) ?? null}
+        open={Boolean(openCommentsPostId)}
+        isLoggedIn={isLoggedIn}
+        comments={openCommentsPostId ? (commentsByPost[openCommentsPostId] ?? []) : []}
+        loading={loadingCommentsPostId === openCommentsPostId}
+        draft={commentDraft}
+        submitting={submittingCommentPostId === openCommentsPostId}
+        replyTo={replyToComment}
+        profileState={commentProfileState}
+        onClose={handleCloseComments}
+        onDraftChange={setCommentDraft}
+        onSubmit={handleSubmitComment}
+        onPrepareReply={handlePrepareReply}
+        onOpenProfile={handleOpenCommentProfile}
+        onCloseProfileState={() => setCommentProfileState({ status: 'idle', profile: null, message: null })}
+      />
+
+      {/* ── Modal publication ── */}
+      {showCreateScreen && (
+        <CreateAnnounceScreen
+          onClose={() => setShowCreateScreen(false)}
+          onPublish={handlePublish}
           isPublishing={isPublishing}
           publishError={publishError}
-          onClose={() => { setCreatorMode(null); setPublishError(null); }}
-          onPublish={handlePublish}
-          t={t}
         />
       )}
 
-      {/* Story viewer */}
-      {storyViewerOpen && (
-        <StoryViewer
-          stories={stories}
-          startIndex={storyViewerIndex}
-          t={t}
-          onClose={() => setStoryViewerOpen(false)}
-          isLoggedIn={isLoggedIn}
-        />
+      {/* ── Viewer média simple ── */}
+      {viewerItem && (
+        <MediaViewer item={viewerItem} onClose={() => setViewerItem(null)} />
       )}
     </>
   );

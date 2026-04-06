@@ -67,59 +67,10 @@ export default defineConfig({
         categories: ["shopping", "business", "lifestyle"],
       },
 
-      // ── Workbox — stratégies de cache ──
+      // ── Workbox — configuration simplifiée ──
       workbox: {
-        // ── Assets statiques : cache-first (long terme) ──
-        runtimeCaching: [
-          {
-            // Fonts Google si jamais utilisées à l'avenir
-            urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
-            handler: "CacheFirst",
-            options: {
-              cacheName: "google-fonts-cache",
-              expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 365 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
-          {
-            // Images (Cloudinary / CDN / assets locaux)
-            urlPattern: /\.(?:png|jpg|jpeg|svg|gif|webp|avif|ico)$/i,
-            handler: "CacheFirst",
-            options: {
-              cacheName: "images-cache",
-              expiration: { maxEntries: 150, maxAgeSeconds: 60 * 60 * 24 * 30 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
-          {
-            // API calls (/api/* AND absolute URLs like http://api.kin-sell.com/*)
-            // Network-first : données fraîches, fallback cache si hors-ligne
-            urlPattern: ({ url }) =>
-              url.pathname.startsWith("/api") ||
-              url.hostname === "api.kin-sell.com",
-            handler: "NetworkFirst",
-            options: {
-              cacheName: "api-cache",
-              networkTimeoutSeconds: 4,
-              expiration: { maxEntries: 100, maxAgeSeconds: 60 * 2 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
-          // JS/CSS chunks : PAS de runtime caching ici.
-          // Le précache Workbox (globPatterns ci-dessous) gère déjà les assets
-          // hashés avec versioning correct. Un StaleWhileRevalidate ici
-          // causerait des 404 → ErrorBoundary après chaque rebuild.
-          {
-            // Woff2 / polices locales — CacheFirst (immuables après build)
-            urlPattern: /\.(?:woff|woff2|ttf|eot)$/i,
-            handler: "CacheFirst",
-            options: {
-              cacheName: "fonts-cache",
-              expiration: { maxEntries: 20, maxAgeSeconds: 60 * 60 * 24 * 365 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
-        ],
+        // Pas de runtimeCaching custom: on s'appuie sur le serveur/CDN pour HTTP caching.
+        runtimeCaching: [],
 
         // Précache tous les chunks build (PAS html : servi sans cache par le serveur)
         globPatterns: ["**/*.{js,css,ico,svg,woff2}"],
@@ -205,7 +156,7 @@ export default defineConfig({
           "vendor-react": ["react", "react-dom", "react-router-dom"],
           // Socket.io chargée séparément (lourde, rarement modifiée)
           "vendor-socket": ["socket.io-client"],
-          // HLS.js pour le streaming live (lourd, uniquement So-Kin Live)
+          // HLS.js pour le streaming vidéo spécialisé (chunk isolé)
           "vendor-hls": ["hls.js"],
           // Leaflet pour les cartes OSM (lourd, uniquement Explorer/Map)
           "vendor-leaflet": ["leaflet"],

@@ -3,7 +3,6 @@ import { Server as SocketIOServer } from "socket.io";
 import { verifyAccessToken } from "../../shared/auth/jwt.js";
 import * as messagingService from "./messaging.service.js";
 import * as callLogService from "./call-log.service.js";
-import * as sokinLiveService from "../sokin/sokin-live.service.js";
 import { sendPushToUser, sendPushToUsers } from "../notifications/push.service.js";
 import { prisma } from "../../shared/db/prisma.js";
 import { logger } from "../../shared/logger.js";
@@ -384,148 +383,6 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
       }
     });
 
-    /* ═══════════════════════════════════════
-       Live Streaming — Real-time events
-       ═══════════════════════════════════════ */
-
-    /** Rate limit for live chat (per user) */
-    const LIVE_CHAT_MAX = 30;
-    const LIVE_CHAT_WINDOW_MS = 60_000;
-    const liveChatRates = new Map<string, { count: number; resetAt: number }>();
-
-    socket.on("live:join", async (data: { liveId: string }, callback?: (res: unknown) => void) => {
-      try {
-        if (!data?.liveId || typeof data.liveId !== "string" || data.liveId.length < 10 || data.liveId.length > 50) {
-          if (callback) callback({ ok: false, error: "liveId invalide" }); return;
-        }
-        const roomName = `live:${data.liveId}`;
-        void socket.join(roomName);
-
-        // Persist join in DB
-        const participant = await sokinLiveService.joinLive(data.liveId, userId);
-        const live = await sokinLiveService.getLiveById(data.liveId);
-        const viewerCount = live?.viewerCount ?? 0;
-
-        // Get user profile for broadcast
-        const profile = await prisma.userProfile.findUnique({ where: { userId }, select: { displayName: true, avatarUrl: true } });
-
-        // Broadcast to room
-        io.to(roomName).emit("live:viewer-joined", {
-          liveId: data.liveId,
-          userId,
-          displayName: profile?.displayName ?? "Anonyme",
-          avatarUrl: profile?.avatarUrl ?? null,
-          viewerCount,
-        });
-
-        if (callback) callback({ ok: true, viewerCount });
-      } catch (error) {
-        if (callback) callback({ ok: false, error: error instanceof Error ? error.message : "Erreur join live" });
-      }
-    });
-
-    socket.on("live:leave", async (data: { liveId: string }, callback?: (res: unknown) => void) => {
-      try {
-        if (!data?.liveId || typeof data.liveId !== "string") { if (callback) callback({ ok: false }); return; }
-        const roomName = `live:${data.liveId}`;
-        void socket.leave(roomName);
-
-        await sokinLiveService.leaveLive(data.liveId, userId);
-        const live = await sokinLiveService.getLiveById(data.liveId);
-        const viewerCount = live?.viewerCount ?? 0;
-
-        io.to(roomName).emit("live:viewer-left", {
-          liveId: data.liveId,
-          userId,
-          viewerCount,
-        });
-
-        if (callback) callback({ ok: true });
-      } catch {
-        if (callback) callback({ ok: false });
-      }
-    });
-
-    socket.on("live:chat", async (data: { liveId: string; text: string }, callback?: (res: unknown) => void) => {
-      try {
-        if (!data?.liveId || typeof data.liveId !== "string" || data.liveId.length < 10 || data.liveId.length > 50) {
-          if (callback) callback({ ok: false, error: "liveId invalide" }); return;
-        }
-        if (!data.text || typeof data.text !== "string" || data.text.length === 0 || data.text.length > 300) {
-          if (callback) callback({ ok: false, error: "Message invalide (1-300 caractères)" }); return;
-        }
-
-        // Rate limit
-        const now = Date.now();
-        let rate = liveChatRates.get(userId);
-        if (!rate || now > rate.resetAt) {
-          rate = { count: 0, resetAt: now + LIVE_CHAT_WINDOW_MS };
-          liveChatRates.set(userId, rate);
-        }
-        rate.count++;
-        if (rate.count > LIVE_CHAT_MAX) {
-          if (callback) callback({ ok: false, error: "Trop de messages. Réessayez dans un instant." }); return;
-        }
-
-        const msg = await sokinLiveService.sendLiveChatMessage(data.liveId, userId, data.text);
-        const profile = await prisma.userProfile.findUnique({ where: { userId }, select: { displayName: true, avatarUrl: true } });
-
-        const chatPayload = {
-          id: msg.id,
-          liveId: data.liveId,
-          userId,
-          text: msg.text,
-          isGift: msg.isGift,
-          giftType: msg.giftType,
-          isPinned: msg.isPinned,
-          createdAt: msg.createdAt,
-          user: { profile: { displayName: profile?.displayName ?? "Anonyme", avatarUrl: profile?.avatarUrl ?? null } },
-        };
-
-        io.to(`live:${data.liveId}`).emit("live:chat:new", chatPayload);
-        if (callback) callback({ ok: true, message: chatPayload });
-      } catch (error) {
-        if (callback) callback({ ok: false, error: error instanceof Error ? error.message : "Erreur chat" });
-      }
-    });
-
-    socket.on("live:like", async (data: { liveId: string }, callback?: (res: unknown) => void) => {
-      try {
-        if (!data?.liveId || typeof data.liveId !== "string") { if (callback) callback({ ok: false }); return; }
-        const result = await sokinLiveService.likeLive(data.liveId);
-        io.to(`live:${data.liveId}`).emit("live:liked", {
-          liveId: data.liveId,
-          userId,
-          likesCount: result.likesCount,
-        });
-        if (callback) callback({ ok: true, likesCount: result.likesCount });
-      } catch {
-        if (callback) callback({ ok: false });
-      }
-    });
-
-    socket.on("live:start", async (data: { liveId: string }, callback?: (res: unknown) => void) => {
-      try {
-        if (!data?.liveId || typeof data.liveId !== "string") { if (callback) callback({ ok: false }); return; }
-        await sokinLiveService.startLive(data.liveId, userId);
-        io.to(`live:${data.liveId}`).emit("live:started", { liveId: data.liveId, hostId: userId });
-        if (callback) callback({ ok: true });
-      } catch (error) {
-        if (callback) callback({ ok: false, error: error instanceof Error ? error.message : "Erreur démarrage" });
-      }
-    });
-
-    socket.on("live:end", async (data: { liveId: string }, callback?: (res: unknown) => void) => {
-      try {
-        if (!data?.liveId || typeof data.liveId !== "string") { if (callback) callback({ ok: false }); return; }
-        await sokinLiveService.endLive(data.liveId, userId);
-        io.to(`live:${data.liveId}`).emit("live:ended", { liveId: data.liveId, hostId: userId });
-        if (callback) callback({ ok: true });
-      } catch (error) {
-        if (callback) callback({ ok: false, error: error instanceof Error ? error.message : "Erreur arrêt" });
-      }
-    });
-
     /* ── Live WebRTC signaling (1-to-many broadcast) ── */
 
     socket.on("live:webrtc:offer", (data: { liveId: string; targetUserId: string; sdp: RTCSessionDescriptionInit }) => {
@@ -626,3 +483,4 @@ export function emitToLiveRoom<TPayload>(liveId: string, event: string, payload:
   if (!ioInstance || !liveId) return;
   ioInstance.to(`live:${liveId}`).emit(event, payload);
 }
+

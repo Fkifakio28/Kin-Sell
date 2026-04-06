@@ -13,7 +13,6 @@ import { useMarketPreference } from '../../app/providers/MarketPreferenceProvide
 import { NegotiatePopup } from '../negotiations/NegotiatePopup';
 import { useLockedCategories, isCategoryLocked } from '../../hooks/useLockedCategories';
 import { AdBanner } from '../../components/AdBanner';
-import { SmartAdSlot } from '../../components/SmartAdSlot';
 import MapView from '../../components/MapView';
 import { SeoMeta } from '../../components/SeoMeta';
 import { useScrollDirection } from '../../hooks/useScrollDirection';
@@ -90,7 +89,6 @@ function ExDrawer({ open, onClose, t, isLoggedIn, user, logout }: {
     { icon: '🏠', label: 'Accueil', href: '/' },
     { icon: '🔍', label: 'Explorer', href: '/explorer' },
     { icon: '📢', label: 'So-Kin', href: '/sokin' },
-    { icon: '🔴', label: 'So-Kin Live', href: '/sokin/live' },
     { icon: '🛒', label: 'Panier', href: '/cart' },
     { icon: '💰', label: 'Forfaits', href: '/forfaits' },
     { icon: '📖', label: 'Blog', href: '/blog' },
@@ -461,7 +459,6 @@ function ExplorerPageMobile() {
         </div>
 
         <AdBanner page="explorer" variant="slim" hideWhenEmpty />
-        <SmartAdSlot pageKey="explorer" componentKey="banner_top" variant="inline" />
 
         {/* ── Articles ── */}
         <section className="ex-section">

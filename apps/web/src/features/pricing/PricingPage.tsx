@@ -4,7 +4,6 @@ import { useAuth } from "../../app/providers/AuthProvider";
 import { useLocaleCurrency } from "../../app/providers/LocaleCurrencyProvider";
 import { billing, type BillingPlanSummary, ApiError } from "../../lib/api-client";
 import { SeoMeta } from "../../components/SeoMeta";
-import { SmartAdSlot } from "../../components/SmartAdSlot";
 import "./pricing.css";
 
 type PricingTab = "users" | "business" | "addons";
@@ -823,8 +822,6 @@ export function PricingPage() {
           ))}
         </div>
       </section>
-
-      <SmartAdSlot pageKey="pricing" componentKey="banner_bottom" variant="card" />
     </section>
   );
 }

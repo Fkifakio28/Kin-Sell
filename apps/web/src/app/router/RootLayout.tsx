@@ -5,12 +5,10 @@ import { Footer } from "../../components/Footer";
 import { shouldShowSplash, SplashScreen } from "../../components/SplashScreen";
 import { SuspensionGuard } from "../providers/AuthProvider";
 import { InstallBanner } from "../../components/InstallBanner";
-import { CookieConsent } from "../../components/CookieConsent";
 import { useIsMobile } from "../../hooks/useIsMobile";
-import { TutorialProvider, TutorialOverlay, TutorialHelpButton } from "../../features/tutorial";
 
-/** Routes où la musique de fond doit être stoppée (caméra/micro/live actifs). */
-const MUSIC_OFF_ROUTES = ["/sokin", "/sokin/live"];
+/** Routes où la musique de fond doit être stoppée (expérience immersion So-Kin). */
+const MUSIC_OFF_ROUTES = ["/sokin"];
 
 /**
  * Root layout — wraps all pages with background shell + footer.
@@ -26,7 +24,7 @@ export function RootLayout() {
   const [splashVisible, setSplashVisible] = useState(() => shouldShowSplash());
   const [musicPlaying, setMusicPlaying] = useState(() => !shouldShowSplash());
 
-  // Stop musique sur les pages So-Kin / So-Kin Live (tous appareils)
+  // Stop musique sur la page So-Kin (tous appareils)
   useEffect(() => {
     const onMusicOffRoute = MUSIC_OFF_ROUTES.includes(location.pathname);
     setMusicPlaying((prev) => onMusicOffRoute ? false : prev || !shouldShowSplash());
@@ -38,7 +36,6 @@ export function RootLayout() {
   }
 
   return (
-    <TutorialProvider>
     <div className="live-background-shell">
       <div className="live-background-media" aria-hidden="true">
         <video autoPlay loop muted playsInline preload="none" poster="/assets/kin-sell/live-background-poster.webp">
@@ -64,10 +61,6 @@ export function RootLayout() {
       {splashVisible && <SplashScreen onDismiss={handleSplashDismiss} />}
       <BackgroundMusic playing={musicPlaying} />
       <InstallBanner />
-      <CookieConsent />
-      <TutorialOverlay />
-      <TutorialHelpButton />
     </div>
-    </TutorialProvider>
   );
 }

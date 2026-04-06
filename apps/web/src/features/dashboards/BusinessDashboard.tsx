@@ -6,7 +6,6 @@ import { getDashboardPath } from '../../utils/role-routing';
 import { useLocaleCurrency } from '../../app/providers/LocaleCurrencyProvider';
 import { compressAndEncodeMedia } from '../../utils/media-compress';
 import { DashboardMessaging } from './DashboardMessaging';
-import { SmartAdSlot } from '../../components/SmartAdSlot';
 import {
   ApiError, auth as authApi, businesses, listings, orders, billing, messaging, sokin, reviews as reviewsApi, invalidateCache, analyticsAi, aiRecommendations, aiTrials,
   type BusinessAccount, type MyListing, type MyListingsStats,
@@ -354,22 +353,10 @@ export function BusinessDashboard() {
       void sokin.myPosts().then((res) => setSokinPosts(res.posts)).catch(() => {});
     };
 
-    const handlePostShared = (payload: {
-      type: 'SOKIN_POST_SHARED';
-      postId: string;
-      shares: number;
-      sourceUserId: string;
-      updatedAt: string;
-    }) => {
-      setSokinPosts((prev) => prev.map((post) => (post.id === payload.postId ? { ...post, shares: payload.shares } : post)));
-    };
-
     on('sokin:post-created', handlePostCreated);
-    on('sokin:post-shared', handlePostShared);
 
     return () => {
       off('sokin:post-created', handlePostCreated);
-      off('sokin:post-shared', handlePostShared);
     };
   }, [isLoggedIn, user, on, off]);
 
@@ -2605,9 +2592,6 @@ export function BusinessDashboard() {
             </section>
           </div>
         )}
-
-        <SmartAdSlot pageKey="dashboard_business" componentKey="banner_bottom" variant="banner" />
-
       </main>
     </div>
   );

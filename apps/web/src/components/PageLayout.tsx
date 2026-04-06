@@ -1,8 +1,6 @@
-import React, { lazy, Suspense } from "react";
+import React from "react";
 import { Header } from "./Header";
 import { Footer } from "./Footer";
-
-const AiSmartPopup = lazy(() => import("./AiSmartPopup"));
 
 interface PageLayoutProps {
   children: React.ReactNode;
@@ -17,9 +15,6 @@ export function PageLayout({ children, hideHeader = false }: PageLayoutProps) {
         <div className="page-main-content">{children}</div>
       </main>
       <Footer />
-      <Suspense fallback={null}>
-        <AiSmartPopup />
-      </Suspense>
     </div>
   );
 }

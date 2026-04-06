@@ -1,59 +1,69 @@
+/**
+ * So-Kin Service (Refonte v3 - Annonces uniquement)
+ * 
+ * Fonctionnalités:
+ * - Créer/lire/supprimer les annonces
+ * - Alimenter le fil public filtré par localisation
+ * - No reactions, no shares, no user profiles
+ */
+
 import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
-import { normalizeImageInputs } from "../../shared/utils/media-storage.js";
-import { resolveCountryTerms } from "../../shared/geo/country-aliases.js";
 
-// Lightweight include: no reactions array (fetched separately via groupBy)
-const publicPostInclude = {
-  author: {
-    select: {
-      id: true,
-      profile: {
-        select: {
-          username: true,
-          displayName: true,
-          avatarUrl: true,
-          city: true,
+const isVideoMediaUrl = (value: string) => /\.(mp4|webm|mov|ogg)(\?.*)?$/i.test(value);
+
+const normalizeMediaUrls = (mediaUrls: string[]): string[] =>
+  mediaUrls
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0);
+
+const validatePostMediaUrls = (mediaUrls: string[]) => {
+  if (mediaUrls.length < 1) {
+    throw new HttpError(400, "Une annonce doit contenir au moins 1 média");
+  }
+  if (mediaUrls.length > 5) {
+    throw new HttpError(400, "Maximum 5 médias par annonce");
+  }
+  const videoCount = mediaUrls.filter((url) => isVideoMediaUrl(url)).length;
+  if (videoCount > 2) {
+    throw new HttpError(400, "Maximum 2 vidéos par annonce");
+  }
+};
+
+// Résoudre les termes pays pour la recherche
+function resolveCountryTerms(country?: string): string[] {
+  if (!country) return [];
+  const map: Record<string, string[]> = {
+    "DRC": ["Congo", "Kinshasa", "RDC", "Katanga"],
+    "CD": ["Congo", "Kinshasa", "RDC", "Katanga"],
+  };
+  return map[country] || [country];
+}
+
+/**
+ * Récupère les annonces de l'utilisateur
+ */
+export const getMySoKinPosts = async (authorId: string) => {
+  return prisma.soKinPost.findMany({
+    where: {
+      authorId,
+      status: { not: "DELETED" },
+    },
+    include: {
+      author: {
+        include: {
+          profile: true,
         },
       },
     },
-  },
-};
-
-// Heavy include kept for single-post fetches where N+1 doesn't matter
-const publicPostIncludeFull = {
-  ...publicPostInclude,
-  reactions: {
-    select: { type: true, userId: true },
-  },
-};
-
-const mapPublicPost = (
-  post: {
-    reactions: Array<{ type: string; userId: string }>;
-  } & Record<string, any>,
-  viewerUserId?: string
-) => {
-  const reactionCounts: Record<string, number> = {};
-  let myReaction: string | null = null;
-  for (const reaction of post.reactions) {
-    reactionCounts[reaction.type] = (reactionCounts[reaction.type] ?? 0) + 1;
-    if (viewerUserId && reaction.userId === viewerUserId) {
-      myReaction = reaction.type;
-    }
-  }
-  const { reactions: _reactions, ...rest } = post;
-  return { ...rest, reactionCounts, myReaction };
-};
-
-export const getMySoKinPosts = async (authorId: string) => {
-  return prisma.soKinPost.findMany({
-    where: { authorId, status: { not: "DELETED" } },
     orderBy: { createdAt: "desc" },
-    take: 50,
+    take: 100,
   });
 };
 
+/**
+ * Crée une nouvelle annonce
+ */
 export const createSoKinPost = async (
   authorId: string,
   text: string,
@@ -63,39 +73,35 @@ export const createSoKinPost = async (
   hashtags?: string[],
   scheduledAt?: Date
 ) => {
-  const normalizedMediaUrls = await normalizeImageInputs(mediaUrls, { folder: "sokin" });
+  const normalizedMediaUrls = normalizeMediaUrls(mediaUrls);
+  validatePostMediaUrls(normalizedMediaUrls);
 
-  return prisma.soKinPost.create({
+  const post = await prisma.soKinPost.create({
     data: {
       authorId,
       text,
-      mediaUrls: normalizedMediaUrls ?? [],
-      location: location || null,
+      mediaUrls: normalizedMediaUrls,
+      location,
       tags: tags || [],
       hashtags: hashtags || [],
-      scheduledAt: scheduledAt || null,
+      scheduledAt,
+      status: "ACTIVE",
+      visibility: "PUBLIC",
+    },
+    include: {
+      author: {
+        include: {
+          profile: true,
+        },
+      },
     },
   });
+  return post;
 };
 
-export const toggleArchiveSoKinPost = async (
-  authorId: string,
-  postId: string
-) => {
-  const post = await prisma.soKinPost.findUnique({ where: { id: postId } });
-  if (!post || post.status === "DELETED") {
-    throw new HttpError(404, "Publication introuvable");
-  }
-  if (post.authorId !== authorId) {
-    throw new HttpError(403, "Non autorisé");
-  }
-  const newStatus = post.status === "HIDDEN" ? "ACTIVE" : "HIDDEN";
-  return prisma.soKinPost.update({
-    where: { id: postId },
-    data: { status: newStatus },
-  });
-};
-
+/**
+ * Supprime une annonce
+ */
 export const deleteSoKinPost = async (authorId: string, postId: string) => {
   const post = await prisma.soKinPost.findUnique({ where: { id: postId } });
   if (!post || post.status === "DELETED") {
@@ -110,236 +116,182 @@ export const deleteSoKinPost = async (authorId: string, postId: string) => {
   });
 };
 
-export const getPublicFeed = async (limit = 20, viewerUserId?: string, city?: string, country?: string) => {
-  const countryTerms = resolveCountryTerms(country);
-  const andClauses: Record<string, unknown>[] = [];
-
-  const cityClause = city
-    ? {
-        OR: [
-          { location: { contains: city, mode: "insensitive" as const } },
-          {
-            author: {
-              profile: {
-                is: {
-                  city: { contains: city, mode: "insensitive" as const },
-                },
-              },
-            },
-          },
-        ],
-      }
-    : undefined;
-
-  if (cityClause) {
-    andClauses.push(cityClause);
-  }
-
-  const countryClause = countryTerms.length > 0
-    ? {
-        OR: [
-          ...countryTerms.map((term) => ({ location: { contains: term, mode: "insensitive" as const } })),
-          {
-            author: {
-              profile: {
-                is: {
-                  OR: countryTerms.map((term) => ({
-                    country: { contains: term, mode: "insensitive" as const },
-                  })),
-                },
-              },
-            },
-          },
-        ],
-      }
-    : undefined;
-
-  if (countryClause) {
-    andClauses.push(countryClause);
-  }
-
-  // Build the geo-filter block, but always include the viewer's own posts
-  const scheduleClause = { OR: [{ scheduledAt: null }, { scheduledAt: { lte: new Date() } }] };
-  const andFilters: Record<string, unknown>[] = [scheduleClause];
-
-  if (andClauses.length > 0) {
-    if (viewerUserId) {
-      andFilters.push({ OR: [{ authorId: viewerUserId }, { AND: andClauses }] });
-    } else {
-      andFilters.push(...andClauses);
-    }
-  }
-
-  const posts = await prisma.soKinPost.findMany({
-    where: {
-      status: "ACTIVE",
-      AND: andFilters,
-      author: {
-        role: { notIn: ["ADMIN", "SUPER_ADMIN"] },
-      },
-    },
-    orderBy: { createdAt: "desc" },
-    take: limit,
-    include: publicPostInclude,
-  });
-
-  // Single grouped query for all reaction counts instead of loading all reactions per post
-  const postIds = posts.map((p) => p.id);
-  const [reactionGroups, viewerReactions] = await Promise.all([
-    postIds.length > 0
-      ? prisma.soKinReaction.groupBy({
-          by: ["postId", "type"],
-          where: { postId: { in: postIds } },
-          _count: { id: true },
-        })
-      : Promise.resolve([]),
-    viewerUserId && postIds.length > 0
-      ? prisma.soKinReaction.findMany({
-          where: { postId: { in: postIds }, userId: viewerUserId },
-          select: { postId: true, type: true },
-        })
-      : Promise.resolve([]),
-  ]);
-
-  // Build lookup maps
-  const countsByPost = new Map<string, Record<string, number>>();
-  for (const g of reactionGroups) {
-    const existing = countsByPost.get(g.postId) ?? {};
-    existing[g.type] = g._count.id;
-    countsByPost.set(g.postId, existing);
-  }
-  const viewerReactionMap = new Map(viewerReactions.map((r) => [r.postId, r.type]));
-
-  return posts.map((post) => {
-    const { ...rest } = post;
-    return {
-      ...rest,
-      reactionCounts: countsByPost.get(post.id) ?? {},
-      myReaction: viewerReactionMap.get(post.id) ?? null,
-    };
-  });
-};
-
-export const getPublicPostById = async (postId: string, viewerUserId?: string) => {
-  const post = await prisma.soKinPost.findFirst({
-    where: {
-      id: postId,
-      status: "ACTIVE",
-      author: {
-        role: { notIn: ["ADMIN", "SUPER_ADMIN"] },
-      },
-    },
-    include: publicPostIncludeFull,
-  });
-
-  if (!post) {
-    throw new HttpError(404, "Publication introuvable");
-  }
-
-  return mapPublicPost(post, viewerUserId);
-};
-
-export const reactToPost = async (
-  userId: string,
-  postId: string,
-  type: "LIKE" | "LOVE" | "HAHA" | "WOW" | "SAD" | "ANGRY"
-) => {
-  const post = await prisma.soKinPost.findUnique({ where: { id: postId }, select: { id: true, status: true, authorId: true } });
-  if (!post || post.status === "DELETED") throw new HttpError(404, "Publication introuvable");
-
-  await prisma.soKinReaction.upsert({
-    where: { postId_userId: { postId, userId } },
-    update: { type },
-    create: { postId, userId, type },
-  });
-
-  // Update cached likes counter (total reactions)
-  const total = await prisma.soKinReaction.count({ where: { postId } });
-  await prisma.soKinPost.update({ where: { id: postId }, data: { likes: total } });
-
-  return { ok: true, type, authorId: post.authorId };
-};
-
-export const unreactToPost = async (userId: string, postId: string) => {
-  await prisma.soKinReaction.deleteMany({ where: { postId, userId } });
-  const total = await prisma.soKinReaction.count({ where: { postId } });
-  await prisma.soKinPost.update({ where: { id: postId }, data: { likes: total } });
-  return { ok: true };
-};
-
-export const sharePost = async (postId: string) => {
-  const post = await prisma.soKinPost.findUnique({
-    where: { id: postId },
-    select: { id: true, authorId: true, status: true },
-  });
-  if (!post || post.status === "DELETED") {
-    throw new HttpError(404, "Publication introuvable");
-  }
-
-  const updated = await prisma.soKinPost.update({
-    where: { id: postId },
-    data: { shares: { increment: 1 } },
-    select: { shares: true },
-  });
-
-  return { ok: true, shares: updated.shares, authorId: post.authorId };
-};
-
-export const getPublicUsers = async (
+/**
+ * Récupère le fil public des annonces (filtré par localisation)
+ */
+export const getPublicFeed = async (
+  limit = 20,
+  viewerUserId?: string,
   city?: string,
-  search?: string,
-  limit = 100,
-  country?: string
+  country?: string,
+  offset = 0,
+  cursor?: string
 ) => {
   const countryTerms = resolveCountryTerms(country);
-  const andClauses: Record<string, unknown>[] = [];
+  const andClauses: Record<string, unknown>[] = [
+    { status: "ACTIVE" },
+    { scheduledAt: { lte: new Date() } },
+  ];
 
-  if (countryTerms.length > 0) {
-    andClauses.push({
-      OR: countryTerms.map((term) => ({
-        country: { contains: term, mode: "insensitive" as const },
-      })),
-    });
-  }
-
-  if (search) {
+  // Filtre par ville
+  if (city) {
     andClauses.push({
       OR: [
-        { displayName: { contains: search, mode: "insensitive" as const } },
-        { username: { contains: search, mode: "insensitive" as const } },
-        { city: { contains: search, mode: "insensitive" as const } },
-        { domain: { contains: search, mode: "insensitive" as const } },
+        { location: { contains: city, mode: "insensitive" as const } },
+        {
+          author: {
+            profile: {
+              city: { contains: city, mode: "insensitive" as const },
+            },
+          },
+        },
       ],
     });
   }
 
-  return prisma.userProfile.findMany({
-    where: {
-      // Seuls les utilisateurs ayant un username public apparaissent dans l'annuaire
-      username: { not: null },
-      user: {
-        accountStatus: "ACTIVE",
-        // Exclure les admins et les comptes business des profils publics
-        role: { notIn: ["ADMIN", "SUPER_ADMIN", "BUSINESS"] },
-        // Seuls les comptes actifs ayant publié du contenu (pas de comptes test)
-        OR: [
-          { listings: { some: { status: "ACTIVE" } } },
-          { sokinPosts: { some: {} } },
-        ],
+  // Filtre par pays
+  if (countryTerms.length > 0) {
+    andClauses.push({
+      OR: [
+        ...countryTerms.map((term) => ({
+          location: { contains: term, mode: "insensitive" as const },
+        })),
+        {
+          author: {
+            profile: {
+              OR: countryTerms.map((term) => ({
+                country: { contains: term, mode: "insensitive" as const },
+              })),
+            },
+          },
+        },
+      ],
+    });
+  }
+
+  const baseQuery = {
+    where: { AND: andClauses },
+    include: {
+      author: {
+        include: {
+          profile: true,
+        },
       },
-      ...(city ? { city: { contains: city, mode: "insensitive" as const } } : {}),
-      ...(andClauses.length > 0 ? { AND: andClauses } : {}),
     },
+    orderBy: { createdAt: "desc" as const },
     take: limit,
-    select: {
-      userId: true,
-      username: true,
-      displayName: true,
-      avatarUrl: true,
-      city: true,
-      domain: true,
-      qualification: true,
-      verificationStatus: true,
+  };
+
+  const posts = cursor
+    ? await prisma.soKinPost.findMany({
+        ...baseQuery,
+        cursor: { id: cursor },
+        skip: 1,
+      })
+    : await prisma.soKinPost.findMany({
+        ...baseQuery,
+        skip: Math.max(offset, 0),
+      });
+
+  return posts;
+};
+
+/**
+ * Récupère une annonce par ID
+ */
+export const getPublicPostById = async (postId: string, viewerUserId?: string) => {
+  const post = await prisma.soKinPost.findUnique({
+    where: { id: postId },
+    include: {
+      author: {
+        include: {
+          profile: true,
+        },
+      },
     },
   });
+
+  if (!post || post.status === "DELETED") {
+    return null;
+  }
+  if (post.status !== "ACTIVE") {
+    return null;
+  }
+
+  return post;
+};
+
+/**
+ * Liste les commentaires d'une annonce (plus récents en premier)
+ */
+export const getPostComments = async (postId: string, limit = 50) => {
+  const safeLimit = Math.min(Math.max(limit, 1), 100);
+  return (prisma as any).soKinComment.findMany({
+    where: { postId },
+    include: {
+      author: {
+        include: {
+          profile: true,
+        },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+    take: safeLimit,
+  });
+};
+
+/**
+ * Crée un commentaire (ou réponse à commentaire) sur une annonce
+ */
+export const createPostComment = async (
+  userId: string,
+  postId: string,
+  content: string,
+  parentCommentId?: string
+) => {
+  const post = await prisma.soKinPost.findUnique({
+    where: { id: postId },
+    select: { id: true, status: true },
+  });
+
+  if (!post || post.status === "DELETED") {
+    throw new HttpError(404, "Annonce introuvable");
+  }
+
+  if (parentCommentId) {
+    const parent = await (prisma as any).soKinComment.findUnique({
+      where: { id: parentCommentId },
+      select: { id: true, postId: true },
+    });
+    if (!parent || parent.postId !== postId) {
+      throw new HttpError(400, "Commentaire parent invalide");
+    }
+  }
+
+  const created = await prisma.$transaction(async (tx) => {
+    const comment = await (tx as any).soKinComment.create({
+      data: {
+        postId,
+        authorId: userId,
+        content,
+        parentCommentId,
+      },
+      include: {
+        author: {
+          include: {
+            profile: true,
+          },
+        },
+      },
+    });
+
+    await tx.soKinPost.update({
+      where: { id: postId },
+      data: { comments: { increment: 1 } },
+    });
+
+    return comment;
+  });
+
+  return created;
 };

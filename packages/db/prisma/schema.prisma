@@ -212,6 +212,7 @@ model User {
   bundlesAsSeller          NegotiationBundle[]       @relation("BundleSeller")
   messageGuardLogs         MessageGuardLog[]         @relation("MessageGuardUser")
   sokinPosts               SoKinPost[]               @relation("SoKinPosts")
+  soKinComments            SoKinComment[]            @relation("SoKinComments")
   adDonations              AdDonation[]              @relation("UserDonations")
   advertisements           Advertisement[]           @relation("UserAds")
   importedContacts         UserContact[]             @relation("ImportedContacts")
@@ -1321,6 +1322,7 @@ model SoKinPost {
 
   author User @relation("SoKinPosts", fields: [authorId], references: [id], onDelete: Cascade)
   reactions SoKinReaction[]
+  commentsList SoKinComment[]
 
   @@index([authorId])
   @@index([status])
@@ -1328,8 +1330,27 @@ model SoKinPost {
   @@index([status, createdAt])
 }
 
+model SoKinComment {
+  id              String   @id @default(cuid())
+  postId          String
+  authorId        String
+  content         String
+  parentCommentId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  post    SoKinPost     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author  User          @relation("SoKinComments", fields: [authorId], references: [id], onDelete: Cascade)
+  parent  SoKinComment? @relation("SoKinCommentReplies", fields: [parentCommentId], references: [id], onDelete: SetNull)
+  replies SoKinComment[] @relation("SoKinCommentReplies")
+
+  @@index([postId, createdAt])
+  @@index([authorId, createdAt])
+  @@index([parentCommentId])
+}
+
 // ══════════════════════════════════════════
-// SO-KIN LIVE — Système de lives
+// SO-KIN LIVE — module historique (non exposé dans la v2 mobile annonces)
 // ══════════════════════════════════════════
 
 enum SoKinLiveStatus {
