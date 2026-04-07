@@ -196,9 +196,9 @@ export default function LocationPicker({ value, onChange, onStructuredChange, co
         </ul>
       )}
 
-      {value && (
+      {value && (value.lat !== 0 || value.lng !== 0) && (
         <div className="location-picker__coords">
-          📌 {value.lat.toFixed(5)}, {value.lng.toFixed(5)}
+          📌 {value.lat.toFixed(6)}, {value.lng.toFixed(6)}
           {value.city && <span> — {value.city}</span>}
         </div>
       )}

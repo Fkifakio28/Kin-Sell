@@ -423,6 +423,8 @@ export function UserDashboard() {
   const [ppDisplayName, setPpDisplayName] = useState('');
   const [ppCity, setPpCity] = useState('');
   const [ppCountry, setPpCountry] = useState('');
+  const [ppLat, setPpLat] = useState(0);
+  const [ppLng, setPpLng] = useState(0);
   const [ppLocationVisibility, setPpLocationVisibility] = useState<LocationVisibility>('CITY_PUBLIC');
   const [ppShowAddress, setPpShowAddress] = useState(true);
   const [ppShowListings, setPpShowListings] = useState(true);
@@ -3518,7 +3520,7 @@ export function UserDashboard() {
                     {ppSaving ? `⏳ ${t('user.ppSaving')}` : `💾 ${t('user.ppSaveBtn')}`}
                   </button>
                   {user.profile.username ? (
-                    <a href={`/user/${encodeURIComponent(user.profile.username)}`} className="ud-quick-btn" target="_blank" rel="noopener noreferrer">{t('user.ppViewResult')}</a>
+                    <a href={`https://kin-sell.com/user/${encodeURIComponent(user.profile.username)}`} className="ud-quick-btn" target="_blank" rel="noopener noreferrer">{t('user.ppViewResult')} ↗</a>
                   ) : null}
                 </div>
               </div>
@@ -3572,11 +3574,13 @@ export function UserDashboard() {
                     <div className="ud-pp-field-group" style={{ width: '100%' }}>
                       <label className="ud-pp-field-label">{t('user.ppCityLabel')}</label>
                       <LocationPicker
-                        value={ppCity ? { lat: 0, lng: 0, address: ppCity } : undefined}
-                        onChange={({ city, address }) => { setPpCity(city || address); }}
+                        value={ppCity ? { lat: ppLat, lng: ppLng, address: ppCity } : undefined}
+                        onChange={({ lat, lng, city, address }) => { setPpCity(city || address); setPpLat(lat); setPpLng(lng); }}
                         onStructuredChange={(loc) => {
                           setPpCity(loc.city || loc.formattedAddress);
                           setPpCountry(loc.country || '');
+                          setPpLat(loc.latitude);
+                          setPpLng(loc.longitude);
                         }}
                         placeholder="Ex: Kinshasa, Gombe"
                       />
@@ -3584,11 +3588,11 @@ export function UserDashboard() {
                     <div className="ud-pp-field-row">
                       <div className="ud-pp-field-group" style={{ flex: 1 }}>
                         <label className="ud-pp-field-label">{t('user.ppCityLabel')}</label>
-                        <input type="text" className="ud-input" value={ppCity} readOnly style={{ opacity: 0.6 }} />
+                        <input type="text" className="ud-input" value={ppCity} onChange={(e) => setPpCity(e.target.value)} placeholder="Ville" />
                       </div>
                       <div className="ud-pp-field-group" style={{ flex: 1 }}>
                         <label className="ud-pp-field-label">{t('user.ppCountryLabel')}</label>
-                        <input type="text" className="ud-input" value={ppCountry} readOnly style={{ opacity: 0.6 }} />
+                        <input type="text" className="ud-input" value={ppCountry} onChange={(e) => setPpCountry(e.target.value)} placeholder="Pays" />
                       </div>
                     </div>
                     <VisibilitySelector
