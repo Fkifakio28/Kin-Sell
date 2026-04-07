@@ -631,7 +631,7 @@ export const fr: Record<string, string> = {
     "user.messaging": "Messagerie",
     "user.myContacts": "Mes contacts",
     "user.myProfile": "Ma page profil",
-    "user.publicProfile": "Profil public",
+    "user.publicProfile": "Ma page Kin-Sell",
     "user.settings": "Paramètres",
     "user.verification": "Vérification",
     "user.business": "Entreprise",
