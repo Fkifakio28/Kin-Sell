@@ -20,7 +20,19 @@ import { getDashboardPath } from '../../utils/role-routing';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { useSocket } from '../../hooks/useSocket';
 import { useScrollDirection } from '../../hooks/useScrollDirection';
-import { sokin as sokinApi, messaging, users as usersApi, resolveMediaUrl, type SoKinApiFeedPost, type SoKinApiComment, type SoKinApiPost } from '../../lib/api-client';
+import {
+  sokin as sokinApi,
+  messaging,
+  users as usersApi,
+  listings as listingsApi,
+  explorer as explorerApi,
+  geo as geoApi,
+  orders as ordersApi,
+  resolveMediaUrl,
+  type SoKinApiFeedPost,
+  type SoKinApiComment,
+  type SoKinApiPost,
+} from '../../lib/api-client';
 import { ApiError } from '../../lib/api-core';
 import { AdBanner } from '../../components/AdBanner';
 import { SeoMeta } from '../../components/SeoMeta';
@@ -42,6 +54,36 @@ type SoKinPostRef = {
   authorId: string;
   authorHandle: string;
 };
+
+type SoKinPublishPayload = {
+  text: string;
+  mediaFiles: File[];
+  location?: string;
+  tags?: string[];
+  hashtags?: string[];
+  scheduledAt?: string;
+};
+
+type HeaderNotification = {
+  id: string;
+  label: string;
+  detail: string;
+  href: string;
+  icon: string;
+  time: string;
+};
+
+const DESKTOP_INFO_ITEMS = [
+  { title: 'À propos', href: '/about' },
+  { title: 'Conditions', href: '/terms' },
+  { title: 'Guide', href: '/guide' },
+  { title: 'Comment ça marche', href: '/how-it-works' },
+  { title: 'Confidentialité', href: '/privacy' },
+  { title: 'Mentions légales', href: '/legal' },
+  { title: 'Blog', href: '/blog' },
+  { title: 'FAQ', href: '/faq' },
+  { title: 'Contact', href: '/contact' },
+] as const;
 
 const CREATE_DRAFT_STORAGE_KEY = 'ks-sokin-create-draft-v1';
 const OVERLAY_VISIBILITY_LOCK_MS = 180;
@@ -502,14 +544,16 @@ function AnnounceCard({
         </button>
       </header>
 
-      {/* ── Corps : texte ── */}
-      {post.text && (
-        <p className="sk-card-text">{post.text}</p>
-      )}
-
       {/* ── Corps : collage médias ── */}
-      {mediaItems.length > 0 && (
-        <MediaCollage items={mediaItems} onItemClick={onMediaClick} />
+      {mediaItems.length > 0 ? (
+        <>
+          <MediaCollage items={mediaItems} onItemClick={onMediaClick} />
+          {post.text && <p className="sk-card-text sk-card-text--after-media">{post.text}</p>}
+        </>
+      ) : (
+        <div className="sk-card-text-only" style={{ background: `linear-gradient(135deg, #000, ${['#1c133b', '#2b1649', '#321f58', '#161616'][post.id.charCodeAt(0) % 4]})` }}>
+          {post.text && <p className="sk-card-text sk-card-text--centered">{post.text}</p>}
+        </div>
       )}
 
       {/* ── Pied de page ── */}
@@ -709,6 +753,416 @@ function AnnouncesFeed({
   );
 }
 
+function DesktopStudioComposer({
+  avatarUrl,
+  displayName,
+  userIdentifier,
+  cityLabel,
+  country,
+  isPublishing,
+  publishError,
+  onPublish,
+}: {
+  avatarUrl: string;
+  displayName: string;
+  userIdentifier: string;
+  cityLabel: string;
+  country: string;
+  isPublishing: boolean;
+  publishError: string | null;
+  onPublish: (data: SoKinPublishPayload) => void;
+}) {
+  const [text, setText] = useState('');
+  const [mediaFiles, setMediaFiles] = useState<File[]>([]);
+  const [previewUrls, setPreviewUrls] = useState<string[]>([]);
+  const [localError, setLocalError] = useState<string | null>(null);
+  const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
+
+  const [location, setLocation] = useState('');
+  const [locationStatus, setLocationStatus] = useState<'idle' | 'loading' | 'ok' | 'denied' | 'error'>('idle');
+
+  const [tagInput, setTagInput] = useState('');
+  const [tagSuggestions, setTagSuggestions] = useState<Array<{ key: string; label: string; handle: string; avatarUrl: string | null }>>([]);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+
+  const [articleInput, setArticleInput] = useState('');
+  const [articleSuggestions, setArticleSuggestions] = useState<Array<{ id: string; label: string }>>([]);
+  const [selectedArticles, setSelectedArticles] = useState<string[]>([]);
+
+  const [scheduledAt, setScheduledAt] = useState('');
+
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const canPreview = text.trim().length > 0 || mediaFiles.length > 0;
+  const canPublish = text.trim().length > 0 && mediaFiles.length >= 1;
+
+  useEffect(() => {
+    const urls = mediaFiles.map((f) => URL.createObjectURL(f));
+    setPreviewUrls(urls);
+    return () => urls.forEach((url) => URL.revokeObjectURL(url));
+  }, [mediaFiles]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (tagInput.trim().length < 2) {
+      setTagSuggestions([]);
+      return;
+    }
+
+    const timer = window.setTimeout(async () => {
+      try {
+        const q = tagInput.trim().toLowerCase();
+        const [profiles, shops] = await Promise.all([
+          explorerApi.profiles({ limit: 50, city: cityLabel, country }).catch(() => []),
+          explorerApi.shops({ limit: 50, city: cityLabel, country }).catch(() => []),
+        ]);
+        if (cancelled) return;
+
+        const profileItems = profiles
+          .filter((p) => `${p.displayName} ${p.username ?? ''}`.toLowerCase().includes(q))
+          .slice(0, 5)
+          .map((p) => ({
+            key: `u-${p.userId}`,
+            label: p.displayName,
+            handle: `@${(p.username ?? p.displayName).replace(/^@/, '').replace(/\s+/g, '_')}`,
+            avatarUrl: p.avatarUrl,
+          }));
+
+        const shopItems = shops
+          .filter((s) => `${s.name} ${s.slug}`.toLowerCase().includes(q))
+          .slice(0, 5)
+          .map((s) => ({
+            key: `b-${s.businessId}`,
+            label: s.name,
+            handle: `@${s.slug.replace(/^@/, '')}`,
+            avatarUrl: s.logo ?? s.coverImage,
+          }));
+
+        setTagSuggestions([...profileItems, ...shopItems].slice(0, 8));
+      } catch {
+        if (!cancelled) setTagSuggestions([]);
+      }
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [tagInput, cityLabel, country]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (articleInput.trim().length < 2) {
+      setArticleSuggestions([]);
+      return;
+    }
+
+    const timer = window.setTimeout(async () => {
+      try {
+        const result = await listingsApi.search({ q: articleInput.trim(), city: cityLabel, country, limit: 8 });
+        if (cancelled) return;
+        const next = result.results.slice(0, 8).map((item) => ({
+          id: item.id,
+          label: `#${item.title.replace(/\s+/g, '_').slice(0, 40)}`,
+        }));
+        setArticleSuggestions(next);
+      } catch {
+        if (!cancelled) setArticleSuggestions([]);
+      }
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [articleInput, cityLabel, country]);
+
+  const addFiles = (fileList: FileList) => {
+    setLocalError(null);
+    const current = [...mediaFiles];
+    let videoCount = current.filter((f) => f.type.startsWith('video/')).length;
+    const toAdd: File[] = [];
+
+    for (const f of Array.from(fileList)) {
+      if (current.length + toAdd.length >= 5) break;
+      if (f.type.startsWith('video/') && videoCount >= 2) continue;
+      if (f.type.startsWith('video/')) videoCount += 1;
+      toAdd.push(f);
+    }
+
+    if (toAdd.length === 0) {
+      setLocalError('Ajout refusé: maximum 5 médias dont 2 vidéos.');
+      return;
+    }
+
+    setMediaFiles([...current, ...toAdd]);
+  };
+
+  const resolveLocation = () => {
+    if (!navigator.geolocation) {
+      setLocationStatus('error');
+      setLocalError('Géolocalisation indisponible sur cet appareil.');
+      return;
+    }
+    setLocationStatus('loading');
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        try {
+          const reversed = await geoApi.reverse(position.coords.latitude, position.coords.longitude);
+          setLocation(reversed.city ? `${reversed.city}, ${reversed.country ?? 'RDC'}` : reversed.formattedAddress);
+          setLocationStatus('ok');
+        } catch {
+          setLocation(`${position.coords.latitude.toFixed(5)}, ${position.coords.longitude.toFixed(5)}`);
+          setLocationStatus('ok');
+        }
+      },
+      () => {
+        setLocationStatus('denied');
+        setLocalError('Permission localisation refusée. Vous pouvez saisir la localisation manuellement.');
+      },
+      { enableHighAccuracy: true, timeout: 9000 }
+    );
+  };
+
+  const addTag = (handleRaw?: string) => {
+    const handle = (handleRaw ?? tagInput).trim();
+    if (!handle) return;
+    const normalized = handle.startsWith('@') ? handle : `@${handle}`;
+    setSelectedTags((prev) => (prev.includes(normalized) ? prev : [...prev, normalized]));
+    setTagInput('');
+    setTagSuggestions([]);
+  };
+
+  const addArticle = (valueRaw?: string) => {
+    const raw = (valueRaw ?? articleInput).trim();
+    if (!raw) return;
+    const normalized = raw.startsWith('#') ? raw : `#${raw}`;
+    setSelectedArticles((prev) => (prev.includes(normalized) ? prev : [...prev, normalized]));
+    setArticleInput('');
+    setArticleSuggestions([]);
+  };
+
+  const submit = () => {
+    setLocalError(null);
+    if (!canPublish) {
+      setLocalError('Texte + au moins 1 média requis pour publier.');
+      return;
+    }
+    if (scheduledAt) {
+      const dt = new Date(scheduledAt);
+      const max = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+      if (Number.isNaN(dt.getTime()) || dt > max) {
+        setLocalError('Programmation invalide: maximum 30 jours.');
+        return;
+      }
+    }
+
+    onPublish({
+      text,
+      mediaFiles,
+      location: location.trim() || undefined,
+      tags: selectedTags.map((v) => v.replace(/^@/, '')),
+      hashtags: selectedArticles.map((v) => v.replace(/^#/, '')),
+      scheduledAt: scheduledAt ? new Date(scheduledAt).toISOString() : undefined,
+    });
+  };
+
+  return (
+    <section className="sk-desktop-studio" aria-label="Studio So-Kin">
+      <header className="sk-desktop-studio-head">
+        <div>
+          <strong>Studio So-Kin</strong>
+          <span>Créer</span>
+        </div>
+        <p>Un seul flux pour publier un post et visualiser le rendu avant diffusion.</p>
+      </header>
+
+      {(publishError || localError) && <div className="sk-modal-error" role="alert">⚠️ {publishError ?? localError}</div>}
+
+      <article className="sk-studio-card">
+        <header className="sk-studio-profile">
+          {avatarUrl ? (
+            <img src={resolveMediaUrl(avatarUrl)} alt={displayName} className="sk-studio-avatar" />
+          ) : (
+            <span className="sk-studio-avatar sk-studio-avatar--empty" aria-hidden="true">{(displayName.charAt(0) || '?').toUpperCase()}</span>
+          )}
+          <div className="sk-studio-profile-meta">
+            <strong>{displayName}</strong>
+            <span>{userIdentifier}</span>
+          </div>
+        </header>
+
+        <p className="sk-studio-context">Feed public ({cityLabel})</p>
+        <p className="sk-studio-question">Quoi de neuf !</p>
+
+        <textarea
+          className="sk-modal-textarea sk-modal-textarea--studio"
+          placeholder="Écrire votre annonce..."
+          value={text}
+          maxLength={500}
+          onChange={(e) => setText(e.target.value)}
+          rows={7}
+        />
+
+        <div className="sk-studio-actions">
+          <button type="button" className="sk-btn sk-btn--outline" onClick={() => fileRef.current?.click()} disabled={isPublishing || mediaFiles.length >= 5}>🖼️</button>
+          <button type="button" className="sk-btn sk-btn--outline" onClick={() => setIsEditorOpen((v) => !v)}>{isEditorOpen ? '← Retour' : 'Éditer'}</button>
+          <button type="button" className="sk-btn sk-btn--primary" onClick={() => setShowPreview(true)} disabled={!canPreview || isPublishing}>Envoyer</button>
+          <input
+            ref={fileRef}
+            type="file"
+            multiple
+            accept="image/*,video/*"
+            hidden
+            onChange={(e) => {
+              if (e.target.files) addFiles(e.target.files);
+            }}
+          />
+        </div>
+
+        {mediaFiles.length > 0 && (
+          <div className="sk-modal-previews">
+            {mediaFiles.map((f, i) => (
+              <div key={i} className="sk-modal-preview-item">
+                {f.type.startsWith('video/') ? (
+                  <video src={previewUrls[i]} className="sk-modal-preview-thumb" muted playsInline />
+                ) : (
+                  <img src={previewUrls[i]} alt="" className="sk-modal-preview-thumb" />
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {isEditorOpen && (
+          <section className="sk-desktop-editor-panel" aria-label="Édition enrichie">
+            <label className="sk-modal-label" htmlFor="sk-location">📍 Localisation</label>
+            <div className="sk-modal-tags-input-row">
+              <input
+                id="sk-location"
+                className="sk-modal-input"
+                placeholder="Gombe, Kinshasa"
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+              />
+              <button type="button" className="sk-btn sk-btn--sm" onClick={resolveLocation} disabled={locationStatus === 'loading'}>
+                {locationStatus === 'loading' ? '📍…' : '📍'}
+              </button>
+            </div>
+
+            <label className="sk-modal-label" htmlFor="sk-tags">🏷️ Tags</label>
+            <div className="sk-modal-tags-input-row">
+              <input
+                id="sk-tags"
+                className="sk-modal-input"
+                placeholder="Ajouter un tag"
+                value={tagInput}
+                onChange={(e) => setTagInput(e.target.value)}
+              />
+              <button type="button" className="sk-btn sk-btn--sm" onClick={() => addTag()}>+</button>
+            </div>
+            {tagSuggestions.length > 0 && (
+              <div className="sk-modal-suggestions">
+                {tagSuggestions.map((item) => (
+                  <button key={item.key} type="button" className="sk-modal-suggestion-item" onClick={() => addTag(item.handle)}>
+                    {item.avatarUrl ? <img src={resolveMediaUrl(item.avatarUrl)} className="sk-modal-suggestion-avatar" alt="" /> : <span className="sk-modal-suggestion-avatar">👤</span>}
+                    <span className="sk-modal-suggestion-text">
+                      <strong>{item.label}</strong>
+                      <span className="sk-modal-suggestion-handle">{item.handle}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {selectedTags.length > 0 && (
+              <div className="sk-modal-tags-list">
+                {selectedTags.map((tag) => (
+                  <span key={tag} className="sk-modal-tag">{tag}
+                    <button type="button" className="sk-modal-tag-remove" onClick={() => setSelectedTags((prev) => prev.filter((v) => v !== tag))}>✕</button>
+                  </span>
+                ))}
+              </div>
+            )}
+
+            <label className="sk-modal-label" htmlFor="sk-articles"># Articles</label>
+            <div className="sk-modal-tags-input-row">
+              <input
+                id="sk-articles"
+                className="sk-modal-input"
+                placeholder="#Ajouter un article"
+                value={articleInput}
+                onChange={(e) => setArticleInput(e.target.value)}
+              />
+              <button type="button" className="sk-btn sk-btn--sm" onClick={() => addArticle()}>+</button>
+            </div>
+            {articleSuggestions.length > 0 && (
+              <div className="sk-modal-suggestions">
+                {articleSuggestions.map((item) => (
+                  <button key={item.id} type="button" className="sk-modal-suggestion-item" onClick={() => addArticle(item.label)}>
+                    <span className="sk-modal-suggestion-text"><strong>{item.label}</strong></span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {selectedArticles.length > 0 && (
+              <div className="sk-modal-tags-list">
+                {selectedArticles.map((tag) => (
+                  <span key={tag} className="sk-modal-tag">{tag}
+                    <button type="button" className="sk-modal-tag-remove" onClick={() => setSelectedArticles((prev) => prev.filter((v) => v !== tag))}>✕</button>
+                  </span>
+                ))}
+              </div>
+            )}
+
+            <label className="sk-modal-label" htmlFor="sk-schedule">📅 Programmer (max 30j)</label>
+            <input
+              id="sk-schedule"
+              type="datetime-local"
+              className="sk-modal-input"
+              value={scheduledAt}
+              onChange={(e) => setScheduledAt(e.target.value)}
+            />
+          </section>
+        )}
+      </article>
+
+      {showPreview && (
+        <div className="sk-desktop-preview-overlay" onClick={() => setShowPreview(false)}>
+          <div className="sk-desktop-preview-modal" onClick={(e) => e.stopPropagation()}>
+            <header className="sk-desktop-preview-head">
+              <strong>Prévisualisation</strong>
+              <button type="button" className="sk-btn sk-btn--primary" onClick={submit} disabled={isPublishing || !canPublish}>
+                {isPublishing ? 'Publication…' : 'Publier'}
+              </button>
+            </header>
+            <p className="sk-create-preview-text">{text || 'Aucun texte saisi.'}</p>
+            {previewUrls.length > 0 ? (
+              <div className="sk-modal-previews">
+                {previewUrls.map((url, i) => (
+                  <div key={i} className="sk-modal-preview-item">
+                    {mediaFiles[i]?.type.startsWith('video/') ? (
+                      <video src={url} className="sk-modal-preview-thumb" muted playsInline controls={false} />
+                    ) : (
+                      <img src={url} alt="" className="sk-modal-preview-thumb" />
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            <div className="sk-preview-metadata">
+              {location && <span className="sk-preview-meta-item">📍 {location}</span>}
+              {selectedTags.map((v) => <span key={v} className="sk-preview-meta-item">{v}</span>)}
+              {selectedArticles.map((v) => <span key={v} className="sk-preview-meta-item">{v}</span>)}
+              {scheduledAt && <span className="sk-preview-meta-item">📅 {new Date(scheduledAt).toLocaleString('fr-FR')}</span>}
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
 /* ─────────────────────────────────────────────────────── */
 /* CREATE SCREEN — création d'annonce mobile plein écran   */
 /* ─────────────────────────────────────────────────────── */
@@ -724,10 +1178,7 @@ function CreateAnnounceScreen({
   cityLabel,
 }: {
   onClose: () => void;
-  onPublish: (data: {
-    text: string;
-    mediaFiles: File[];
-  }) => void;
+  onPublish: (data: SoKinPublishPayload) => void;
   isPublishing: boolean;
   publishError?: string | null;
   avatarUrl: string;
@@ -1083,7 +1534,7 @@ function CreateAnnounceScreen({
 
 export function SoKinPage() {
   const navigate = useNavigate();
-  const { isLoggedIn, user } = useAuth();
+  const { isLoggedIn, user, logout } = useAuth();
   const { t } = useLocaleCurrency();
   const { effectiveCountry, getCountryConfig } = useMarketPreference();
   const { on, off } = useSocket();
@@ -1123,6 +1574,11 @@ export function SoKinPage() {
   });
   // Ouverture messagerie depuis une annonce
   const [contactingPostId, setContactingPostId] = useState<string | null>(null);
+  const [desktopSearch, setDesktopSearch] = useState('');
+  const [desktopHelpOpen, setDesktopHelpOpen] = useState(false);
+  const [desktopNotifOpen, setDesktopNotifOpen] = useState(false);
+  const [desktopAccountOpen, setDesktopAccountOpen] = useState(false);
+  const [desktopNotifications, setDesktopNotifications] = useState<HeaderNotification[]>([]);
 
   const city = user?.profile?.city ?? getCountryConfig(effectiveCountry).defaultCity;
   const country = effectiveCountry;
@@ -1194,6 +1650,83 @@ export function SoKinPage() {
   useEffect(() => {
     void loadMyPublishedPosts();
   }, [loadMyPublishedPosts]);
+
+  useEffect(() => {
+    if (!isLoggedIn) {
+      setDesktopNotifications([]);
+      return;
+    }
+    let cancelled = false;
+    const loadDesktopNotifications = async () => {
+      try {
+        const [buyerData, sellerData] = await Promise.all([
+          ordersApi.buyerOrders({ limit: 5, inProgressOnly: true }).catch(() => null),
+          ordersApi.sellerOrders({ limit: 5, inProgressOnly: true }).catch(() => null),
+        ]);
+        if (cancelled) return;
+
+        const notifs: HeaderNotification[] = [];
+        if (buyerData) {
+          for (const o of buyerData.orders) {
+            const statusLabel = o.status === 'SHIPPED' ? 'Expédiée' : o.status === 'CONFIRMED' ? 'Confirmée' : 'En cours';
+            notifs.push({
+              id: `buy-${o.id}`,
+              label: `Commande ${statusLabel}`,
+              detail: `#${o.id.slice(0, 8).toUpperCase()} • ${o.itemsCount} article${o.itemsCount > 1 ? 's' : ''}`,
+              href: getDashboardPath(user?.role),
+              icon: '📦',
+              time: new Date(o.createdAt).toLocaleDateString('fr-FR'),
+            });
+          }
+        }
+        if (sellerData) {
+          for (const o of sellerData.orders) {
+            notifs.push({
+              id: `sell-${o.id}`,
+              label: 'Nouvelle commande reçue',
+              detail: `#${o.id.slice(0, 8).toUpperCase()} • ${o.buyer.displayName}`,
+              href: getDashboardPath(user?.role),
+              icon: '🛒',
+              time: new Date(o.createdAt).toLocaleDateString('fr-FR'),
+            });
+          }
+        }
+        setDesktopNotifications(notifs);
+      } catch {
+        if (!cancelled) setDesktopNotifications([]);
+      }
+    };
+    void loadDesktopNotifications();
+    return () => {
+      cancelled = true;
+    };
+  }, [isLoggedIn, user?.role]);
+
+  useEffect(() => {
+    const onEsc = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setDesktopHelpOpen(false);
+      setDesktopNotifOpen(false);
+      setDesktopAccountOpen(false);
+    };
+    window.addEventListener('keydown', onEsc);
+    return () => window.removeEventListener('keydown', onEsc);
+  }, []);
+
+  const handleDesktopSearch = useCallback(() => {
+    const q = desktopSearch.trim();
+    if (!q) {
+      navigate('/explorer');
+      return;
+    }
+    navigate(`/explorer?q=${encodeURIComponent(q)}`);
+  }, [desktopSearch, navigate]);
+
+  const handleDesktopLogout = useCallback(async () => {
+    await logout();
+    setDesktopAccountOpen(false);
+    navigate('/login');
+  }, [logout, navigate]);
 
   // Scroll infini
   useEffect(() => {
@@ -1457,7 +1990,7 @@ export function SoKinPage() {
     navigate(dashboardPath || '/account');
   }, [dashboardPath, navigate]);
 
-  const handlePublish = async (data: { text: string; mediaFiles: File[] }) => {
+  const handlePublish = async (data: SoKinPublishPayload) => {
     if (isPublishing || !isLoggedIn) return;
     setIsPublishing(true);
     setPublishError(null);
@@ -1473,6 +2006,10 @@ export function SoKinPage() {
       const created = await sokinApi.createPost({
         text: data.text,
         mediaUrls,
+        location: data.location,
+        tags: data.tags,
+        hashtags: data.hashtags,
+        scheduledAt: data.scheduledAt,
       });
 
       if (!created?.id) {
@@ -1575,138 +2112,196 @@ export function SoKinPage() {
           </button>
         </>
       ) : (
-        <div className="sk-desktop">
-          <aside className="sk-desktop-left" aria-label="Navigation So-Kin desktop">
-            <div className="sk-desktop-brand">
-              <h1>So-Kin</h1>
-              <p>Annonces uniquement</p>
+        <div className="sk-desktop-shell">
+          <header className="sk-desktop-topbar" aria-label="Barre supérieure So-Kin">
+            <div className="sk-desktop-logo-bubbles" aria-label="So-Kin">
+              {['S', 'O', '-', 'K', 'I', 'N'].map((letter, idx) => (
+                <span key={letter + idx} className="sk-desktop-logo-bubble" style={{ animationDelay: `${idx * 0.08}s` }}>{letter}</span>
+              ))}
             </div>
 
-            <nav className="sk-desktop-nav">
-              <button type="button" className="sk-desktop-nav-item" onClick={() => navigate('/')}>🏠 Accueil</button>
-              <button type="button" className="sk-desktop-nav-item sk-desktop-nav-item--active" onClick={() => navigate('/sokin')}>📱 Accueil So-Kin</button>
-              <button type="button" className="sk-desktop-nav-item" onClick={() => navigate('/explorer/public-profiles')}>👥 Utilisateurs publics</button>
-              <button type="button" className="sk-desktop-nav-item" onClick={() => navigate('/explorer/shops-online')}>🏪 Marché public</button>
-              <button type="button" className="sk-desktop-nav-item" onClick={() => navigate('/explorer')}>Accéder à Explorer</button>
-            </nav>
-
-            <section className="sk-desktop-left-ads" aria-label="Publicités So-Kin desktop">
-              <h3>Publicités</h3>
-              <div className="sk-desktop-left-ad-slot">
-                <AdBanner page="sokin" variant="slim" hideWhenEmpty />
-              </div>
-              <div className="sk-desktop-left-ad-slot">
-                <AdBanner page="sokin" variant="slim" hideWhenEmpty />
-              </div>
-            </section>
-
-            <button type="button" className="sk-desktop-primary" onClick={handleOpenCreate}>Créer une annonce</button>
-          </aside>
-
-          <main className="sk-desktop-center" aria-label="Contenu principal So-Kin desktop">
-            <header className="sk-desktop-center-head">
-              <div className="sk-desktop-center-title-wrap">
-                <h2>SO-KIN</h2>
-                <p>{city}, {country}</p>
-              </div>
-
-              <div className="sk-desktop-center-search-wrap">
-                <input
-                  type="search"
-                  className="sk-desktop-center-search"
-                  placeholder="Rechercher un post, un profil, une opportunité…"
-                  aria-label="Recherche So-Kin"
-                />
-              </div>
-
-              <div className="sk-desktop-center-actions" aria-label="Actions header So-Kin">
-                <button type="button" className="sk-desktop-head-icon" title="Notifications" aria-label="Notifications" onClick={() => navigate('/account')}>🔔</button>
-                <button type="button" className="sk-desktop-head-icon" title="Aide" aria-label="Aide" onClick={() => navigate('/guide')}>?</button>
-                <button type="button" className="sk-desktop-head-icon" title="Messagerie" aria-label="Messagerie" onClick={() => navigate('/messaging')}>💬</button>
-                <button type="button" className="sk-desktop-head-icon" title="Panier" aria-label="Panier" onClick={() => navigate('/cart')}>🛒</button>
-                <button type="button" className="sk-desktop-head-account" onClick={() => navigate('/account')}>Mon compte</button>
-              </div>
-            </header>
-
-            <ComposeZone
-              avatarUrl={avatarUrl}
-              displayName={displayName}
-              onCreatePost={handleOpenCreate}
-            />
-
-            <section className="sk-desktop-announces-block" aria-label="Bloc principal des annonces">
-              <header className="sk-desktop-announces-head">
-                <h3>Annonces</h3>
-                <div className="sk-desktop-announces-head-empty" aria-hidden="true" />
-              </header>
-
-              <AnnouncesFeed
-                posts={posts}
-                hasMore={hasMore}
-                loading={loadingFeed}
-                sentinelRef={sentinelRef}
-                t={t}
-                isLoggedIn={isLoggedIn}
-                openCommentsPostId={openCommentsPostId}
-                onOpenComments={handleOpenComments}
-                onMediaClick={(item) => setViewerItem(item)}
-                onContact={handleContact}
-                contactingPostId={contactingPostId}
-                immersiveDesktop
+            <div className="sk-desktop-global-search">
+              <input
+                type="search"
+                value={desktopSearch}
+                onChange={(e) => setDesktopSearch(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleDesktopSearch();
+                }}
+                placeholder="Rechercher sur Kin-Sell: annonces, utilisateurs, boutiques, articles..."
+                aria-label="Recherche globale Kin-Sell"
               />
-            </section>
-          </main>
+            </div>
 
-          <aside className="sk-desktop-right" aria-label="Actions et contenu utilisateur">
-            <section className="sk-desktop-panel sk-desktop-commercial" aria-label="Bloc commercial Kin-Sell">
-              <span className="sk-desktop-commercial-icon">📦</span>
-              <p className="sk-desktop-commercial-brand">✦ Kin-Sell</p>
-              <p className="sk-desktop-commercial-line">Publiez vos articles</p>
-              <p className="sk-desktop-commercial-line">En 3 étapes simples</p>
-              <p className="sk-desktop-commercial-line">Photos, prix, description</p>
-              <p className="sk-desktop-commercial-line">Votre vitrine en 5 min</p>
-              <button type="button" className="sk-desktop-primary" onClick={openAccountArticles}>publier maintenant</button>
-            </section>
+            <div className="sk-desktop-topbar-actions">
+              <button type="button" className="sk-desktop-head-icon" onClick={() => setDesktopHelpOpen(true)} aria-label="Aide">?</button>
+              <button type="button" className="sk-desktop-head-icon sk-desktop-head-icon--notif" onClick={() => setDesktopNotifOpen((prev) => !prev)} aria-label="Notifications">
+                🔔
+                {desktopNotifications.length > 0 && <span className="sk-desktop-notif-badge">{desktopNotifications.length}</span>}
+              </button>
+              <button type="button" className="sk-desktop-head-account" onClick={() => setDesktopAccountOpen(true)} aria-label="Compte">👤</button>
+            </div>
 
-            <section className="sk-desktop-panel" aria-label="Liste des annonces publiées">
-              <h3>Mes annonces publiées</h3>
-
-              {loadingMyPublishedPosts ? (
-                <p className="sk-desktop-user-meta">Chargement…</p>
-              ) : myPublishedPosts.length === 0 ? (
-                <p className="sk-desktop-user-meta">Aucune annonce publiée.</p>
-              ) : (
-                <div className="sk-desktop-published-list">
-                  {myPublishedPosts.slice(0, 8).map((post) => (
-                    <article key={post.id} className="sk-desktop-published-item">
-                      <button
-                        type="button"
-                        className="sk-desktop-published-main"
-                        onClick={() => void handleOpenPublishedPost(post.id)}
-                        title="Voir l'annonce"
-                      >
-                        <strong>{post.text?.slice(0, 46) || 'Annonce sans texte'}</strong>
-                        <span>ID: {post.id.slice(0, 8)} · {new Date(post.createdAt).toLocaleDateString('fr-FR')}</span>
+            {desktopNotifOpen && (
+              <div className="sk-desktop-notif-panel" role="menu">
+                <header>
+                  <strong>Notifications</strong>
+                  <span>{desktopNotifications.length}</span>
+                </header>
+                {desktopNotifications.length === 0 ? (
+                  <p className="sk-desktop-user-meta">Aucune notification manquée.</p>
+                ) : (
+                  <div className="sk-desktop-notif-list">
+                    {desktopNotifications.map((item) => (
+                      <button key={item.id} type="button" className="sk-desktop-notif-item" onClick={() => {
+                        setDesktopNotifOpen(false);
+                        navigate(item.href);
+                      }}>
+                        <span>{item.icon}</span>
+                        <div>
+                          <strong>{item.label}</strong>
+                          <small>{item.detail}</small>
+                        </div>
                       </button>
-                      <div className="sk-desktop-published-actions">
-                        <button type="button" className="sk-desktop-outline" onClick={() => handleEditPublishedPost(post.id)}>Modifier</button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </header>
+
+          <div className="sk-desktop-grid">
+            <aside className="sk-desktop-left" aria-label="Navigation So-Kin desktop">
+              <nav className="sk-desktop-nav">
+                <button type="button" className="sk-desktop-nav-item" onClick={() => navigate('/')}>🏠 Accueil</button>
+                <button type="button" className="sk-desktop-nav-item sk-desktop-nav-item--active" onClick={() => navigate('/sokin')}>📱 Accueil So-Kin</button>
+                <button type="button" className="sk-desktop-nav-item" onClick={() => navigate('/explorer/public-profiles')}>👥 Utilisateurs publics</button>
+                <button type="button" className="sk-desktop-nav-item" onClick={() => navigate('/explorer/shops-online')}>🏪 Marché public</button>
+                <button type="button" className="sk-desktop-nav-item" onClick={() => navigate('/explorer')}>Accéder à Explorer</button>
+              </nav>
+              <AdBanner page="sokin" variant="slim" hideWhenEmpty />
+              <AdBanner page="sokin" variant="slim" hideWhenEmpty />
+            </aside>
+
+            <main className="sk-desktop-center" aria-label="Contenu principal So-Kin desktop">
+              <DesktopStudioComposer
+                avatarUrl={avatarUrl}
+                displayName={displayName}
+                userIdentifier={user?.profile?.username ? `@${user.profile.username.replace('@', '')}` : `ID ${user?.id?.slice(0, 8) ?? 'invité'}`}
+                cityLabel={city}
+                country={country}
+                isPublishing={isPublishing}
+                publishError={publishError}
+                onPublish={handlePublish}
+              />
+
+              <section className="sk-desktop-announces-block" aria-label="Bloc principal des annonces">
+                <header className="sk-desktop-announces-head">
+                  <h3>Annonces</h3>
+                  <div className="sk-desktop-announces-head-empty" aria-hidden="true" />
+                </header>
+
+                <AnnouncesFeed
+                  posts={posts}
+                  hasMore={hasMore}
+                  loading={loadingFeed}
+                  sentinelRef={sentinelRef}
+                  t={t}
+                  isLoggedIn={isLoggedIn}
+                  openCommentsPostId={openCommentsPostId}
+                  onOpenComments={handleOpenComments}
+                  onMediaClick={(item) => setViewerItem(item)}
+                  onContact={handleContact}
+                  contactingPostId={contactingPostId}
+                  immersiveDesktop
+                />
+              </section>
+            </main>
+
+            <aside className="sk-desktop-right" aria-label="Actions et contenu utilisateur">
+              <section className="sk-desktop-panel sk-desktop-commercial" aria-label="Bloc commercial Kin-Sell">
+                <span className="sk-desktop-commercial-icon">📦</span>
+                <p className="sk-desktop-commercial-brand">✦ Kin-Sell</p>
+                <p className="sk-desktop-commercial-line">Publiez vos articles</p>
+                <p className="sk-desktop-commercial-line">En 3 étapes simples. Photos, prix, description. Votre vitrine en 5 min.</p>
+                <button type="button" className="sk-desktop-primary" onClick={openAccountArticles}>publier maintenant</button>
+              </section>
+
+              <section className="sk-desktop-panel" aria-label="Liste des annonces publiées">
+                <h3>Mes annonces publiées</h3>
+
+                {loadingMyPublishedPosts ? (
+                  <p className="sk-desktop-user-meta">Chargement…</p>
+                ) : myPublishedPosts.length === 0 ? (
+                  <p className="sk-desktop-user-meta">Aucune annonce publiée.</p>
+                ) : (
+                  <div className="sk-desktop-published-list">
+                    {myPublishedPosts.slice(0, 8).map((post) => (
+                      <article key={post.id} className="sk-desktop-published-item">
                         <button
                           type="button"
-                          className="sk-desktop-outline sk-desktop-outline--danger"
-                          onClick={() => void handleDeletePublishedPost(post.id)}
-                          disabled={deletingPostId === post.id}
+                          className="sk-desktop-published-main"
+                          onClick={() => void handleOpenPublishedPost(post.id)}
+                          title="Voir l'annonce"
                         >
-                          {deletingPostId === post.id ? 'Suppression…' : 'Supprimer'}
+                          <strong>{post.text?.slice(0, 46) || 'Annonce sans texte'}</strong>
+                          <span>ID: {post.id.slice(0, 8)} · {new Date(post.createdAt).toLocaleDateString('fr-FR')}</span>
                         </button>
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              )}
+                        <div className="sk-desktop-published-actions">
+                          <button type="button" className="sk-desktop-outline" onClick={() => handleEditPublishedPost(post.id)}>Modifier</button>
+                          <button
+                            type="button"
+                            className="sk-desktop-outline sk-desktop-outline--danger"
+                            onClick={() => void handleDeletePublishedPost(post.id)}
+                            disabled={deletingPostId === post.id}
+                          >
+                            {deletingPostId === post.id ? 'Suppression…' : 'Supprimer'}
+                          </button>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                )}
 
-              <button type="button" className="sk-desktop-outline" onClick={openAccountArticles}>Gérer dans Articles</button>
-            </section>
-          </aside>
+                <button type="button" className="sk-desktop-outline" onClick={openAccountArticles}>Gérer dans Articles</button>
+              </section>
+            </aside>
+          </div>
+
+          {desktopHelpOpen && (
+            <div className="sk-desktop-help-overlay" onClick={() => setDesktopHelpOpen(false)}>
+              <div className="sk-desktop-help-popup" onClick={(e) => e.stopPropagation()}>
+                <header>
+                  <strong>Kin-Sell</strong>
+                  <button type="button" onClick={() => setDesktopHelpOpen(false)}>✕</button>
+                </header>
+                <nav>
+                  {DESKTOP_INFO_ITEMS.map((item) => (
+                    <button key={item.href} type="button" onClick={() => {
+                      setDesktopHelpOpen(false);
+                      navigate(item.href);
+                    }}>{item.title}</button>
+                  ))}
+                </nav>
+              </div>
+            </div>
+          )}
+
+          {desktopAccountOpen && (
+            <div className="sk-desktop-account-overlay" onClick={() => setDesktopAccountOpen(false)}>
+              <div className="sk-desktop-account-popup" onClick={(e) => e.stopPropagation()}>
+                <button type="button" onClick={() => {
+                  setDesktopAccountOpen(false);
+                  navigate(getDashboardPath(user?.role));
+                }}>Compte</button>
+                <button type="button" onClick={() => {
+                  setDesktopAccountOpen(false);
+                  navigate('/messaging');
+                }}>Messagerie</button>
+                <button type="button" onClick={() => void handleDesktopLogout()}>Déconnexion</button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
