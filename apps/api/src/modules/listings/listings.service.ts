@@ -395,7 +395,8 @@ export const searchListings = async (input: SearchListingsInput) => {
     });
   }
 
-  const rows = await prisma.listing.findMany({
+  // Essai 1: avec filtre ville
+  let rows = await prisma.listing.findMany({
     where: {
       isPublished: true,
       type: input.type,
@@ -413,6 +414,27 @@ export const searchListings = async (input: SearchListingsInput) => {
     take: Math.max(1, Math.min(input.limit, 100)),
     orderBy: { createdAt: "desc" }
   });
+
+  // Fallback: sans filtre ville si aucun résultat
+  if (rows.length === 0 && input.city) {
+    rows = await prisma.listing.findMany({
+      where: {
+        isPublished: true,
+        type: input.type,
+        ...(andClauses.length > 0 ? { AND: andClauses } : {}),
+        OR: input.q
+          ? [
+              { title: { contains: input.q, mode: "insensitive" } },
+              { category: { contains: input.q, mode: "insensitive" } },
+              { city: { contains: input.q, mode: "insensitive" } }
+            ]
+          : undefined
+      },
+      include: listingSearchInclude,
+      take: Math.max(1, Math.min(input.limit, 100)),
+      orderBy: { createdAt: "desc" }
+    });
+  }
 
   const enriched = rows
     .map((row) => {
@@ -572,7 +594,7 @@ export const latestListings = async (input: { type?: ListingType; city?: string;
     });
   }
 
-  const rows = await prisma.listing.findMany({
+  let rows = await prisma.listing.findMany({
     where: {
       isPublished: true,
       status: ListingStatus.ACTIVE,
@@ -586,6 +608,39 @@ export const latestListings = async (input: { type?: ListingType; city?: string;
     orderBy: { createdAt: "desc" },
     take: Math.max(1, Math.min(input.limit, 50)),
   });
+
+  // Fallback: sans filtre ville si aucun résultat
+  if (rows.length === 0 && input.city) {
+    rows = await prisma.listing.findMany({
+      where: {
+        isPublished: true,
+        status: ListingStatus.ACTIVE,
+        type: input.type,
+        ...(andClauses.length > 0 ? { AND: andClauses } : {}),
+      },
+      include: {
+        ownerUser: { include: { profile: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: Math.max(1, Math.min(input.limit, 50)),
+    });
+  }
+
+  // Fallback: sans filtre pays si aucun résultat
+  if (rows.length === 0 && andClauses.length > 0) {
+    rows = await prisma.listing.findMany({
+      where: {
+        isPublished: true,
+        status: ListingStatus.ACTIVE,
+        type: input.type,
+      },
+      include: {
+        ownerUser: { include: { profile: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: Math.max(1, Math.min(input.limit, 50)),
+    });
+  }
 
   return rows.map((row) => ({
     id: row.id,
