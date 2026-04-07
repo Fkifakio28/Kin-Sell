@@ -8,7 +8,7 @@ import { useScrollDirection } from '../../hooks/useScrollDirection';
 import { compressAndEncodeMedia } from '../../utils/media-compress';
 import { DashboardMessaging } from './DashboardMessaging';
 import {
-  ApiError, auth as authApi, businesses, listings, orders, billing, messaging, sokin, reviews as reviewsApi, invalidateCache, analyticsAi, aiRecommendations, aiTrials,
+  ApiError, auth as authApi, businesses, listings, orders, billing, messaging, sokin, reviews as reviewsApi, invalidateCache, analyticsAi, aiRecommendations, aiTrials, resolveMediaUrl,
   type BusinessAccount, type MyListing, type MyListingsStats,
   type OrderSummary, type BillingPlanSummary, type OrderStatus,
   type SoKinApiPost, type BasicInsights, type DeepInsights,
@@ -117,6 +117,9 @@ export function BusinessDashboard() {
   const [ksLoading, setKsLoading] = useState(false);
   const [validationCodeBusyId, setValidationCodeBusyId] = useState<string | null>(null);
   const [sellerValidationQr, setSellerValidationQr] = useState<{ orderId: string; code: string } | null>(null);
+  const [orderStatusBusyId, setOrderStatusBusyId] = useState<string | null>(null);
+  const [bizOrderFilter, setBizOrderFilter] = useState<OrderStatus | ''>('');
+  const [selectedBizOrder, setSelectedBizOrder] = useState<OrderSummary | null>(null);
 
   // ─── Boutique ────────────────────────────────────────────
   const [shopSaving, setShopSaving] = useState(false);
@@ -855,12 +858,18 @@ export function BusinessDashboard() {
 
   // ─── Mise à jour statut commande ─────────────────────────
   const handleOrderStatus = async (orderId: string, status: OrderStatus) => {
+    setOrderStatusBusyId(orderId);
     try {
       await orders.updateSellerOrderStatus(orderId, { status });
       invalidateCache('/orders/');
       const res = await orders.sellerOrders({ limit: 50 });
       setSellerOrders(res.orders);
+      if (selectedBizOrder?.id === orderId) {
+        const detail = await orders.detail(orderId);
+        setSelectedBizOrder(detail);
+      }
     } catch { /* ignore */ }
+    finally { setOrderStatusBusyId(null); }
   };
 
   const handleRevealCode = async (orderId: string) => {
@@ -1704,56 +1713,188 @@ export function BusinessDashboard() {
         )}
 
         {/* ── COMMANDES ── */}
-        {activeSection === 'commandes' && (
+        {activeSection === 'commandes' && (() => {
+          const bizStatusLabel = (s: string) => {
+            const map: Record<string, string> = { PENDING: '⏳ En attente', CONFIRMED: '✅ Confirmée', PROCESSING: '⚙️ En préparation', SHIPPED: '🚚 Expédiée', DELIVERED: '📬 Livrée', CANCELED: '❌ Annulée' };
+            return map[s] ?? s;
+          };
+          const bizNextStatuses = (s: string): OrderStatus[] => {
+            switch (s) {
+              case 'PENDING': return ['CONFIRMED', 'CANCELED'];
+              case 'CONFIRMED': return ['PROCESSING', 'CANCELED'];
+              case 'PROCESSING': return ['SHIPPED', 'CANCELED'];
+              default: return [];
+            }
+          };
+          const filteredBizOrders = bizOrderFilter ? sellerOrders.filter(o => o.status === bizOrderFilter) : sellerOrders;
+          const bizStats = {
+            total: sellerOrders.length,
+            inProgress: sellerOrders.filter(o => ['PENDING','CONFIRMED','PROCESSING','SHIPPED'].includes(o.status)).length,
+            delivered: sellerOrders.filter(o => o.status === 'DELIVERED').length,
+            canceled: sellerOrders.filter(o => o.status === 'CANCELED').length,
+          };
+          return (
           <div className="ud-section animate-fade-in">
-            <section className="ud-glass-panel bz-glass-panel">
-              <h2 className="ud-panel-title">{t('biz.allOrders')} ({sellerOrders.length})</h2>
-              {sellerOrders.length === 0 ? (
-                <p className="ud-placeholder-text" style={{ padding: 'var(--space-lg)' }}>
-                  {dataLoading ? t('biz.loadingData') : t('biz.noOrdersReceived')}
-                </p>
-              ) : (
-                <table className="ud-table">
-                  <thead>
-                    <tr><th>{t('biz.thId')}</th><th>{t('biz.thClient')}</th><th>{t('biz.thDate')}</th><th>{t('biz.thAmount')}</th><th>{t('biz.thStatus')}</th><th>{t('biz.thAction')}</th></tr>
-                  </thead>
-                  <tbody>
-                    {sellerOrders.map(o => {
-                      const s = ORDER_STATUS_MAP[o.status] ?? { labelKey: o.status, cls: 'ud-badge' };
-                      return (
-                        <tr key={o.id}>
-                          <td className="ud-table-id">#{o.id.slice(0, 8).toUpperCase()}</td>
-                          <td>{o.buyer.displayName}</td>
-                          <td>{new Date(o.createdAt).toLocaleDateString('fr-FR')}</td>
-                          <td>{formatMoneyFromUsdCents(o.totalUsdCents)}</td>
-                          <td><span className={s.cls}>{t(s.labelKey)}</span></td>
-                          <td>
-                            <div className="ud-table-action-stack">
-                              {o.status === 'PENDING' && (
-                                <button type="button" className="ud-table-action" onClick={() => void handleOrderStatus(o.id, 'CONFIRMED')}>{t('biz.confirmOrder')} →</button>
-                              )}
-                              {o.status === 'CONFIRMED' && (
-                                <button type="button" className="ud-table-action" onClick={() => void handleOrderStatus(o.id, 'SHIPPED')}>{t('biz.shipOrder')} →</button>
-                              )}
-                              {(o.status === 'PROCESSING' || o.status === 'SHIPPED') && (
-                                <button
-                                  type="button"
-                                  className="ud-table-action ud-table-action--code"
-                                  disabled={validationCodeBusyId === o.id}
-                                  onClick={() => void handleRevealCode(o.id)}
-                                >
-                                  {validationCodeBusyId === o.id ? '...' : '🔑 QR / Code'}
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+
+            {/* ── Topbar commandes ── */}
+            <div className="ud-ord-topbar">
+              <div className="ud-ord-topbar-left">
+                <h2 className="ud-ord-topbar-title">🛒 Gestion des commandes</h2>
+                <div className="ud-ord-stats-inline">
+                  <span className="ud-ord-stat-chip">{bizStats.total} {bizStats.total > 1 ? 'commandes' : 'commande'}</span>
+                  <span className="ud-ord-stat-chip ud-ord-stat-chip--progress">{bizStats.inProgress} en cours</span>
+                  <span className="ud-ord-stat-chip ud-ord-stat-chip--success">{bizStats.delivered} {bizStats.delivered > 1 ? 'livrées' : 'livrée'}</span>
+                  <span className="ud-ord-stat-chip ud-ord-stat-chip--danger">{bizStats.canceled} {bizStats.canceled > 1 ? 'annulées' : 'annulée'}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* ── Panel commandes ── */}
+            <div className="ud-commerce-panel">
+              <div className="ud-commerce-panel-head">
+                <h3 className="ud-commerce-panel-title">📦 Commandes reçues</h3>
+                <span className="ud-ord-stat-chip">{filteredBizOrders.length} total</span>
+                <select className="ud-neg-filter-select" value={bizOrderFilter} onChange={e => setBizOrderFilter(e.target.value as OrderStatus | '')}>
+                  <option value="">Tous les statuts</option>
+                  <option value="PENDING">⏳ En attente</option>
+                  <option value="CONFIRMED">✅ Confirmée</option>
+                  <option value="PROCESSING">⚙️ En préparation</option>
+                  <option value="SHIPPED">🚚 Expédiée</option>
+                  <option value="DELIVERED">📬 Livrée</option>
+                  <option value="CANCELED">❌ Annulée</option>
+                </select>
+              </div>
+
+              {dataLoading && <div className="ud-loading"><span className="ud-spinner" /><span>Chargement…</span></div>}
+
+              {!dataLoading && filteredBizOrders.length === 0 && (
+                <div className="ud-neg-empty">
+                  <span style={{ fontSize: '2rem' }}>📭</span>
+                  <p>Aucune commande{bizOrderFilter ? ` avec le statut "${bizStatusLabel(bizOrderFilter)}"` : ' reçue pour le moment'}.</p>
+                </div>
               )}
-            </section>
+
+              {!dataLoading && filteredBizOrders.length > 0 && (
+                <div className="ud-neg-grid">
+                  {filteredBizOrders.map(order => {
+                    const firstItem = order.items[0];
+                    return (
+                      <div key={order.id} className={`ud-neg-card glass-card ud-neg-card--${order.status.toLowerCase()}`}>
+
+                        {/* Header: image + info client */}
+                        <div className="ud-neg-card-header">
+                          {firstItem?.imageUrl ? (
+                            <img src={resolveMediaUrl(firstItem.imageUrl)} alt={firstItem.title} className="ud-neg-img" />
+                          ) : (
+                            <div className="ud-neg-img-placeholder">{firstItem?.listingType === 'SERVICE' ? '🛠' : '📦'}</div>
+                          )}
+                          <div className="ud-neg-card-info">
+                            <h4 className="ud-neg-card-title">#{order.id.slice(0, 8).toUpperCase()}</h4>
+                            <p className="ud-neg-card-meta">Client : {order.buyer.displayName}</p>
+                            <div className="ud-neg-badges-row">
+                              <span className={`ud-neg-status-badge ud-neg-status-badge--${order.status.toLowerCase()}`}>
+                                {bizStatusLabel(order.status)}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Articles de la commande */}
+                        <div className="ud-sord-items">
+                          {order.items.map(item => (
+                            <div key={item.id} className="ud-sord-item">
+                              {item.imageUrl ? (
+                                <img src={resolveMediaUrl(item.imageUrl)} alt={item.title} className="ud-sord-item-img" />
+                              ) : (
+                                <div className="ud-sord-item-img-ph">{item.listingType === 'SERVICE' ? '🛠' : '📦'}</div>
+                              )}
+                              <div className="ud-sord-item-info">
+                                <span className="ud-sord-item-title">{item.title}</span>
+                                <span className="ud-sord-item-detail">x{item.quantity} — {formatMoneyFromUsdCents(item.lineTotalUsdCents)}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Résumé prix */}
+                        <div className="ud-neg-card-prices">
+                          <div className="ud-neg-price-row">
+                            <span>Total</span>
+                            <span className="ud-neg-price-current">{formatMoneyFromUsdCents(order.totalUsdCents)}</span>
+                          </div>
+                          <div className="ud-neg-price-row">
+                            <span>Articles</span>
+                            <span className="ud-neg-price-original">{order.itemsCount} {order.itemsCount > 1 ? 'articles' : 'article'}</span>
+                          </div>
+                          <div className="ud-neg-price-row">
+                            <span>Date</span>
+                            <span className="ud-neg-price-original">{new Date(order.createdAt).toLocaleDateString('fr-FR')}</span>
+                          </div>
+                        </div>
+
+                        {/* Actions vendeur */}
+                        <div className="ud-sord-actions">
+                          <button type="button" className="ud-neg-respond-btn" onClick={() => { orders.detail(order.id).then(d => setSelectedBizOrder(d)).catch(() => {}); }}>
+                            ℹ️ Détails
+                          </button>
+
+                          {bizNextStatuses(order.status).map(status => (
+                            <button
+                              key={status}
+                              type="button"
+                              className={`ud-neg-respond-btn${status === 'CANCELED' ? ' ud-sord-action--danger' : ''}`}
+                              disabled={orderStatusBusyId !== null}
+                              onClick={() => void handleOrderStatus(order.id, status)}
+                            >
+                              {orderStatusBusyId === order.id ? '…' : bizStatusLabel(status)}
+                            </button>
+                          ))}
+
+                          {(order.status === 'PROCESSING' || order.status === 'SHIPPED') && (
+                            <button
+                              type="button"
+                              className="ud-neg-respond-btn"
+                              disabled={validationCodeBusyId === order.id}
+                              onClick={() => void handleRevealCode(order.id)}
+                            >
+                              {validationCodeBusyId === order.id ? '…' : '🔑 QR / Code'}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Détail commande sélectionnée */}
+              {selectedBizOrder && (
+                <section className="ud-ord-detail">
+                  <div className="ud-ord-detail-head">
+                    <h3>Détail — #{selectedBizOrder.id.slice(0, 8).toUpperCase()}</h3>
+                    <span className={`ud-neg-status-badge ud-neg-status-badge--${selectedBizOrder.status.toLowerCase()}`}>{bizStatusLabel(selectedBizOrder.status)}</span>
+                    <span className="ud-ord-detail-total">{formatMoneyFromUsdCents(selectedBizOrder.totalUsdCents)}</span>
+                    <button type="button" className="ud-neg-respond-btn" style={{ marginLeft: 'auto' }} onClick={() => setSelectedBizOrder(null)}>✕ Fermer</button>
+                  </div>
+                  <ul className="ud-ord-detail-items">
+                    {selectedBizOrder.items.map(item => (
+                      <li key={item.id} className="ud-ord-detail-item">
+                        {item.imageUrl ? (
+                          <img src={resolveMediaUrl(item.imageUrl)} alt={item.title} className="ud-sord-item-img" style={{ width: 36, height: 36, borderRadius: 8 }} />
+                        ) : (
+                          <span className="ud-ord-detail-icon">{item.listingType === 'SERVICE' ? '🛠' : '📦'}</span>
+                        )}
+                        <div className="ud-ord-detail-info">
+                          <strong>{item.title}</strong>
+                          <span>{item.category} · {item.city} · x{item.quantity}</span>
+                        </div>
+                        <span className="ud-ord-detail-price">{formatMoneyFromUsdCents(item.lineTotalUsdCents)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+            </div>
 
             {sellerValidationQr && (
               <OrderValidationQrModal
@@ -1766,7 +1907,8 @@ export function BusinessDashboard() {
               />
             )}
           </div>
-        )}
+          );
+        })()}
 
         {/* ── MESSAGERIE ── */}
         {activeSection === 'messages' && (
