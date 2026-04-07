@@ -1977,13 +1977,7 @@ export function UserDashboard() {
             </p>
           </div>
 
-          <div className="ud-page-header-actions">
-            <button type="button" className="ud-quick-btn ud-quick-btn--icon" title={t('user.refresh')} onClick={() => void handleRefresh()}>🔄</button>
-            <button type="button" className="ud-quick-btn ud-quick-btn--icon" title={t('user.messaging')} onClick={() => navigate('/messaging')}>💬</button>
-            <button type="button" className="ud-quick-btn ud-quick-btn--icon ud-quick-btn--danger" title={t('common.logout')} onClick={() => void handleLogout()}>
-              {logoutBusy ? '⏳' : '🚪'}
-            </button>
-          </div>
+
         </div>
 
         {errorMessage ? <div className="ud-ov-feedback ud-ov-feedback--error">{errorMessage}</div> : null}
@@ -1993,28 +1987,28 @@ export function UserDashboard() {
           <div className="ud-section animate-fade-in">
             {/* ── Stats row: 4 KPIs ── */}
             <div className="ud-ov-kpi-row">
-              <article className="ud-ov-kpi ud-ov-kpi--blue">
+              <article className="ud-ov-kpi ud-ov-kpi--blue" style={{ cursor: 'pointer' }} onClick={() => setActiveSection('articles')}>
                 <span className="ud-ov-kpi-icon">🧩</span>
                 <div className="ud-ov-kpi-body">
                   <span className="ud-ov-kpi-label">{t('user.publishedArticles')}</span>
                   <strong className="ud-ov-kpi-value">{listings.length}</strong>
                 </div>
               </article>
-              <article className="ud-ov-kpi ud-ov-kpi--green">
+              <article className="ud-ov-kpi ud-ov-kpi--green" style={{ cursor: 'pointer' }} onClick={() => setActiveSection('sales')}>
                 <span className="ud-ov-kpi-icon">📦</span>
                 <div className="ud-ov-kpi-body">
                   <span className="ud-ov-kpi-label">{t('user.sales')}</span>
                   <strong className="ud-ov-kpi-value">{allSellerOrders.length}</strong>
                 </div>
               </article>
-              <article className="ud-ov-kpi ud-ov-kpi--amber">
+              <article className="ud-ov-kpi ud-ov-kpi--amber" style={{ cursor: 'pointer' }} onClick={() => setActiveSection('purchases')}>
                 <span className="ud-ov-kpi-icon">🛍️</span>
                 <div className="ud-ov-kpi-body">
                   <span className="ud-ov-kpi-label">{t('user.purchases')}</span>
                   <strong className="ud-ov-kpi-value">{allBuyerOrders.length}</strong>
                 </div>
               </article>
-              <article className="ud-ov-kpi ud-ov-kpi--violet">
+              <article className="ud-ov-kpi ud-ov-kpi--violet" style={{ cursor: 'pointer' }} onClick={() => setActiveSection('purchases')}>
                 <span className="ud-ov-kpi-icon">🛒</span>
                 <div className="ud-ov-kpi-body">
                   <span className="ud-ov-kpi-label">{t('user.cart')}</span>
