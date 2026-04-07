@@ -823,7 +823,8 @@
 }
 
 .bz-setup-field input,
-.bz-setup-field textarea {
+.bz-setup-field textarea,
+.bz-setup-field select {
   width: 100%;
   border-radius: 14px;
   border: 1px solid rgba(213,178,95,0.16);
@@ -831,10 +832,30 @@
   color: var(--ud-text-1);
   padding: 12px 14px;
   outline: none;
+  font-family: inherit;
+  font-size: inherit;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+}
+
+.bz-setup-field select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23c7bedf' stroke-width='1.5' fill='none'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  padding-right: 36px;
+  cursor: pointer;
+}
+
+.bz-setup-field select option {
+  background: #1e1240;
+  color: #fff;
+  padding: 8px 12px;
 }
 
 .bz-setup-field input:focus,
-.bz-setup-field textarea:focus {
+.bz-setup-field textarea:focus,
+.bz-setup-field select:focus {
   border-color: rgba(213,178,95,0.4);
   box-shadow: 0 0 0 3px rgba(213,178,95,0.12);
 }
