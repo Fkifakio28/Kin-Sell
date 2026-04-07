@@ -272,6 +272,11 @@ export function UserDashboard() {
   const [aiCommandeEnabled, setAiCommandeEnabled] = useState(() => localStorage.getItem(SK_AI_COMMANDE) !== 'off');
   const [savingSettings, setSavingSettings] = useState(false);
   const [logoutBusy, setLogoutBusy] = useState(false);
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
+  const [barsHidden, setBarsHidden] = useState(false);
+  const lastScrollY = useRef(0);
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+  const [mobileSearchQuery, setMobileSearchQuery] = useState('');
   // Suppression de compte
   const [deleteStep, setDeleteStep] = useState<'idle' | 'confirm' | 'reason' | 'done'>('idle');
   const [deleteReason, setDeleteReason] = useState('');
@@ -1450,6 +1455,21 @@ export function UserDashboard() {
     }
   };
 
+  // ── Scroll auto-hide for mobile TopBar + FAB ──
+  useEffect(() => {
+    const onScroll = () => {
+      const y = window.scrollY;
+      if (y > lastScrollY.current && y > 40) {
+        setBarsHidden(true);
+      } else {
+        setBarsHidden(false);
+      }
+      lastScrollY.current = y;
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
   const handleRefresh = async () => {
     setErrorMessage(null);
     setSuccessMessage(null);
@@ -1862,29 +1882,35 @@ export function UserDashboard() {
   const hasProductItems = buyerCart?.items.some((item) => item.listing.type === 'PRODUIT') ?? false;
   const hasServiceItems = buyerCart?.items.some((item) => item.listing.type === 'SERVICE') ?? false;
 
-  const handleToggleFullscreen = async () => {
-    try {
-      if (document.fullscreenElement) {
-        await document.exitFullscreen();
-        return;
-      }
-      await document.documentElement.requestFullscreen();
-    } catch {
-      setErrorMessage("Impossible d'activer le plein ecran sur cet appareil.");
-    }
-  };
-
   return (
     <div className={`ud-shell${sidebarCollapsed ? ' ud-sidebar-collapsed' : ''}`}>
       {/* ── Mobile Header ── */}
-      <header className="dash-mobile-header">
+      <header className={`dash-mobile-header${barsHidden ? ' dash-bars-hidden' : ''}`}>
         <button className="dash-mob-hamburger" onClick={() => setMobileSidebarOpen(o => !o)} aria-label="Menu">☰</button>
-        <Link to="/" className="dash-mob-logo">
+        <Link to="/" className="dash-mob-logo dash-mob-logo--shine">
           <img src="/assets/kin-sell/logo.png" alt="Kin-Sell" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
           <span>Kin-Sell</span>
         </Link>
-        <button className="dash-mob-search" onClick={() => void handleToggleFullscreen()} aria-label="Plein ecran">⛶</button>
+        <button className="dash-mob-search" onClick={() => setMobileSearchOpen(o => !o)} aria-label="Recherche">🔍</button>
       </header>
+
+      {/* ── Mobile Search Bar ── */}
+      {mobileSearchOpen && (
+        <div className="dash-mobile-searchbar">
+          <form onSubmit={(e) => { e.preventDefault(); if (mobileSearchQuery.trim()) { navigate(`/explorer?search=${encodeURIComponent(mobileSearchQuery.trim())}`); } }}>
+            <input
+              type="text"
+              className="dash-mobile-search-input"
+              placeholder={t('common.search') || 'Rechercher...'}
+              value={mobileSearchQuery}
+              onChange={e => setMobileSearchQuery(e.target.value)}
+              autoFocus
+            />
+            <button type="submit" className="dash-mobile-search-go">→</button>
+          </form>
+          <button type="button" className="dash-mobile-search-close" onClick={() => setMobileSearchOpen(false)}>✕</button>
+        </div>
+      )}
 
       {/* ── Overlay mobile ── */}
       {mobileSidebarOpen && <div className="dash-mob-overlay" onClick={() => setMobileSidebarOpen(false)} />}
@@ -1959,7 +1985,7 @@ export function UserDashboard() {
         )}
 
         <div className="ud-drawer-logout">
-          <button type="button" className="ud-drawer-logout-btn" onClick={() => void handleLogout()}>
+          <button type="button" className="ud-drawer-logout-btn" onClick={() => { setMobileSidebarOpen(false); setLogoutConfirmOpen(true); }}>
             {logoutBusy ? '⏳' : '🚪'} {t('common.logout')}
           </button>
         </div>
@@ -4162,6 +4188,49 @@ export function UserDashboard() {
           </div>
         )}
       </main>
+
+      {/* ── Mobile FAB Bottom Nav ── */}
+      <nav className={`dash-fab-bar${barsHidden ? ' dash-bars-hidden' : ''}`}>
+        <button type="button" className={`dash-fab-item${activeSection === 'articles' ? ' dash-fab-item--active' : ''}`} onClick={() => { setActiveSection('articles'); setMobileSidebarOpen(false); }}>
+          <span className="dash-fab-icon">🧩</span>
+          <span className="dash-fab-label">Articles</span>
+        </button>
+        <button type="button" className={`dash-fab-item${activeSection === 'sales' ? ' dash-fab-item--active' : ''}`} onClick={() => { setActiveSection('sales'); setMobileSidebarOpen(false); }}>
+          <span className="dash-fab-icon">📦</span>
+          <span className="dash-fab-label">Vente</span>
+        </button>
+        <button type="button" className="dash-fab-item dash-fab-item--home" onClick={() => navigate('/')}>
+          <span className="dash-fab-icon">🏠</span>
+          <span className="dash-fab-label">Home</span>
+        </button>
+        <button type="button" className={`dash-fab-item${activeSection === 'messages' ? ' dash-fab-item--active' : ''}`} onClick={() => navigate('/messaging')}>
+          <span className="dash-fab-icon">💬</span>
+          <span className="dash-fab-label">Messages</span>
+        </button>
+        <button type="button" className="dash-fab-item dash-fab-item--logout" onClick={() => setLogoutConfirmOpen(true)}>
+          <span className="dash-fab-icon">🚪</span>
+          <span className="dash-fab-label">Quitter</span>
+        </button>
+        <button type="button" className={`dash-fab-item${activeSection === 'settings' ? ' dash-fab-item--active' : ''}`} onClick={() => { setActiveSection('settings'); setMobileSidebarOpen(false); }}>
+          <span className="dash-fab-icon">⚙️</span>
+          <span className="dash-fab-label">Réglages</span>
+        </button>
+      </nav>
+
+      {/* ── Logout Confirmation Popup ── */}
+      {logoutConfirmOpen && (
+        <div className="dash-logout-popup-overlay" onClick={() => setLogoutConfirmOpen(false)}>
+          <div className="dash-logout-popup" onClick={e => e.stopPropagation()}>
+            <p className="dash-logout-popup-text">Voulez-vous vraiment vous déconnecter ?</p>
+            <div className="dash-logout-popup-actions">
+              <button type="button" className="dash-logout-popup-cancel" onClick={() => setLogoutConfirmOpen(false)}>Annuler</button>
+              <button type="button" className="dash-logout-popup-confirm" onClick={() => { setLogoutConfirmOpen(false); void handleLogout(); }} disabled={logoutBusy}>
+                {logoutBusy ? '⏳' : 'Confirmer'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ═══════════════════════════════════════════════════════
           MODALE PUBLICATION / MODIFICATION ARTICLE
