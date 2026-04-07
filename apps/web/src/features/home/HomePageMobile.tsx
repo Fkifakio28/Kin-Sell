@@ -22,6 +22,7 @@ import { getDashboardPath } from "../../utils/role-routing";
 import {
   listings as listingsApi,
   sokin as sokinApi,
+  messaging,
   resolveMediaUrl,
   type PublicListing,
   type SoKinApiFeedPost,
@@ -49,8 +50,8 @@ const DRAWER_LINKS = {
   ],
   public: [
     { icon: "\uD83D\uDCE2", labelKey: "home.sokinFeed", href: "/sokin" },
-    { icon: "\uD83D\uDC64", labelKey: "home.sokinProfiles", href: "/sokin/profiles" },
-    { icon: "\uD83C\uDFEC", labelKey: "home.sokinMarket", href: "/sokin/market" },
+    { icon: "\uD83D\uDC64", labelKey: "home.sokinProfiles", href: "/explorer/public-profiles" },
+    { icon: "\uD83C\uDFEC", labelKey: "home.sokinMarket", href: "/explorer/shops-online" },
   ],
   info: [
     { icon: "\u2139\uFE0F", labelKey: "home.aboutUs", href: "/about" },
@@ -388,6 +389,7 @@ function TopBar({
         </svg>
       </button>
       <Link to="/" className="hm-topbar-logo" aria-label="Kin-Sell">
+        <span className="hm-topbar-logo-shimmer" aria-hidden="true" />
         <img
           src="/assets/kin-sell/logo.png"
           alt="Kin-Sell"
@@ -446,7 +448,7 @@ function SearchOverlay({
           ref={inputRef}
           type="search"
           className="hm-search-input"
-          placeholder={t("home.searchPlaceholder")}
+          placeholder="Rechercher sur Kin-Sell (annonces, articles, profils, boutiques...)"
           value={q}
           onChange={(e) => setQ(e.target.value)}
           aria-label={t("common.search")}
@@ -521,7 +523,7 @@ function SuggestionsSection({
       aria-label={t("home.suggestedArticles")}
     >
       <h2 className="hm-section-title">
-        {"\uD83D\uDD25 " + t("home.suggestedArticles")}
+        🔥 Articles pour vous
       </h2>
       <div className="hm-hscroll">
         {loading
@@ -621,9 +623,7 @@ function ListingsSection({
       aria-label={t("home.recentListings")}
     >
       <div className="hm-section-row">
-        <h2 className="hm-section-title">
-          {"\uD83C\uDFEA " + t("home.recentListings")}
-        </h2>
+        <h2 className="hm-section-title">🏪 Annonces récentes</h2>
         <Link
           to={
             "/explorer?type=" +
@@ -631,7 +631,7 @@ function ListingsSection({
           }
           className="hm-see-all"
         >
-          {t("home.viewAll")}
+          Voir tout →
         </Link>
       </div>
 
@@ -757,19 +757,32 @@ function SoKinFeed({
   t,
   cityHint,
   countryHint,
+  onNegotiate,
+  lockedCats,
+  formatMoney,
+  formatLabel,
 }: {
   t: (k: string) => string;
   cityHint: string;
   countryHint: string;
+  onNegotiate: (l: PublicListing) => void;
+  lockedCats: string[];
+  formatMoney: (c: number) => string;
+  formatLabel: (c: number) => string;
 }) {
   const [posts, setPosts] = useState<SoKinApiFeedPost[]>([]);
   const [loading, setLoading] = useState(true);
   const { on, off } = useSocket();
   const { isLoggedIn } = useAuth();
+  const [reinjectedTab, setReinjectedTab] = useState<"PRODUIT" | "SERVICE">("PRODUIT");
+  const [reinjectedListings, setReinjectedListings] = useState<PublicListing[]>([]);
+  const [reinjectedLoading, setReinjectedLoading] = useState(false);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const [hasMore, setHasMore] = useState(true);
   const loadingRef = useRef(false);
   const offsetRef = useRef(0);
+  const navigate = useNavigate();
+  const touchStart = useRef<{ x: number; y: number } | null>(null);
 
   const loadFeed = useCallback(
     async (reset = false) => {
@@ -839,6 +852,94 @@ function SoKinFeed({
     return () => obs.disconnect();
   }, [hasMore, loadFeed]);
 
+  useEffect(() => {
+    if (posts.length < 10) {
+      setReinjectedListings([]);
+      return;
+    }
+    let cancelled = false;
+    setReinjectedLoading(true);
+    (async () => {
+      try {
+        let results = await listingsApi.latest({ type: reinjectedTab, limit: 10, city: cityHint, country: countryHint });
+        if (results.length === 0 && countryHint) {
+          results = await listingsApi.latest({ type: reinjectedTab, limit: 10, country: countryHint });
+        }
+        if (results.length === 0) {
+          results = await listingsApi.latest({ type: reinjectedTab, limit: 10 });
+        }
+        if (!cancelled) setReinjectedListings(results);
+      } catch {
+        if (!cancelled) setReinjectedListings([]);
+      } finally {
+        if (!cancelled) setReinjectedLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [posts.length, reinjectedTab, cityHint, countryHint]);
+
+  const handleSwipeStart = (event: React.TouchEvent<HTMLDivElement>) => {
+    const touch = event.touches[0];
+    touchStart.current = { x: touch.clientX, y: touch.clientY };
+  };
+
+  const handleSwipeEnd = (event: React.TouchEvent<HTMLDivElement>) => {
+    if (!touchStart.current) return;
+    const touch = event.changedTouches[0];
+    const dx = touch.clientX - touchStart.current.x;
+    const dy = touch.clientY - touchStart.current.y;
+    touchStart.current = null;
+
+    if (dx < -72 && Math.abs(dx) > Math.abs(dy) * 1.25) {
+      void navigate("/sokin");
+    }
+  };
+
+  const openInSoKin = (postId: string) => {
+    try {
+      sessionStorage.setItem("ks-home-open-comments-post-id", postId);
+    } catch {
+      // no-op
+    }
+    void navigate("/sokin");
+  };
+
+  const renderReinjectedListings = () => {
+    if (posts.length < 10) return null;
+    if (reinjectedLoading) return null;
+    if (reinjectedListings.length === 0) return null;
+
+    return (
+      <section className="hm-section hm-listings hm-listings--reinjected" aria-label="Annonces récentes">
+        <div className="hm-section-row">
+          <h2 className="hm-section-title">🏪 Annonces récentes</h2>
+          <Link to={`/explorer?type=${reinjectedTab === "PRODUIT" ? "produits" : "services"}`} className="hm-see-all">Voir tout →</Link>
+        </div>
+
+        <div className="hm-tabs">
+          <button className={"hm-tab" + (reinjectedTab === "PRODUIT" ? " hm-tab--active" : "")} onClick={() => setReinjectedTab("PRODUIT")}>Produits</button>
+          <button className={"hm-tab" + (reinjectedTab === "SERVICE" ? " hm-tab--active" : "")} onClick={() => setReinjectedTab("SERVICE")}>Services</button>
+        </div>
+
+        <div className="hm-hscroll">
+          {reinjectedListings.map((l) => (
+            <MarketCard
+              key={`reinjected-${l.id}`}
+              listing={l}
+              onNegotiate={onNegotiate}
+              formatMoney={formatMoney}
+              formatLabel={formatLabel}
+              t={t}
+              locked={isCategoryLocked(lockedCats, l.category ?? "")}
+            />
+          ))}
+        </div>
+      </section>
+    );
+  };
+
   const renderItems = () => {
     const elements: React.ReactNode[] = [];
     posts.forEach((post, idx) => {
@@ -847,8 +948,13 @@ function SoKinFeed({
           key={post.id}
           post={post}
           t={t}
+          onOpenComments={() => openInSoKin(post.id)}
         />,
       );
+      if (idx === 9) {
+        const block = renderReinjectedListings();
+        if (block) elements.push(<div key="reinjected-listings">{block}</div>);
+      }
       if ((idx + 1) % 4 === 0) {
         elements.push(
           <AdBanner key={"ad-" + idx} page="home" variant="slim" hideWhenEmpty />,
@@ -863,11 +969,11 @@ function SoKinFeed({
       <div className="hm-section-row">
         <h2 className="hm-section-title">{"\uD83D\uDCE2 So-Kin"}</h2>
         <Link to="/sokin" className="hm-see-all">
-          {t("home.viewAll")}
+          Voir tout →
         </Link>
       </div>
 
-      <div className="hm-sokin-feed">
+      <div className="hm-sokin-feed" onTouchStart={handleSwipeStart} onTouchEnd={handleSwipeEnd}>
         {loading && posts.length === 0 ? (
           [1, 2, 3].map((i) => <div key={i} className="hm-letter-skeleton" />)
         ) : posts.length === 0 ? (
@@ -902,12 +1008,17 @@ function SoKinFeed({
 function SoKinPostCard({
   post,
   t,
+  onOpenComments,
 }: {
   post: SoKinApiFeedPost;
   t: (k: string) => string;
+  onOpenComments: () => void;
 }) {
+  const { isLoggedIn, user } = useAuth();
+  const navigate = useNavigate();
   const profile = post.author?.profile;
   const name = profile?.displayName ?? t("home.defaultUser");
+  const handle = (profile?.username ?? post.author.id).replace("@", "");
   const city = profile?.city;
   const initial = name.charAt(0).toUpperCase();
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -915,6 +1026,20 @@ function SoKinPostCard({
   const tapTimeout = useRef<ReturnType<typeof setTimeout>>();
 
   const isVideo = (url: string) => /\.(mp4|webm|mov|ogg)(\?|$)/i.test(url);
+
+  const handleContact = async () => {
+    if (!isLoggedIn) {
+      void navigate("/login");
+      return;
+    }
+    if (!user?.id || post.author.id === user.id) return;
+    try {
+      const { conversation } = await messaging.createDM(post.author.id);
+      void navigate(`/messaging/${conversation.id}`);
+    } catch {
+      void navigate("/messaging");
+    }
+  };
 
   const handleMediaTap = () => {
     if (tapTimeout.current) {
@@ -952,13 +1077,14 @@ function SoKinPostCard({
         </Link>
         <div className="hm-letter-author">
           <p className="hm-letter-name">{name}</p>
+          <p className="hm-letter-city">ID: {handle}</p>
           {city && <p className="hm-letter-city">{"\uD83D\uDCCD " + city}</p>}
         </div>
         <div className="hm-letter-actions-top">
           <button
             className="hm-letter-icon-btn"
             aria-label={t("home.contact")}
-            onClick={() => window.location.assign("/sokin")}
+            onClick={() => void handleContact()}
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
@@ -1010,7 +1136,11 @@ function SoKinPostCard({
 
       {/* Pied */}
       <div className="hm-letter-foot">
-        <div className="hm-letter-foot-left" />
+        <div className="hm-letter-foot-left">
+          <button className="hm-letter-react-btn" onClick={onOpenComments}>
+            💬 {post.comments ?? 0} réponses
+          </button>
+        </div>
         <div className="hm-letter-foot-right">
           <Link
             to="/sokin"
@@ -1168,12 +1298,15 @@ export function HomePageMobile() {
   const { effectiveCountry, getCountryConfig } = useMarketPreference();
   const defaultCity = getCountryConfig(effectiveCountry).defaultCity;
   const lockedCats = useLockedCategories();
-  const barsVisible = useScrollDirection();
+  const barsVisibleRaw = useScrollDirection();
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [negotiateListing, setNegotiateListing] =
     useState<PublicListing | null>(null);
+
+  const barsVisible =
+    barsVisibleRaw || drawerOpen || searchOpen || Boolean(negotiateListing);
 
   const contentCls =
     "hm-content" + (barsVisible ? "" : " hm-content--expanded");
@@ -1221,6 +1354,10 @@ export function HomePageMobile() {
           t={t}
           cityHint={defaultCity}
           countryHint={effectiveCountry}
+          onNegotiate={setNegotiateListing}
+          lockedCats={lockedCats}
+          formatMoney={formatMoneyFromUsdCents}
+          formatLabel={formatPriceLabelFromUsdCents}
         />
       </main>
 

@@ -57,11 +57,29 @@
 }
 
 .hm-topbar-logo {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
   text-decoration: none;
   color: var(--color-text);
+  border-radius: 10px;
+  padding: 4px 8px;
+  overflow: hidden;
+}
+
+.hm-topbar-logo-shimmer {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(120deg, transparent 25%, rgba(255, 255, 255, 0.18) 50%, transparent 75%);
+  transform: translateX(-130%);
+  animation: hmLogoShimmer 3.8s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes hmLogoShimmer {
+  0%, 100% { transform: translateX(-130%); }
+  45% { transform: translateX(130%); }
 }
 
 .hm-topbar-logo-img {
@@ -758,6 +776,10 @@
   font-size: 0.95rem;
   outline: none;
   transition: border-color 0.15s;
+}
+
+.hm-listings--reinjected {
+  padding-top: 8px;
 }
 
 .hm-search-input::placeholder {
