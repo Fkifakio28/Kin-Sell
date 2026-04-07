@@ -94,13 +94,13 @@ export function HomePage() {
 
   const reloadSokinFeed = useCallback(async () => {
     try {
-      const feedData = await sokinApi.publicFeed({ limit: 4, city: defaultCity, country: effectiveCountry });
+      const feedData = await sokinApi.publicFeed({ limit: 4 });
       setSokinFeed(feedData.posts);
       setSokinIndex(0);
     } catch {
       // ignore
     }
-  }, [defaultCity, effectiveCountry]);
+  }, []);
 
   const reloadDashOverview = useCallback(async () => {
     if (!isLoggedIn) return;
@@ -194,7 +194,7 @@ export function HomePage() {
       const [shopsRes, profilesRes, feedRes, blogRes] = await Promise.allSettled([
         explorerApi.shops({ limit: 3, city: defaultCity, country: effectiveCountry }),
         explorerApi.profiles({ limit: 3, city: defaultCity, country: effectiveCountry }),
-        sokinApi.publicFeed({ limit: 4, city: defaultCity, country: effectiveCountry }),
+        sokinApi.publicFeed({ limit: 4 }),
         blogApi.publicPosts({ limit: 3 }),
       ]);
       if (cancelled) return;

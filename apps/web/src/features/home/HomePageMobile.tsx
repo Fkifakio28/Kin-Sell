@@ -817,8 +817,6 @@ function SoKinFeed({
         const res = await sokinApi.publicFeed({
           limit,
           offset: currentOffset,
-          city: cityHint,
-          country: countryHint,
         });
         if (reset) {
           setPosts(res.posts);
@@ -843,13 +841,14 @@ function SoKinFeed({
         loadingRef.current = false;
       }
     },
-    [cityHint, countryHint],
+    [],
   );
 
   useEffect(() => {
     setLoading(true);
     void loadFeed(true);
-  }, [loadFeed]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     const handleCreated = () => {
