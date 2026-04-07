@@ -570,7 +570,7 @@ export function MessagingPage() {
 
     const messageBody = {
       type: "SYSTEM",
-      content: `📌 Annonce So-Kin\nAuteur: ${post.authorName}\nID: ${post.id}\nAperçu: ${preview}`,
+      content: `📌 Annonce So-Kin\nAuteur: ${post.authorName}\nID auteur: ${post.authorId}\nID annonce: ${post.id}\nAperçu: ${preview}`,
       mediaUrl: post.mediaUrl ?? undefined,
       fileName: `sokin-post:${encodeURIComponent(JSON.stringify(payload))}`,
     };

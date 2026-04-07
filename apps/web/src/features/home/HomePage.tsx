@@ -693,7 +693,7 @@ export function HomePage() {
               <p className="h-trending-empty">{t('home.noProfiles')}</p>
             ) : (
               <>
-                <div role="button" onClick={() => navigate(trendingProfiles[safeSellerIdx].username ? `/user/${trendingProfiles[safeSellerIdx].username}` : '/sokin/profiles')} className="h-trending-card glass-card" style={{ cursor: 'pointer' }}>
+                <div role="button" onClick={() => navigate(trendingProfiles[safeSellerIdx].username ? `/user/${trendingProfiles[safeSellerIdx].username}` : '/explorer/public-profiles')} className="h-trending-card glass-card" style={{ cursor: 'pointer' }}>
                   <div className="h-trending-avatar">
                     {trendingProfiles[safeSellerIdx].avatarUrl
                       ? <img src={resolveMediaUrl(trendingProfiles[safeSellerIdx].avatarUrl!)} alt={trendingProfiles[safeSellerIdx].displayName} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
@@ -908,8 +908,8 @@ export function HomePage() {
 
           {/* Liens So-Kin */}
           <div className="h-sokin-links">
-            <button type="button" onClick={() => navigate('/sokin/profiles')} className="glass-button secondary h-sokin-cta">{t('home.sokinProfiles')}</button>
-            <button type="button" onClick={() => navigate('/sokin/market')} className="glass-button secondary h-sokin-cta">{t('home.sokinMarket')}</button>
+            <button type="button" onClick={() => navigate('/explorer/public-profiles')} className="glass-button secondary h-sokin-cta">{t('home.sokinProfiles')}</button>
+            <button type="button" onClick={() => navigate('/explorer/shops-online')} className="glass-button secondary h-sokin-cta">{t('home.sokinMarket')}</button>
           </div>
 
           {/* Conseils d'utilisation */}

@@ -514,7 +514,7 @@ function ExplorerPageMobile() {
         <section className="ex-section">
           <div className="ex-section-head">
             <h2 className="ex-section-title">🏪 Boutiques populaires</h2>
-            <Link to="/sokin/market" className="ex-section-link">Voir toutes →</Link>
+            <Link to="/explorer/shops-online" className="ex-section-link">Voir toutes →</Link>
           </div>
           <div className="ex-shops-grid">
             {shops.length > 0 ? shops.map((shop) => (
@@ -540,7 +540,7 @@ function ExplorerPageMobile() {
         <section className="ex-section">
           <div className="ex-section-head">
             <h2 className="ex-section-title">👥 Vendeurs en vedette</h2>
-            <Link to="/sokin/profiles" className="ex-section-link">Voir tous →</Link>
+            <Link to="/explorer/public-profiles" className="ex-section-link">Voir tous →</Link>
           </div>
           <div className="ex-profiles-grid">
             {profiles.length > 0 ? profiles.map((profile) => (

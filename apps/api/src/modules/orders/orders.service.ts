@@ -151,6 +151,7 @@ const mapOrder = (order: {
     quantity: number;
     unitPriceUsdCents: number;
     lineTotalUsdCents: number;
+    listing?: { imageUrl: string | null } | null;
   }>;
 }) => ({
   id: order.id,
@@ -185,7 +186,8 @@ const mapOrder = (order: {
     city: item.city,
     quantity: item.quantity,
     unitPriceUsdCents: item.unitPriceUsdCents,
-    lineTotalUsdCents: item.lineTotalUsdCents
+    lineTotalUsdCents: item.lineTotalUsdCents,
+    imageUrl: item.listing?.imageUrl ?? null
   }))
 });
 
@@ -494,7 +496,7 @@ export const checkoutBuyerCart = async (userId: string, notes?: string, delivery
       buyer: { include: { profile: true } },
       seller: { include: { profile: true } },
       sellerBusiness: true,
-      items: { orderBy: { createdAt: "asc" } }
+      items: { orderBy: { createdAt: "asc" }, include: { listing: { select: { imageUrl: true } } } }
     },
     orderBy: { createdAt: "desc" }
   });
@@ -543,7 +545,7 @@ export const listBuyerOrders = async (
         buyer: { include: { profile: true } },
         seller: { include: { profile: true } },
         sellerBusiness: true,
-        items: { orderBy: { createdAt: "asc" } }
+        items: { orderBy: { createdAt: "asc" }, include: { listing: { select: { imageUrl: true } } } }
       },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       skip,
@@ -604,7 +606,7 @@ export const listSellerOrders = async (
         buyer: { include: { profile: true } },
         seller: { include: { profile: true } },
         sellerBusiness: true,
-        items: { orderBy: { createdAt: "asc" } }
+        items: { orderBy: { createdAt: "asc" }, include: { listing: { select: { imageUrl: true } } } }
       },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       skip,
@@ -637,7 +639,7 @@ export const getOrderDetails = async (userId: string, orderId: string) => {
       buyer: { include: { profile: true } },
       seller: { include: { profile: true } },
       sellerBusiness: true,
-      items: { orderBy: { createdAt: "asc" } }
+      items: { orderBy: { createdAt: "asc" }, include: { listing: { select: { imageUrl: true } } } }
     }
   });
 
@@ -731,7 +733,7 @@ export const buyerConfirmDelivery = async (userId: string, orderId: string, code
       buyer: { include: { profile: true } },
       seller: { include: { profile: true } },
       sellerBusiness: true,
-      items: { orderBy: { createdAt: "asc" } }
+      items: { orderBy: { createdAt: "asc" }, include: { listing: { select: { imageUrl: true } } } }
     }
   });
 
@@ -794,7 +796,7 @@ export const updateSellerOrderStatus = async (userId: string, orderId: string, n
       buyer: { include: { profile: true } },
       seller: { include: { profile: true } },
       sellerBusiness: true,
-      items: { orderBy: { createdAt: "asc" } }
+      items: { orderBy: { createdAt: "asc" }, include: { listing: { select: { imageUrl: true } } } }
     }
   });
 

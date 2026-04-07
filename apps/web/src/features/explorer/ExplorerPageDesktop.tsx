@@ -666,7 +666,7 @@ export function ExplorerPageDesktop() {
         <div className="explorer-shops-section">
           <div className="explorer-section-header">
             <h3 className="explorer-section-title">🏪 Boutiques populaires</h3>
-            <a href="/sokin/market" className="explorer-section-link">Voir toutes →</a>
+            <a href="/explorer/shops-online" className="explorer-section-link">Voir toutes →</a>
           </div>
 
           <div className="explorer-shops-grid">
@@ -707,7 +707,7 @@ export function ExplorerPageDesktop() {
         <div className="explorer-shops-section">
           <div className="explorer-section-header">
             <h3 className="explorer-section-title">👥 Vendeurs en vedette</h3>
-            <a href="/sokin/profiles" className="explorer-section-link">Voir tous →</a>
+            <a href="/explorer/public-profiles" className="explorer-section-link">Voir tous →</a>
           </div>
 
           <div className="explorer-shops-grid">

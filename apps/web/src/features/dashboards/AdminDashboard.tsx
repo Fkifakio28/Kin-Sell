@@ -2331,7 +2331,7 @@ export function AdminDashboard() {
 
   const renderMessaging = () => <DashboardMessaging />;
 
-  const ADV_PAGES = ['home','explorer','sokin','sokin-market','sokin-profiles','account','admin'];
+  const ADV_PAGES = ['home','explorer','sokin','account','admin'];
   const ADV_STATUSES = ['ALL','PENDING','ACTIVE','INACTIVE','ARCHIVED','CANCELLED'];
   const ADV_TYPES = ['ALL','KIN_SELL','USER','BUSINESS'];
 
@@ -4034,7 +4034,7 @@ export function AdminDashboard() {
                 <div className="ad-field">
                   <label className="ad-label">Pages cibles (séparées par virgule)</label>
                   <input className="ad-input" value={advForm.targetPages.join(',')} onChange={e => setAdvForm(f => ({ ...f, targetPages: e.target.value.split(',').map(p => p.trim()).filter(Boolean) }))} placeholder="home,explorer,sokin" />
-                  <div style={{ fontSize: 11, opacity: 0.6, marginTop: 4 }}>Disponibles: {['home','explorer','sokin','sokin-market','sokin-profiles'].join(', ')}</div>
+                  <div style={{ fontSize: 11, opacity: 0.6, marginTop: 4 }}>Disponibles: {['home','explorer','sokin','account','admin'].join(', ')}</div>
                 </div>
                 <div className="ad-field">
                   <label className="ad-label">Priorité (0 = normale)</label>

@@ -74,6 +74,7 @@ export type OrderSummary = {
     quantity: number;
     unitPriceUsdCents: number;
     lineTotalUsdCents: number;
+    imageUrl: string | null;
   }>;
 };
 

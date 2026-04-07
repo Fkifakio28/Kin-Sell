@@ -2628,85 +2628,130 @@ export function UserDashboard() {
             <div className="ud-commerce-panel">
               <div className="ud-commerce-panel-head">
                 <h3 className="ud-commerce-panel-title">📦 {t('user.sellerOrders')}</h3>
-              </div>
-              <div className="ud-ord-filters">
-                {(['' , 'PENDING', 'CONFIRMED', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELED'] as const).map((f) => (
-                  <button
-                    key={f}
-                    type="button"
-                    className={`ud-ord-filter-btn${salesFilter === f ? ' active' : ''}`}
-                    onClick={() => setSalesFilter(f as OrderStatus | '')}
-                  >
-                    {f === '' ? t('user.filterAll') : f === 'PENDING' ? t('user.filterPending') : f === 'CONFIRMED' ? t('user.filterConfirmed') : f === 'PROCESSING' ? t('user.filterProcessing') : f === 'SHIPPED' ? t('user.filterShipped') : f === 'DELIVERED' ? t('user.filterDelivered') : t('user.filterCanceled')}
-                  </button>
-                ))}
+                <span className="ud-ord-stat-chip">{allSellerOrders.length} total</span>
+                <select
+                  className="ud-neg-filter-select"
+                  value={salesFilter}
+                  onChange={(e) => setSalesFilter(e.target.value as OrderStatus | '')}
+                >
+                  <option value="">{t('user.filterAll')}</option>
+                  <option value="PENDING">⏳ {t('user.filterPending')}</option>
+                  <option value="CONFIRMED">✅ {t('user.filterConfirmed')}</option>
+                  <option value="PROCESSING">⚙️ {t('user.filterProcessing')}</option>
+                  <option value="SHIPPED">🚚 {t('user.filterShipped')}</option>
+                  <option value="DELIVERED">📬 {t('user.filterDelivered')}</option>
+                  <option value="CANCELED">❌ {t('user.filterCanceled')}</option>
+                </select>
               </div>
 
-              {loadingCommerce ? (
-                <div className="ud-ord-loading">
-                  <span className="ud-ord-loading-spinner" />
-                  <span>{t('user.loadingOrders')}</span>
-                </div>
-              ) : filteredSellerOrders.length === 0 ? (
-                <div className="ud-ord-empty">
-                  <span className="ud-ord-empty-icon">📭</span>
+              {loadingCommerce && <div className="ud-loading"><span className="ud-spinner" /><span>{t('user.loadingOrders')}</span></div>}
+              {!loadingCommerce && filteredSellerOrders.length === 0 && (
+                <div className="ud-neg-empty">
+                  <span style={{ fontSize: '2rem' }}>📭</span>
                   <p>{t('user.noSellerOrders')}{salesFilter ? ` ${t('user.withStatus')} "${statusLabel(salesFilter)}"` : ''}.</p>
                 </div>
-              ) : (
-                <div className="ud-ord-grid">
-                  {filteredSellerOrders.map((order) => (
-                    <article key={order.id} className="ud-ord-card">
-                      <div className="ud-ord-card-header">
-                        <span className="ud-ord-card-id">#{order.id.slice(0, 8).toUpperCase()}</span>
-                        <span className={statusClass(order.status)}>{statusLabel(order.status)}</span>
-                      </div>
-                      <div className="ud-ord-card-body">
-                        <p className="ud-ord-card-amount">{money(order.totalUsdCents)}</p>
-                        <p className="ud-ord-card-meta">{order.itemsCount} {order.itemsCount > 1 ? t('user.articlesLabel') : t('user.articleLabel')} · {new Date(order.createdAt).toLocaleDateString('fr-FR')}</p>
-                      </div>
-                      <div className="ud-ord-card-actions">
-                        <button type="button" className="ud-ord-action ud-ord-action--detail" title={t('user.orderDetailLabel')} onClick={() => void handleOrderDetail(order.id)}>
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-                        </button>
-                        {nextSellerStatuses(order.status).map((status) => (
-                          <button
-                            key={status}
-                            type="button"
-                            className={`ud-ord-action${status === 'CANCELED' ? ' ud-ord-action--danger' : ' ud-ord-action--confirm'}`}
-                            title={statusLabel(status)}
-                            disabled={orderStatusBusyId !== null}
-                            onClick={() => void handleSellerStatus(order.id, status)}
-                          >
-                            {orderStatusBusyId === order.id ? '...' : statusLabel(status)}
+              )}
+              {!loadingCommerce && filteredSellerOrders.length > 0 && (
+                <div className="ud-neg-grid">
+                  {filteredSellerOrders.map((order) => {
+                    const firstItem = order.items[0];
+                    return (
+                      <div key={order.id} className={`ud-neg-card glass-card ud-neg-card--${order.status.toLowerCase()}`}>
+                        <div className="ud-neg-card-header">
+                          {firstItem?.imageUrl ? (
+                            <img src={resolveMediaUrl(firstItem.imageUrl)} alt={firstItem.title} className="ud-neg-img" />
+                          ) : (
+                            <div className="ud-neg-img-placeholder">{firstItem?.listingType === 'SERVICE' ? '🛠' : '📦'}</div>
+                          )}
+                          <div className="ud-neg-card-info">
+                            <h4 className="ud-neg-card-title">#{order.id.slice(0, 8).toUpperCase()}</h4>
+                            <p className="ud-neg-card-meta">{t('user.buyerLabel')} : {order.buyer.displayName}</p>
+                            <div className="ud-neg-badges-row">
+                              <span className={`ud-neg-status-badge ud-neg-status-badge--${order.status.toLowerCase()}`}>
+                                {order.status === 'PENDING' && `⏳ ${statusLabel(order.status)}`}
+                                {order.status === 'CONFIRMED' && `✅ ${statusLabel(order.status)}`}
+                                {order.status === 'PROCESSING' && `⚙️ ${statusLabel(order.status)}`}
+                                {order.status === 'SHIPPED' && `🚚 ${statusLabel(order.status)}`}
+                                {order.status === 'DELIVERED' && `📬 ${statusLabel(order.status)}`}
+                                {order.status === 'CANCELED' && `❌ ${statusLabel(order.status)}`}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* ── Articles de la commande ── */}
+                        <div className="ud-sord-items">
+                          {order.items.map((item) => (
+                            <div key={item.id} className="ud-sord-item">
+                              {item.imageUrl ? (
+                                <img src={resolveMediaUrl(item.imageUrl)} alt={item.title} className="ud-sord-item-img" />
+                              ) : (
+                                <div className="ud-sord-item-img-ph">{item.listingType === 'SERVICE' ? '🛠' : '📦'}</div>
+                              )}
+                              <div className="ud-sord-item-info">
+                                <span className="ud-sord-item-title">{item.title}</span>
+                                <span className="ud-sord-item-detail">x{item.quantity} — {money(item.lineTotalUsdCents)}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="ud-neg-card-prices">
+                          <div className="ud-neg-price-row">
+                            <span>Total</span>
+                            <span className="ud-neg-price-current">{money(order.totalUsdCents)}</span>
+                          </div>
+                          <div className="ud-neg-price-row">
+                            <span>{t('user.articlesLabel')}</span>
+                            <span className="ud-neg-price-original">{order.itemsCount} {order.itemsCount > 1 ? t('user.articlesLabel') : t('user.articleLabel')}</span>
+                          </div>
+                          <div className="ud-neg-price-row">
+                            <span>Date</span>
+                            <span className="ud-neg-price-original">{new Date(order.createdAt).toLocaleDateString('fr-FR')}</span>
+                          </div>
+                        </div>
+
+                        <div className="ud-sord-actions">
+                          <button type="button" className="ud-neg-respond-btn" onClick={() => void handleOrderDetail(order.id)}>
+                            ℹ️ {t('user.orderDetailLabel')}
                           </button>
-                        ))}
-                        {(order.status === 'PROCESSING' || order.status === 'SHIPPED') && (
-                          <button
-                            type="button"
-                            className="ud-ord-action ud-ord-action--code"
-                            title={t('user.showValidationQr')}
-                            disabled={validationCodeBusyId === order.id}
-                            onClick={() => void handleRevealCode(order.id)}
-                          >
-                            {validationCodeBusyId === order.id ? '...' : '🔑 QR / Code'}
-                          </button>
-                        )}
-                        {order.status === 'DELIVERED' && !reviewedOrders.has(order.id) && (
-                          <button
-                            type="button"
-                            className="ud-ord-action ud-ord-action--confirm"
-                            title="Laisser un avis"
-                            onClick={() => { setReviewModalOrder({ orderId: order.id }); setReviewRating(5); setReviewText(''); }}
-                          >
-                            ⭐ Avis
-                          </button>
-                        )}
-                        {order.status === 'DELIVERED' && reviewedOrders.has(order.id) && (
-                          <span style={{ fontSize: '.75rem', color: 'var(--color-primary)', padding: '4px 8px' }}>✓ Avis envoyé</span>
-                        )}
+                          {nextSellerStatuses(order.status).map((status) => (
+                            <button
+                              key={status}
+                              type="button"
+                              className={`ud-neg-respond-btn${status === 'CANCELED' ? ' ud-sord-action--danger' : ''}`}
+                              disabled={orderStatusBusyId !== null}
+                              onClick={() => void handleSellerStatus(order.id, status)}
+                            >
+                              {orderStatusBusyId === order.id ? '...' : statusLabel(status)}
+                            </button>
+                          ))}
+                          {(order.status === 'PROCESSING' || order.status === 'SHIPPED') && (
+                            <button
+                              type="button"
+                              className="ud-neg-respond-btn"
+                              disabled={validationCodeBusyId === order.id}
+                              onClick={() => void handleRevealCode(order.id)}
+                            >
+                              {validationCodeBusyId === order.id ? '...' : '🔑 QR / Code'}
+                            </button>
+                          )}
+                          {order.status === 'DELIVERED' && !reviewedOrders.has(order.id) && (
+                            <button
+                              type="button"
+                              className="ud-neg-respond-btn"
+                              onClick={() => { setReviewModalOrder({ orderId: order.id }); setReviewRating(5); setReviewText(''); }}
+                            >
+                              ⭐ Avis
+                            </button>
+                          )}
+                          {order.status === 'DELIVERED' && reviewedOrders.has(order.id) && (
+                            <span style={{ fontSize: '.75rem', color: 'var(--color-primary)', padding: '4px 8px' }}>✓ Avis envoyé</span>
+                          )}
+                        </div>
                       </div>
-                    </article>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
 
@@ -2721,7 +2766,11 @@ export function UserDashboard() {
                   <ul className="ud-ord-detail-items">
                     {selectedOrder.items.map((item) => (
                       <li key={item.id} className="ud-ord-detail-item">
-                        <span className="ud-ord-detail-icon">{item.listingType === 'SERVICE' ? '🛠' : '📦'}</span>
+                        {item.imageUrl ? (
+                          <img src={resolveMediaUrl(item.imageUrl)} alt={item.title} className="ud-sord-item-img" style={{ width: 36, height: 36, borderRadius: 8 }} />
+                        ) : (
+                          <span className="ud-ord-detail-icon">{item.listingType === 'SERVICE' ? '🛠' : '📦'}</span>
+                        )}
                         <div className="ud-ord-detail-info">
                           <strong>{item.title}</strong>
                           <span>{item.category} · {item.city} · x{item.quantity}</span>

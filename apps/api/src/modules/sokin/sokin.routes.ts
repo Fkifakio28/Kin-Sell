@@ -40,6 +40,8 @@ const createPostSchema = z.object({
       message: "Maximum 2 vidéos par annonce",
     }),
   location: z.string().max(100).optional(),
+  tags: z.array(z.string()).default([]).optional(),
+  hashtags: z.array(z.string()).default([]).optional(),
   scheduledAt: z.string().datetime().optional(),
 });
 
@@ -124,7 +126,7 @@ router.post(
   requireAuth,
   rateLimit(RateLimits.SOKIN_POST),
   asyncHandler(async (req: AuthenticatedRequest, res) => {
-    const { text, mediaUrls = [], location, scheduledAt } = createPostSchema.parse(req.body);
+    const { text, mediaUrls = [], location, scheduledAt, tags = [], hashtags = [] } = createPostSchema.parse(req.body);
 
     // ContentGuard: modération IA avant publication
     const { analyzePost } = await import("./content-guard.service.js");
@@ -143,8 +145,8 @@ router.post(
       text,
       mediaUrls,
       location,
-      [],
-      [],
+      tags,
+      hashtags,
       scheduledAt ? new Date(scheduledAt) : undefined
     );
 
