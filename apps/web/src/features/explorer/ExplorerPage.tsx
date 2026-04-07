@@ -464,14 +464,7 @@ function ExplorerPageMobile() {
         <section className="ex-section">
           <div className="ex-section-head">
             <h2 className="ex-section-title">🧩 Articles disponibles</h2>
-            <button className="ex-pill-btn" onClick={() => setIsMapView(v => !v)}>{isMapView ? '📋 Liste' : '🗺️ Carte'}</button>
           </div>
-
-          {isMapView && (
-            <div className="ex-map-wrap">
-              <MapView center={{ lat: -4.325, lng: 15.322 }} markers={filteredArticles.map(a => ({ lat: a.latitude ?? -4.325, lng: a.longitude ?? 15.322, title: a.title, info: `${a.title} — ${a.priceLabel}` }))} zoom={12} height="300px" />
-            </div>
-          )}
 
           {isLoadingArticles ? (
             <p className="ex-empty">Chargement des articles…</p>

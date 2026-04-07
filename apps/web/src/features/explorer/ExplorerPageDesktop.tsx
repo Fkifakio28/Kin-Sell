@@ -584,26 +584,7 @@ export function ExplorerPageDesktop() {
         <div className="explorer-shops-section">
           <div className="explorer-section-header">
             <h3 className="explorer-section-title">🧩 Articles disponibles</h3>
-            <button type="button" className="explorer-show-all-btn" style={{ marginLeft: 'auto', marginRight: 8 }} onClick={() => setIsMapView(v => !v)}>
-              {isMapView ? '📋 Liste' : '🗺️ Carte'}
-            </button>
           </div>
-
-          {isMapView ? (
-            <div className="ex-map-wrap">
-              <MapView
-                center={{ lat: -4.325, lng: 15.322 }}
-                markers={filteredArticles.map(a => ({
-                  lat: a.latitude ?? -4.325,
-                  lng: a.longitude ?? 15.322,
-                  title: a.title,
-                  info: `${a.title} — ${a.priceLabel}`,
-                }))}
-                zoom={12}
-                height="450px"
-              />
-            </div>
-          ) : null}
 
           <div className="explorer-articles-box">
             {isLoadingArticles ? (

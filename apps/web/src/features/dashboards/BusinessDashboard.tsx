@@ -183,7 +183,8 @@ export function BusinessDashboard() {
   // ─── Photos boutique physique (localStorage) ─────────────
   const [shopPhotos, setShopPhotos] = useState<string[]>([]);
 
-  // ─── Créer listing ───────────────────────────────────────
+  // ─── Créer / Modifier listing ────────────────────────────
+  const [editingArticleId, setEditingArticleId] = useState<string | null>(null);
   const [createMode, setCreateMode] = useState<'produit' | 'service' | null>(null);
   const [createForm, setCreateForm] = useState({ title: '', category: '', city: 'Kinshasa', priceCdf: '', stock: '', description: '', isNegotiable: true, latitude: -4.3216965, longitude: 15.3124553, country: 'RDC', countryCode: 'CD', region: '', district: '', formattedAddress: '', placeId: '', locationVisibility: 'CITY_PUBLIC' as LocationVisibility, serviceRadiusKm: '' });
   const [createBusy, setCreateBusy] = useState(false);
@@ -578,6 +579,7 @@ export function BusinessDashboard() {
 
   const handleBzEdit = (article: MyListing) => {
     const type = article.type === 'SERVICE' ? 'service' : 'produit';
+    setEditingArticleId(article.id);
     setCreateMode(type);
     setCreateStep(1);
     setCreateUploadFiles([]);
@@ -640,7 +642,7 @@ export function BusinessDashboard() {
       if (createUploadFiles.length > 0) {
         mediaUrls = await prepareMediaUrls(createUploadFiles);
       }
-      await listings.create({
+      const payload = {
         type: createMode === 'produit' ? 'PRODUIT' : 'SERVICE',
         title: createForm.title.trim(),
         category: createForm.category.trim(),
@@ -660,10 +662,16 @@ export function BusinessDashboard() {
         locationVisibility: createForm.locationVisibility || undefined,
         serviceRadiusKm: createForm.serviceRadiusKm ? parseInt(createForm.serviceRadiusKm) : undefined,
         imageUrl: mediaUrls[0] || undefined,
-        mediaUrls,
-      });
+        mediaUrls: mediaUrls.length > 0 ? mediaUrls : undefined,
+      };
+      if (editingArticleId) {
+        await listings.update(editingArticleId, payload);
+      } else {
+        await listings.create(payload as any);
+      }
       invalidateCache('/listings/mine');
-      setCreateMsg(t('biz.listingSuccess'));
+      setCreateMsg(editingArticleId ? '✓ Article modifié avec succès' : t('biz.listingSuccess'));
+      setEditingArticleId(null);
       setCreateForm({ title: '', category: '', city: 'Kinshasa', priceCdf: '', stock: '', description: '', isNegotiable: true, latitude: -4.3216965, longitude: 15.3124553, country: 'RDC', countryCode: 'CD', region: '', district: '', formattedAddress: '', placeId: '', locationVisibility: 'CITY_PUBLIC', serviceRadiusKm: '' });
       setCreateMode(null);
       setCreateStep(1);
@@ -1297,7 +1305,7 @@ export function BusinessDashboard() {
             <button type="button" className="ud-quick-btn" onClick={() => setActiveSection('publicite')}>
               {t('biz.launchPromo')}
             </button>
-            <button type="button" className="ud-quick-btn ud-quick-btn--primary bz-cta-gold" onClick={() => { setActiveSection('produits'); setCreateMode('produit'); setCreateStep(1); }}>
+            <button type="button" className="ud-quick-btn ud-quick-btn--primary bz-cta-gold" onClick={() => { setActiveSection('produits'); setCreateMode('produit'); setCreateStep(1); setEditingArticleId(null); }}>
               {t('biz.addProduct')}
             </button>
           </div>
@@ -1468,7 +1476,7 @@ export function BusinessDashboard() {
               </div>
               <div className="bz-bout-header-right">
                 <button type="button" className="ud-quick-btn bz-cta-gold" onClick={() => setActiveSection('produits')}>🎯 Lancer une promo</button>
-                <button type="button" className="ud-quick-btn ud-quick-btn--primary bz-cta-gold" onClick={() => { setActiveSection('produits'); setCreateMode('produit'); setCreateStep(1); }}>+ Ajouter un produit</button>
+                <button type="button" className="ud-quick-btn ud-quick-btn--primary bz-cta-gold" onClick={() => { setActiveSection('produits'); setCreateMode('produit'); setCreateStep(1); setEditingArticleId(null); }}>+ Ajouter un produit</button>
               </div>
             </div>
 
@@ -1711,7 +1719,7 @@ export function BusinessDashboard() {
                   <span className="bz-art-publish-icon">📥</span>
                   {importOpen === 'produit' ? '✕ Fermer' : 'Importer'}
                 </button>
-                <button type="button" className="bz-art-publish-btn" onClick={() => { setCreateMode(createMode === 'produit' ? null : 'produit'); setCreateStep(1); setCreateUploadFiles([]); setCreateUploadPreviews(p => { p.forEach(u => URL.revokeObjectURL(u)); return []; }); setCreateMsg(null); }}>
+                <button type="button" className="bz-art-publish-btn" onClick={() => { setCreateMode(createMode === 'produit' ? null : 'produit'); setCreateStep(1); setCreateUploadFiles([]); setCreateUploadPreviews(p => { p.forEach(u => URL.revokeObjectURL(u)); return []; }); setCreateMsg(null); setEditingArticleId(null); }}>
                   <span className="bz-art-publish-icon">+</span>
                   {createMode === 'produit' ? t('biz.cancelBtn') : t('biz.newProduct')}
                 </button>
@@ -1844,7 +1852,7 @@ export function BusinessDashboard() {
                     <div className="ud-publish-nav">
                       <button type="button" className="ud-quick-btn" onClick={() => setCreateStep(2)}>← Retour</button>
                       <button type="submit" className="ud-quick-btn ud-quick-btn--primary bz-cta-gold" disabled={createBusy}>
-                        {createBusy ? '⏳ Publication...' : '🚀 Publier le produit'}
+                        {createBusy ? '⏳ Publication...' : editingArticleId ? '✏️ Modifier le produit' : '🚀 Publier le produit'}
                       </button>
                     </div>
                   </div>
@@ -1938,7 +1946,7 @@ export function BusinessDashboard() {
                   <span className="bz-art-publish-icon">📥</span>
                   {importOpen === 'service' ? '✕ Fermer' : 'Importer'}
                 </button>
-                <button type="button" className="bz-art-publish-btn" onClick={() => { setCreateMode(createMode === 'service' ? null : 'service'); setCreateStep(1); setCreateUploadFiles([]); setCreateUploadPreviews(p => { p.forEach(u => URL.revokeObjectURL(u)); return []; }); setCreateMsg(null); }}>
+                <button type="button" className="bz-art-publish-btn" onClick={() => { setCreateMode(createMode === 'service' ? null : 'service'); setCreateStep(1); setCreateUploadFiles([]); setCreateUploadPreviews(p => { p.forEach(u => URL.revokeObjectURL(u)); return []; }); setCreateMsg(null); setEditingArticleId(null); }}>
                   <span className="bz-art-publish-icon">+</span>
                   {createMode === 'service' ? t('biz.cancelBtn') : t('biz.newService')}
                 </button>
@@ -2071,7 +2079,7 @@ export function BusinessDashboard() {
                     <div className="ud-publish-nav">
                       <button type="button" className="ud-quick-btn" onClick={() => setCreateStep(2)}>← Retour</button>
                       <button type="submit" className="ud-quick-btn ud-quick-btn--primary bz-cta-gold" disabled={createBusy}>
-                        {createBusy ? '⏳ Publication...' : '🚀 Publier le service'}
+                        {createBusy ? '⏳ Publication...' : editingArticleId ? '✏️ Modifier le service' : '🚀 Publier le service'}
                       </button>
                     </div>
                   </div>
