@@ -1096,6 +1096,19 @@
   padding-top: 0;
 }
 
+.sk-mobile-editor-actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 14px;
+  padding-top: 8px;
+  border-top: 1px solid var(--glass-border, rgba(255, 255, 255, 0.08));
+}
+
+.sk-mobile-editor-actions .sk-btn {
+  min-width: 140px;
+  justify-content: center;
+}
+
 .sk-create-preview-card {
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 14px;

@@ -1957,6 +1957,17 @@ function CreateAnnounceScreen({
                 <p className="sk-modal-hint">Sélection: {new Date(editorDraft.scheduledAt).toLocaleString('fr-FR')}</p>
               )}
             </section>
+
+            <div className="sk-mobile-editor-actions">
+              <button
+                type="button"
+                className="sk-btn sk-btn--outline"
+                onClick={cancelEditor}
+                disabled={isPublishing}
+              >
+                Annuler
+              </button>
+            </div>
           </article>
         ) : (
           <article className="sk-create-preview-card" aria-label="Prévisualisation annonce">
