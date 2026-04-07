@@ -129,8 +129,6 @@ const SECTION_DEFS: Array<{ key: HubSection; labelKey: string; icon: string }> =
   { key: 'sales', labelKey: 'user.sellSpace', icon: '📦' },
   { key: 'messages', labelKey: 'user.messaging', icon: '💬' },
   { key: 'contacts', labelKey: 'user.myContacts', icon: '🤝' },
-  { key: 'sokin', labelKey: 'sokin.home', icon: '✦' },
-  { key: 'my-profile-page', labelKey: 'user.myProfile', icon: '🪪' },
   { key: 'public-profile', labelKey: 'user.publicProfile', icon: '👤' },
   { key: 'verification', labelKey: 'user.verification', icon: '✅' },
   { key: 'analytics', labelKey: 'user.analytics', icon: '📊' },
