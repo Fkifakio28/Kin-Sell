@@ -1,9 +1,11 @@
-﻿import { useEffect, useMemo, useState, useCallback } from 'react';
+﻿import { useEffect, useMemo, useState, useCallback, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../app/providers/AuthProvider';
 import { businesses as businessesApi, reviews as reviewsApi, resolveMediaUrl, type ReviewItem } from '../../lib/api-client';
 import './public-pages.css';
 import { SeoMeta } from '../../components/SeoMeta';
+
+const MapView = lazy(() => import('../../components/MapView'));
 
 type BusinessShopPageProps = {
   slug: string;
@@ -38,6 +40,8 @@ type PublicBusiness = {
     formattedAddress?: string | null;
     contactPhone?: string | null;
     contactEmail?: string | null;
+    latitude?: number | null;
+    longitude?: number | null;
     active: boolean;
     highlights?: { id: string; icon: string; name: string; description: string }[] | null;
     shopPhotos?: string[];
@@ -627,14 +631,27 @@ export function BusinessShopPage({ slug }: BusinessShopPageProps) {
           </article>
         </div>
 
-        {/* ── Carte (placeholder) ── */}
-        <div className="biz-map-placeholder">
-          <div className="biz-map-inner">
-            <span className="biz-map-pin">📍</span>
-            <p>{business.publicName} — {[city, business.shop?.country].filter(Boolean).join(', ')}</p>
-            <small>Carte interactive bientôt disponible</small>
+        {/* ── Carte interactive ── */}
+        {business.shop?.latitude && business.shop?.longitude ? (
+          <div className="biz-map-live">
+            <Suspense fallback={<div className="biz-map-placeholder"><div className="biz-map-inner"><span className="biz-map-pin">📍</span><p>Chargement de la carte…</p></div></div>}>
+              <MapView
+                center={{ lat: business.shop.latitude, lng: business.shop.longitude }}
+                markers={[{ lat: business.shop.latitude, lng: business.shop.longitude, title: business.publicName, info: [city, business.shop?.country].filter(Boolean).join(', ') }]}
+                zoom={14}
+                height="320px"
+              />
+            </Suspense>
           </div>
-        </div>
+        ) : (
+          <div className="biz-map-placeholder">
+            <div className="biz-map-inner">
+              <span className="biz-map-pin">📍</span>
+              <p>{business.publicName} — {[city, business.shop?.country].filter(Boolean).join(', ')}</p>
+              <small>Localisation non renseignée</small>
+            </div>
+          </div>
+        )}
 
         {/* ── Photos boutique physique défilantes ── */}
         {shopPhotos.length > 0 && (

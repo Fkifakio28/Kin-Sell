@@ -1927,6 +1927,18 @@
   align-items: center;
   justify-content: center;
 }
+
+/* ── Carte interactive live ────────────────────────────── */
+.biz-map-live {
+  margin-top: var(--space-md, 16px);
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid rgba(180, 160, 255, 0.18);
+  min-height: 320px;
+}
+.biz-map-live .map-view {
+  border-radius: 16px;
+}
 .biz-map-inner {
   text-align: center;
   padding: var(--space-lg, 24px);
