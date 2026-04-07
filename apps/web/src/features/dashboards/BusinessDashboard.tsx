@@ -32,10 +32,12 @@ type BizSection =
 type AbonnementTier = 'based' | 'medium' | 'premium';
 
 /* ─── Helpers devise ───────────────────────────────────────── */
-import { USD_TO_CDF_RATE } from '../../shared/constants/currencies';
+import { USD_TO_CDF_RATE, DEFAULT_CURRENCY_RATES } from '../../shared/constants/currencies';
 import { SK_BIZ_AI_ADVICE, SK_BIZ_AI_AUTO_NEGO, SK_BIZ_AI_COMMANDE } from '../../shared/constants/storage-keys';
 import { DashboardSecurityBlock, DashboardAiSettings, DashboardVerificationSection } from './sections';
 const USD_TO_CDF = USD_TO_CDF_RATE;
+const CURRENCY_SYMBOLS: Record<string, string> = { CDF: 'FC', USD: '$', EUR: '€', XAF: 'XAF', AOA: 'Kz', XOF: 'XOF', GNF: 'GNF', MAD: 'MAD' };
+const getCurrencyRate = (c: string) => c === 'USD' ? 1 : (DEFAULT_CURRENCY_RATES[c] ?? DEFAULT_CURRENCY_RATES.CDF);
 
 function deriveTier(planCode?: string | null): AbonnementTier {
   if (!planCode) return 'based';
@@ -585,7 +587,7 @@ export function BusinessDashboard() {
       title: article.title,
       category: article.category,
       city: article.city,
-      priceCdf: String(Math.round(article.priceUsdCents / 100 * USD_TO_CDF)),
+      priceCdf: String(Math.round(article.priceUsdCents / 100 * getCurrencyRate(currency))),
       stock: article.stockQuantity !== null ? String(article.stockQuantity) : '',
       description: article.description ?? '',
       isNegotiable: article.isNegotiable,
@@ -631,8 +633,9 @@ export function BusinessDashboard() {
     setCreateBusy(true);
     setCreateMsg(null);
     try {
-      const priceCdf = parseFloat(createForm.priceCdf.replace(/\s/g, '')) || 0;
-      const priceUsdCents = Math.round((priceCdf / USD_TO_CDF) * 100);
+      const priceLocal = parseFloat(createForm.priceCdf.replace(/\s/g, '')) || 0;
+      const rate = getCurrencyRate(currency);
+      const priceUsdCents = Math.round((priceLocal / rate) * 100);
       let mediaUrls: string[] = [];
       if (createUploadFiles.length > 0) {
         mediaUrls = await prepareMediaUrls(createUploadFiles);
@@ -1768,13 +1771,13 @@ export function BusinessDashboard() {
                 {createStep === 2 && (
                   <div className="ud-publish-step-content">
                     <label className="ud-publish-field">
-                      <span className="ud-publish-field-label">{t('biz.priceCdf')} *</span>
+                      <span className="ud-publish-field-label">{t('biz.priceCdf')} ({currency}) *</span>
                       <div className="ud-publish-price-wrap">
-                        <span className="ud-publish-price-symbol">FC</span>
+                        <span className="ud-publish-price-symbol">{CURRENCY_SYMBOLS[currency] || currency}</span>
                         <input className="ud-input" type="number" required min={0} value={createForm.priceCdf} onChange={e => setCreateForm(f => ({ ...f, priceCdf: e.target.value }))} placeholder="0" />
                       </div>
                       {createForm.priceCdf && parseInt(createForm.priceCdf) > 0 && (
-                        <span className="ud-publish-field-hint">≈ {(parseInt(createForm.priceCdf) / USD_TO_CDF).toFixed(2)} $ USD</span>
+                        <span className="ud-publish-field-hint">≈ {(parseInt(createForm.priceCdf) / getCurrencyRate(currency)).toFixed(2)} $ USD</span>
                       )}
                     </label>
                     <label className="ud-publish-field">
@@ -1831,7 +1834,7 @@ export function BusinessDashboard() {
                         <span>Type</span><strong>📦 Produit</strong>
                         <span>Titre</span><strong>{createForm.title || '–'}</strong>
                         <span>Catégorie</span><strong>{createForm.category || '–'}</strong>
-                        <span>Prix</span><strong>{createForm.priceCdf && parseInt(createForm.priceCdf) > 0 ? `${new Intl.NumberFormat('fr-CD').format(parseInt(createForm.priceCdf))} FC` : 'Prix libre'}</strong>
+                        <span>Prix</span><strong>{createForm.priceCdf && parseInt(createForm.priceCdf) > 0 ? `${new Intl.NumberFormat('fr-CD').format(parseInt(createForm.priceCdf))} ${CURRENCY_SYMBOLS[currency] || currency}` : 'Prix libre'}</strong>
                         <span>Ville</span><strong>{createForm.city || '–'}</strong>
                         {createForm.stock && <><span>Stock</span><strong>{createForm.stock}</strong></>}
                         <span>Médias</span><strong>{createUploadFiles.length} fichier(s)</strong>
@@ -1995,13 +1998,13 @@ export function BusinessDashboard() {
                 {createStep === 2 && (
                   <div className="ud-publish-step-content">
                     <label className="ud-publish-field">
-                      <span className="ud-publish-field-label">{t('biz.rateCdf')} *</span>
+                      <span className="ud-publish-field-label">{t('biz.rateCdf')} ({currency}) *</span>
                       <div className="ud-publish-price-wrap">
-                        <span className="ud-publish-price-symbol">FC</span>
+                        <span className="ud-publish-price-symbol">{CURRENCY_SYMBOLS[currency] || currency}</span>
                         <input className="ud-input" type="number" required min={0} value={createForm.priceCdf} onChange={e => setCreateForm(f => ({ ...f, priceCdf: e.target.value }))} placeholder="0" />
                       </div>
                       {createForm.priceCdf && parseInt(createForm.priceCdf) > 0 && (
-                        <span className="ud-publish-field-hint">≈ {(parseInt(createForm.priceCdf) / USD_TO_CDF).toFixed(2)} $ USD</span>
+                        <span className="ud-publish-field-hint">≈ {(parseInt(createForm.priceCdf) / getCurrencyRate(currency)).toFixed(2)} $ USD</span>
                       )}
                     </label>
                     <label className="ud-publish-field">
@@ -2058,7 +2061,7 @@ export function BusinessDashboard() {
                         <span>Type</span><strong>🛠️ Service</strong>
                         <span>Titre</span><strong>{createForm.title || '–'}</strong>
                         <span>Catégorie</span><strong>{createForm.category || '–'}</strong>
-                        <span>Tarif</span><strong>{createForm.priceCdf && parseInt(createForm.priceCdf) > 0 ? `${new Intl.NumberFormat('fr-CD').format(parseInt(createForm.priceCdf))} FC` : 'Tarif libre'}</strong>
+                        <span>Tarif</span><strong>{createForm.priceCdf && parseInt(createForm.priceCdf) > 0 ? `${new Intl.NumberFormat('fr-CD').format(parseInt(createForm.priceCdf))} ${CURRENCY_SYMBOLS[currency] || currency}` : 'Tarif libre'}</strong>
                         <span>Ville</span><strong>{createForm.city || '–'}</strong>
                         {createForm.serviceRadiusKm && <><span>Rayon</span><strong>{createForm.serviceRadiusKm} km</strong></>}
                         <span>Médias</span><strong>{createUploadFiles.length} fichier(s)</strong>

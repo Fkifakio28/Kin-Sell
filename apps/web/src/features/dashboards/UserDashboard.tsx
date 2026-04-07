@@ -46,7 +46,7 @@ import { extractValidationCodeFromQrPayload } from '../../utils/order-validation
 import { useSocket } from '../../hooks/useSocket';
 import { useMarketPreference } from '../../app/providers/MarketPreferenceProvider';
 import { LISTING_PRODUCT_CATEGORIES, LISTING_SERVICE_CATEGORIES } from '../../shared/constants/categories';
-import { USD_TO_CDF_RATE } from '../../shared/constants/currencies';
+import { USD_TO_CDF_RATE, DEFAULT_CURRENCY_RATES } from '../../shared/constants/currencies';
 import { SK_AI_ADVICE, SK_AI_AUTO_NEGO, SK_AI_COMMANDE } from '../../shared/constants/storage-keys';
 import {
   DashboardSecurityBlock,
@@ -200,7 +200,7 @@ function nextSellerStatuses(status: OrderStatus): OrderStatus[] {
 
 export function UserDashboard() {
   const navigate = useNavigate();
-  const { t, formatMoneyFromUsdCents, formatPriceLabelFromUsdCents } = useLocaleCurrency();
+  const { t, formatMoneyFromUsdCents, formatPriceLabelFromUsdCents, currency } = useLocaleCurrency();
   const { user, isLoading, isLoggedIn, logout, refreshUser } = useAuth();
   const { on, off } = useSocket();
   const { effectiveCountry, getCountryConfig } = useMarketPreference();
@@ -402,6 +402,8 @@ export function UserDashboard() {
   const [noCategoryMatch, setNoCategoryMatch] = useState(false);
   const [showSoKinCatPopup, setShowSoKinCatPopup] = useState(false);
   const [priceCdf, setPriceCdf] = useState('');
+  const udCurrencySymbols: Record<string, string> = { CDF: 'FC', USD: '$', EUR: '€', XAF: 'XAF', AOA: 'Kz', XOF: 'XOF', GNF: 'GNF', MAD: 'MAD' };
+  const udGetRate = (c: string) => c === 'USD' ? 1 : (DEFAULT_CURRENCY_RATES[c] ?? DEFAULT_CURRENCY_RATES.CDF);
   const [publishError, setPublishError] = useState<string | null>(null);
 
   /* ── Bulk import state ── */
@@ -1300,6 +1302,7 @@ export function UserDashboard() {
       serviceDurationMin: article.serviceDurationMin !== null ? String(article.serviceDurationMin) : '',
       serviceLocation: (article.serviceLocation as '' | 'DOMICILE' | 'SUR_PLACE') ?? '',
     });
+    setPriceCdf(String(Math.round(article.priceUsdCents / 100 * udGetRate(currency))));
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -4387,9 +4390,9 @@ export function UserDashboard() {
               {publishStep === 2 && (
                 <div className="ud-publish-step-content">
                   <label className="ud-publish-field">
-                    <span className="ud-publish-field-label">{t('publish.priceLabel')} *</span>
+                    <span className="ud-publish-field-label">{t('publish.priceLabel')} ({currency}) *</span>
                     <div className="ud-publish-price-wrap">
-                      <span className="ud-publish-price-symbol">FC</span>
+                      <span className="ud-publish-price-symbol">{udCurrencySymbols[currency] || currency}</span>
                       <input
                         className="ud-input"
                         type="number"
@@ -4400,14 +4403,15 @@ export function UserDashboard() {
                         onChange={(e) => {
                           const raw = e.target.value;
                           setPriceCdf(raw);
-                          const cdf = parseInt(raw, 10) || 0;
-                          const usdCents = Math.round((cdf / USD_TO_CDF_RATE) * 100);
+                          const val = parseInt(raw, 10) || 0;
+                          const rate = udGetRate(currency);
+                          const usdCents = Math.round((val / rate) * 100);
                           setArticleForm(p => ({ ...p, priceUsdCents: String(usdCents) }));
                         }}
                       />
                     </div>
                     {priceCdf && parseInt(priceCdf, 10) > 0 && (
-                      <span className="ud-publish-field-hint">≈ {((parseInt(priceCdf, 10) || 0) / USD_TO_CDF_RATE).toFixed(2)} $ USD</span>
+                      <span className="ud-publish-field-hint">≈ {((parseInt(priceCdf, 10) || 0) / udGetRate(currency)).toFixed(2)} $ USD</span>
                     )}
                     <span className="ud-publish-field-hint">{t('publish.priceFreeHint')}</span>
                   </label>
@@ -4610,7 +4614,7 @@ export function UserDashboard() {
                       <span>{t('publish.summaryType')}</span><strong>{articleForm.type === 'PRODUIT' ? `📦 ${t('publish.typeProductLabel')}` : `🛠️ ${t('publish.typeServiceLabel')}`}</strong>
                       <span>{t('publish.summaryTitre')}</span><strong>{articleForm.title || '–'}</strong>
                       <span>{t('publish.summaryCat')}</span><strong>{articleForm.category || '–'}</strong>
-                      <span>{t('publish.summaryPrix')}</span><strong>{priceCdf && parseInt(priceCdf, 10) > 0 ? `${new Intl.NumberFormat('fr-CD').format(parseInt(priceCdf, 10))} FC` : t('publish.summaryPrixLibre')}</strong>
+                      <span>{t('publish.summaryPrix')}</span><strong>{priceCdf && parseInt(priceCdf, 10) > 0 ? `${new Intl.NumberFormat('fr-CD').format(parseInt(priceCdf, 10))} ${udCurrencySymbols[currency] || currency}` : t('publish.summaryPrixLibre')}</strong>
                       <span>{t('publish.summaryVille')}</span><strong>{articleForm.city || '–'}</strong>
                       {articleForm.type === 'PRODUIT' && articleForm.stockQuantity && (
                         <><span>{t('publish.summaryStock')}</span><strong>{articleForm.stockQuantity}</strong></>
