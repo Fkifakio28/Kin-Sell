@@ -1155,6 +1155,11 @@ function DesktopStudioComposer({
               value={scheduledAt}
               onChange={(e) => setScheduledAt(e.target.value)}
             />
+
+            <div className="sk-desktop-editor-actions">
+              <button type="button" className="sk-btn sk-btn--outline" onClick={() => setIsEditorOpen(false)} disabled={isPublishing}>Annuler</button>
+              <button type="button" className="sk-btn sk-btn--primary" onClick={() => setIsEditorOpen(false)} disabled={isPublishing}>Confirmer ✔</button>
+            </div>
           </section>
         )}
       </article>
@@ -1966,6 +1971,14 @@ function CreateAnnounceScreen({
                 disabled={isPublishing}
               >
                 Annuler
+              </button>
+              <button
+                type="button"
+                className="sk-btn sk-btn--primary"
+                onClick={confirmEditor}
+                disabled={isPublishing}
+              >
+                Confirmer ✔
               </button>
             </div>
           </article>
