@@ -7,21 +7,24 @@
  * - Collage médias Facebook-style : 1 à 5 médias, max 2 vidéos
  * - Viewer simple au clic sur un média (pas de galerie complexe)
  * - Tiroir de réponses inline sous chaque carte
- * - Mobile uniquement — desktop redirige vers accueil
+ * - Layout adaptatif mobile/tablette/desktop
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../app/providers/AuthProvider';
 import { useLocaleCurrency } from '../../app/providers/LocaleCurrencyProvider';
 import { useMarketPreference } from '../../app/providers/MarketPreferenceProvider';
 import { prepareMediaUrl } from '../../utils/media-upload';
+import { getDashboardPath } from '../../utils/role-routing';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { useSocket } from '../../hooks/useSocket';
-import { sokin as sokinApi, messaging, users as usersApi, resolveMediaUrl, type SoKinApiFeedPost, type SoKinApiComment } from '../../lib/api-client';
+import { useScrollDirection } from '../../hooks/useScrollDirection';
+import { sokin as sokinApi, messaging, users as usersApi, resolveMediaUrl, type SoKinApiFeedPost, type SoKinApiComment, type SoKinApiPost } from '../../lib/api-client';
 import { ApiError } from '../../lib/api-core';
 import { AdBanner } from '../../components/AdBanner';
 import { SeoMeta } from '../../components/SeoMeta';
+import { buildSoKinFeedItems } from './ad-cadence';
 import './sokin.css';
 
 /* ─────────────────────────────────────────────────────── */
@@ -39,6 +42,9 @@ type SoKinPostRef = {
   authorId: string;
   authorHandle: string;
 };
+
+const CREATE_DRAFT_STORAGE_KEY = 'ks-sokin-create-draft-v1';
+const OVERLAY_VISIBILITY_LOCK_MS = 180;
 
 /* ─────────────────────────────────────────────────────── */
 /* HELPERS                                                  */
@@ -92,14 +98,6 @@ function categorizeMedia(urls: string[]): MediaItem[] {
 function IconMessage() {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-    </svg>
-  );
-}
-
-function IconReply() {
-  return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
     </svg>
   );
@@ -278,6 +276,9 @@ function CommentsDrawer({
 }) {
   const [showEmoji, setShowEmoji] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const orderedComments = [...comments].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -288,7 +289,14 @@ function CommentsDrawer({
   const title = post ? `${post.comments ?? 0} réponse${(post.comments ?? 0) > 1 ? 's' : ''}` : 'Commentaires';
 
   return (
-    <aside className={`sk-comments-drawer${open ? ' sk-comments-drawer--open' : ''}`} aria-hidden={!open}>
+    <>
+      <div
+        className={`sk-comments-backdrop${open ? ' sk-comments-backdrop--open' : ''}`}
+        onClick={onClose}
+        aria-hidden={!open}
+      />
+
+      <aside className={`sk-comments-drawer${open ? ' sk-comments-drawer--open' : ''}`} aria-hidden={!open}>
       <header className="sk-comments-head">
         <strong className="sk-comments-title">{title}</strong>
         <button type="button" className="sk-comments-close" onClick={onClose} aria-label="Fermer les commentaires">-</button>
@@ -300,12 +308,12 @@ function CommentsDrawer({
         ) : comments.length === 0 ? (
           <p className="sk-comments-empty">Aucun commentaire pour le moment.</p>
         ) : (
-          comments.map((comment) => {
+          orderedComments.map((comment) => {
             const name = comment.author.profile?.displayName ?? 'Utilisateur';
             const idLabel = comment.author.profile?.username ? `@${comment.author.profile.username.replace('@', '')}` : comment.author.id;
             const avatar = comment.author.profile?.avatarUrl;
             return (
-              <article key={comment.id} className="sk-comment-item" onClick={() => onPrepareReply(comment)}>
+              <article key={comment.id} className="sk-comment-item">
                 <div className="sk-comment-avatar-wrap">
                   {avatar ? (
                     <img src={resolveMediaUrl(avatar)} alt={name} className="sk-comment-avatar" />
@@ -326,7 +334,13 @@ function CommentsDrawer({
                   >
                     {idLabel}
                   </button>
-                  <p className="sk-comment-content">{comment.content}</p>
+                  <p
+                    className="sk-comment-content sk-comment-content--clickable"
+                    onClick={() => onPrepareReply(comment)}
+                    title="Répondre à ce commentaire"
+                  >
+                    {comment.content}
+                  </p>
                 </div>
               </article>
             );
@@ -394,7 +408,8 @@ function CommentsDrawer({
           </button>
         </div>
       </footer>
-    </aside>
+      </aside>
+    </>
   );
 }
 
@@ -460,10 +475,7 @@ function AnnounceCard({
           <div className="sk-card-author-info">
             <strong className="sk-card-author-name">{authorName}</strong>
             <span className="sk-card-author-meta">
-              {cleanHandle && (
-                <span className="sk-card-author-handle">@{cleanHandle}</span>
-              )}
-              {authorCity && <span className="sk-card-author-city"> · {authorCity}</span>}
+              <span className="sk-card-author-handle">ID: {cleanHandle || post.author.id}</span>
               <span className="sk-card-author-time"> · {relTime(post.createdAt, t)}</span>
             </span>
           </div>
@@ -482,7 +494,10 @@ function AnnounceCard({
           {isContacting ? (
             <span style={{ fontSize: 12, lineHeight: 1 }}>⏳</span>
           ) : (
-            <IconMessage />
+            <>
+              <IconMessage />
+              <span>Contacter</span>
+            </>
           )}
         </button>
       </header>
@@ -501,16 +516,11 @@ function AnnounceCard({
       <footer className="sk-card-footer">
         <button
           type="button"
-          className="sk-card-reply-btn"
+          className="sk-card-replies-link"
           onClick={onOpenComments}
           aria-expanded={isCommentsOpen}
         >
-          <IconReply />
-          <span>
-            {replyCount > 0
-              ? `${replyCount} réponse${replyCount > 1 ? 's' : ''}`
-              : 'Répondre'}
-          </span>
+          {replyCount} réponse{replyCount > 1 ? 's' : ''}
         </button>
       </footer>
     </article>
@@ -524,16 +534,12 @@ function AnnounceCard({
 function ComposeZone({
   avatarUrl,
   displayName,
-  isLoggedIn,
   onCreatePost,
 }: {
   avatarUrl: string;
   displayName: string;
-  isLoggedIn: boolean;
   onCreatePost: () => void;
 }) {
-  const navigate = useNavigate();
-
   return (
     <section className="sk-compose">
       <div className="sk-compose-inner">
@@ -551,14 +557,9 @@ function ComposeZone({
         <button
           type="button"
           className="sk-compose-trigger"
-          onClick={() => {
-            if (!isLoggedIn) navigate('/login');
-            else onCreatePost();
-          }}
+          onClick={onCreatePost}
         >
-          {isLoggedIn
-            ? `Publiez une annonce, ${displayName}…`
-            : 'Connectez-vous pour publier…'}
+          {`Publiez une annonce, ${displayName}…`}
         </button>
       </div>
     </section>
@@ -604,6 +605,7 @@ function AnnouncesFeed({
   onMediaClick,
   onContact,
   contactingPostId,
+  immersiveDesktop = false,
 }: {
   posts: SoKinApiFeedPost[];
   hasMore: boolean;
@@ -616,7 +618,16 @@ function AnnouncesFeed({
   onMediaClick: (item: MediaItem) => void;
   onContact: (post: SoKinApiFeedPost) => void;
   contactingPostId: string | null;
+  immersiveDesktop?: boolean;
 }) {
+  const feedItems = useMemo(() => buildSoKinFeedItems(posts, 4), [posts]);
+  const [resolvedAdsBySlot, setResolvedAdsBySlot] = useState<Record<string, string | null>>({});
+
+  const getPreviousAdId = useCallback((sequence: number) => {
+    if (sequence <= 1) return null;
+    return resolvedAdsBySlot[`sokin-slot-${sequence - 1}`] ?? null;
+  }, [resolvedAdsBySlot]);
+
   if (loading && posts.length === 0) {
     return <FeedSkeletons />;
   }
@@ -636,29 +647,57 @@ function AnnouncesFeed({
   }
 
   const items: React.ReactNode[] = [];
-  posts.forEach((post, idx) => {
+  feedItems.forEach((entry) => {
+    if (entry.type === 'post') {
+      const post = entry.post;
+      const card = (
+        <AnnounceCard
+          key={post.id}
+          post={post}
+          t={t}
+          isLoggedIn={isLoggedIn}
+          onMediaClick={onMediaClick}
+          isCommentsOpen={openCommentsPostId === post.id}
+          onOpenComments={() => onOpenComments(post.id)}
+          onContact={() => onContact(post)}
+          isContacting={contactingPostId === post.id}
+        />
+      );
+
+      items.push(
+        immersiveDesktop ? (
+          <div key={`slide-${post.id}`} className="sk-feed-slide">
+            {card}
+          </div>
+        ) : (
+          card
+        )
+      );
+      return;
+    }
+
+    const previousAdId = getPreviousAdId(entry.slot.sequence) ?? undefined;
     items.push(
-      <AnnounceCard
-        key={post.id}
-        post={post}
-        t={t}
-        isLoggedIn={isLoggedIn}
-        onMediaClick={onMediaClick}
-        isCommentsOpen={openCommentsPostId === post.id}
-        onOpenComments={() => onOpenComments(post.id)}
-        onContact={() => onContact(post)}
-        isContacting={contactingPostId === post.id}
+      <AdBanner
+        key={entry.slot.slotKey}
+        page="sokin"
+        variant="slim"
+        hideWhenEmpty
+        slotKey={entry.slot.slotKey}
+        excludeAdId={previousAdId}
+        onAdResolved={(adId) => {
+          setResolvedAdsBySlot((prev) => {
+            if (prev[entry.slot.slotKey] === adId) return prev;
+            return { ...prev, [entry.slot.slotKey]: adId };
+          });
+        }}
+        className={immersiveDesktop ? 'sk-feed-inline-ad sk-feed-inline-ad--immersive' : 'sk-feed-inline-ad'}
       />
     );
-    if ((idx + 1) % 4 === 0) {
-      items.push(
-        <AdBanner key={`ad-${idx}`} page="sokin" variant="slim" hideWhenEmpty />
-      );
-    }
   });
 
   return (
-    <section className="sk-feed" aria-label="Fil d'annonces So-Kin">
+    <section className={`sk-feed${immersiveDesktop ? ' sk-feed--immersive' : ''}`} aria-label="Fil d'annonces So-Kin">
       {items}
       {hasMore && (
         <div ref={sentinelRef} className="sk-sentinel" aria-hidden="true" />
@@ -679,6 +718,10 @@ function CreateAnnounceScreen({
   onPublish,
   isPublishing,
   publishError,
+  avatarUrl,
+  displayName,
+  userIdentifier,
+  cityLabel,
 }: {
   onClose: () => void;
   onPublish: (data: {
@@ -687,18 +730,34 @@ function CreateAnnounceScreen({
   }) => void;
   isPublishing: boolean;
   publishError?: string | null;
+  avatarUrl: string;
+  displayName: string;
+  userIdentifier: string;
+  cityLabel: string;
 }) {
-  const [text, setText] = useState('');
+  const [text, setText] = useState(() => {
+    try {
+      const raw = localStorage.getItem(CREATE_DRAFT_STORAGE_KEY);
+      if (!raw) return '';
+      const parsed = JSON.parse(raw) as { text?: unknown };
+      return typeof parsed.text === 'string' ? parsed.text.slice(0, 500) : '';
+    } catch {
+      return '';
+    }
+  });
   const [mediaFiles, setMediaFiles] = useState<File[]>([]);
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [localError, setLocalError] = useState<string | null>(null);
   const [mode, setMode] = useState<'edit' | 'preview'>('edit');
+  const [showRestoreInfo, setShowRestoreInfo] = useState(() => text.trim().length > 0);
   const fileRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const canPreview = text.trim().length > 0 || mediaFiles.length > 0;
   const canPublish = text.trim().length > 0 && mediaFiles.length >= 1;
   const imageCount = mediaFiles.filter((f) => !f.type.startsWith('video/')).length;
   const videoCount = mediaFiles.filter((f) => f.type.startsWith('video/')).length;
+  const hasUnsavedInput = text.trim().length > 0 || mediaFiles.length > 0;
 
   const validateMediaSelection = (files: File[]) => {
     if (files.length < 1) return 'Ajoutez au moins 1 média à votre annonce.';
@@ -722,6 +781,44 @@ function CreateAnnounceScreen({
       document.body.style.overflow = '';
     };
   }, []);
+
+  // Autosave minimal du brouillon local (texte)
+  useEffect(() => {
+    try {
+      if (text.trim().length === 0) {
+        localStorage.removeItem(CREATE_DRAFT_STORAGE_KEY);
+        return;
+      }
+      localStorage.setItem(
+        CREATE_DRAFT_STORAGE_KEY,
+        JSON.stringify({ text, updatedAt: Date.now() })
+      );
+    } catch {
+      // Ignorer les erreurs storage (quota / private mode)
+    }
+  }, [text]);
+
+  // Garde-fou abandon navigateur quand le draft est en cours
+  useEffect(() => {
+    if (!hasUnsavedInput) return;
+
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [hasUnsavedInput]);
+
+  const requestClose = useCallback(() => {
+    if (isPublishing) return;
+    if (hasUnsavedInput) {
+      const confirmed = window.confirm('Vous avez un brouillon en cours. Quitter sans publier ?');
+      if (!confirmed) return;
+    }
+    onClose();
+  }, [hasUnsavedInput, isPublishing, onClose]);
 
   const addFiles = (fileList: FileList) => {
     setLocalError(null);
@@ -796,19 +893,41 @@ function CreateAnnounceScreen({
   return (
     <section className="sk-create-screen" role="dialog" aria-modal="true" aria-label="Créer une annonce">
       <header className="sk-create-screen-head">
-        <button type="button" className="sk-btn sk-btn--outline" onClick={onClose} disabled={isPublishing}>Retour</button>
-        <strong>Nouvelle annonce</strong>
-        <button
-          type="button"
-          className="sk-btn sk-btn--sm"
-          onClick={() => setMode((prev) => (prev === 'edit' ? 'preview' : 'edit'))}
-          disabled={!canPreview || isPublishing}
-        >
-          {mode === 'edit' ? 'Prévisualiser' : 'Modifier'}
-        </button>
+        {mode === 'edit' ? (
+          <>
+            <button type="button" className="sk-btn sk-btn--outline" onClick={requestClose} disabled={isPublishing}>Retour</button>
+            <div className="sk-studio-head-title">
+              <strong>Studio So-Kin</strong>
+              <span>Créer</span>
+            </div>
+            <div className="sk-studio-head-spacer" aria-hidden="true" />
+          </>
+        ) : (
+          <>
+            <button type="button" className="sk-btn sk-btn--outline" onClick={() => setMode('edit')} disabled={isPublishing}>Éditer</button>
+            <strong>Prévisualisation</strong>
+            <button type="button" className="sk-btn sk-btn--primary" onClick={submit} disabled={!canPublish || isPublishing}>
+              {isPublishing ? 'Publication…' : 'Publier'}
+            </button>
+          </>
+        )}
       </header>
 
       <div className="sk-create-screen-body">
+        {showRestoreInfo && (
+          <div className="sk-modal-info" role="status">
+            Brouillon restauré automatiquement.
+            <button
+              type="button"
+              className="sk-modal-info-dismiss"
+              onClick={() => setShowRestoreInfo(false)}
+              aria-label="Masquer l'information"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
         {(publishError || localError) && (
           <div className="sk-modal-error" role="alert">
             ⚠️ {publishError ?? localError}
@@ -817,19 +936,69 @@ function CreateAnnounceScreen({
 
         {mode === 'edit' ? (
           <>
-            <textarea
-              className="sk-modal-textarea"
-              placeholder="Décrivez votre annonce (produit, prix, état, livraison...)"
-              value={text}
-              onChange={(e) => {
-                setText(e.target.value);
-                setLocalError(null);
-              }}
-              rows={6}
-              maxLength={500}
-              autoFocus
-            />
-            <span className="sk-modal-char-count">{text.length}/500</span>
+            <article className="sk-studio-card" aria-label="Zone de création d'annonce">
+              <header className="sk-studio-profile">
+                {avatarUrl ? (
+                  <img src={resolveMediaUrl(avatarUrl)} alt={displayName} className="sk-studio-avatar" />
+                ) : (
+                  <span className="sk-studio-avatar sk-studio-avatar--empty" aria-hidden="true">{(displayName.charAt(0) || '?').toUpperCase()}</span>
+                )}
+                <div className="sk-studio-profile-meta">
+                  <strong>{displayName}</strong>
+                  <span>{userIdentifier}</span>
+                </div>
+              </header>
+
+              <p className="sk-studio-context">Feed public {cityLabel}</p>
+              <p className="sk-studio-question">Quoi de neuf ?</p>
+
+              <div className="sk-studio-text-wrap">
+                <textarea
+                  ref={textareaRef}
+                  className="sk-modal-textarea sk-modal-textarea--studio"
+                  placeholder="Écrire une annonce claire et utile…"
+                  value={text}
+                  onChange={(e) => {
+                    setText(e.target.value);
+                    setLocalError(null);
+                  }}
+                  rows={7}
+                  maxLength={500}
+                  autoFocus
+                />
+                <button
+                  type="button"
+                  className="sk-studio-media-btn"
+                  onClick={() => fileRef.current?.click()}
+                  disabled={mediaFiles.length >= 5 || isPublishing}
+                  aria-label="Ajouter un média"
+                  title="Ajouter un média"
+                >
+                  🖼️
+                </button>
+              </div>
+
+              <span className="sk-modal-char-count">{text.length}/500</span>
+
+              <div className="sk-studio-actions">
+                <button
+                  type="button"
+                  className="sk-btn sk-btn--outline"
+                  onClick={() => textareaRef.current?.focus()}
+                  disabled={isPublishing}
+                >
+                  Éditer
+                </button>
+                <button
+                  type="button"
+                  className="sk-btn sk-btn--primary"
+                  onClick={openPreview}
+                  disabled={!canPreview || isPublishing}
+                >
+                  Envoyer
+                </button>
+              </div>
+            </article>
 
             {mediaFiles.length > 0 && (
               <div className="sk-modal-previews">
@@ -854,14 +1023,7 @@ function CreateAnnounceScreen({
             )}
 
             <div className="sk-modal-media-row">
-              <button
-                type="button"
-                className="sk-btn sk-btn--sm"
-                onClick={() => fileRef.current?.click()}
-                disabled={mediaFiles.length >= 5 || isPublishing}
-              >
-                🖼️ Ajouter médias ({mediaFiles.length}/5)
-              </button>
+              <span className="sk-modal-media-hint">Médias: {mediaFiles.length}/5</span>
               <span className="sk-modal-media-hint">Jusqu'à 5 médias, dont 2 vidéos max</span>
               <span className="sk-media-counter" aria-live="polite">
                 {imageCount} image{imageCount > 1 ? 's' : ''} / {videoCount} vidéo{videoCount > 1 ? 's' : ''}
@@ -880,7 +1042,18 @@ function CreateAnnounceScreen({
           </>
         ) : (
           <article className="sk-create-preview-card" aria-label="Prévisualisation annonce">
-            <h3 className="sk-create-preview-title">Aperçu avant publication</h3>
+            <header className="sk-studio-profile">
+              {avatarUrl ? (
+                <img src={resolveMediaUrl(avatarUrl)} alt={displayName} className="sk-studio-avatar" />
+              ) : (
+                <span className="sk-studio-avatar sk-studio-avatar--empty" aria-hidden="true">{(displayName.charAt(0) || '?').toUpperCase()}</span>
+              )}
+              <div className="sk-studio-profile-meta">
+                <strong>{displayName}</strong>
+                <span>{userIdentifier}</span>
+              </div>
+            </header>
+            <h3 className="sk-create-preview-title">Annonce prête à publier</h3>
             <p className="sk-create-preview-text">{text.trim() || 'Aucun texte saisi.'}</p>
             {mediaFiles.length > 0 ? (
               <div className="sk-modal-previews">
@@ -900,17 +1073,6 @@ function CreateAnnounceScreen({
           </article>
         )}
       </div>
-
-      <footer className="sk-create-screen-foot">
-        {mode === 'preview' ? (
-          <button type="button" className="sk-btn sk-btn--outline" onClick={() => setMode('edit')} disabled={isPublishing}>Retour édition</button>
-        ) : (
-          <button type="button" className="sk-btn sk-btn--outline" onClick={openPreview} disabled={!canPreview || isPublishing}>Prévisualiser</button>
-        )}
-        <button type="button" className="sk-btn sk-btn--primary" onClick={submit} disabled={!canPublish || isPublishing}>
-          {isPublishing ? '⏳ Publication…' : 'Publier l’annonce'}
-        </button>
-      </footer>
     </section>
   );
 }
@@ -928,6 +1090,8 @@ export function SoKinPage() {
   const isMobile = useIsMobile(1023);
 
   // ── State — TOUS les hooks avant tout return conditionnel ──
+  const scrollDir = useScrollDirection();
+
   const [posts, setPosts] = useState<SoKinApiFeedPost[]>([]);
   const [loadingFeed, setLoadingFeed] = useState(true);
   const [hasMore, setHasMore] = useState(true);
@@ -938,6 +1102,10 @@ export function SoKinPage() {
   const [showCreateScreen, setShowCreateScreen] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
+  const [overlayUiLock, setOverlayUiLock] = useState(false);
+  const [myPublishedPosts, setMyPublishedPosts] = useState<SoKinApiPost[]>([]);
+  const [loadingMyPublishedPosts, setLoadingMyPublishedPosts] = useState(false);
+  const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
 
   // Viewer (géré au niveau page : un seul à la fois)
   const [viewerItem, setViewerItem] = useState<MediaItem | null>(null);
@@ -960,11 +1128,7 @@ export function SoKinPage() {
   const country = effectiveCountry;
   const avatarUrl = user?.profile?.avatarUrl ?? '';
   const displayName = user?.profile?.displayName ?? 'Utilisateur';
-
-  // ── Redirect desktop (effect, pas de hook conditionnel) ──
-  useEffect(() => {
-    if (!isMobile) navigate('/', { replace: true });
-  }, [isMobile, navigate]);
+  const dashboardPath = getDashboardPath(user?.role);
 
   // ── Chargement du fil ──
   const loadFeed = useCallback(
@@ -1005,11 +1169,31 @@ export function SoKinPage() {
     [hasMore, city, country]
   );
 
+  const loadMyPublishedPosts = useCallback(async () => {
+    if (!isLoggedIn) {
+      setMyPublishedPosts([]);
+      return;
+    }
+    setLoadingMyPublishedPosts(true);
+    try {
+      const data = await sokinApi.myPosts();
+      setMyPublishedPosts((data.posts ?? []).filter((p) => p.status === 'ACTIVE'));
+    } catch {
+      setMyPublishedPosts([]);
+    } finally {
+      setLoadingMyPublishedPosts(false);
+    }
+  }, [isLoggedIn]);
+
   // Chargement initial
   useEffect(() => {
     void loadFeed(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [city, country]);
+
+  useEffect(() => {
+    void loadMyPublishedPosts();
+  }, [loadMyPublishedPosts]);
 
   // Scroll infini
   useEffect(() => {
@@ -1047,20 +1231,22 @@ export function SoKinPage() {
     }
   }, []);
 
-  const handleOpenComments = useCallback((postId: string) => {
-    setOpenCommentsPostId(postId);
-    setReplyToComment(null);
-    setCommentProfileState({ status: 'idle', profile: null, message: null });
-    setCommentDraft('');
-    void loadComments(postId);
-  }, [loadComments]);
-
-  const handleCloseComments = useCallback(() => {
-    setOpenCommentsPostId(null);
+  const clearCommentsComposer = useCallback(() => {
     setReplyToComment(null);
     setCommentProfileState({ status: 'idle', profile: null, message: null });
     setCommentDraft('');
   }, []);
+
+  const handleOpenComments = useCallback((postId: string) => {
+    setOpenCommentsPostId(postId);
+    clearCommentsComposer();
+    void loadComments(postId);
+  }, [clearCommentsComposer, loadComments]);
+
+  const handleCloseComments = useCallback(() => {
+    setOpenCommentsPostId(null);
+    clearCommentsComposer();
+  }, [clearCommentsComposer]);
 
   const handlePrepareReply = useCallback((comment: SoKinApiComment) => {
     const targetName = comment.author.profile?.displayName ?? 'Utilisateur';
@@ -1192,10 +1378,12 @@ export function SoKinPage() {
     setContactingPostId(post.id);
     try {
       const { conversation } = await messaging.createDM(post.author.id);
+      const mainMedia = post.mediaUrls?.[0] ? resolveMediaUrl(post.mediaUrls[0]) : null;
+      const textPreview = (post.text ?? '').replace(/\s+/g, ' ').trim().slice(0, 120);
       const postRef: SoKinPostRef = {
         id: post.id,
-        text: (post.text ?? '').slice(0, 120),
-        mediaUrl: post.mediaUrls?.[0] ?? null,
+        text: textPreview,
+        mediaUrl: mainMedia,
         authorName: post.author.profile?.displayName ?? 'Utilisateur',
         authorId: post.author.id,
         authorHandle: post.author.profile?.username ?? post.author.id,
@@ -1207,6 +1395,67 @@ export function SoKinPage() {
       setContactingPostId(null);
     }
   }, [isLoggedIn, user?.id, contactingPostId, navigate]);
+
+  const handleOpenCreate = useCallback(() => {
+    if (!isLoggedIn) {
+      navigate('/login');
+      return;
+    }
+    setShowCreateScreen(true);
+  }, [isLoggedIn, navigate]);
+
+  const handleCloseCreate = useCallback(() => {
+    setShowCreateScreen(false);
+  }, []);
+
+  const openAccountArticles = useCallback(() => {
+    try {
+      sessionStorage.setItem('ud-section', 'articles');
+    } catch {
+      // no-op
+    }
+    navigate(dashboardPath || '/account');
+  }, [dashboardPath, navigate]);
+
+  const handleOpenPublishedPost = useCallback(async (postId: string) => {
+    try {
+      const found = posts.find((item) => item.id === postId);
+      if (found) {
+        setPosts((prev) => [found, ...prev.filter((item) => item.id !== found.id)]);
+        return;
+      }
+      const payload = await sokinApi.publicPost(postId);
+      if (payload?.post) {
+        setPosts((prev) => [payload.post, ...prev.filter((item) => item.id !== payload.post.id)]);
+      }
+    } catch {
+      openAccountArticles();
+    }
+  }, [posts, openAccountArticles]);
+
+  const handleDeletePublishedPost = useCallback(async (postId: string) => {
+    if (deletingPostId) return;
+    const confirmed = window.confirm('Supprimer cette annonce publiée ?');
+    if (!confirmed) return;
+    setDeletingPostId(postId);
+    try {
+      await sokinApi.deletePost(postId);
+      setMyPublishedPosts((prev) => prev.filter((item) => item.id !== postId));
+      setPosts((prev) => prev.filter((item) => item.id !== postId));
+    } finally {
+      setDeletingPostId(null);
+    }
+  }, [deletingPostId]);
+
+  const handleEditPublishedPost = useCallback((postId: string) => {
+    try {
+      sessionStorage.setItem('ud-section', 'articles');
+      sessionStorage.setItem('ud-edit-sokin-post-id', postId);
+    } catch {
+      // no-op
+    }
+    navigate(dashboardPath || '/account');
+  }, [dashboardPath, navigate]);
 
   const handlePublish = async (data: { text: string; mediaFiles: File[] }) => {
     if (isPublishing || !isLoggedIn) return;
@@ -1230,6 +1479,12 @@ export function SoKinPage() {
         throw new Error('Publication non confirmée par le serveur.');
       }
 
+      try {
+        localStorage.removeItem(CREATE_DRAFT_STORAGE_KEY);
+      } catch {
+        // Ignore storage failures
+      }
+
       setShowCreateScreen(false);
 
       try {
@@ -1247,8 +1502,19 @@ export function SoKinPage() {
     }
   };
 
-  // Desktop : rien à rendre (la redirection est dans l'effect ci-dessus)
-  if (!isMobile) return null;
+  // Anti-flicker overlays: petit verrou de visibilité après transitions d'ouverture/fermeture
+  useEffect(() => {
+    setOverlayUiLock(true);
+    const timer = window.setTimeout(() => setOverlayUiLock(false), OVERLAY_VISIBILITY_LOCK_MS);
+    return () => window.clearTimeout(timer);
+  }, [showCreateScreen, openCommentsPostId, viewerItem]);
+
+  // ── Visibility des barres (top bar + FAB) ──
+  const hasActiveOverlay = showCreateScreen || Boolean(openCommentsPostId) || Boolean(viewerItem);
+  const barsVisible =
+    hasActiveOverlay ||
+    overlayUiLock ||
+    scrollDir === 'up';
 
   return (
     <>
@@ -1258,48 +1524,191 @@ export function SoKinPage() {
         canonical="https://kin-sell.com/sokin"
       />
 
-      <div className="sk-page">
-        {/* ── Barre supérieure ── */}
-        <header className="sk-topbar">
+      {isMobile ? (
+        <>
+          <div className={`sk-page${barsVisible ? '' : ' sk-page--expanded'}`}>
+            {/* ── Barre supérieure ── */}
+            <header className={`sk-topbar${barsVisible ? '' : ' sk-topbar--hidden'}`}>
+              <button
+                type="button"
+                className="sk-topbar-back"
+                onClick={() => navigate('/')}
+                aria-label="Retour à l'accueil"
+              >
+                <IconBack />
+              </button>
+              <div className="sk-topbar-center">
+                <span className="sk-topbar-title">So-Kin</span>
+                <span className="sk-topbar-sub">Annonces</span>
+              </div>
+              <div className="sk-topbar-end" aria-hidden="true" />
+            </header>
+
+            <ComposeZone
+              avatarUrl={avatarUrl}
+              displayName={displayName}
+              onCreatePost={handleOpenCreate}
+            />
+
+            <AnnouncesFeed
+              posts={posts}
+              hasMore={hasMore}
+              loading={loadingFeed}
+              sentinelRef={sentinelRef}
+              t={t}
+              isLoggedIn={isLoggedIn}
+              openCommentsPostId={openCommentsPostId}
+              onOpenComments={handleOpenComments}
+              onMediaClick={(item) => setViewerItem(item)}
+              onContact={handleContact}
+              contactingPostId={contactingPostId}
+            />
+          </div>
+
           <button
             type="button"
-            className="sk-topbar-back"
-            onClick={() => navigate('/')}
-            aria-label="Retour à l'accueil"
+            className={`sk-floating-create${barsVisible ? '' : ' sk-floating-create--hidden'}`}
+            aria-label="Créer une annonce So-Kin"
+            onClick={handleOpenCreate}
           >
-            <IconBack />
+            <span>+</span>
           </button>
-          <div className="sk-topbar-center">
-            <span className="sk-topbar-title">So-Kin</span>
-            <span className="sk-topbar-sub">Annonces</span>
-          </div>
-          {/* Espace symétrique droit (à utiliser pour filter/search futur) */}
-          <div className="sk-topbar-end" aria-hidden="true" />
-        </header>
+        </>
+      ) : (
+        <div className="sk-desktop">
+          <aside className="sk-desktop-left" aria-label="Navigation So-Kin desktop">
+            <div className="sk-desktop-brand">
+              <h1>So-Kin</h1>
+              <p>Annonces uniquement</p>
+            </div>
 
-        {/* ── Zone composer ── */}
-        <ComposeZone
-          avatarUrl={avatarUrl}
-          displayName={displayName}
-          isLoggedIn={isLoggedIn}
-          onCreatePost={() => setShowCreateScreen(true)}
-        />
+            <nav className="sk-desktop-nav">
+              <button type="button" className="sk-desktop-nav-item" onClick={() => navigate('/')}>🏠 Accueil</button>
+              <button type="button" className="sk-desktop-nav-item sk-desktop-nav-item--active" onClick={() => navigate('/sokin')}>📱 Accueil So-Kin</button>
+              <button type="button" className="sk-desktop-nav-item" onClick={() => navigate('/explorer/public-profiles')}>👥 Utilisateurs publics</button>
+              <button type="button" className="sk-desktop-nav-item" onClick={() => navigate('/explorer/shops-online')}>🏪 Marché public</button>
+              <button type="button" className="sk-desktop-nav-item" onClick={() => navigate('/explorer')}>Accéder à Explorer</button>
+            </nav>
 
-        {/* ── Fil d'annonces ── */}
-        <AnnouncesFeed
-          posts={posts}
-          hasMore={hasMore}
-          loading={loadingFeed}
-          sentinelRef={sentinelRef}
-          t={t}
-          isLoggedIn={isLoggedIn}
-          openCommentsPostId={openCommentsPostId}
-          onOpenComments={handleOpenComments}
-          onMediaClick={(item) => setViewerItem(item)}
-          onContact={handleContact}
-          contactingPostId={contactingPostId}
-        />
-      </div>
+            <section className="sk-desktop-left-ads" aria-label="Publicités So-Kin desktop">
+              <h3>Publicités</h3>
+              <div className="sk-desktop-left-ad-slot">
+                <AdBanner page="sokin" variant="slim" hideWhenEmpty />
+              </div>
+              <div className="sk-desktop-left-ad-slot">
+                <AdBanner page="sokin" variant="slim" hideWhenEmpty />
+              </div>
+            </section>
+
+            <button type="button" className="sk-desktop-primary" onClick={handleOpenCreate}>Créer une annonce</button>
+          </aside>
+
+          <main className="sk-desktop-center" aria-label="Contenu principal So-Kin desktop">
+            <header className="sk-desktop-center-head">
+              <div className="sk-desktop-center-title-wrap">
+                <h2>SO-KIN</h2>
+                <p>{city}, {country}</p>
+              </div>
+
+              <div className="sk-desktop-center-search-wrap">
+                <input
+                  type="search"
+                  className="sk-desktop-center-search"
+                  placeholder="Rechercher un post, un profil, une opportunité…"
+                  aria-label="Recherche So-Kin"
+                />
+              </div>
+
+              <div className="sk-desktop-center-actions" aria-label="Actions header So-Kin">
+                <button type="button" className="sk-desktop-head-icon" title="Notifications" aria-label="Notifications" onClick={() => navigate('/account')}>🔔</button>
+                <button type="button" className="sk-desktop-head-icon" title="Aide" aria-label="Aide" onClick={() => navigate('/guide')}>?</button>
+                <button type="button" className="sk-desktop-head-icon" title="Messagerie" aria-label="Messagerie" onClick={() => navigate('/messaging')}>💬</button>
+                <button type="button" className="sk-desktop-head-icon" title="Panier" aria-label="Panier" onClick={() => navigate('/cart')}>🛒</button>
+                <button type="button" className="sk-desktop-head-account" onClick={() => navigate('/account')}>Mon compte</button>
+              </div>
+            </header>
+
+            <ComposeZone
+              avatarUrl={avatarUrl}
+              displayName={displayName}
+              onCreatePost={handleOpenCreate}
+            />
+
+            <section className="sk-desktop-announces-block" aria-label="Bloc principal des annonces">
+              <header className="sk-desktop-announces-head">
+                <h3>Annonces</h3>
+                <div className="sk-desktop-announces-head-empty" aria-hidden="true" />
+              </header>
+
+              <AnnouncesFeed
+                posts={posts}
+                hasMore={hasMore}
+                loading={loadingFeed}
+                sentinelRef={sentinelRef}
+                t={t}
+                isLoggedIn={isLoggedIn}
+                openCommentsPostId={openCommentsPostId}
+                onOpenComments={handleOpenComments}
+                onMediaClick={(item) => setViewerItem(item)}
+                onContact={handleContact}
+                contactingPostId={contactingPostId}
+                immersiveDesktop
+              />
+            </section>
+          </main>
+
+          <aside className="sk-desktop-right" aria-label="Actions et contenu utilisateur">
+            <section className="sk-desktop-panel sk-desktop-commercial" aria-label="Bloc commercial Kin-Sell">
+              <span className="sk-desktop-commercial-icon">📦</span>
+              <p className="sk-desktop-commercial-brand">✦ Kin-Sell</p>
+              <p className="sk-desktop-commercial-line">Publiez vos articles</p>
+              <p className="sk-desktop-commercial-line">En 3 étapes simples</p>
+              <p className="sk-desktop-commercial-line">Photos, prix, description</p>
+              <p className="sk-desktop-commercial-line">Votre vitrine en 5 min</p>
+              <button type="button" className="sk-desktop-primary" onClick={openAccountArticles}>publier maintenant</button>
+            </section>
+
+            <section className="sk-desktop-panel" aria-label="Liste des annonces publiées">
+              <h3>Mes annonces publiées</h3>
+
+              {loadingMyPublishedPosts ? (
+                <p className="sk-desktop-user-meta">Chargement…</p>
+              ) : myPublishedPosts.length === 0 ? (
+                <p className="sk-desktop-user-meta">Aucune annonce publiée.</p>
+              ) : (
+                <div className="sk-desktop-published-list">
+                  {myPublishedPosts.slice(0, 8).map((post) => (
+                    <article key={post.id} className="sk-desktop-published-item">
+                      <button
+                        type="button"
+                        className="sk-desktop-published-main"
+                        onClick={() => void handleOpenPublishedPost(post.id)}
+                        title="Voir l'annonce"
+                      >
+                        <strong>{post.text?.slice(0, 46) || 'Annonce sans texte'}</strong>
+                        <span>ID: {post.id.slice(0, 8)} · {new Date(post.createdAt).toLocaleDateString('fr-FR')}</span>
+                      </button>
+                      <div className="sk-desktop-published-actions">
+                        <button type="button" className="sk-desktop-outline" onClick={() => handleEditPublishedPost(post.id)}>Modifier</button>
+                        <button
+                          type="button"
+                          className="sk-desktop-outline sk-desktop-outline--danger"
+                          onClick={() => void handleDeletePublishedPost(post.id)}
+                          disabled={deletingPostId === post.id}
+                        >
+                          {deletingPostId === post.id ? 'Suppression…' : 'Supprimer'}
+                        </button>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+
+              <button type="button" className="sk-desktop-outline" onClick={openAccountArticles}>Gérer dans Articles</button>
+            </section>
+          </aside>
+        </div>
+      )}
 
       <CommentsDrawer
         post={posts.find((p) => p.id === openCommentsPostId) ?? null}
@@ -1319,17 +1728,19 @@ export function SoKinPage() {
         onCloseProfileState={() => setCommentProfileState({ status: 'idle', profile: null, message: null })}
       />
 
-      {/* ── Modal publication ── */}
       {showCreateScreen && (
         <CreateAnnounceScreen
-          onClose={() => setShowCreateScreen(false)}
+          onClose={handleCloseCreate}
           onPublish={handlePublish}
           isPublishing={isPublishing}
           publishError={publishError}
+          avatarUrl={avatarUrl}
+          displayName={displayName}
+          userIdentifier={user?.profile?.username ? `@${user.profile.username.replace('@', '')}` : `ID ${user?.id?.slice(0, 8) ?? 'invité'}`}
+          cityLabel={city}
         />
       )}
 
-      {/* ── Viewer média simple ── */}
       {viewerItem && (
         <MediaViewer item={viewerItem} onClose={() => setViewerItem(null)} />
       )}

@@ -16,8 +16,13 @@ export type AdvertisementItem = {
 };
 
 export const adsApi = {
-  getBanner: (page: string) =>
-    request<{ ad: AdvertisementItem | null }>(`/ads/banner?page=${encodeURIComponent(page)}`),
+  getBanner: (page: string, options?: { excludeAdId?: string; slotKey?: string }) => {
+    const query = new URLSearchParams();
+    query.set('page', page);
+    if (options?.excludeAdId) query.set('excludeAdId', options.excludeAdId);
+    if (options?.slotKey) query.set('slotKey', options.slotKey);
+    return request<{ ad: AdvertisementItem | null }>(`/ads/banner?${query.toString()}`);
+  },
   recordImpression: (id: string) =>
     request<{ ok: boolean }>(`/ads/${encodeURIComponent(id)}/impression`, { method: 'POST' }),
   recordClick: (id: string) =>

@@ -60,11 +60,11 @@ const KIN_SELL_PROMOS: KinSellPromo[] = [
     title: 'Boutiques vérifiées Kin-Sell',
     description: 'Achetez en confiance auprès de boutiques officiellement vérifiées.',
     ctaText: 'Voir les boutiques',
-    link: '/sokin/market',
+    link: '/explorer/shops-online',
   },
 ];
 
-type AdPage = 'home' | 'explorer' | 'sokin' | 'sokin-market' | 'sokin-profiles' | 'account' | 'admin';
+type AdPage = 'home' | 'explorer' | 'sokin' | 'account' | 'admin';
 type AdVariant = 'horizontal' | 'sidebar' | 'slim';
 
 interface AdBannerProps {
@@ -78,6 +78,12 @@ interface AdBannerProps {
    */
   hideWhenEmpty?: boolean;
   className?: string;
+  /** Évite de remonter la même pub consécutive dans un flux donné */
+  excludeAdId?: string;
+  /** Clé de slot pour une rotation stable côté client/serveur */
+  slotKey?: string;
+  /** Remonte l'identifiant final de pub résolue (ou null si rien affiché) */
+  onAdResolved?: (adId: string | null) => void;
 }
 
 const KIN_SELL_ONLY_PAGES: AdPage[] = ['account', 'admin'];
@@ -94,6 +100,9 @@ export function AdBanner({
   forceKinSell = false,
   hideWhenEmpty = false,
   className = '',
+  excludeAdId,
+  slotKey,
+  onAdResolved,
 }: AdBannerProps) {
   const navigate = useNavigate();
   const isKinSellOnly = forceKinSell || KIN_SELL_ONLY_PAGES.includes(page);
@@ -115,23 +124,31 @@ export function AdBanner({
     let cancelled = false;
     const load = async () => {
       try {
-        const result = await adsApi.getBanner(page);
+        const result = await adsApi.getBanner(page, { excludeAdId, slotKey });
         if (cancelled) return;
-        if (result.ad) {
-          setAdData(result.ad);
+        const resolvedAd = result.ad && result.ad.id !== excludeAdId ? result.ad : null;
+        if (resolvedAd) {
+          setAdData(resolvedAd);
           setShowKinSell(false);
+          onAdResolved?.(resolvedAd.id);
         } else {
+          setAdData(null);
           setShowKinSell(true);
+          onAdResolved?.(null);
         }
       } catch {
-        if (!cancelled) setShowKinSell(true);
+        if (!cancelled) {
+          setAdData(null);
+          setShowKinSell(true);
+          onAdResolved?.(null);
+        }
       } finally {
         if (!cancelled) setApiChecked(true);
       }
     };
     void load();
     return () => { cancelled = true; };
-  }, [page, isKinSellOnly]);
+  }, [page, isKinSellOnly, excludeAdId, slotKey, onAdResolved]);
 
   // Enregistrer l'impression une seule fois, une fois la pub déterminée
   useEffect(() => {
