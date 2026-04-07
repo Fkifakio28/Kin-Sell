@@ -1325,7 +1325,7 @@ export function MessagingPage() {
     try {
       const { conversation } = await messaging.createDM(targetUserId);
       setConversations((prev) => prev.some((c) => c.id === conversation.id) ? prev : [conversation, ...prev]);
-      emit("message:send", { conversationId: conversation.id, type: "TEXT", content: `📞 ${user.profile.displayName} vous invite à rejoindre un appel ${callState.type === "video" ? "vidéo" : "audio"} sur Kin-Sell. Ouvrez la messagerie pour rejoindre la conversation.` }, () => {});
+      emit("message:send", { conversationId: conversation.id, type: "TEXT", content: `📞 ${user.profile.displayName} vous invite à rejoindre un appel audio sur Kin-Sell. Ouvrez la messagerie pour rejoindre la conversation.` }, () => {});
       showGuardAlert("warn", t("msg.inviteSent").replace("{name}", displayName));
       setShowAddPeople(false); setInviteQuery("");
     } catch { showGuardAlert("block", t("msg.inviteFailed")); }
@@ -1388,19 +1388,7 @@ export function MessagingPage() {
                 <span className={`mg-call-quality mg-call-quality--${connectionQuality}`}>
                   {connectionQuality === "good" ? "Bonne" : connectionQuality === "fair" ? "Moyenne" : connectionQuality === "poor" ? "Faible" : "..."}
                 </span>
-                {callState.type === "video" && (
-                  <button type="button" className="mg-call-quality-btn" onClick={cycleQualityMode}>
-                    Mode: {qualityMode === "auto" ? "Auto" : qualityMode === "hd" ? "HD" : qualityMode === "balanced" ? "Équilibré" : "Éco"}
-                  </button>
-                )}
               </>
-            )}
-            {callState.type === "video" && (
-              <div className="mg-call-videos">
-                <video ref={remoteVideoRef} autoPlay playsInline className="mg-call-video-remote" />
-                <video ref={localVideoRef} autoPlay playsInline muted className="mg-call-video-local" style={isCameraOff ? { display: "none" } : undefined} />
-                {isCameraOff && <div className="mg-call-camera-off">{t("msg.cameraOff")}</div>}
-              </div>
             )}
             <div className="mg-call-controls">
               <button className={`mg-call-ctrl${isMuted ? " mg-call-ctrl--active" : ""}`} onClick={toggleMute}>
@@ -1417,18 +1405,7 @@ export function MessagingPage() {
                   <span className="mg-call-ctrl-label">Oreille</span>
                 </button>
               )}
-              {callState.type === "video" && (
-                <>
-                  <button className={`mg-call-ctrl${isCameraOff ? " mg-call-ctrl--active" : ""}`} onClick={toggleCamera}>
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">{isCameraOff ? <><line x1="1" y1="1" x2="23" y2="23"/><path d="M21 21H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3m4.5 0h8c1.1 0 2 .9 2 2v3.5M16 16l5 3V8"/></> : <><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></>}</svg>
-                    <span className="mg-call-ctrl-label">Caméra</span>
-                  </button>
-                  <button className="mg-call-ctrl" onClick={() => void switchCamera()} disabled={isSwitchingCamera}>
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.13-3.36L23 10"/><path d="M1 14l5.36 4.36A9 9 0 0 0 20.49 15"/></svg>
-                    <span className="mg-call-ctrl-label">{isSwitchingCamera ? "..." : "Flip"}</span>
-                  </button>
-                </>
-              )}
+
               <button className="mg-call-ctrl" onClick={() => setShowAddPeople(true)}>
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="17" y1="11" x2="23" y2="11"/></svg>
                 <span className="mg-call-ctrl-label">Ajouter</span>
@@ -1697,14 +1674,9 @@ export function MessagingPage() {
             </div>
             <div className="mg-conv-header-actions">
               {!activeConv.isGroup && (
-                <>
-                  <button className="mg-icon-btn" onClick={() => void startCall("audio")} title={t("msg.audioCall")}>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
-                  </button>
-                  <button className="mg-icon-btn" onClick={() => void startCall("video")} title={t("msg.videoCall")}>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
-                  </button>
-                </>
+                <button className="mg-icon-btn" onClick={() => void startCall("audio")} title={t("msg.audioCall")}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                </button>
               )}
               <button className={`mg-icon-btn${selectMode ? " mg-icon-btn--active" : ""}`} onClick={() => { setSelectMode((p) => !p); if (selectMode) setSelectedMsgIds(new Set()); }} title={selectMode ? t("msg.exitSelection") : t("msg.selectMessages")}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>

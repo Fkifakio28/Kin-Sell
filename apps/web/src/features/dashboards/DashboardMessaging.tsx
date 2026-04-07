@@ -646,13 +646,10 @@ export function DashboardMessaging() {
                 return conv ? getConversationName(conv, myId) : "Utilisateur";
               })()}
             </p>
-            <p className="dm-call-label">📞 Appel {callState.type === "video" ? "vidéo" : "audio"} entrant</p>
+            <p className="dm-call-label">📞 Appel audio entrant</p>
             <div className="dm-call-actions">
               <button className="dm-call-btn dm-call-btn--reject" onClick={rejectCall}>Refuser</button>
-              <button className="dm-call-btn dm-call-btn--accept" onClick={() => void acceptCall(callState.type)}>Accepter</button>
-              {callState.type === "video" && (
-                <button className="dm-call-btn dm-call-btn--audio" onClick={() => void acceptCall("audio")}>Audio seulement</button>
-              )}
+              <button className="dm-call-btn dm-call-btn--accept" onClick={() => void acceptCall("audio")}>Accepter</button>
             </div>
           </div>
         </div>
@@ -662,8 +659,7 @@ export function DashboardMessaging() {
           <div className="dm-call-screen dm-call-screen--active">
             <audio ref={remoteAudioRef} autoPlay playsInline />
             {callState.status === "ringing" && <div className="dm-ringtone-pulse"><span className="dm-ringtone-dot" /><span className="dm-ringtone-dot" /><span className="dm-ringtone-dot" /></div>}
-            {callState.type === "video" && <div className="dm-call-videos"><video ref={remoteVideoRef} autoPlay playsInline className="dm-call-video-remote" /><video ref={localVideoRef} autoPlay playsInline muted className="dm-call-video-local" /></div>}
-            <p className="dm-call-label">{callState.status === "ringing" ? "Appel en cours..." : `Appel ${callState.type} connecté`}</p>
+            <p className="dm-call-label">{callState.status === "ringing" ? "Appel en cours..." : "Appel audio connecté"}</p>
             <button className="dm-call-btn dm-call-btn--reject" onClick={endCall}>Raccrocher</button>
           </div>
         </div>
@@ -827,10 +823,7 @@ export function DashboardMessaging() {
               </div>
               <div className="dm-chat-header-actions">
                 {!activeConv.isGroup && (
-                  <>
-                    <button className="dm-icon-btn" title="Appel audio" onClick={() => void startCall("audio")}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg></button>
-                    <button className="dm-icon-btn" title="Appel vidéo" onClick={() => void startCall("video")}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg></button>
-                  </>
+                  <button className="dm-icon-btn" title="Appel audio" onClick={() => void startCall("audio")}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg></button>
                 )}
               </div>
             </div>
