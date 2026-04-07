@@ -13,6 +13,22 @@ import { SocketProvider } from "./app/providers/SocketProvider";
 import ErrorBoundary from "./components/ErrorBoundary";
 import "./styles/index.css";
 
+// ── Unregister all existing Service Workers & clear caches (transition period) ──
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.getRegistrations().then((registrations) => {
+    for (const reg of registrations) {
+      reg.unregister().catch(() => {});
+    }
+  });
+}
+if ("caches" in window) {
+  caches.keys().then((names) => {
+    for (const name of names) {
+      caches.delete(name).catch(() => {});
+    }
+  });
+}
+
 // ── Native platform setup ──
 if (Capacitor.isNativePlatform()) {
   // Deep-link handler: intercept OAuth callback

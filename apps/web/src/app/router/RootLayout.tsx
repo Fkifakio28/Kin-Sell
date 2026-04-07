@@ -4,7 +4,6 @@ import { BackgroundMusic } from "../../components/BackgroundMusic";
 import { Footer } from "../../components/Footer";
 import { shouldShowSplash, SplashScreen } from "../../components/SplashScreen";
 import { SuspensionGuard } from "../providers/AuthProvider";
-import { InstallBanner } from "../../components/InstallBanner";
 import { useIsMobile } from "../../hooks/useIsMobile";
 
 /** Routes où la musique de fond doit être stoppée (expérience immersion So-Kin). */
@@ -60,7 +59,6 @@ export function RootLayout() {
       <ScrollRestoration />
       {splashVisible && <SplashScreen onDismiss={handleSplashDismiss} />}
       <BackgroundMusic playing={musicPlaying} />
-      <InstallBanner />
     </div>
   );
 }

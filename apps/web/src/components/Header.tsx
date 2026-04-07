@@ -5,7 +5,6 @@ import { useAuth } from "../app/providers/AuthProvider";
 import { useLocaleCurrency } from "../app/providers/LocaleCurrencyProvider";
 import { getDashboardPath } from "../utils/role-routing";
 import { orders as ordersApi, resolveMediaUrl } from "../lib/api-client";
-import { InstallPrompt } from "./InstallPrompt";
 import { RegionLanguageCurrencySelector } from "./RegionLanguageCurrencySelector";
 
 const INFO_ITEMS = [
@@ -175,7 +174,6 @@ export const Header = React.memo(function Header() {
           </nav>
 
           <div className="ks-header-actions">
-            <InstallPrompt />
             <button type="button" className="ks-help-btn" aria-label={t('nav.helpAria')} title={t('nav.helpAria')} onClick={() => setInfoOpen(true)}>
               <span>?</span>
             </button>

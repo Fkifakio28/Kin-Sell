@@ -2,16 +2,10 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { createPortal } from "react-dom";
 import { useAuth } from "./AuthProvider";
 import { useSocketContext } from "./SocketProvider";
-import { isPushSupported, subscribeToPush, onServiceWorkerMessage, registerServiceWorker } from "../../utils/push-notifications";
 import { playCallSound, stopCallSound, refreshCallSoundIfNeeded } from "../../utils/call-sound";
-import { setAppBadge, clearAppBadge } from "../../utils/app-badge";
 import "../../styles/global-notifications.css";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:4000";
-
-import { SK_PUSH_BANNER_DISMISSED } from "../../shared/constants/storage-keys";
-const PUSH_BANNER_DISMISSED_AT_KEY = SK_PUSH_BANNER_DISMISSED;
-const PUSH_BANNER_DISMISS_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 /* ── Context ── */
 type GlobalNotifContextValue = {
@@ -115,27 +109,6 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
 
   /* ── Message toasts ── */
   const [toasts, setToasts] = useState<MessageToast[]>([]);
-  const badgeCountRef = useRef(0);
-
-  /* ── App Badge: increment on each toast, clear when page becomes visible ── */
-  useEffect(() => {
-    const handleVisibility = () => {
-      if (document.visibilityState === "visible") {
-        badgeCountRef.current = 0;
-        clearAppBadge();
-      }
-    };
-    document.addEventListener("visibilitychange", handleVisibility);
-    return () => document.removeEventListener("visibilitychange", handleVisibility);
-  }, []);
-
-  // Update badge when toasts change while page is hidden
-  useEffect(() => {
-    if (toasts.length > 0 && document.visibilityState === "hidden") {
-      badgeCountRef.current += 1;
-      setAppBadge(badgeCountRef.current);
-    }
-  }, [toasts.length]);
 
   /* ── Incoming call overlay (intercepted when NOT on /messaging) ── */
   const [incomingCall, setIncomingCall] = useState<{
@@ -158,77 +131,6 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
     window.history.pushState({}, "", targetUrl);
     window.dispatchEvent(new PopStateEvent("popstate"));
   }, []);
-
-  /* ── Push notification state ── */
-  const [pushEnabled, setPushEnabled] = useState(false);
-  const [showPushBanner, setShowPushBanner] = useState(false);
-  const pushSubscribedRef = useRef(false);
-
-  /* ── Register SW + auto-subscribe to push on login ── */
-  useEffect(() => {
-    if (!isLoggedIn) {
-      pushSubscribedRef.current = false;
-      setPushEnabled(false);
-      return;
-    }
-    if (!isLoggedIn || !isPushSupported()) return;
-    if (pushSubscribedRef.current) return;
-    pushSubscribedRef.current = true;
-
-    void registerServiceWorker();
-
-    // Auto-subscribe if permission already granted
-    if (Notification.permission === "granted") {
-      void subscribeToPush().then((ok) => {
-        setPushEnabled(ok);
-        if (!ok) pushSubscribedRef.current = false;
-      });
-      setShowPushBanner(false);
-    } else if (Notification.permission === "default") {
-      const dismissedAtRaw = localStorage.getItem(PUSH_BANNER_DISMISSED_AT_KEY);
-      const dismissedAt = dismissedAtRaw ? Number(dismissedAtRaw) : 0;
-      const canShowBanner = !dismissedAt || Number.isNaN(dismissedAt) || Date.now() - dismissedAt > PUSH_BANNER_DISMISS_TTL_MS;
-      if (!canShowBanner) return;
-
-      const timer = setTimeout(() => setShowPushBanner(true), 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [isLoggedIn]);
-
-  useEffect(() => {
-    if (!isLoggedIn) return;
-    if (!isPushSupported()) return;
-    if (Notification.permission !== "granted") return;
-    if (pushEnabled) return;
-
-    const timer = setInterval(() => {
-      void subscribeToPush().then((ok) => setPushEnabled(ok));
-    }, 30000);
-
-    return () => clearInterval(timer);
-  }, [isLoggedIn, pushEnabled]);
-
-  useEffect(() => {
-    if (!isLoggedIn) return;
-    if (!isPushSupported()) return;
-
-    const retrySubscribe = () => {
-      if (Notification.permission !== "granted") return;
-      if (pushEnabled) return;
-      void subscribeToPush().then((ok) => setPushEnabled(ok));
-    };
-
-    const onVisible = () => {
-      if (document.visibilityState === "visible") retrySubscribe();
-    };
-
-    window.addEventListener("online", retrySubscribe);
-    document.addEventListener("visibilitychange", onVisible);
-    return () => {
-      window.removeEventListener("online", retrySubscribe);
-      document.removeEventListener("visibilitychange", onVisible);
-    };
-  }, [isLoggedIn, pushEnabled]);
 
   const presentIncomingCall = useCallback((data: { conversationId: string; callerId: string; callType: "audio" | "video" }) => {
     if (incomingCallTimerRef.current) clearTimeout(incomingCallTimerRef.current);
@@ -269,68 +171,8 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
     }, 45_000);
   }, []);
 
-  /* ── Listen for SW messages (notification clicks) ── */
-  useEffect(() => {
-    if (!isLoggedIn) return;
-    return onServiceWorkerMessage((msg) => {
-      const swMsg = msg as { type: string; data?: PushPayloadData; targetUrl?: string; payload?: { title?: string; body?: string; data?: PushPayloadData } };
-      if (msg.type === "NOTIFICATION_CLICK" && msg.targetUrl) {
-        navigateInApp(msg.targetUrl as string);
-        return;
-      }
-      if (swMsg.type === "CALL_DISMISSED" && swMsg.data?.conversationId) {
-        setIncomingCall((prev) => {
-          if (prev?.conversationId === swMsg.data?.conversationId) {
-            stopCallSound();
-            if (vibrationIntervalRef.current) { clearInterval(vibrationIntervalRef.current); vibrationIntervalRef.current = null; }
-            if ("vibrate" in navigator) navigator.vibrate(0);
-            return null;
-          }
-          return prev;
-        });
-        return;
-      }
-      if (swMsg.type === "PUSH_RECEIVED" && swMsg.payload?.data?.type) {
-        if (swMsg.payload.data.type === "message") {
-          return;
-        }
-        if (swMsg.payload.data.type === "call" && swMsg.payload.data.conversationId && swMsg.payload.data.callerId) {
-          presentIncomingCall({
-            conversationId: swMsg.payload.data.conversationId,
-            callerId: swMsg.payload.data.callerId,
-            callType: swMsg.payload.data.callType === "video" ? "video" : "audio",
-          });
-          return;
-        }
-        const kind = resolveNotificationKind(swMsg.payload.data);
-        const toast: MessageToast = {
-          id: `${swMsg.payload.data.type}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-          kind,
-          title: swMsg.payload.title || "Kin-Sell",
-          content: swMsg.payload.body || "Nouvelle notification",
-          icon: resolveNotificationIcon(kind),
-          targetUrl: resolveNotificationTarget(swMsg.payload.data),
-          timestamp: Date.now(),
-        };
-        setToasts((prev) => [toast, ...prev].slice(0, 4));
-        setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== toast.id)), 6000);
-      }
-    });
-  }, [isLoggedIn, navigateInApp, presentIncomingCall]);
-
   const requestPushPermission = useCallback(async () => {
-    const ok = await subscribeToPush();
-    setPushEnabled(ok);
-    setShowPushBanner(false);
-    if (ok) {
-      localStorage.removeItem(PUSH_BANNER_DISMISSED_AT_KEY);
-    }
-    return ok;
-  }, []);
-
-  const dismissPushBanner = useCallback(() => {
-    setShowPushBanner(false);
-    localStorage.setItem(PUSH_BANNER_DISMISSED_AT_KEY, String(Date.now()));
+    return false;
   }, []);
 
   /* ── Notification sound for messages ── */
@@ -597,8 +439,8 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
 
   /* ── Context value ── */
   const ctxValue = useMemo(
-    () => ({ messagingActive, setMessagingActive, pushEnabled, requestPushPermission }),
-    [messagingActive, pushEnabled, requestPushPermission],
+    () => ({ messagingActive, setMessagingActive, pushEnabled: false, requestPushPermission }),
+    [messagingActive, requestPushPermission],
   );
 
   return (
@@ -678,28 +520,6 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
                   </button>
                 ) : null}
               </div>
-            </div>
-          </div>,
-          document.body,
-        )}
-
-      {/* ── Push permission banner (portal) ── */}
-      {showPushBanner &&
-        isLoggedIn &&
-        createPortal(
-          <div className="gn-push-banner">
-            <div className="gn-push-banner-icon">🔔</div>
-            <div className="gn-push-banner-text">
-              <strong>Restez informé !</strong>
-              <p>Activez les notifications pour recevoir les appels, messages et mises à jour même en dehors de l'appli.</p>
-            </div>
-            <div className="gn-push-banner-actions">
-              <button className="gn-push-banner-btn gn-push-banner-btn--accept" onClick={() => void requestPushPermission()}>
-                Activer
-              </button>
-              <button className="gn-push-banner-btn gn-push-banner-btn--dismiss" onClick={dismissPushBanner}>
-                Plus tard
-              </button>
             </div>
           </div>,
           document.body,
