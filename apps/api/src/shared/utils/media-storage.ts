@@ -32,7 +32,7 @@ const ensureUploadsDir = async (folder?: string) => {
 
 const buildPublicUrl = (absolutePath: string) => {
   const relativePath = path.relative(UPLOADS_DIR, absolutePath).replace(/\\/g, "/");
-  return `/uploads/${relativePath}`;
+  return `/api/uploads/${relativePath}`;
 };
 
 const generateBaseName = () => `${Date.now()}-${crypto.randomBytes(8).toString("hex")}`;
@@ -54,7 +54,7 @@ const optimizeImageBuffer = async (
 export const isAcceptedImageInput = (value: string) => {
   const trimmed = value.trim();
   if (!trimmed) return false;
-  if (trimmed.startsWith("/uploads/")) return true;
+  if (trimmed.startsWith("/uploads/") || trimmed.startsWith("/api/uploads/")) return true;
   if (IMAGE_DATA_URL_RE.test(trimmed)) return true;
 
   try {
