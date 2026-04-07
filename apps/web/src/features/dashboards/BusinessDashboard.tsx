@@ -10,7 +10,7 @@ import { prepareMediaUrls } from '../../utils/media-upload';
 import { DashboardMessaging } from './DashboardMessaging';
 import {
   ApiError, auth as authApi, businesses, listings, orders, billing, messaging, sokin, reviews as reviewsApi, invalidateCache, analyticsAi, aiRecommendations, aiTrials, resolveMediaUrl,
-  type BusinessAccount, type MyListing, type MyListingsStats,
+  type BusinessAccount, type MyListing, type MyListingsStats, type ListingStatus,
   type OrderSummary, type BillingPlanSummary, type OrderStatus,
   type SoKinApiPost, type BasicInsights, type DeepInsights,
   type AiRecommendation, type AiTrial, type ReviewItem,
@@ -70,7 +70,7 @@ const INITIAL_BUSINESS_FORM = {
 export function BusinessDashboard() {
   const navigate = useNavigate();
   const { user, isLoading, isLoggedIn, refreshUser, logout } = useAuth();
-  const { t, formatMoneyFromUsdCents, currency } = useLocaleCurrency();
+  const { t, formatMoneyFromUsdCents, formatPriceLabelFromUsdCents, currency } = useLocaleCurrency();
   const { on, off } = useSocket();
   const [activeSection, setActiveSection] = useState<BizSection>(() => {
     const stored = sessionStorage.getItem('ud-section');
@@ -189,6 +189,14 @@ export function BusinessDashboard() {
   const [createStep, setCreateStep] = useState(1);
   const [createUploadFiles, setCreateUploadFiles] = useState<File[]>([]);
   const [createUploadPreviews, setCreateUploadPreviews] = useState<string[]>([]);
+
+  // ─── Produits/Services: filtres, pagination, actions ─────
+  const [prodFilter, setProdFilter] = useState<ListingStatus | ''>('');
+  const [prodPage, setProdPage] = useState(1);
+  const [svcFilter, setSvcFilter] = useState<ListingStatus | ''>('');
+  const [svcPage, setSvcPage] = useState(1);
+  const [bzArticleBusy, setBzArticleBusy] = useState<string | null>(null);
+  const BZ_PAGE_LIMIT = 12;
 
   // ─── Contacts ────────────────────────────────────────────
   const [contactFilter, setContactFilter] = useState<'all' | 'online' | 'favorites'>('all');
@@ -528,8 +536,72 @@ export function BusinessDashboard() {
   const businessLogo = business?.shop?.logo ?? null;
   const businessVerified = Boolean(business?.shop?.active);
   const businessSlug = business?.slug ?? '';
-  const produits = myListings.filter(l => l.type === 'PRODUIT');
-  const services = myListings.filter(l => l.type === 'SERVICE');
+
+  // ── Produits / Services : stats, filtrage, pagination ──
+  const allProduits = myListings.filter(l => l.type === 'PRODUIT');
+  const allServices = myListings.filter(l => l.type === 'SERVICE');
+  const prodStats = {
+    active: allProduits.filter(l => l.status === 'ACTIVE').length,
+    inactive: allProduits.filter(l => l.status === 'INACTIVE').length,
+    archived: allProduits.filter(l => l.status === 'ARCHIVED').length,
+  };
+  const svcStats = {
+    active: allServices.filter(l => l.status === 'ACTIVE').length,
+    inactive: allServices.filter(l => l.status === 'INACTIVE').length,
+    archived: allServices.filter(l => l.status === 'ARCHIVED').length,
+  };
+  const filteredProduits = prodFilter ? allProduits.filter(l => l.status === prodFilter) : allProduits;
+  const prodTotalPages = Math.max(1, Math.ceil(filteredProduits.length / BZ_PAGE_LIMIT));
+  const pagedProduits = filteredProduits.slice((prodPage - 1) * BZ_PAGE_LIMIT, prodPage * BZ_PAGE_LIMIT);
+  const filteredServices = svcFilter ? allServices.filter(l => l.status === svcFilter) : allServices;
+  const svcTotalPages = Math.max(1, Math.ceil(filteredServices.length / BZ_PAGE_LIMIT));
+  const pagedServices = filteredServices.slice((svcPage - 1) * BZ_PAGE_LIMIT, svcPage * BZ_PAGE_LIMIT);
+
+  // ── Alias legacy (dashboard overview) ──
+  const produits = allProduits;
+  const services = allServices;
+
+  // ── Handlers articles business ──
+  const handleBzStatusChange = async (id: string, status: ListingStatus) => {
+    setBzArticleBusy(id);
+    try {
+      await listings.changeStatus(id, status);
+      invalidateCache('/listings/mine');
+      const [lRes, sRes] = await Promise.allSettled([listings.mine({ limit: 50 }), listings.mineStats()]);
+      if (lRes.status === 'fulfilled') setMyListings(lRes.value.listings);
+      if (sRes.status === 'fulfilled') setListingStats(sRes.value);
+    } catch { /* silently fail */ }
+    finally { setBzArticleBusy(null); }
+  };
+
+  const handleBzEdit = (article: MyListing) => {
+    const type = article.type === 'SERVICE' ? 'service' : 'produit';
+    setCreateMode(type);
+    setCreateStep(1);
+    setCreateUploadFiles([]);
+    setCreateUploadPreviews(p => { p.forEach(u => URL.revokeObjectURL(u)); return []; });
+    setCreateMsg(null);
+    setCreateForm({
+      title: article.title,
+      category: article.category,
+      city: article.city,
+      priceCdf: String(Math.round(article.priceUsdCents / 100 * USD_TO_CDF)),
+      stock: article.stockQuantity !== null ? String(article.stockQuantity) : '',
+      description: article.description ?? '',
+      isNegotiable: article.isNegotiable,
+      latitude: article.latitude,
+      longitude: article.longitude,
+      country: (article as any).country ?? 'RDC',
+      countryCode: (article as any).countryCode ?? 'CD',
+      region: (article as any).region ?? '',
+      district: (article as any).district ?? '',
+      formattedAddress: (article as any).formattedAddress ?? '',
+      placeId: (article as any).placeId ?? '',
+      locationVisibility: (article as any).locationVisibility ?? 'CITY_PUBLIC',
+      serviceRadiusKm: (article as any).serviceRadiusKm?.toString() ?? '',
+    });
+    setActiveSection(type === 'service' ? 'services' : 'produits');
+  };
 
   // ─── Upload fichiers listing ──────────────────────────────
   const handleCreateFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1621,350 +1693,453 @@ export function BusinessDashboard() {
         {/* ── PRODUITS ── */}
         {activeSection === 'produits' && (
           <div className="ud-section animate-fade-in">
-            <section className="ud-glass-panel bz-glass-panel">
-              <div className="ud-panel-head">
-                <h2 className="ud-panel-title">{t('biz.myProducts')} ({produits.length})</h2>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button type="button" className="ud-quick-btn ud-quick-btn--primary bz-cta-gold" onClick={() => { setImportOpen(importOpen === 'produit' ? null : 'produit'); setImportMsg(null); setImportProgress(null); }}>
-                    {importOpen === 'produit' ? '✕ Fermer' : '📥 Importer'}
-                  </button>
-                  <button type="button" className="ud-quick-btn ud-quick-btn--primary bz-cta-gold" onClick={() => { setCreateMode(createMode === 'produit' ? null : 'produit'); setCreateStep(1); setCreateUploadFiles([]); setCreateUploadPreviews(p => { p.forEach(u => URL.revokeObjectURL(u)); return []; }); setCreateMsg(null); }}>
-                    {createMode === 'produit' ? t('biz.cancelBtn') : t('biz.newProduct')}
-                  </button>
+            {/* ── Topbar ── */}
+            <div className="bz-art-topbar">
+              <div className="bz-art-topbar-left">
+                <h2 className="bz-art-topbar-title">📦 {t('biz.myProducts')}</h2>
+                <div className="bz-art-stats-inline">
+                  <span className="bz-art-stat-chip bz-art-stat-chip--active">{prodStats.active} actifs</span>
+                  <span className="bz-art-stat-chip">{prodStats.inactive} inactifs</span>
+                  <span className="bz-art-stat-chip">{prodStats.archived} archivés</span>
                 </div>
               </div>
-              {importOpen === 'produit' && (
-                <div className="bz-import-zone" style={{ marginBottom: 'var(--space-lg)' }}>
-                  <h3 style={{ margin: '0 0 var(--space-sm)' }}>📥 Importer des produits en masse</h3>
-                  <p style={{ fontSize: '0.85rem', opacity: 0.7, margin: '0 0 var(--space-md)' }}>
-                    Formats acceptés : <strong>.csv</strong>, <strong>.json</strong>, <strong>.xml</strong><br />
-                    Colonnes attendues : titre, categorie, prix (CDF), stock, description, ville
-                  </p>
-                  <label className="bz-photo-drop-zone bz-import-drop">
-                    <input type="file" accept=".csv,.json,.xml" disabled={importBusy} onChange={e => { const f = e.target.files?.[0]; if (f) handleImportFile(f, 'PRODUIT'); e.target.value = ''; }} />
-                    <span className="bz-photo-drop-icon">📄</span>
-                    <span className="bz-photo-drop-text">{importBusy ? 'Import en cours…' : 'Glissez ou cliquez pour choisir un fichier'}</span>
-                  </label>
-                  {importProgress && (
-                    <div style={{ marginTop: 'var(--space-sm)' }}>
-                      <div className="bz-import-progress-bar"><div className="bz-import-progress-fill" style={{ width: `${(importProgress.done / importProgress.total) * 100}%` }} /></div>
-                      <small>{importProgress.done} / {importProgress.total}</small>
-                    </div>
-                  )}
-                  {importMsg && <p className={`bz-setup-${importMsg.startsWith('✓') ? 'note' : 'error'}`} style={{ marginTop: 'var(--space-sm)' }}>{importMsg}</p>}
-                </div>
-              )}
-              {createMode === 'produit' && (
-                <form className="bz-setup-form ud-publish-modal" style={{ marginBottom: 'var(--space-lg)' }} onSubmit={handleCreateListing}>
-                  {/* Étape 1 — Infos */}
-                  {createStep === 1 && (
-                    <div className="ud-publish-step-content">
-                      <label className="ud-publish-field">
-                        <span className="ud-publish-field-label">{t('biz.titleLabel')} *</span>
-                        <input className="ud-input" type="text" required minLength={2} maxLength={140} value={createForm.title} onChange={e => setCreateForm(f => ({ ...f, title: e.target.value }))} placeholder="Ex: iPhone 14 Pro 256GB neuf sous scellé" />
-                      </label>
-                      <label className="ud-publish-field">
-                        <span className="ud-publish-field-label">{t('biz.categoryLabel')} *</span>
-                        <select className="ud-input" required value={createForm.category} onChange={e => setCreateForm(f => ({ ...f, category: e.target.value }))}>
-                          <option value="">Choisir une catégorie</option>
-                          {LISTING_PRODUCT_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                        </select>
-                      </label>
-                      <label className="ud-publish-field">
-                        <span className="ud-publish-field-label">{t('biz.descriptionLabel')}</span>
-                        <textarea className="ud-input" rows={4} maxLength={1200} value={createForm.description} onChange={e => setCreateForm(f => ({ ...f, description: e.target.value }))} placeholder="Description détaillée du produit..." />
-                        <span className="ud-publish-field-hint">{createForm.description.length}/1200 caractères</span>
-                      </label>
-                      <div className="ud-publish-nav">
-                        <span />
-                        <button type="button" className="ud-quick-btn ud-quick-btn--primary" onClick={() => { if (!createForm.title.trim()) { setCreateMsg('Le titre est requis'); return; } if (!createForm.category) { setCreateMsg('La catégorie est requise'); return; } setCreateMsg(null); setCreateStep(2); }}>Suivant →</button>
-                      </div>
-                    </div>
-                  )}
-                  {/* Étape 2 — Prix & Localisation */}
-                  {createStep === 2 && (
-                    <div className="ud-publish-step-content">
-                      <label className="ud-publish-field">
-                        <span className="ud-publish-field-label">{t('biz.priceCdf')} *</span>
-                        <div className="ud-publish-price-wrap">
-                          <span className="ud-publish-price-symbol">FC</span>
-                          <input className="ud-input" type="number" required min={0} value={createForm.priceCdf} onChange={e => setCreateForm(f => ({ ...f, priceCdf: e.target.value }))} placeholder="0" />
-                        </div>
-                        {createForm.priceCdf && parseInt(createForm.priceCdf) > 0 && (
-                          <span className="ud-publish-field-hint">≈ {(parseInt(createForm.priceCdf) / USD_TO_CDF).toFixed(2)} $ USD</span>
-                        )}
-                      </label>
-                      <label className="ud-publish-field">
-                        <span className="ud-publish-field-label">{t('biz.cityLabel')} *</span>
-                        <LocationPicker value={{ lat: createForm.latitude, lng: createForm.longitude, address: createForm.city }} onChange={({ address, city, lat, lng }) => setCreateForm(f => ({ ...f, city: city || address, latitude: lat, longitude: lng }))} onStructuredChange={(loc) => setCreateForm(f => ({ ...f, city: loc.city || loc.formattedAddress, latitude: loc.latitude ?? f.latitude, longitude: loc.longitude ?? f.longitude, country: loc.country || f.country, countryCode: loc.countryCode || f.countryCode, region: loc.region || '', district: loc.district || '', formattedAddress: loc.formattedAddress || '', placeId: loc.placeId || '' }))} placeholder="Kinshasa" />
-                      </label>
-                      <label className="ud-publish-field">
-                        <span className="ud-publish-field-label">{t('biz.stockLabel')}</span>
-                        <input className="ud-input" type="number" min={0} value={createForm.stock} onChange={e => setCreateForm(f => ({ ...f, stock: e.target.value }))} placeholder="∞ (illimité)" />
-                      </label>
-                      <label className="ud-publish-field">
-                        <span className="ud-publish-field-label">🔒 Visibilité</span>
-                        <VisibilitySelector value={createForm.locationVisibility} onChange={(v: LocationVisibility) => setCreateForm(f => ({ ...f, locationVisibility: v }))} />
-                      </label>
-                      <label className="ud-publish-field" style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-                        <input type="checkbox" checked={createForm.isNegotiable} onChange={e => setCreateForm(f => ({ ...f, isNegotiable: e.target.checked }))} />
-                        <span>{t('negotiation.allowPrice')}</span>
-                      </label>
-                      <div className="ud-publish-nav">
-                        <button type="button" className="ud-quick-btn" onClick={() => setCreateStep(1)}>← Retour</button>
-                        <button type="button" className="ud-quick-btn ud-quick-btn--primary" onClick={() => setCreateStep(3)}>Suivant →</button>
-                      </div>
-                    </div>
-                  )}
-                  {/* Étape 3 — Médias & Validation */}
-                  {createStep === 3 && (
-                    <div className="ud-publish-step-content">
-                      <div className="ud-publish-media-zone">
-                        <p className="ud-publish-field-label">📷 Photos & Vidéo</p>
-                        <p className="ud-publish-field-hint" style={{ marginBottom: '0.75rem' }}>Max 5 photos + 1 vidéo (50 Mo max)</p>
-                        <div className="ud-publish-media-grid">
-                          {createUploadPreviews.map((url, i) => {
-                            const file = createUploadFiles[i];
-                            const isVideo = file?.type.startsWith('video/');
-                            return (
-                              <div key={url} className="ud-publish-media-thumb">
-                                {isVideo ? <video src={url} className="ud-publish-media-img" muted /> : <img src={url} alt={`Media ${i + 1}`} className="ud-publish-media-img" />}
-                                <button type="button" className="ud-publish-media-remove" onClick={() => removeCreateFile(i)}>✕</button>
-                                {isVideo && <span className="ud-publish-media-badge">🎬 Vidéo</span>}
-                              </div>
-                            );
-                          })}
-                          {createUploadFiles.length < 6 && (
-                            <label className="ud-publish-media-add">
-                              <input type="file" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm" multiple onChange={handleCreateFileSelect} style={{ display: 'none' }} />
-                              <span className="ud-publish-media-add-icon">+</span>
-                              <span className="ud-publish-media-add-label">Ajouter</span>
-                            </label>
-                          )}
-                        </div>
-                      </div>
-                      <div className="ud-publish-summary">
-                        <h3 className="ud-publish-summary-title">Récapitulatif</h3>
-                        <div className="ud-publish-summary-grid">
-                          <span>Type</span><strong>📦 Produit</strong>
-                          <span>Titre</span><strong>{createForm.title || '–'}</strong>
-                          <span>Catégorie</span><strong>{createForm.category || '–'}</strong>
-                          <span>Prix</span><strong>{createForm.priceCdf && parseInt(createForm.priceCdf) > 0 ? `${new Intl.NumberFormat('fr-CD').format(parseInt(createForm.priceCdf))} FC` : 'Prix libre'}</strong>
-                          <span>Ville</span><strong>{createForm.city || '–'}</strong>
-                          {createForm.stock && <><span>Stock</span><strong>{createForm.stock}</strong></>}
-                          <span>Médias</span><strong>{createUploadFiles.length} fichier(s)</strong>
-                        </div>
-                      </div>
-                      {createMsg && <p className={`bz-setup-${createMsg.startsWith('✓') ? 'note' : 'error'}`}>{createMsg}</p>}
-                      <div className="ud-publish-nav">
-                        <button type="button" className="ud-quick-btn" onClick={() => setCreateStep(2)}>← Retour</button>
-                        <button type="submit" className="ud-quick-btn ud-quick-btn--primary bz-cta-gold" disabled={createBusy}>
-                          {createBusy ? '⏳ Publication...' : '🚀 Publier le produit'}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </form>
-              )}
-              {produits.length === 0 ? (
-                <p className="ud-placeholder-text" style={{ padding: 'var(--space-lg)' }}>
-                  {dataLoading ? t('biz.loadingData') : t('biz.noProductsEmpty')}
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button type="button" className="bz-art-publish-btn" style={{ background: 'rgba(214,170,80,.15)', color: '#d6aa50' }} onClick={() => { setImportOpen(importOpen === 'produit' ? null : 'produit'); setImportMsg(null); setImportProgress(null); }}>
+                  <span className="bz-art-publish-icon">📥</span>
+                  {importOpen === 'produit' ? '✕ Fermer' : 'Importer'}
+                </button>
+                <button type="button" className="bz-art-publish-btn" onClick={() => { setCreateMode(createMode === 'produit' ? null : 'produit'); setCreateStep(1); setCreateUploadFiles([]); setCreateUploadPreviews(p => { p.forEach(u => URL.revokeObjectURL(u)); return []; }); setCreateMsg(null); }}>
+                  <span className="bz-art-publish-icon">+</span>
+                  {createMode === 'produit' ? t('biz.cancelBtn') : t('biz.newProduct')}
+                </button>
+              </div>
+            </div>
+
+            {/* ── Import zone ── */}
+            {importOpen === 'produit' && (
+              <div className="bz-import-zone" style={{ marginBottom: 'var(--space-lg)' }}>
+                <h3 style={{ margin: '0 0 var(--space-sm)' }}>📥 Importer des produits en masse</h3>
+                <p style={{ fontSize: '0.85rem', opacity: 0.7, margin: '0 0 var(--space-md)' }}>
+                  Formats acceptés : <strong>.csv</strong>, <strong>.json</strong>, <strong>.xml</strong><br />
+                  Colonnes attendues : titre, categorie, prix (CDF), stock, description, ville
                 </p>
-              ) : (
-                <table className="ud-table">
-                  <thead>
-                    <tr><th>{t('biz.thProduct')}</th><th>{t('biz.thCategory')}</th><th>{t('biz.thPrice')}</th><th>{t('biz.thStock')}</th><th>{t('biz.thNegotiable')}</th><th>{t('biz.thStatus')}</th></tr>
-                  </thead>
-                  <tbody>
-                    {produits.map(p => (
-                      <tr key={p.id}>
-                        <td>{p.title}</td>
-                        <td>{p.category}</td>
-                        <td>{formatMoneyFromUsdCents(p.priceUsdCents)}</td>
-                        <td><span className={`bz-stock-badge${(p.stockQuantity ?? 99) <= 5 ? ' bz-stock-badge--low' : ''}`}>{p.stockQuantity != null ? p.stockQuantity : '∞'}</span></td>
-                        <td><button type="button" className={`ud-badge ${p.isNegotiable !== false ? 'ud-badge--done' : ''}`} style={{ cursor: 'pointer', border: 'none' }} onClick={() => { listings.update(p.id, { isNegotiable: p.isNegotiable === false }).then(() => { invalidateCache('/listings/mine'); listings.mine({ limit: 50 }).then(r => setMyListings(r.listings)); }); }}>{p.isNegotiable !== false ? t('negotiation.yes') : t('negotiation.no')}</button></td>
-                        <td><span className={p.isPublished ? 'ud-badge ud-badge--done' : 'ud-badge'}>{p.isPublished ? t('biz.published') : t('biz.draft')}</span></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </section>
+                <label className="bz-photo-drop-zone bz-import-drop">
+                  <input type="file" accept=".csv,.json,.xml" disabled={importBusy} onChange={e => { const f = e.target.files?.[0]; if (f) handleImportFile(f, 'PRODUIT'); e.target.value = ''; }} />
+                  <span className="bz-photo-drop-icon">📄</span>
+                  <span className="bz-photo-drop-text">{importBusy ? 'Import en cours…' : 'Glissez ou cliquez pour choisir un fichier'}</span>
+                </label>
+                {importProgress && (
+                  <div style={{ marginTop: 'var(--space-sm)' }}>
+                    <div className="bz-import-progress-bar"><div className="bz-import-progress-fill" style={{ width: `${(importProgress.done / importProgress.total) * 100}%` }} /></div>
+                    <small>{importProgress.done} / {importProgress.total}</small>
+                  </div>
+                )}
+                {importMsg && <p className={`bz-setup-${importMsg.startsWith('✓') ? 'note' : 'error'}`} style={{ marginTop: 'var(--space-sm)' }}>{importMsg}</p>}
+              </div>
+            )}
+
+            {/* ── Formulaire création produit ── */}
+            {createMode === 'produit' && (
+              <form className="bz-setup-form ud-publish-modal" style={{ marginBottom: 'var(--space-lg)' }} onSubmit={handleCreateListing}>
+                {createStep === 1 && (
+                  <div className="ud-publish-step-content">
+                    <label className="ud-publish-field">
+                      <span className="ud-publish-field-label">{t('biz.titleLabel')} *</span>
+                      <input className="ud-input" type="text" required minLength={2} maxLength={140} value={createForm.title} onChange={e => setCreateForm(f => ({ ...f, title: e.target.value }))} placeholder="Ex: iPhone 14 Pro 256GB neuf sous scellé" />
+                    </label>
+                    <label className="ud-publish-field">
+                      <span className="ud-publish-field-label">{t('biz.categoryLabel')} *</span>
+                      <select className="ud-input" required value={createForm.category} onChange={e => setCreateForm(f => ({ ...f, category: e.target.value }))}>
+                        <option value="">Choisir une catégorie</option>
+                        {LISTING_PRODUCT_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    </label>
+                    <label className="ud-publish-field">
+                      <span className="ud-publish-field-label">{t('biz.descriptionLabel')}</span>
+                      <textarea className="ud-input" rows={4} maxLength={1200} value={createForm.description} onChange={e => setCreateForm(f => ({ ...f, description: e.target.value }))} placeholder="Description détaillée du produit..." />
+                      <span className="ud-publish-field-hint">{createForm.description.length}/1200 caractères</span>
+                    </label>
+                    <div className="ud-publish-nav">
+                      <span />
+                      <button type="button" className="ud-quick-btn ud-quick-btn--primary" onClick={() => { if (!createForm.title.trim()) { setCreateMsg('Le titre est requis'); return; } if (!createForm.category) { setCreateMsg('La catégorie est requise'); return; } setCreateMsg(null); setCreateStep(2); }}>Suivant →</button>
+                    </div>
+                  </div>
+                )}
+                {createStep === 2 && (
+                  <div className="ud-publish-step-content">
+                    <label className="ud-publish-field">
+                      <span className="ud-publish-field-label">{t('biz.priceCdf')} *</span>
+                      <div className="ud-publish-price-wrap">
+                        <span className="ud-publish-price-symbol">FC</span>
+                        <input className="ud-input" type="number" required min={0} value={createForm.priceCdf} onChange={e => setCreateForm(f => ({ ...f, priceCdf: e.target.value }))} placeholder="0" />
+                      </div>
+                      {createForm.priceCdf && parseInt(createForm.priceCdf) > 0 && (
+                        <span className="ud-publish-field-hint">≈ {(parseInt(createForm.priceCdf) / USD_TO_CDF).toFixed(2)} $ USD</span>
+                      )}
+                    </label>
+                    <label className="ud-publish-field">
+                      <span className="ud-publish-field-label">{t('biz.cityLabel')} *</span>
+                      <LocationPicker value={{ lat: createForm.latitude, lng: createForm.longitude, address: createForm.city }} onChange={({ address, city, lat, lng }) => setCreateForm(f => ({ ...f, city: city || address, latitude: lat, longitude: lng }))} onStructuredChange={(loc) => setCreateForm(f => ({ ...f, city: loc.city || loc.formattedAddress, latitude: loc.latitude ?? f.latitude, longitude: loc.longitude ?? f.longitude, country: loc.country || f.country, countryCode: loc.countryCode || f.countryCode, region: loc.region || '', district: loc.district || '', formattedAddress: loc.formattedAddress || '', placeId: loc.placeId || '' }))} placeholder="Kinshasa" />
+                    </label>
+                    <label className="ud-publish-field">
+                      <span className="ud-publish-field-label">{t('biz.stockLabel')}</span>
+                      <input className="ud-input" type="number" min={0} value={createForm.stock} onChange={e => setCreateForm(f => ({ ...f, stock: e.target.value }))} placeholder="∞ (illimité)" />
+                    </label>
+                    <label className="ud-publish-field">
+                      <span className="ud-publish-field-label">🔒 Visibilité</span>
+                      <VisibilitySelector value={createForm.locationVisibility} onChange={(v: LocationVisibility) => setCreateForm(f => ({ ...f, locationVisibility: v }))} />
+                    </label>
+                    <label className="ud-publish-field" style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                      <input type="checkbox" checked={createForm.isNegotiable} onChange={e => setCreateForm(f => ({ ...f, isNegotiable: e.target.checked }))} />
+                      <span>{t('negotiation.allowPrice')}</span>
+                    </label>
+                    <div className="ud-publish-nav">
+                      <button type="button" className="ud-quick-btn" onClick={() => setCreateStep(1)}>← Retour</button>
+                      <button type="button" className="ud-quick-btn ud-quick-btn--primary" onClick={() => setCreateStep(3)}>Suivant →</button>
+                    </div>
+                  </div>
+                )}
+                {createStep === 3 && (
+                  <div className="ud-publish-step-content">
+                    <div className="ud-publish-media-zone">
+                      <p className="ud-publish-field-label">📷 Photos & Vidéo</p>
+                      <p className="ud-publish-field-hint" style={{ marginBottom: '0.75rem' }}>Max 5 photos + 1 vidéo (50 Mo max)</p>
+                      <div className="ud-publish-media-grid">
+                        {createUploadPreviews.map((url, i) => {
+                          const file = createUploadFiles[i];
+                          const isVideo = file?.type.startsWith('video/');
+                          return (
+                            <div key={url} className="ud-publish-media-thumb">
+                              {isVideo ? <video src={url} className="ud-publish-media-img" muted /> : <img src={url} alt={`Media ${i + 1}`} className="ud-publish-media-img" />}
+                              <button type="button" className="ud-publish-media-remove" onClick={() => removeCreateFile(i)}>✕</button>
+                              {isVideo && <span className="ud-publish-media-badge">🎬 Vidéo</span>}
+                            </div>
+                          );
+                        })}
+                        {createUploadFiles.length < 6 && (
+                          <label className="ud-publish-media-add">
+                            <input type="file" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm" multiple onChange={handleCreateFileSelect} style={{ display: 'none' }} />
+                            <span className="ud-publish-media-add-icon">+</span>
+                            <span className="ud-publish-media-add-label">Ajouter</span>
+                          </label>
+                        )}
+                      </div>
+                    </div>
+                    <div className="ud-publish-summary">
+                      <h3 className="ud-publish-summary-title">Récapitulatif</h3>
+                      <div className="ud-publish-summary-grid">
+                        <span>Type</span><strong>📦 Produit</strong>
+                        <span>Titre</span><strong>{createForm.title || '–'}</strong>
+                        <span>Catégorie</span><strong>{createForm.category || '–'}</strong>
+                        <span>Prix</span><strong>{createForm.priceCdf && parseInt(createForm.priceCdf) > 0 ? `${new Intl.NumberFormat('fr-CD').format(parseInt(createForm.priceCdf))} FC` : 'Prix libre'}</strong>
+                        <span>Ville</span><strong>{createForm.city || '–'}</strong>
+                        {createForm.stock && <><span>Stock</span><strong>{createForm.stock}</strong></>}
+                        <span>Médias</span><strong>{createUploadFiles.length} fichier(s)</strong>
+                      </div>
+                    </div>
+                    {createMsg && <p className={`bz-setup-${createMsg.startsWith('✓') ? 'note' : 'error'}`}>{createMsg}</p>}
+                    <div className="ud-publish-nav">
+                      <button type="button" className="ud-quick-btn" onClick={() => setCreateStep(2)}>← Retour</button>
+                      <button type="submit" className="ud-quick-btn ud-quick-btn--primary bz-cta-gold" disabled={createBusy}>
+                        {createBusy ? '⏳ Publication...' : '🚀 Publier le produit'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </form>
+            )}
+
+            {/* ── Filtres ── */}
+            <div className="bz-art-filters">
+              {(['', 'ACTIVE', 'INACTIVE', 'ARCHIVED'] as const).map((f) => (
+                <button key={f} type="button" className={`bz-art-filter-btn${prodFilter === f ? ' active' : ''}`} onClick={() => { setProdFilter(f as ListingStatus | ''); setProdPage(1); }}>
+                  {f === '' ? '🗂 Tous' : f === 'ACTIVE' ? '🟢 Actifs' : f === 'INACTIVE' ? '⏸ Inactifs' : '📦 Archivés'}
+                </button>
+              ))}
+            </div>
+
+            {/* ── Grille cards ── */}
+            {dataLoading ? (
+              <div className="bz-art-loading"><span className="bz-art-loading-spinner" /><span>Chargement…</span></div>
+            ) : pagedProduits.length === 0 ? (
+              <div className="bz-art-empty">
+                <span className="bz-art-empty-icon">📦</span>
+                <p>{prodFilter ? 'Aucun produit avec ce statut.' : t('biz.noProductsEmpty')}</p>
+              </div>
+            ) : (
+              <div className="bz-art-grid">
+                {pagedProduits.map((p) => (
+                  <article key={p.id} className={`bz-art-card${p.status === 'INACTIVE' ? ' bz-art-card--dim' : ''}`}>
+                    <div className="bz-art-card-visual">
+                      {p.imageUrl ? (
+                        <img src={resolveMediaUrl(p.imageUrl)} alt={p.title} className="bz-art-card-img" loading="lazy" />
+                      ) : (
+                        <div className="bz-art-card-placeholder"><span>📦</span></div>
+                      )}
+                      <span className={`bz-art-card-badge${p.status === 'ACTIVE' ? ' bz-art-card-badge--active' : p.status === 'INACTIVE' ? ' bz-art-card-badge--inactive' : ' bz-art-card-badge--archived'}`}>
+                        {p.status === 'ACTIVE' ? '🟢' : p.status === 'INACTIVE' ? '⏸' : '📦'}
+                      </span>
+                    </div>
+                    <div className="bz-art-card-body">
+                      <h4 className="bz-art-card-title">{p.title}</h4>
+                      <p className="bz-art-card-meta">{p.category} · {p.city}</p>
+                      <p className="bz-art-card-price">{formatPriceLabelFromUsdCents(p.priceUsdCents)}</p>
+                      <p className="bz-art-card-stock">Stock: {p.stockQuantity !== null ? p.stockQuantity : '∞'}</p>
+                    </div>
+                    <div className="bz-art-card-actions">
+                      <button type="button" className="bz-art-action bz-art-action--edit" title="Modifier" disabled={bzArticleBusy !== null} onClick={() => handleBzEdit(p)}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+                      {p.status === 'ACTIVE' && (
+                        <button type="button" className="bz-art-action bz-art-action--toggle" title="Désactiver" disabled={bzArticleBusy !== null} onClick={() => void handleBzStatusChange(p.id, 'INACTIVE')}><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg></button>
+                      )}
+                      {p.status === 'INACTIVE' && (
+                        <button type="button" className="bz-art-action bz-art-action--toggle" title="Activer" disabled={bzArticleBusy !== null} onClick={() => void handleBzStatusChange(p.id, 'ACTIVE')}><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg></button>
+                      )}
+                      {(p.status === 'ACTIVE' || p.status === 'INACTIVE') && (
+                        <button type="button" className="bz-art-action bz-art-action--archive" title="Archiver" disabled={bzArticleBusy !== null} onClick={() => void handleBzStatusChange(p.id, 'ARCHIVED')}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg></button>
+                      )}
+                      {p.status !== 'DELETED' && (
+                        <button type="button" className="bz-art-action bz-art-action--delete" title="Supprimer" disabled={bzArticleBusy !== null} onClick={() => void handleBzStatusChange(p.id, 'DELETED')}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>
+                      )}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+
+            {/* ── Pagination ── */}
+            {prodTotalPages > 1 && (
+              <div className="bz-art-pagination">
+                <button type="button" className="bz-art-page-btn" disabled={prodPage <= 1} onClick={() => setProdPage(v => Math.max(1, v - 1))}>←</button>
+                <span className="bz-art-page-num">{prodPage} / {prodTotalPages}</span>
+                <button type="button" className="bz-art-page-btn" disabled={prodPage >= prodTotalPages} onClick={() => setProdPage(v => v + 1)}>→</button>
+              </div>
+            )}
           </div>
         )}
 
         {/* ── SERVICES ── */}
         {activeSection === 'services' && (
           <div className="ud-section animate-fade-in">
-            <section className="ud-glass-panel bz-glass-panel">
-              <div className="ud-panel-head">
-                <h2 className="ud-panel-title">{t('biz.myServices')} ({services.length})</h2>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button type="button" className="ud-quick-btn ud-quick-btn--primary bz-cta-gold" onClick={() => { setImportOpen(importOpen === 'service' ? null : 'service'); setImportMsg(null); setImportProgress(null); }}>
-                    {importOpen === 'service' ? '✕ Fermer' : '📥 Importer'}
-                  </button>
-                  <button type="button" className="ud-quick-btn ud-quick-btn--primary bz-cta-gold" onClick={() => { setCreateMode(createMode === 'service' ? null : 'service'); setCreateStep(1); setCreateUploadFiles([]); setCreateUploadPreviews(p => { p.forEach(u => URL.revokeObjectURL(u)); return []; }); setCreateMsg(null); }}>
-                    {createMode === 'service' ? t('biz.cancelBtn') : t('biz.newService')}
-                  </button>
+            {/* ── Topbar ── */}
+            <div className="bz-art-topbar">
+              <div className="bz-art-topbar-left">
+                <h2 className="bz-art-topbar-title">🛠️ {t('biz.myServices')}</h2>
+                <div className="bz-art-stats-inline">
+                  <span className="bz-art-stat-chip bz-art-stat-chip--active">{svcStats.active} actifs</span>
+                  <span className="bz-art-stat-chip">{svcStats.inactive} inactifs</span>
+                  <span className="bz-art-stat-chip">{svcStats.archived} archivés</span>
                 </div>
               </div>
-              {importOpen === 'service' && (
-                <div className="bz-import-zone" style={{ marginBottom: 'var(--space-lg)' }}>
-                  <h3 style={{ margin: '0 0 var(--space-sm)' }}>📥 Importer des services en masse</h3>
-                  <p style={{ fontSize: '0.85rem', opacity: 0.7, margin: '0 0 var(--space-md)' }}>
-                    Formats acceptés : <strong>.csv</strong>, <strong>.json</strong>, <strong>.xml</strong><br />
-                    Colonnes attendues : titre, categorie, prix (CDF), description, ville
-                  </p>
-                  <label className="bz-photo-drop-zone bz-import-drop">
-                    <input type="file" accept=".csv,.json,.xml" disabled={importBusy} onChange={e => { const f = e.target.files?.[0]; if (f) handleImportFile(f, 'SERVICE'); e.target.value = ''; }} />
-                    <span className="bz-photo-drop-icon">📄</span>
-                    <span className="bz-photo-drop-text">{importBusy ? 'Import en cours…' : 'Glissez ou cliquez pour choisir un fichier'}</span>
-                  </label>
-                  {importProgress && (
-                    <div style={{ marginTop: 'var(--space-sm)' }}>
-                      <div className="bz-import-progress-bar"><div className="bz-import-progress-fill" style={{ width: `${(importProgress.done / importProgress.total) * 100}%` }} /></div>
-                      <small>{importProgress.done} / {importProgress.total}</small>
-                    </div>
-                  )}
-                  {importMsg && <p className={`bz-setup-${importMsg.startsWith('✓') ? 'note' : 'error'}`} style={{ marginTop: 'var(--space-sm)' }}>{importMsg}</p>}
-                </div>
-              )}
-              {createMode === 'service' && (
-                <form className="bz-setup-form ud-publish-modal" style={{ marginBottom: 'var(--space-lg)' }} onSubmit={handleCreateListing}>
-                  {/* Étape 1 — Infos */}
-                  {createStep === 1 && (
-                    <div className="ud-publish-step-content">
-                      <label className="ud-publish-field">
-                        <span className="ud-publish-field-label">{t('biz.titleLabel')} *</span>
-                        <input className="ud-input" type="text" required minLength={2} maxLength={140} value={createForm.title} onChange={e => setCreateForm(f => ({ ...f, title: e.target.value }))} placeholder="Ex: Réparation smartphones toutes marques" />
-                      </label>
-                      <label className="ud-publish-field">
-                        <span className="ud-publish-field-label">{t('biz.categoryLabel')} *</span>
-                        <select className="ud-input" required value={createForm.category} onChange={e => setCreateForm(f => ({ ...f, category: e.target.value }))}>
-                          <option value="">Choisir une catégorie</option>
-                          {LISTING_SERVICE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                        </select>
-                      </label>
-                      <label className="ud-publish-field">
-                        <span className="ud-publish-field-label">{t('biz.descriptionLabel')}</span>
-                        <textarea className="ud-input" rows={4} maxLength={1200} value={createForm.description} onChange={e => setCreateForm(f => ({ ...f, description: e.target.value }))} placeholder="Description détaillée du service..." />
-                        <span className="ud-publish-field-hint">{createForm.description.length}/1200 caractères</span>
-                      </label>
-                      <div className="ud-publish-nav">
-                        <span />
-                        <button type="button" className="ud-quick-btn ud-quick-btn--primary" onClick={() => { if (!createForm.title.trim()) { setCreateMsg('Le titre est requis'); return; } if (!createForm.category) { setCreateMsg('La catégorie est requise'); return; } setCreateMsg(null); setCreateStep(2); }}>Suivant →</button>
-                      </div>
-                    </div>
-                  )}
-                  {/* Étape 2 — Tarif & Localisation */}
-                  {createStep === 2 && (
-                    <div className="ud-publish-step-content">
-                      <label className="ud-publish-field">
-                        <span className="ud-publish-field-label">{t('biz.rateCdf')} *</span>
-                        <div className="ud-publish-price-wrap">
-                          <span className="ud-publish-price-symbol">FC</span>
-                          <input className="ud-input" type="number" required min={0} value={createForm.priceCdf} onChange={e => setCreateForm(f => ({ ...f, priceCdf: e.target.value }))} placeholder="0" />
-                        </div>
-                        {createForm.priceCdf && parseInt(createForm.priceCdf) > 0 && (
-                          <span className="ud-publish-field-hint">≈ {(parseInt(createForm.priceCdf) / USD_TO_CDF).toFixed(2)} $ USD</span>
-                        )}
-                      </label>
-                      <label className="ud-publish-field">
-                        <span className="ud-publish-field-label">{t('biz.cityLabel')} *</span>
-                        <LocationPicker value={{ lat: createForm.latitude, lng: createForm.longitude, address: createForm.city }} onChange={({ address, city, lat, lng }) => setCreateForm(f => ({ ...f, city: city || address, latitude: lat, longitude: lng }))} onStructuredChange={(loc) => setCreateForm(f => ({ ...f, city: loc.city || loc.formattedAddress, latitude: loc.latitude ?? f.latitude, longitude: loc.longitude ?? f.longitude, country: loc.country || f.country, countryCode: loc.countryCode || f.countryCode, region: loc.region || '', district: loc.district || '', formattedAddress: loc.formattedAddress || '', placeId: loc.placeId || '' }))} placeholder="Kinshasa" />
-                      </label>
-                      <label className="ud-publish-field">
-                        <span className="ud-publish-field-label">📍 Rayon d'intervention (km)</span>
-                        <input className="ud-input" type="number" min={0} max={500} value={createForm.serviceRadiusKm} onChange={e => setCreateForm(f => ({ ...f, serviceRadiusKm: e.target.value }))} placeholder="Ex: 25" />
-                      </label>
-                      <label className="ud-publish-field">
-                        <span className="ud-publish-field-label">🔒 Visibilité</span>
-                        <VisibilitySelector value={createForm.locationVisibility} onChange={(v: LocationVisibility) => setCreateForm(f => ({ ...f, locationVisibility: v }))} />
-                      </label>
-                      <label className="ud-publish-field" style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-                        <input type="checkbox" checked={createForm.isNegotiable} onChange={e => setCreateForm(f => ({ ...f, isNegotiable: e.target.checked }))} />
-                        <span>{t('negotiation.allowPrice')}</span>
-                      </label>
-                      <div className="ud-publish-nav">
-                        <button type="button" className="ud-quick-btn" onClick={() => setCreateStep(1)}>← Retour</button>
-                        <button type="button" className="ud-quick-btn ud-quick-btn--primary" onClick={() => setCreateStep(3)}>Suivant →</button>
-                      </div>
-                    </div>
-                  )}
-                  {/* Étape 3 — Médias & Validation */}
-                  {createStep === 3 && (
-                    <div className="ud-publish-step-content">
-                      <div className="ud-publish-media-zone">
-                        <p className="ud-publish-field-label">📷 Photos & Vidéo</p>
-                        <p className="ud-publish-field-hint" style={{ marginBottom: '0.75rem' }}>Max 5 photos + 1 vidéo (50 Mo max)</p>
-                        <div className="ud-publish-media-grid">
-                          {createUploadPreviews.map((url, i) => {
-                            const file = createUploadFiles[i];
-                            const isVideo = file?.type.startsWith('video/');
-                            return (
-                              <div key={url} className="ud-publish-media-thumb">
-                                {isVideo ? <video src={url} className="ud-publish-media-img" muted /> : <img src={url} alt={`Media ${i + 1}`} className="ud-publish-media-img" />}
-                                <button type="button" className="ud-publish-media-remove" onClick={() => removeCreateFile(i)}>✕</button>
-                                {isVideo && <span className="ud-publish-media-badge">🎬 Vidéo</span>}
-                              </div>
-                            );
-                          })}
-                          {createUploadFiles.length < 6 && (
-                            <label className="ud-publish-media-add">
-                              <input type="file" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm" multiple onChange={handleCreateFileSelect} style={{ display: 'none' }} />
-                              <span className="ud-publish-media-add-icon">+</span>
-                              <span className="ud-publish-media-add-label">Ajouter</span>
-                            </label>
-                          )}
-                        </div>
-                      </div>
-                      <div className="ud-publish-summary">
-                        <h3 className="ud-publish-summary-title">Récapitulatif</h3>
-                        <div className="ud-publish-summary-grid">
-                          <span>Type</span><strong>🛠️ Service</strong>
-                          <span>Titre</span><strong>{createForm.title || '–'}</strong>
-                          <span>Catégorie</span><strong>{createForm.category || '–'}</strong>
-                          <span>Tarif</span><strong>{createForm.priceCdf && parseInt(createForm.priceCdf) > 0 ? `${new Intl.NumberFormat('fr-CD').format(parseInt(createForm.priceCdf))} FC` : 'Tarif libre'}</strong>
-                          <span>Ville</span><strong>{createForm.city || '–'}</strong>
-                          {createForm.serviceRadiusKm && <><span>Rayon</span><strong>{createForm.serviceRadiusKm} km</strong></>}
-                          <span>Médias</span><strong>{createUploadFiles.length} fichier(s)</strong>
-                        </div>
-                      </div>
-                      {createMsg && <p className={`bz-setup-${createMsg.startsWith('✓') ? 'note' : 'error'}`}>{createMsg}</p>}
-                      <div className="ud-publish-nav">
-                        <button type="button" className="ud-quick-btn" onClick={() => setCreateStep(2)}>← Retour</button>
-                        <button type="submit" className="ud-quick-btn ud-quick-btn--primary bz-cta-gold" disabled={createBusy}>
-                          {createBusy ? '⏳ Publication...' : '🚀 Publier le service'}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </form>
-              )}
-              {services.length === 0 ? (
-                <p className="ud-placeholder-text" style={{ padding: 'var(--space-lg)' }}>
-                  {dataLoading ? t('biz.loadingData') : t('biz.noServicesEmpty')}
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button type="button" className="bz-art-publish-btn" style={{ background: 'rgba(214,170,80,.15)', color: '#d6aa50' }} onClick={() => { setImportOpen(importOpen === 'service' ? null : 'service'); setImportMsg(null); setImportProgress(null); }}>
+                  <span className="bz-art-publish-icon">📥</span>
+                  {importOpen === 'service' ? '✕ Fermer' : 'Importer'}
+                </button>
+                <button type="button" className="bz-art-publish-btn" onClick={() => { setCreateMode(createMode === 'service' ? null : 'service'); setCreateStep(1); setCreateUploadFiles([]); setCreateUploadPreviews(p => { p.forEach(u => URL.revokeObjectURL(u)); return []; }); setCreateMsg(null); }}>
+                  <span className="bz-art-publish-icon">+</span>
+                  {createMode === 'service' ? t('biz.cancelBtn') : t('biz.newService')}
+                </button>
+              </div>
+            </div>
+
+            {/* ── Import zone ── */}
+            {importOpen === 'service' && (
+              <div className="bz-import-zone" style={{ marginBottom: 'var(--space-lg)' }}>
+                <h3 style={{ margin: '0 0 var(--space-sm)' }}>📥 Importer des services en masse</h3>
+                <p style={{ fontSize: '0.85rem', opacity: 0.7, margin: '0 0 var(--space-md)' }}>
+                  Formats acceptés : <strong>.csv</strong>, <strong>.json</strong>, <strong>.xml</strong><br />
+                  Colonnes attendues : titre, categorie, prix (CDF), description, ville
                 </p>
-              ) : (
-                <table className="ud-table">
-                  <thead>
-                    <tr><th>{t('biz.thService')}</th><th>{t('biz.thCategory')}</th><th>{t('biz.thRate')}</th><th>{t('biz.thCity')}</th><th>{t('biz.thNegotiable')}</th><th>{t('biz.thStatus')}</th></tr>
-                  </thead>
-                  <tbody>
-                    {services.map(s => (
-                      <tr key={s.id}>
-                        <td>{s.title}</td>
-                        <td>{s.category}</td>
-                        <td>{formatMoneyFromUsdCents(s.priceUsdCents)}</td>
-                        <td>{s.city}</td>
-                        <td><button type="button" className={`ud-badge ${s.isNegotiable !== false ? 'ud-badge--done' : ''}`} style={{ cursor: 'pointer', border: 'none' }} onClick={() => { listings.update(s.id, { isNegotiable: s.isNegotiable === false }).then(() => { invalidateCache('/listings/mine'); listings.mine({ limit: 50 }).then(r => setMyListings(r.listings)); }); }}>{s.isNegotiable !== false ? t('negotiation.yes') : t('negotiation.no')}</button></td>
-                        <td><span className={s.isPublished ? 'ud-badge ud-badge--done' : 'ud-badge'}>{s.isPublished ? t('biz.published') : t('biz.draft')}</span></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </section>
+                <label className="bz-photo-drop-zone bz-import-drop">
+                  <input type="file" accept=".csv,.json,.xml" disabled={importBusy} onChange={e => { const f = e.target.files?.[0]; if (f) handleImportFile(f, 'SERVICE'); e.target.value = ''; }} />
+                  <span className="bz-photo-drop-icon">📄</span>
+                  <span className="bz-photo-drop-text">{importBusy ? 'Import en cours…' : 'Glissez ou cliquez pour choisir un fichier'}</span>
+                </label>
+                {importProgress && (
+                  <div style={{ marginTop: 'var(--space-sm)' }}>
+                    <div className="bz-import-progress-bar"><div className="bz-import-progress-fill" style={{ width: `${(importProgress.done / importProgress.total) * 100}%` }} /></div>
+                    <small>{importProgress.done} / {importProgress.total}</small>
+                  </div>
+                )}
+                {importMsg && <p className={`bz-setup-${importMsg.startsWith('✓') ? 'note' : 'error'}`} style={{ marginTop: 'var(--space-sm)' }}>{importMsg}</p>}
+              </div>
+            )}
+
+            {/* ── Formulaire création service ── */}
+            {createMode === 'service' && (
+              <form className="bz-setup-form ud-publish-modal" style={{ marginBottom: 'var(--space-lg)' }} onSubmit={handleCreateListing}>
+                {createStep === 1 && (
+                  <div className="ud-publish-step-content">
+                    <label className="ud-publish-field">
+                      <span className="ud-publish-field-label">{t('biz.titleLabel')} *</span>
+                      <input className="ud-input" type="text" required minLength={2} maxLength={140} value={createForm.title} onChange={e => setCreateForm(f => ({ ...f, title: e.target.value }))} placeholder="Ex: Réparation smartphones toutes marques" />
+                    </label>
+                    <label className="ud-publish-field">
+                      <span className="ud-publish-field-label">{t('biz.categoryLabel')} *</span>
+                      <select className="ud-input" required value={createForm.category} onChange={e => setCreateForm(f => ({ ...f, category: e.target.value }))}>
+                        <option value="">Choisir une catégorie</option>
+                        {LISTING_SERVICE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    </label>
+                    <label className="ud-publish-field">
+                      <span className="ud-publish-field-label">{t('biz.descriptionLabel')}</span>
+                      <textarea className="ud-input" rows={4} maxLength={1200} value={createForm.description} onChange={e => setCreateForm(f => ({ ...f, description: e.target.value }))} placeholder="Description détaillée du service..." />
+                      <span className="ud-publish-field-hint">{createForm.description.length}/1200 caractères</span>
+                    </label>
+                    <div className="ud-publish-nav">
+                      <span />
+                      <button type="button" className="ud-quick-btn ud-quick-btn--primary" onClick={() => { if (!createForm.title.trim()) { setCreateMsg('Le titre est requis'); return; } if (!createForm.category) { setCreateMsg('La catégorie est requise'); return; } setCreateMsg(null); setCreateStep(2); }}>Suivant →</button>
+                    </div>
+                  </div>
+                )}
+                {createStep === 2 && (
+                  <div className="ud-publish-step-content">
+                    <label className="ud-publish-field">
+                      <span className="ud-publish-field-label">{t('biz.rateCdf')} *</span>
+                      <div className="ud-publish-price-wrap">
+                        <span className="ud-publish-price-symbol">FC</span>
+                        <input className="ud-input" type="number" required min={0} value={createForm.priceCdf} onChange={e => setCreateForm(f => ({ ...f, priceCdf: e.target.value }))} placeholder="0" />
+                      </div>
+                      {createForm.priceCdf && parseInt(createForm.priceCdf) > 0 && (
+                        <span className="ud-publish-field-hint">≈ {(parseInt(createForm.priceCdf) / USD_TO_CDF).toFixed(2)} $ USD</span>
+                      )}
+                    </label>
+                    <label className="ud-publish-field">
+                      <span className="ud-publish-field-label">{t('biz.cityLabel')} *</span>
+                      <LocationPicker value={{ lat: createForm.latitude, lng: createForm.longitude, address: createForm.city }} onChange={({ address, city, lat, lng }) => setCreateForm(f => ({ ...f, city: city || address, latitude: lat, longitude: lng }))} onStructuredChange={(loc) => setCreateForm(f => ({ ...f, city: loc.city || loc.formattedAddress, latitude: loc.latitude ?? f.latitude, longitude: loc.longitude ?? f.longitude, country: loc.country || f.country, countryCode: loc.countryCode || f.countryCode, region: loc.region || '', district: loc.district || '', formattedAddress: loc.formattedAddress || '', placeId: loc.placeId || '' }))} placeholder="Kinshasa" />
+                    </label>
+                    <label className="ud-publish-field">
+                      <span className="ud-publish-field-label">📍 Rayon d'intervention (km)</span>
+                      <input className="ud-input" type="number" min={0} max={500} value={createForm.serviceRadiusKm} onChange={e => setCreateForm(f => ({ ...f, serviceRadiusKm: e.target.value }))} placeholder="Ex: 25" />
+                    </label>
+                    <label className="ud-publish-field">
+                      <span className="ud-publish-field-label">🔒 Visibilité</span>
+                      <VisibilitySelector value={createForm.locationVisibility} onChange={(v: LocationVisibility) => setCreateForm(f => ({ ...f, locationVisibility: v }))} />
+                    </label>
+                    <label className="ud-publish-field" style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                      <input type="checkbox" checked={createForm.isNegotiable} onChange={e => setCreateForm(f => ({ ...f, isNegotiable: e.target.checked }))} />
+                      <span>{t('negotiation.allowPrice')}</span>
+                    </label>
+                    <div className="ud-publish-nav">
+                      <button type="button" className="ud-quick-btn" onClick={() => setCreateStep(1)}>← Retour</button>
+                      <button type="button" className="ud-quick-btn ud-quick-btn--primary" onClick={() => setCreateStep(3)}>Suivant →</button>
+                    </div>
+                  </div>
+                )}
+                {createStep === 3 && (
+                  <div className="ud-publish-step-content">
+                    <div className="ud-publish-media-zone">
+                      <p className="ud-publish-field-label">📷 Photos & Vidéo</p>
+                      <p className="ud-publish-field-hint" style={{ marginBottom: '0.75rem' }}>Max 5 photos + 1 vidéo (50 Mo max)</p>
+                      <div className="ud-publish-media-grid">
+                        {createUploadPreviews.map((url, i) => {
+                          const file = createUploadFiles[i];
+                          const isVideo = file?.type.startsWith('video/');
+                          return (
+                            <div key={url} className="ud-publish-media-thumb">
+                              {isVideo ? <video src={url} className="ud-publish-media-img" muted /> : <img src={url} alt={`Media ${i + 1}`} className="ud-publish-media-img" />}
+                              <button type="button" className="ud-publish-media-remove" onClick={() => removeCreateFile(i)}>✕</button>
+                              {isVideo && <span className="ud-publish-media-badge">🎬 Vidéo</span>}
+                            </div>
+                          );
+                        })}
+                        {createUploadFiles.length < 6 && (
+                          <label className="ud-publish-media-add">
+                            <input type="file" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm" multiple onChange={handleCreateFileSelect} style={{ display: 'none' }} />
+                            <span className="ud-publish-media-add-icon">+</span>
+                            <span className="ud-publish-media-add-label">Ajouter</span>
+                          </label>
+                        )}
+                      </div>
+                    </div>
+                    <div className="ud-publish-summary">
+                      <h3 className="ud-publish-summary-title">Récapitulatif</h3>
+                      <div className="ud-publish-summary-grid">
+                        <span>Type</span><strong>🛠️ Service</strong>
+                        <span>Titre</span><strong>{createForm.title || '–'}</strong>
+                        <span>Catégorie</span><strong>{createForm.category || '–'}</strong>
+                        <span>Tarif</span><strong>{createForm.priceCdf && parseInt(createForm.priceCdf) > 0 ? `${new Intl.NumberFormat('fr-CD').format(parseInt(createForm.priceCdf))} FC` : 'Tarif libre'}</strong>
+                        <span>Ville</span><strong>{createForm.city || '–'}</strong>
+                        {createForm.serviceRadiusKm && <><span>Rayon</span><strong>{createForm.serviceRadiusKm} km</strong></>}
+                        <span>Médias</span><strong>{createUploadFiles.length} fichier(s)</strong>
+                      </div>
+                    </div>
+                    {createMsg && <p className={`bz-setup-${createMsg.startsWith('✓') ? 'note' : 'error'}`}>{createMsg}</p>}
+                    <div className="ud-publish-nav">
+                      <button type="button" className="ud-quick-btn" onClick={() => setCreateStep(2)}>← Retour</button>
+                      <button type="submit" className="ud-quick-btn ud-quick-btn--primary bz-cta-gold" disabled={createBusy}>
+                        {createBusy ? '⏳ Publication...' : '🚀 Publier le service'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </form>
+            )}
+
+            {/* ── Filtres ── */}
+            <div className="bz-art-filters">
+              {(['', 'ACTIVE', 'INACTIVE', 'ARCHIVED'] as const).map((f) => (
+                <button key={f} type="button" className={`bz-art-filter-btn${svcFilter === f ? ' active' : ''}`} onClick={() => { setSvcFilter(f as ListingStatus | ''); setSvcPage(1); }}>
+                  {f === '' ? '🗂 Tous' : f === 'ACTIVE' ? '🟢 Actifs' : f === 'INACTIVE' ? '⏸ Inactifs' : '📦 Archivés'}
+                </button>
+              ))}
+            </div>
+
+            {/* ── Grille cards ── */}
+            {dataLoading ? (
+              <div className="bz-art-loading"><span className="bz-art-loading-spinner" /><span>Chargement…</span></div>
+            ) : pagedServices.length === 0 ? (
+              <div className="bz-art-empty">
+                <span className="bz-art-empty-icon">🛠️</span>
+                <p>{svcFilter ? 'Aucun service avec ce statut.' : t('biz.noServicesEmpty')}</p>
+              </div>
+            ) : (
+              <div className="bz-art-grid">
+                {pagedServices.map((s) => (
+                  <article key={s.id} className={`bz-art-card${s.status === 'INACTIVE' ? ' bz-art-card--dim' : ''}`}>
+                    <div className="bz-art-card-visual">
+                      {s.imageUrl ? (
+                        <img src={resolveMediaUrl(s.imageUrl)} alt={s.title} className="bz-art-card-img" loading="lazy" />
+                      ) : (
+                        <div className="bz-art-card-placeholder"><span>🛠️</span></div>
+                      )}
+                      <span className={`bz-art-card-badge${s.status === 'ACTIVE' ? ' bz-art-card-badge--active' : s.status === 'INACTIVE' ? ' bz-art-card-badge--inactive' : ' bz-art-card-badge--archived'}`}>
+                        {s.status === 'ACTIVE' ? '🟢' : s.status === 'INACTIVE' ? '⏸' : '📦'}
+                      </span>
+                    </div>
+                    <div className="bz-art-card-body">
+                      <h4 className="bz-art-card-title">{s.title}</h4>
+                      <p className="bz-art-card-meta">{s.category} · {s.city}</p>
+                      <p className="bz-art-card-price">{formatPriceLabelFromUsdCents(s.priceUsdCents)}</p>
+                    </div>
+                    <div className="bz-art-card-actions">
+                      <button type="button" className="bz-art-action bz-art-action--edit" title="Modifier" disabled={bzArticleBusy !== null} onClick={() => handleBzEdit(s)}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+                      {s.status === 'ACTIVE' && (
+                        <button type="button" className="bz-art-action bz-art-action--toggle" title="Désactiver" disabled={bzArticleBusy !== null} onClick={() => void handleBzStatusChange(s.id, 'INACTIVE')}><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg></button>
+                      )}
+                      {s.status === 'INACTIVE' && (
+                        <button type="button" className="bz-art-action bz-art-action--toggle" title="Activer" disabled={bzArticleBusy !== null} onClick={() => void handleBzStatusChange(s.id, 'ACTIVE')}><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg></button>
+                      )}
+                      {(s.status === 'ACTIVE' || s.status === 'INACTIVE') && (
+                        <button type="button" className="bz-art-action bz-art-action--archive" title="Archiver" disabled={bzArticleBusy !== null} onClick={() => void handleBzStatusChange(s.id, 'ARCHIVED')}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg></button>
+                      )}
+                      {s.status !== 'DELETED' && (
+                        <button type="button" className="bz-art-action bz-art-action--delete" title="Supprimer" disabled={bzArticleBusy !== null} onClick={() => void handleBzStatusChange(s.id, 'DELETED')}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>
+                      )}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+
+            {/* ── Pagination ── */}
+            {svcTotalPages > 1 && (
+              <div className="bz-art-pagination">
+                <button type="button" className="bz-art-page-btn" disabled={svcPage <= 1} onClick={() => setSvcPage(v => Math.max(1, v - 1))}>←</button>
+                <span className="bz-art-page-num">{svcPage} / {svcTotalPages}</span>
+                <button type="button" className="bz-art-page-btn" disabled={svcPage >= svcTotalPages} onClick={() => setSvcPage(v => v + 1)}>→</button>
+              </div>
+            )}
           </div>
         )}
 
