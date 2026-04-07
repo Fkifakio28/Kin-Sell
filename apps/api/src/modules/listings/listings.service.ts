@@ -626,21 +626,7 @@ export const latestListings = async (input: { type?: ListingType; city?: string;
     });
   }
 
-  // Fallback: sans filtre pays si aucun résultat
-  if (rows.length === 0 && andClauses.length > 0) {
-    rows = await prisma.listing.findMany({
-      where: {
-        isPublished: true,
-        status: ListingStatus.ACTIVE,
-        type: input.type,
-      },
-      include: {
-        ownerUser: { include: { profile: true } },
-      },
-      orderBy: { createdAt: "desc" },
-      take: Math.max(1, Math.min(input.limit, 50)),
-    });
-  }
+  // Note: le filtre pays (andClauses) est toujours conservé
 
   return rows.map((row) => ({
     id: row.id,
