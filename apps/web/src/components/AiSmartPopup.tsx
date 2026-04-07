@@ -80,15 +80,21 @@ export default function AiSmartPopup() {
         await aiTrials.activate(current.actionTarget);
       }
 
+      const isBiz = current.accountType === 'BUSINESS';
+      const dashPath = isBiz ? '/business/dashboard' : '/account';
+
       if (current.actionType === "BOOST_ARTICLE" || current.actionType === "BOOST_SHOP" ||
         current.actionType === "UPGRADE_PLAN" || current.actionType === "ENABLE_AUTO_SALES") {
         navigate("/pricing");
       } else if (current.actionType === "VIEW_ANALYTICS") {
-        navigate("/dashboard?tab=analytics");
+        if (isBiz) { sessionStorage.setItem('ud-section', 'analytics'); navigate(dashPath); }
+        else { navigate(`${dashPath}?section=analytics`); }
       } else if (current.actionType === "PRICE_ADVICE") {
-        navigate("/dashboard?tab=overview");
+        if (isBiz) { sessionStorage.setItem('ud-section', 'dashboard'); navigate(dashPath); }
+        else { navigate(`${dashPath}?section=overview`); }
       } else if (current.actionType === "ACTIVATE_TRIAL") {
-        navigate("/dashboard?tab=kinsell");
+        if (isBiz) { sessionStorage.setItem('ud-section', 'kinsell'); navigate(dashPath); }
+        else { navigate(`${dashPath}?section=kinsell`); }
       }
     } catch { /* ignore */ }
     handleDismiss();

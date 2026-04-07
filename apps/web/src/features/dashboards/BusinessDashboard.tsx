@@ -2548,7 +2548,7 @@ export function BusinessDashboard() {
                                     if (rec.actionType === 'ACTIVATE_TRIAL' && rec.actionTarget) {
                                       await aiTrials.activate(rec.actionTarget);
                                     }
-                                    navigate(rec.actionType === 'VIEW_ANALYTICS' ? '/business?tab=analytics' : '/pricing');
+                                    if (rec.actionType === 'VIEW_ANALYTICS') { setActiveSection('analytics'); } else { navigate('/pricing'); }
                                   } catch { /* silent */ }
                                 }}
                                 style={{ padding: '6px 12px', fontSize: 11, fontWeight: 600, border: 'none', borderRadius: 6, background: 'linear-gradient(135deg, #6f58ff, #9b7aff)', color: '#fff', cursor: 'pointer' }}
