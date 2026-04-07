@@ -213,6 +213,29 @@ export async function toggleContactFavorite(userId: string, contactId: string, i
   });
 }
 
+// ── Auto-ajout contacts depuis la messagerie ──
+
+export async function autoAddMessagingContacts(userIdA: string, userIdB: string) {
+  if (userIdA === userIdB) return;
+
+  // Vérifier les rôles — exclure les admins
+  const users = await prisma.user.findMany({
+    where: { id: { in: [userIdA, userIdB] } },
+    select: { id: true, role: true },
+  });
+
+  const hasAdmin = users.some(
+    (u) => u.role === "ADMIN" || u.role === "SUPER_ADMIN"
+  );
+  if (hasAdmin) return;
+
+  // Ajout mutuel silencieux (upsert via addManualContact)
+  await Promise.all([
+    addManualContact(userIdA, userIdB).catch(() => {}),
+    addManualContact(userIdB, userIdA).catch(() => {}),
+  ]);
+}
+
 // ── Supprimer un contact ──
 
 export async function deleteContact(userId: string, contactId: string) {

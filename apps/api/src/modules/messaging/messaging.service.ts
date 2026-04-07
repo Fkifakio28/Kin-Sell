@@ -2,6 +2,7 @@ import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
 import type { MessageType, Role } from "@prisma/client";
 import { analyzeMessage } from "../message-guard/message-guard.service.js";
+import { autoAddMessagingContacts } from "../contacts/contacts.service.js";
 
 /* ── Conversations ── */
 
@@ -23,7 +24,11 @@ export async function getOrCreateDMConversation(userIdA: string, userIdB: string
     },
   });
 
-  if (existing) return { ...existing, messages: existing.messages ?? [], unreadCount: 0 };
+  if (existing) {
+    // Auto-ajout contact mutuel (non-bloquant, ignore erreurs)
+    autoAddMessagingContacts(userIdA, userIdB).catch(() => {});
+    return { ...existing, messages: existing.messages ?? [], unreadCount: 0 };
+  }
 
   // Verify both users exist
   const users = await prisma.user.findMany({ where: { id: { in: [userIdA, userIdB] } } });
@@ -41,6 +46,8 @@ export async function getOrCreateDMConversation(userIdA: string, userIdB: string
       messages: { orderBy: { createdAt: "desc" }, take: 1, include: { sender: { select: { id: true, profile: { select: { displayName: true } } } } } },
     },
   });
+  // Auto-ajout contact mutuel (non-bloquant, ignore erreurs)
+  autoAddMessagingContacts(userIdA, userIdB).catch(() => {});
   return { ...conv, unreadCount: 0 };
 }
 
