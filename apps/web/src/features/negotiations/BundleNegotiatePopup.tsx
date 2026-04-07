@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useLocaleCurrency } from "../../app/providers/LocaleCurrencyProvider";
+import { DEFAULT_CURRENCY_RATES } from "../../shared/constants/currencies";
 import { negotiations, resolveMediaUrl, type NegotiationSummary, type BundleNegotiationResult, ApiError } from "../../lib/api-client";
 import "./negotiate-popup.css";
 
@@ -21,7 +22,10 @@ type BundleNegotiatePopupProps = {
 type BundleMode = "SIMPLE" | "QUANTITY" | "GROUPED";
 
 export function BundleNegotiatePopup({ sellerDisplayName, listings, onClose, onSuccess }: BundleNegotiatePopupProps) {
-  const { formatMoneyFromUsdCents, t } = useLocaleCurrency();
+  const { formatMoneyFromUsdCents, t, currency } = useLocaleCurrency();
+  const negRate = currency === 'USD' ? 1 : (DEFAULT_CURRENCY_RATES[currency] ?? DEFAULT_CURRENCY_RATES.CDF);
+  const negSymbols: Record<string, string> = { CDF: 'FC', USD: '$', EUR: '€', XAF: 'XAF', AOA: 'Kz', XOF: 'XOF', GNF: 'GNF', MAD: 'MAD' };
+  const negSym = negSymbols[currency] || currency;
   const [mode, setMode] = useState<BundleMode>("SIMPLE");
   const [items, setItems] = useState<{ listingId: string; quantity: number; selected: boolean }[]>(
     listings.map((l) => ({ listingId: l.id, quantity: 1, selected: true }))
@@ -55,12 +59,12 @@ export function BundleNegotiatePopup({ sellerDisplayName, listings, onClose, onS
       setError(t("error.minBundleItems"));
       return;
     }
-    const dollars = parseFloat(totalDollars);
-    if (isNaN(dollars) || dollars <= 0) {
+    const localAmount = parseFloat(totalDollars);
+    if (isNaN(localAmount) || localAmount <= 0) {
       setError(t("error.invalidTotal"));
       return;
     }
-    const cents = Math.round(dollars * 100);
+    const cents = Math.round((localAmount / negRate) * 100);
     setBusy(true);
     setError(null);
     try {
@@ -82,7 +86,7 @@ export function BundleNegotiatePopup({ sellerDisplayName, listings, onClose, onS
     }
   };
 
-  const proposedCents = Math.round((parseFloat(totalDollars) || 0) * 100);
+  const proposedCents = Math.round(((parseFloat(totalDollars) || 0) / negRate) * 100);
 
   const modeLabels: Record<BundleMode, { icon: string; label: string }> = {
     SIMPLE: { icon: "🤝", label: t("negotiation.modeSimple") },
@@ -162,19 +166,19 @@ export function BundleNegotiatePopup({ sellerDisplayName, listings, onClose, onS
           </div>
 
           <label className="neg-label">
-            Votre prix total propose ($)
+            Votre prix total propose ({negSym})
             <div className="neg-input-row">
               <input
                 className="neg-input"
                 type="number"
                 min={0.01}
-                step={0.01}
-                placeholder={(totalOriginalCents / 100).toFixed(2)}
+                step={currency === 'USD' || currency === 'EUR' || currency === 'MAD' ? 0.01 : 1}
+                placeholder={(totalOriginalCents / 100 * negRate).toFixed(currency === 'USD' || currency === 'EUR' || currency === 'MAD' ? 2 : 0)}
                 value={totalDollars}
                 onChange={(e) => setTotalDollars(e.target.value)}
                 autoFocus
               />
-              <span className="neg-currency">USD</span>
+              <span className="neg-currency">{negSym}</span>
             </div>
           </label>
 

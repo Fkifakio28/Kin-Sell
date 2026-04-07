@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useLocaleCurrency } from "../../app/providers/LocaleCurrencyProvider";
+import { DEFAULT_CURRENCY_RATES } from "../../shared/constants/currencies";
 import { negotiations, resolveMediaUrl, type NegotiationSummary, type GroupNegotiationSummary, ApiError } from "../../lib/api-client";
 import { useSocket } from "../../hooks/useSocket";
 import "./negotiate-popup.css";
@@ -20,7 +21,10 @@ type NegotiatePopupProps = {
 type NegMode = "SIMPLE" | "QUANTITY" | "GROUPED";
 
 export function NegotiatePopup({ listing, onClose, onSuccess }: NegotiatePopupProps) {
-  const { t, formatMoneyFromUsdCents } = useLocaleCurrency();
+  const { t, formatMoneyFromUsdCents, currency } = useLocaleCurrency();
+  const negRate = currency === 'USD' ? 1 : (DEFAULT_CURRENCY_RATES[currency] ?? DEFAULT_CURRENCY_RATES.CDF);
+  const negSymbols: Record<string, string> = { CDF: 'FC', USD: '$', EUR: '€', XAF: 'XAF', AOA: 'Kz', XOF: 'XOF', GNF: 'GNF', MAD: 'MAD' };
+  const negSym = negSymbols[currency] || currency;
   const { on, off } = useSocket();
   const [mode, setMode] = useState<NegMode>("SIMPLE");
   const [priceDollars, setPriceDollars] = useState("");
@@ -71,12 +75,12 @@ export function NegotiatePopup({ listing, onClose, onSuccess }: NegotiatePopupPr
   }, [mode, on, off, loadOpenGroups]);
 
   const handleSubmit = async () => {
-    const dollars = parseFloat(priceDollars);
-    if (isNaN(dollars) || dollars <= 0) {
+    const localAmount = parseFloat(priceDollars);
+    if (isNaN(localAmount) || localAmount <= 0) {
       setError(t("error.invalidPrice"));
       return;
     }
-    const cents = Math.round(dollars * 100);
+    const cents = Math.round((localAmount / negRate) * 100);
     setBusy(true);
     setError(null);
     try {
@@ -109,8 +113,8 @@ export function NegotiatePopup({ listing, onClose, onSuccess }: NegotiatePopupPr
     }
   };
 
-  const originalDollars = (listing.priceUsdCents / 100).toFixed(2);
-  const proposedCents = Math.round((parseFloat(priceDollars) || 0) * 100);
+  const originalDollars = (listing.priceUsdCents / 100 * negRate).toFixed(currency === 'USD' || currency === 'EUR' || currency === 'MAD' ? 2 : 0);
+  const proposedCents = Math.round(((parseFloat(priceDollars) || 0) / negRate) * 100);
   const totalProposed = proposedCents * quantity;
   const totalOriginal = listing.priceUsdCents * quantity;
 
@@ -199,19 +203,19 @@ export function NegotiatePopup({ listing, onClose, onSuccess }: NegotiatePopupPr
 
         <div className="neg-form">
           <label className="neg-label">
-            {mode === "QUANTITY" ? "Prix unitaire proposé ($)" : "Votre prix proposé ($)"}
+            {mode === "QUANTITY" ? `Prix unitaire proposé (${negSym})` : `Votre prix proposé (${negSym})`}
             <div className="neg-input-row">
               <input
                 className="neg-input"
                 type="number"
                 min={0.01}
-                step={0.01}
+                step={currency === 'USD' || currency === 'EUR' || currency === 'MAD' ? 0.01 : 1}
                 placeholder={originalDollars}
                 value={priceDollars}
                 onChange={(e) => setPriceDollars(e.target.value)}
                 autoFocus
               />
-              <span className="neg-currency">USD</span>
+              <span className="neg-currency">{negSym}</span>
             </div>
           </label>
 

@@ -2597,7 +2597,7 @@ export function UserDashboard() {
                         <div className="ud-neg-card-prices">
                           <div className="ud-neg-price-row">
                             <span>{t('user.catalogPrice')}</span>
-                            <span className="ud-neg-price-original">{(neg.originalPriceUsdCents / 100).toFixed(2)} $</span>
+                            <span className="ud-neg-price-original">{formatMoneyFromUsdCents(neg.originalPriceUsdCents)}</span>
                           </div>
                           <div className="ud-neg-price-row">
                             <span>{t('user.quantityLabel')}</span>
@@ -2606,7 +2606,7 @@ export function UserDashboard() {
                           {lastOffer && (
                             <div className="ud-neg-price-row">
                               <span>{t('user.proposedPrice')}</span>
-                              <span className="ud-neg-price-current">{(lastOffer.priceUsdCents / 100).toFixed(2)} $</span>
+                              <span className="ud-neg-price-current">{formatMoneyFromUsdCents(lastOffer.priceUsdCents)}</span>
                             </div>
                           )}
                         </div>
@@ -2626,7 +2626,7 @@ export function UserDashboard() {
                                     )}
                                     <div className="ud-neg-bundle-item-info">
                                       <span className="ud-neg-bundle-item-title">{bi.listing?.title ?? 'Article'}</span>
-                                      <span className="ud-neg-bundle-item-detail">x{bi.quantity} — {((bi.listing?.priceUsdCents ?? 0) / 100).toFixed(2)} $</span>
+                                      <span className="ud-neg-bundle-item-detail">x{bi.quantity} — {formatMoneyFromUsdCents((bi.listing?.priceUsdCents ?? 0))}</span>
                                     </div>
                                   </div>
                                 ))}
@@ -2908,7 +2908,7 @@ export function UserDashboard() {
                         <div className="ud-neg-card-prices">
                           <div className="ud-neg-price-row">
                             <span>{t('user.catalogPrice')}</span>
-                            <span className="ud-neg-price-original">{(neg.originalPriceUsdCents / 100).toFixed(2)} $</span>
+                            <span className="ud-neg-price-original">{formatMoneyFromUsdCents(neg.originalPriceUsdCents)}</span>
                           </div>
                           <div className="ud-neg-price-row">
                             <span>{t('user.quantityLabel')}</span>
@@ -2917,7 +2917,7 @@ export function UserDashboard() {
                           {lastOffer && (
                             <div className="ud-neg-price-row">
                               <span>{t('user.lastOffer')}</span>
-                              <span className="ud-neg-price-current">{(lastOffer.priceUsdCents / 100).toFixed(2)} $</span>
+                              <span className="ud-neg-price-current">{formatMoneyFromUsdCents(lastOffer.priceUsdCents)}</span>
                             </div>
                           )}
                         </div>
@@ -2937,7 +2937,7 @@ export function UserDashboard() {
                                     )}
                                     <div className="ud-neg-bundle-item-info">
                                       <span className="ud-neg-bundle-item-title">{bi.listing?.title ?? 'Article'}</span>
-                                      <span className="ud-neg-bundle-item-detail">x{bi.quantity} — {((bi.listing?.priceUsdCents ?? 0) / 100).toFixed(2)} $</span>
+                                      <span className="ud-neg-bundle-item-detail">x{bi.quantity} — {formatMoneyFromUsdCents((bi.listing?.priceUsdCents ?? 0))}</span>
                                     </div>
                                   </div>
                                 ))}

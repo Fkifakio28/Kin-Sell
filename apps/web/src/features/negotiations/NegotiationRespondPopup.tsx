@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLocaleCurrency } from "../../app/providers/LocaleCurrencyProvider";
+import { DEFAULT_CURRENCY_RATES } from "../../shared/constants/currencies";
 import { negotiations, negotiationAi, resolveMediaUrl, type NegotiationSummary, type SellerNegotiationAdvice, ApiError } from "../../lib/api-client";
 import "./negotiate-popup.css";
 
@@ -11,7 +12,10 @@ type NegotiationRespondPopupProps = {
 };
 
 export function NegotiationRespondPopup({ negotiation, onClose, onUpdated, showAi = false }: NegotiationRespondPopupProps) {
-  const { t, formatMoneyFromUsdCents } = useLocaleCurrency();
+  const { t, formatMoneyFromUsdCents, currency } = useLocaleCurrency();
+  const negRate = currency === 'USD' ? 1 : (DEFAULT_CURRENCY_RATES[currency] ?? DEFAULT_CURRENCY_RATES.CDF);
+  const negSymbols: Record<string, string> = { CDF: 'FC', USD: '$', EUR: '€', XAF: 'XAF', AOA: 'Kz', XOF: 'XOF', GNF: 'GNF', MAD: 'MAD' };
+  const negSym = negSymbols[currency] || currency;
   const [counterPrice, setCounterPrice] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
@@ -46,13 +50,13 @@ export function NegotiationRespondPopup({ negotiation, onClose, onUpdated, showA
         message: message.trim() || undefined,
       };
       if (action === "COUNTER") {
-        const dollars = parseFloat(counterPrice);
-        if (isNaN(dollars) || dollars <= 0) {
+        const localAmount = parseFloat(counterPrice);
+        if (isNaN(localAmount) || localAmount <= 0) {
           setError("Entrez un prix valide pour la contre-offre");
           setBusy(false);
           return;
         }
-        body.counterPriceUsdCents = Math.round(dollars * 100);
+        body.counterPriceUsdCents = Math.round((localAmount / negRate) * 100);
       }
       const updated = await negotiations.respond(negotiation.id, body);
       onUpdated(updated);
@@ -122,18 +126,18 @@ export function NegotiationRespondPopup({ negotiation, onClose, onUpdated, showA
         {/* Contre-offre input */}
         <div className="neg-form">
           <label className="neg-label">
-            Contre-offre ($) – optionnel
+            Contre-offre ({negSym}) – optionnel
             <div className="neg-input-row">
               <input
                 className="neg-input"
                 type="number"
                 min={0.01}
-                step={0.01}
+                step={currency === 'USD' || currency === 'EUR' || currency === 'MAD' ? 0.01 : 1}
                 placeholder="Votre prix..."
                 value={counterPrice}
                 onChange={(e) => setCounterPrice(e.target.value)}
               />
-              <span className="neg-currency">USD</span>
+              <span className="neg-currency">{negSym}</span>
             </div>
           </label>
 
