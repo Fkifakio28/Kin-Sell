@@ -212,6 +212,13 @@ export function UserDashboard() {
   const missing = user ? MISSING_FIELD_KEYS.filter(f => f.check(user)).map(f => t(f.key)) : [];
 
   const [activeSection, setActiveSection] = useState<HubSection>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const urlSection = params.get('section');
+    if (urlSection) {
+      // Clean URL without reload
+      window.history.replaceState({}, '', window.location.pathname);
+      return urlSection as HubSection;
+    }
     const stored = sessionStorage.getItem('ud-section');
     if (stored) {
       sessionStorage.removeItem('ud-section');
