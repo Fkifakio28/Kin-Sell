@@ -407,13 +407,6 @@ export function UserDashboard() {
   const bulkFileRef = useRef<HTMLInputElement>(null);
   const [bulkDbForm, setBulkDbForm] = useState({ host: '', port: '3306', user: '', password: '', database: '', table: '' });
 
-  // ── Contacts state ──
-  const [contactSearchOpen, setContactSearchOpen] = useState(false);
-  const [contactSearchQuery, setContactSearchQuery] = useState('');
-  const [contactSearchResults, setContactSearchResults] = useState<Array<{ id: string; profile: { displayName: string; avatarUrl: string | null; username: string | null; city: string | null } }>>([]);
-  const [contactSearching, setContactSearching] = useState(false);
-  const [contactFilter, setContactFilter] = useState<'all' | 'online' | 'favorites'>('all');
-
 
   // ── Public profile editing state ──
   const [ppEditingField, setPpEditingField] = useState<string | null>(null);

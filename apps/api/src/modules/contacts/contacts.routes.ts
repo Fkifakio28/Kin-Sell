@@ -6,6 +6,9 @@ import {
   importFacebookContacts,
   getUserContacts,
   rematchContacts,
+  addManualContact,
+  toggleContactFavorite,
+  deleteContact,
 } from "./contacts.service.js";
 import { ContactSource } from "@prisma/client";
 
@@ -63,6 +66,63 @@ router.post(
     const userId = (req as AuthenticatedRequest).auth!.userId;
     const result = await rematchContacts(userId);
     res.json(result);
+  })
+);
+
+// POST /contacts/add — ajouter un contact manuellement par userId
+router.post(
+  "/add",
+  requireAuth,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = (req as AuthenticatedRequest).auth!.userId;
+    const { targetUserId } = req.body;
+    if (!targetUserId || typeof targetUserId !== "string") {
+      res.status(400).json({ error: "targetUserId requis." });
+      return;
+    }
+    try {
+      const contact = await addManualContact(userId, targetUserId);
+      res.json(contact);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  })
+);
+
+// PATCH /contacts/:id/favorite — toggle favori
+router.patch(
+  "/:id/favorite",
+  requireAuth,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = (req as AuthenticatedRequest).auth!.userId;
+    const { id } = req.params;
+    const { isFavorite } = req.body;
+    if (typeof isFavorite !== "boolean") {
+      res.status(400).json({ error: "isFavorite (boolean) requis." });
+      return;
+    }
+    try {
+      const contact = await toggleContactFavorite(userId, id, isFavorite);
+      res.json(contact);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  })
+);
+
+// DELETE /contacts/:id — supprimer un contact
+router.delete(
+  "/:id",
+  requireAuth,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = (req as AuthenticatedRequest).auth!.userId;
+    const { id } = req.params;
+    try {
+      const result = await deleteContact(userId, id);
+      res.json(result);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
   })
 );
 

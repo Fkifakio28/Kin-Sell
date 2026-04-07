@@ -2790,6 +2790,92 @@
 .ud-contact-search-info strong { font-size: 0.88rem; color: var(--ud-text-1); }
 .ud-contact-search-meta { font-size: 0.76rem; color: var(--ud-text-2); }
 .ud-contact-search-id { font-size: 0.72rem; color: var(--ud-text-2); opacity: .7; font-family: monospace; }
+.ud-contact-added-badge {
+  font-size: 0.78rem;
+  color: #66bb6a;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* ── Contact cards ── */
+.ud-contact-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 18px 14px 14px;
+  text-align: center;
+  position: relative;
+  transition: box-shadow 0.2s;
+}
+.ud-contact-card:hover {
+  box-shadow: 0 0 14px rgba(111, 88, 255, 0.12);
+}
+.ud-contact-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  width: 100%;
+}
+.ud-contact-card-avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(111, 88, 255, 0.18);
+  color: var(--color-primary);
+  font-weight: 700;
+  font-size: 1rem;
+  margin: 0 auto;
+}
+.ud-contact-card-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.ud-contact-fav-btn {
+  background: none;
+  border: none;
+  font-size: 1.1rem;
+  cursor: pointer;
+  padding: 2px;
+  opacity: 0.5;
+  transition: opacity 0.15s, transform 0.15s;
+  position: absolute;
+  top: 10px;
+  right: 10px;
+}
+.ud-contact-fav-btn:hover { opacity: 0.9; transform: scale(1.15); }
+.ud-contact-fav-btn--active { opacity: 1; }
+.ud-contact-card-name {
+  font-size: 0.88rem;
+  color: var(--ud-text-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.ud-contact-card-city {
+  font-size: 0.74rem;
+  color: var(--ud-text-2);
+}
+.ud-contact-card-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+.ud-quick-btn--sm {
+  padding: 4px 10px;
+  font-size: 0.76rem;
+}
+.ud-quick-btn--danger {
+  background: rgba(244, 67, 54, 0.15);
+  color: #ef5350;
+  border-color: rgba(244, 67, 54, 0.3);
+}
 
 /* ══════════════════════════════════════════════════════════
    SO-KIN SECTION — annonces avec engagement
