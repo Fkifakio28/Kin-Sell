@@ -53,14 +53,17 @@ export const requireAuth = (request: AuthenticatedRequest, _response: Response, 
 
   // Verify user account is still active and session not revoked
   _verifyAccountAndSession(request.auth!.userId, request.auth!.sessionId, skipSuspension)
-    .then(() => next())
+    .then(({ freshRole }) => {
+      if (freshRole) request.auth!.role = freshRole;
+      next();
+    })
     .catch((err) => next(err));
 };
 
-async function _verifyAccountAndSession(userId: string, sessionId?: string, skipSuspensionCheck = false): Promise<void> {
+async function _verifyAccountAndSession(userId: string, sessionId?: string, skipSuspensionCheck = false): Promise<{ freshRole?: Role }> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { accountStatus: true },
+    select: { accountStatus: true, role: true },
   });
 
   if (!user) throw new HttpError(401, "Compte introuvable");
@@ -76,6 +79,8 @@ async function _verifyAccountAndSession(userId: string, sessionId?: string, skip
       throw new HttpError(401, "Session révoquée");
     }
   }
+
+  return { freshRole: user.role as Role };
 }
 
 export const requireRoles = (...roles: Role[]) => {
