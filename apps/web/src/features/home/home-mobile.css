@@ -609,6 +609,7 @@
 }
 
 .hm-bnav-item {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -639,6 +640,43 @@
   font-weight: 600;
   letter-spacing: 0.02em;
   line-height: 1;
+}
+
+.hm-bnav-cart-badge {
+  position: absolute;
+  top: 2px;
+  right: 8px;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  padding: 0 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #ff5f57;
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 700;
+  line-height: 1;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+.hm-cart-feedback {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: calc(74px + env(safe-area-inset-bottom, 0px));
+  z-index: 965;
+  border-radius: 12px;
+  border: 1px solid var(--color-glass-border, rgba(255, 255, 255, 0.14));
+  background: var(--color-glass-bg, rgba(18, 11, 43, 0.9));
+  color: var(--color-text);
+  padding: 10px 12px;
+  text-align: center;
+  font-size: 0.86rem;
+  font-weight: 600;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 /* Bouton central (+) */

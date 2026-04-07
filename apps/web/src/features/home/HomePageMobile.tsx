@@ -22,10 +22,12 @@ import { getDashboardPath } from "../../utils/role-routing";
 import {
   listings as listingsApi,
   sokin as sokinApi,
+  orders as ordersApi,
   messaging,
   resolveMediaUrl,
   type PublicListing,
   type SoKinApiFeedPost,
+  type CartSummary,
 } from "../../lib/api-client";
 import { NegotiatePopup } from "../negotiations/NegotiatePopup";
 import { AdBanner } from "../../components/AdBanner";
@@ -480,12 +482,16 @@ function SuggestionsSection({
   cityHint,
   countryHint,
   t,
+  onArticleTap,
+  cartBusyId,
 }: {
   formatMoney: (c: number) => string;
   formatLabel: (c: number) => string;
   cityHint?: string;
   countryHint?: string;
   t: (k: string) => string;
+  onArticleTap: (listing: PublicListing) => void;
+  cartBusyId: string | null;
 }) {
   const [items, setItems] = useState<PublicListing[]>([]);
   const [loading, setLoading] = useState(true);
@@ -531,14 +537,11 @@ function SuggestionsSection({
               <div key={i} className="hm-card-skeleton hm-card-skeleton--small" />
             ))
           : items.map((item) => (
-              <Link
+              <button
                 key={item.id}
-                to={
-                  item.owner.username
-                    ? "/user/" + item.owner.username + "#listing-" + item.id
-                    : "/explorer"
-                }
                 className="hm-suggestion-card"
+                onClick={() => onArticleTap(item)}
+                disabled={cartBusyId === item.id}
               >
                 <div className="hm-suggestion-img">
                   {item.imageUrl ? (
@@ -555,7 +558,7 @@ function SuggestionsSection({
                     ? formatLabel(0)
                     : formatMoney(item.priceUsdCents)}
                 </p>
-              </Link>
+              </button>
             ))}
       </div>
     </section>
@@ -569,6 +572,8 @@ function ListingsSection({
   formatLabel,
   t,
   onNegotiate,
+  onArticleTap,
+  cartBusyId,
   lockedCats,
   cityHint,
   countryHint,
@@ -577,6 +582,8 @@ function ListingsSection({
   formatLabel: (c: number) => string;
   t: (k: string) => string;
   onNegotiate: (l: PublicListing) => void;
+  onArticleTap: (listing: PublicListing) => void;
+  cartBusyId: string | null;
   lockedCats: string[];
   cityHint?: string;
   countryHint?: string;
@@ -669,10 +676,12 @@ function ListingsSection({
               key={l.id}
               listing={l}
               onNegotiate={onNegotiate}
+              onArticleTap={onArticleTap}
               formatMoney={formatMoney}
               formatLabel={formatLabel}
               t={t}
               locked={isCategoryLocked(lockedCats, l.category ?? "")}
+              busy={cartBusyId === l.id}
             />
           ))}
         </div>
@@ -684,26 +693,36 @@ function ListingsSection({
 function MarketCard({
   listing,
   onNegotiate,
+  onArticleTap,
   formatMoney,
   formatLabel,
   t,
   locked,
+  busy,
 }: {
   listing: PublicListing;
   onNegotiate: (l: PublicListing) => void;
+  onArticleTap: (listing: PublicListing) => void;
   formatMoney: (c: number) => string;
   formatLabel: (c: number) => string;
   t: (k: string) => string;
   locked: boolean;
+  busy: boolean;
 }) {
   return (
-    <Link
-      to={
-        listing.owner.username
-          ? "/user/" + listing.owner.username + "#listing-" + listing.id
-          : "/explorer"
-      }
+    <article
       className="hm-market-card"
+      role="button"
+      tabIndex={0}
+      onClick={() => onArticleTap(listing)}
+      onKeyDown={(e) => {
+        if (busy) return;
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onArticleTap(listing);
+        }
+      }}
+      aria-disabled={busy}
     >
       <div className="hm-market-card-img">
         {listing.imageUrl ? (
@@ -747,7 +766,7 @@ function MarketCard({
           </button>
         )}
       </div>
-    </Link>
+    </article>
   );
 }
 
@@ -758,6 +777,8 @@ function SoKinFeed({
   cityHint,
   countryHint,
   onNegotiate,
+  onArticleTap,
+  cartBusyId,
   lockedCats,
   formatMoney,
   formatLabel,
@@ -766,6 +787,8 @@ function SoKinFeed({
   cityHint: string;
   countryHint: string;
   onNegotiate: (l: PublicListing) => void;
+  onArticleTap: (listing: PublicListing) => void;
+  cartBusyId: string | null;
   lockedCats: string[];
   formatMoney: (c: number) => string;
   formatLabel: (c: number) => string;
@@ -929,10 +952,12 @@ function SoKinFeed({
               key={`reinjected-${l.id}`}
               listing={l}
               onNegotiate={onNegotiate}
+              onArticleTap={onArticleTap}
               formatMoney={formatMoney}
               formatLabel={formatLabel}
               t={t}
               locked={isCategoryLocked(lockedCats, l.category ?? "")}
+              busy={cartBusyId === l.id}
             />
           ))}
         </div>
@@ -1163,10 +1188,12 @@ function SoKinPostCard({
 function BottomNav({
   visible,
   isLoggedIn,
+  cartItemsCount,
   t,
 }: {
   visible: boolean;
   isLoggedIn: boolean;
+  cartItemsCount: number;
   t: (k: string) => string;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -1200,6 +1227,7 @@ function BottomNav({
             <circle cx="20" cy="21" r="1" />
             <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
           </svg>
+          {cartItemsCount > 0 && <span className="hm-bnav-cart-badge">{cartItemsCount}</span>}
           <span className="hm-bnav-label">{t("nav.cart")}</span>
         </Link>
 
@@ -1304,9 +1332,69 @@ export function HomePageMobile() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [negotiateListing, setNegotiateListing] =
     useState<PublicListing | null>(null);
+  const [buyerCart, setBuyerCart] = useState<CartSummary | null>(null);
+  const [cartBusyId, setCartBusyId] = useState<string | null>(null);
+  const [cartFeedback, setCartFeedback] = useState<string | null>(null);
+  const navigate = useNavigate();
 
   const barsVisible =
     barsVisibleRaw || drawerOpen || searchOpen || Boolean(negotiateListing);
+  const cartItemsCount = buyerCart?.itemsCount ?? 0;
+
+  useEffect(() => {
+    if (!isLoggedIn) {
+      setBuyerCart(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const cart = await ordersApi.buyerCart();
+        if (!cancelled) setBuyerCart(cart);
+      } catch {
+        if (!cancelled) setBuyerCart(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isLoggedIn]);
+
+  const isAdmin = user?.role === "ADMIN" || user?.role === "SUPER_ADMIN";
+
+  const handleArticleTap = useCallback(
+    async (listing: PublicListing) => {
+      if (!isLoggedIn) {
+        void navigate("/login");
+        return;
+      }
+      if (isAdmin) {
+        setCartFeedback(`🔒 ${t("home.adminNoTransact")}`);
+        window.setTimeout(() => setCartFeedback(null), 2200);
+        return;
+      }
+      if (user?.id && listing.owner.userId === user.id) {
+        setCartFeedback(`⚠️ ${t("home.cannotBuyOwn")}`);
+        window.setTimeout(() => setCartFeedback(null), 2200);
+        return;
+      }
+      if (cartBusyId) return;
+
+      setCartBusyId(listing.id);
+      try {
+        const summary = await ordersApi.addCartItem({ listingId: listing.id, quantity: 1 });
+        const freshCart = await ordersApi.buyerCart().catch(() => summary);
+        setBuyerCart(freshCart);
+        setCartFeedback(`✓ ${t("home.addedToCart")}`);
+      } catch {
+        setCartFeedback(`✗ ${t("home.errorGeneric")}`);
+      } finally {
+        setCartBusyId(null);
+        window.setTimeout(() => setCartFeedback(null), 1800);
+      }
+    },
+    [cartBusyId, isAdmin, isLoggedIn, navigate, t, user?.id],
+  );
 
   const contentCls =
     "hm-content" + (barsVisible ? "" : " hm-content--expanded");
@@ -1340,12 +1428,16 @@ export function HomePageMobile() {
           cityHint={defaultCity}
           countryHint={effectiveCountry}
           t={t}
+          onArticleTap={handleArticleTap}
+          cartBusyId={cartBusyId}
         />
         <ListingsSection
           formatMoney={formatMoneyFromUsdCents}
           formatLabel={formatPriceLabelFromUsdCents}
           t={t}
           onNegotiate={setNegotiateListing}
+          onArticleTap={handleArticleTap}
+          cartBusyId={cartBusyId}
           lockedCats={lockedCats}
           cityHint={defaultCity}
           countryHint={effectiveCountry}
@@ -1355,13 +1447,17 @@ export function HomePageMobile() {
           cityHint={defaultCity}
           countryHint={effectiveCountry}
           onNegotiate={setNegotiateListing}
+          onArticleTap={handleArticleTap}
+          cartBusyId={cartBusyId}
           lockedCats={lockedCats}
           formatMoney={formatMoneyFromUsdCents}
           formatLabel={formatPriceLabelFromUsdCents}
         />
       </main>
 
-      <BottomNav visible={barsVisible} isLoggedIn={isLoggedIn} t={t} />
+      <BottomNav visible={barsVisible} isLoggedIn={isLoggedIn} cartItemsCount={cartItemsCount} t={t} />
+
+      {cartFeedback && <div className="hm-cart-feedback" role="status" aria-live="polite">{cartFeedback}</div>}
 
       {negotiateListing && (
         <NegotiatePopup

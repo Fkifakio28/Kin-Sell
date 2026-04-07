@@ -96,6 +96,13 @@ type SoKinCreateDraft = {
   scheduledAt?: string;
 };
 
+type SoKinEditorDraftState = {
+  location: string;
+  selectedTags: string[];
+  selectedArticles: string[];
+  scheduledAt: string;
+};
+
 function readSoKinCreateDraft(): SoKinCreateDraft {
   try {
     const raw = localStorage.getItem(CREATE_DRAFT_STORAGE_KEY);
@@ -1236,6 +1243,8 @@ function CreateAnnounceScreen({
   const [articleSearchNonce, setArticleSearchNonce] = useState(0);
 
   const [scheduledAt, setScheduledAt] = useState(initialDraft.scheduledAt ?? '');
+  const [editorDraft, setEditorDraft] = useState<SoKinEditorDraftState | null>(null);
+  const [editorBaseline, setEditorBaseline] = useState<SoKinEditorDraftState | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -1254,6 +1263,22 @@ function CreateAnnounceScreen({
     const target = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
     const offset = target.getTimezoneOffset() * 60_000;
     return new Date(target.getTime() - offset).toISOString().slice(0, 16);
+  }, []);
+  const minScheduleLocal = useMemo(() => {
+    const now = new Date();
+    const offset = now.getTimezoneOffset() * 60_000;
+    return new Date(now.getTime() - offset).toISOString().slice(0, 16);
+  }, []);
+
+  const validateSchedule = useCallback((raw: string): string | null => {
+    if (!raw) return null;
+    const dt = new Date(raw);
+    const now = new Date();
+    const max = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    if (Number.isNaN(dt.getTime())) return 'Date de programmation invalide.';
+    if (dt < now) return 'La date de programmation doit être dans le futur.';
+    if (dt > max) return 'Programmation invalide: maximum 30 jours dans le futur.';
+    return null;
   }, []);
 
   const validateMediaSelection = (files: File[]) => {
@@ -1471,16 +1496,77 @@ function CreateAnnounceScreen({
       setLocalError(mediaError);
       return;
     }
-    if (scheduledAt) {
-      const dt = new Date(scheduledAt);
-      const max = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-      if (Number.isNaN(dt.getTime()) || dt > max) {
-        setLocalError('Programmation invalide: maximum 30 jours dans le futur.');
-        return;
-      }
+    const scheduleError = validateSchedule(scheduledAt);
+    if (scheduleError) {
+      setLocalError(scheduleError);
+      return;
     }
     setMode('preview');
   };
+
+  const openEditor = useCallback(() => {
+    const snapshot: SoKinEditorDraftState = {
+      location,
+      selectedTags,
+      selectedArticles,
+      scheduledAt,
+    };
+    setEditorBaseline(snapshot);
+    setEditorDraft(snapshot);
+    setTagInput('');
+    setTagSuggestions([]);
+    setArticleInput('');
+    setArticleSuggestions([]);
+    setLocationStatus('idle');
+    setMode('editor');
+  }, [location, scheduledAt, selectedArticles, selectedTags]);
+
+  const hasEditorChanges = useCallback(() => {
+    if (!editorDraft || !editorBaseline) return false;
+    return (
+      editorDraft.location !== editorBaseline.location ||
+      editorDraft.scheduledAt !== editorBaseline.scheduledAt ||
+      editorDraft.selectedTags.join('||') !== editorBaseline.selectedTags.join('||') ||
+      editorDraft.selectedArticles.join('||') !== editorBaseline.selectedArticles.join('||')
+    );
+  }, [editorBaseline, editorDraft]);
+
+  const cancelEditor = useCallback(() => {
+    if (isPublishing) return;
+    if (hasEditorChanges()) {
+      const confirmed = window.confirm('Voulez-vous abandonner les modifications ?');
+      if (!confirmed) return;
+    }
+    setEditorDraft(null);
+    setEditorBaseline(null);
+    setTagInput('');
+    setTagSuggestions([]);
+    setArticleInput('');
+    setArticleSuggestions([]);
+    setLocationStatus('idle');
+    setMode('edit');
+  }, [hasEditorChanges, isPublishing]);
+
+  const confirmEditor = useCallback(() => {
+    if (isPublishing || !editorDraft) return;
+    const scheduleError = validateSchedule(editorDraft.scheduledAt);
+    if (scheduleError) {
+      setLocalError(scheduleError);
+      return;
+    }
+    setLocation(editorDraft.location);
+    setSelectedTags(editorDraft.selectedTags);
+    setSelectedArticles(editorDraft.selectedArticles);
+    setScheduledAt(editorDraft.scheduledAt);
+    setEditorDraft(null);
+    setEditorBaseline(null);
+    setTagInput('');
+    setTagSuggestions([]);
+    setArticleInput('');
+    setArticleSuggestions([]);
+    setLocationStatus('idle');
+    setMode('edit');
+  }, [editorDraft, isPublishing, validateSchedule]);
 
   const resolveLocation = () => {
     setLocalError(null);
@@ -1494,10 +1580,12 @@ function CreateAnnounceScreen({
       async (position) => {
         try {
           const reversed = await geoApi.reverse(position.coords.latitude, position.coords.longitude);
-          setLocation(reversed.city ? `${reversed.city}, ${reversed.country ?? 'RDC'}` : reversed.formattedAddress);
+          const resolved = reversed.city ? `${reversed.city}, ${reversed.country ?? 'RDC'}` : reversed.formattedAddress;
+          setEditorDraft((prev) => (prev ? { ...prev, location: resolved } : prev));
           setLocationStatus('ok');
         } catch {
-          setLocation(`${position.coords.latitude.toFixed(5)}, ${position.coords.longitude.toFixed(5)}`);
+          const fallback = `${position.coords.latitude.toFixed(5)}, ${position.coords.longitude.toFixed(5)}`;
+          setEditorDraft((prev) => (prev ? { ...prev, location: fallback } : prev));
           setLocationStatus('ok');
         }
       },
@@ -1509,21 +1597,30 @@ function CreateAnnounceScreen({
     );
   };
 
-  const addTag = (handleRaw?: string) => {
-    const handle = (handleRaw ?? tagInput).trim();
+  const addTag = (handleRaw: string) => {
+    const handle = handleRaw.trim();
     if (!handle) return;
     const normalized = handle.startsWith('@') ? handle : `@${handle}`;
-    setSelectedTags((prev) => (prev.includes(normalized) ? prev : [...prev, normalized]));
+    setEditorDraft((prev) => {
+      if (!prev) return prev;
+      return prev.selectedTags.includes(normalized)
+        ? prev
+        : { ...prev, selectedTags: [...prev.selectedTags, normalized] };
+    });
     setTagInput('');
     setTagSuggestions([]);
     setTagSearchNonce(0);
   };
 
-  const addArticle = (valueRaw?: string) => {
-    const raw = (valueRaw ?? articleInput).trim();
-    if (!raw) return;
-    const normalized = raw.startsWith('#') ? raw : `#${raw}`;
-    setSelectedArticles((prev) => (prev.includes(normalized) ? prev : [...prev, normalized]));
+  const addArticle = (item: { id: string; label: string }) => {
+    const normalized = item.label.trim();
+    if (!normalized || !normalized.startsWith('#')) return;
+    setEditorDraft((prev) => {
+      if (!prev) return prev;
+      return prev.selectedArticles.includes(normalized)
+        ? prev
+        : { ...prev, selectedArticles: [...prev.selectedArticles, normalized] };
+    });
     setArticleInput('');
     setArticleSuggestions([]);
     setArticleSearchNonce(0);
@@ -1542,14 +1639,11 @@ function CreateAnnounceScreen({
       setMode('edit');
       return;
     }
-    if (scheduledAt) {
-      const dt = new Date(scheduledAt);
-      const max = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-      if (Number.isNaN(dt.getTime()) || dt > max) {
-        setLocalError('Programmation invalide: maximum 30 jours dans le futur.');
-        setMode('editor');
-        return;
-      }
+    const scheduleError = validateSchedule(scheduledAt);
+    if (scheduleError) {
+      setLocalError(scheduleError);
+      setMode('editor');
+      return;
     }
 
     // La planification est transmise au backend sans simulation locale de succès.
@@ -1577,13 +1671,13 @@ function CreateAnnounceScreen({
           </>
         ) : mode === 'editor' ? (
           <>
-            <button type="button" className="sk-btn sk-btn--outline" onClick={() => setMode('edit')} disabled={isPublishing}>← Retour</button>
+            <button type="button" className="sk-btn sk-btn--outline" onClick={cancelEditor} disabled={isPublishing}>← Annuler</button>
             <strong>Édition mobile</strong>
-            <button type="button" className="sk-btn sk-btn--primary" onClick={() => setMode('edit')} disabled={isPublishing}>Valider</button>
+            <button type="button" className="sk-btn sk-btn--primary" onClick={confirmEditor} disabled={isPublishing}>Confirmer ✔</button>
           </>
         ) : (
           <>
-            <button type="button" className="sk-btn sk-btn--outline" onClick={() => setMode('edit')} disabled={isPublishing}>Éditer</button>
+            <button type="button" className="sk-btn sk-btn--outline" onClick={openEditor} disabled={isPublishing}>Éditer</button>
             <strong>Prévisualisation</strong>
             <button type="button" className="sk-btn sk-btn--primary" onClick={submit} disabled={!canPublish || isPublishing}>
               {isPublishing ? 'Publication…' : 'Publier'}
@@ -1663,7 +1757,7 @@ function CreateAnnounceScreen({
                 <button
                   type="button"
                   className="sk-btn sk-btn--outline"
-                  onClick={() => setMode('editor')}
+                  onClick={openEditor}
                   disabled={isPublishing}
                 >
                   Éditer
@@ -1731,8 +1825,8 @@ function CreateAnnounceScreen({
                   id="sk-mobile-location"
                   className="sk-modal-input"
                   placeholder="Gombe, Kinshasa"
-                  value={location}
-                  onChange={(e) => setLocation(e.target.value)}
+                  value={editorDraft?.location ?? ''}
+                  onChange={(e) => setEditorDraft((prev) => (prev ? { ...prev, location: e.target.value } : prev))}
                 />
                 <button type="button" className="sk-btn sk-btn--sm" onClick={resolveLocation} disabled={locationStatus === 'loading'}>
                   {locationStatus === 'loading' ? '📍…' : '📍'}
@@ -1759,13 +1853,7 @@ function CreateAnnounceScreen({
                 <button
                   type="button"
                   className="sk-btn sk-btn--sm"
-                  onClick={() => {
-                    if (tagInput.trim()) {
-                      addTag();
-                      return;
-                    }
-                    setTagSearchNonce((v) => v + 1);
-                  }}
+                  onClick={() => setTagSearchNonce((v) => v + 1)}
                 >
                   +
                 </button>
@@ -1784,11 +1872,17 @@ function CreateAnnounceScreen({
                   ))}
                 </div>
               )}
-              {selectedTags.length > 0 && (
+              {(editorDraft?.selectedTags.length ?? 0) > 0 && (
                 <div className="sk-modal-tags-list">
-                  {selectedTags.map((tag) => (
+                  {(editorDraft?.selectedTags ?? []).map((tag) => (
                     <span key={tag} className="sk-modal-tag">{tag}
-                      <button type="button" className="sk-modal-tag-remove" onClick={() => setSelectedTags((prev) => prev.filter((v) => v !== tag))}>✕</button>
+                      <button
+                        type="button"
+                        className="sk-modal-tag-remove"
+                        onClick={() => setEditorDraft((prev) => (prev ? { ...prev, selectedTags: prev.selectedTags.filter((v) => v !== tag) } : prev))}
+                      >
+                        ✕
+                      </button>
                     </span>
                   ))}
                 </div>
@@ -1811,13 +1905,7 @@ function CreateAnnounceScreen({
                 <button
                   type="button"
                   className="sk-btn sk-btn--sm"
-                  onClick={() => {
-                    if (articleInput.trim()) {
-                      addArticle();
-                      return;
-                    }
-                    setArticleSearchNonce((v) => v + 1);
-                  }}
+                  onClick={() => setArticleSearchNonce((v) => v + 1)}
                 >
                   +
                 </button>
@@ -1826,17 +1914,23 @@ function CreateAnnounceScreen({
               {articleSuggestions.length > 0 && (
                 <div className="sk-modal-suggestions">
                   {articleSuggestions.map((item) => (
-                    <button key={item.id} type="button" className="sk-modal-suggestion-item" onClick={() => addArticle(item.label)}>
+                    <button key={item.id} type="button" className="sk-modal-suggestion-item" onClick={() => addArticle(item)}>
                       <span className="sk-modal-suggestion-text"><strong>{item.label}</strong></span>
                     </button>
                   ))}
                 </div>
               )}
-              {selectedArticles.length > 0 && (
+              {(editorDraft?.selectedArticles.length ?? 0) > 0 && (
                 <div className="sk-modal-tags-list">
-                  {selectedArticles.map((tag) => (
+                  {(editorDraft?.selectedArticles ?? []).map((tag) => (
                     <span key={tag} className="sk-modal-tag">{tag}
-                      <button type="button" className="sk-modal-tag-remove" onClick={() => setSelectedArticles((prev) => prev.filter((v) => v !== tag))}>✕</button>
+                      <button
+                        type="button"
+                        className="sk-modal-tag-remove"
+                        onClick={() => setEditorDraft((prev) => (prev ? { ...prev, selectedArticles: prev.selectedArticles.filter((v) => v !== tag) } : prev))}
+                      >
+                        ✕
+                      </button>
                     </span>
                   ))}
                 </div>
@@ -1849,14 +1943,19 @@ function CreateAnnounceScreen({
                 id="sk-mobile-schedule"
                 type="datetime-local"
                 className="sk-modal-input"
-                value={scheduledAt}
+                value={editorDraft?.scheduledAt ?? ''}
+                min={minScheduleLocal}
                 max={maxScheduleLocal}
                 onChange={(e) => {
-                  setScheduledAt(e.target.value);
-                  setLocalError(null);
+                  setEditorDraft((prev) => (prev ? { ...prev, scheduledAt: e.target.value } : prev));
+                  const nextError = validateSchedule(e.target.value);
+                  setLocalError(nextError);
                 }}
               />
               <p className="sk-modal-hint">Format: jj/mm/aaaa --:--, limite 30 jours.</p>
+              {editorDraft?.scheduledAt && !validateSchedule(editorDraft.scheduledAt) && (
+                <p className="sk-modal-hint">Sélection: {new Date(editorDraft.scheduledAt).toLocaleString('fr-FR')}</p>
+              )}
             </section>
           </article>
         ) : (
