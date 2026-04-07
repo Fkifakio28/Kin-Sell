@@ -19,6 +19,7 @@ import { useSocket } from '../../hooks/useSocket';
 import LocationPicker from '../../components/LocationPicker';
 import VisibilitySelector from '../../components/VisibilitySelector';
 import type { StructuredLocation, LocationVisibility } from '../../lib/api-client';
+import { LISTING_PRODUCT_CATEGORIES, LISTING_SERVICE_CATEGORIES } from '../../shared/constants/categories';
 import './dashboard.css';
 
 type BizSection =
@@ -121,6 +122,12 @@ export function BusinessDashboard() {
   const [shopSaving, setShopSaving] = useState(false);
   const [shopMsg, setShopMsg] = useState<string | null>(null);
   const [shopForm, setShopForm] = useState({ publicName: '', publicDescription: '', city: '', address: '', logo: '', coverImage: '' });
+
+  // ─── Import produits/services ────────────────────────────
+  const [importOpen, setImportOpen] = useState<'produit' | 'service' | null>(null);
+  const [importBusy, setImportBusy] = useState(false);
+  const [importMsg, setImportMsg] = useState<string | null>(null);
+  const [importProgress, setImportProgress] = useState<{ done: number; total: number } | null>(null);
 
   // ─── Paramètres ──────────────────────────────────────────
   const [settingsSaving, setSettingsSaving] = useState(false);
@@ -560,6 +567,86 @@ export function BusinessDashboard() {
       setCreateMsg(msg);
     } finally {
       setCreateBusy(false);
+    }
+  };
+
+  // ─── Import fichier (CSV / JSON / XML) ──────────────────
+  const handleImportFile = async (file: File, type: 'PRODUIT' | 'SERVICE') => {
+    setImportBusy(true);
+    setImportMsg(null);
+    setImportProgress(null);
+    try {
+      const text = await file.text();
+      const ext = file.name.split('.').pop()?.toLowerCase();
+      type RawRow = { title?: string; titre?: string; category?: string; categorie?: string; price?: string | number; prix?: string | number; priceCdf?: string | number; stock?: string | number; description?: string; city?: string; ville?: string };
+      let rows: RawRow[] = [];
+
+      if (ext === 'json') {
+        const parsed = JSON.parse(text);
+        rows = Array.isArray(parsed) ? parsed : parsed.data ?? parsed.items ?? parsed.products ?? parsed.services ?? [];
+      } else if (ext === 'csv') {
+        const lines = text.split(/\r?\n/).filter(l => l.trim());
+        if (lines.length < 2) throw new Error('CSV vide ou sans en-tête');
+        const headers = lines[0].split(/[;,\t]/).map(h => h.trim().toLowerCase().replace(/"/g, ''));
+        for (let i = 1; i < lines.length; i++) {
+          const vals = lines[i].split(/[;,\t]/).map(v => v.trim().replace(/^"|"$/g, ''));
+          const row: Record<string, string> = {};
+          headers.forEach((h, idx) => { row[h] = vals[idx] || ''; });
+          rows.push(row as unknown as RawRow);
+        }
+      } else if (ext === 'xml') {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(text, 'text/xml');
+        const items = doc.querySelectorAll('item, product, service, listing, row, record');
+        items.forEach(el => {
+          const get = (tags: string[]) => { for (const t of tags) { const n = el.querySelector(t); if (n?.textContent) return n.textContent.trim(); } return ''; };
+          rows.push({
+            title: get(['title', 'titre', 'name', 'nom']),
+            category: get(['category', 'categorie']),
+            price: get(['price', 'prix', 'priceCdf']),
+            stock: get(['stock', 'quantity', 'quantite']),
+            description: get(['description', 'desc']),
+            city: get(['city', 'ville']),
+          });
+        });
+      } else {
+        throw new Error('Format non supporté. Utilisez .csv, .json ou .xml');
+      }
+
+      if (!rows.length) throw new Error('Aucune donnée trouvée dans le fichier');
+
+      const validCategories = type === 'PRODUIT' ? LISTING_PRODUCT_CATEGORIES : LISTING_SERVICE_CATEGORIES;
+      let created = 0;
+      let errors = 0;
+      setImportProgress({ done: 0, total: rows.length });
+
+      for (let i = 0; i < rows.length; i++) {
+        const r = rows[i];
+        const title = (r.title || r.titre || '').toString().trim();
+        if (!title) { errors++; setImportProgress({ done: i + 1, total: rows.length }); continue; }
+        let cat = (r.category || r.categorie || '').toString().trim();
+        if (!(validCategories as readonly string[]).includes(cat)) cat = validCategories[validCategories.length - 1];
+        const priceCdf = parseFloat(String(r.priceCdf || r.price || r.prix || '0').replace(/\s/g, '')) || 0;
+        const priceUsdCents = Math.round((priceCdf / USD_TO_CDF) * 100);
+        const stock = parseInt(String(r.stock || '0')) || null;
+        const desc = (r.description || '').toString().trim() || null;
+        const city = (r.city || r.ville || 'Kinshasa').toString().trim();
+        try {
+          await listings.create({ type, title, category: cat, city, priceUsdCents, stockQuantity: type === 'PRODUIT' ? stock : null, description: desc });
+          created++;
+        } catch { errors++; }
+        setImportProgress({ done: i + 1, total: rows.length });
+      }
+
+      invalidateCache('/listings/mine');
+      const [lRes, sRes] = await Promise.allSettled([listings.mine({ limit: 50 }), listings.mineStats()]);
+      if (lRes.status === 'fulfilled') setMyListings(lRes.value.listings);
+      if (sRes.status === 'fulfilled') setListingStats(sRes.value);
+      setImportMsg(`✓ ${created} importé(s)${errors ? `, ${errors} erreur(s)` : ''}`);
+    } catch (err) {
+      setImportMsg(err instanceof Error ? err.message : 'Erreur lors de l\'import');
+    } finally {
+      setImportBusy(false);
     }
   };
 
@@ -1456,15 +1543,41 @@ export function BusinessDashboard() {
             <section className="ud-glass-panel bz-glass-panel">
               <div className="ud-panel-head">
                 <h2 className="ud-panel-title">{t('biz.myProducts')} ({produits.length})</h2>
-                <button type="button" className="ud-quick-btn ud-quick-btn--primary bz-cta-gold" onClick={() => setCreateMode(createMode === 'produit' ? null : 'produit')}>
-                  {createMode === 'produit' ? t('biz.cancelBtn') : t('biz.newProduct')}
-                </button>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button type="button" className="ud-quick-btn ud-quick-btn--primary bz-cta-gold" onClick={() => { setImportOpen(importOpen === 'produit' ? null : 'produit'); setImportMsg(null); setImportProgress(null); }}>
+                    {importOpen === 'produit' ? '✕ Fermer' : '📥 Importer'}
+                  </button>
+                  <button type="button" className="ud-quick-btn ud-quick-btn--primary bz-cta-gold" onClick={() => setCreateMode(createMode === 'produit' ? null : 'produit')}>
+                    {createMode === 'produit' ? t('biz.cancelBtn') : t('biz.newProduct')}
+                  </button>
+                </div>
               </div>
+              {importOpen === 'produit' && (
+                <div className="bz-import-zone" style={{ marginBottom: 'var(--space-lg)' }}>
+                  <h3 style={{ margin: '0 0 var(--space-sm)' }}>📥 Importer des produits en masse</h3>
+                  <p style={{ fontSize: '0.85rem', opacity: 0.7, margin: '0 0 var(--space-md)' }}>
+                    Formats acceptés : <strong>.csv</strong>, <strong>.json</strong>, <strong>.xml</strong><br />
+                    Colonnes attendues : titre, categorie, prix (CDF), stock, description, ville
+                  </p>
+                  <label className="bz-photo-drop-zone bz-import-drop">
+                    <input type="file" accept=".csv,.json,.xml" disabled={importBusy} onChange={e => { const f = e.target.files?.[0]; if (f) handleImportFile(f, 'PRODUIT'); e.target.value = ''; }} />
+                    <span className="bz-photo-drop-icon">📄</span>
+                    <span className="bz-photo-drop-text">{importBusy ? 'Import en cours…' : 'Glissez ou cliquez pour choisir un fichier'}</span>
+                  </label>
+                  {importProgress && (
+                    <div style={{ marginTop: 'var(--space-sm)' }}>
+                      <div className="bz-import-progress-bar"><div className="bz-import-progress-fill" style={{ width: `${(importProgress.done / importProgress.total) * 100}%` }} /></div>
+                      <small>{importProgress.done} / {importProgress.total}</small>
+                    </div>
+                  )}
+                  {importMsg && <p className={`bz-setup-${importMsg.startsWith('✓') ? 'note' : 'error'}`} style={{ marginTop: 'var(--space-sm)' }}>{importMsg}</p>}
+                </div>
+              )}
               {createMode === 'produit' && (
                 <form className="bz-setup-form" style={{ marginBottom: 'var(--space-lg)' }} onSubmit={handleCreateListing}>
                   <div className="bz-setup-grid">
                     <label className="bz-setup-field"><span>{t('biz.titleLabel')} *</span><input type="text" required minLength={2} maxLength={200} value={createForm.title} onChange={e => setCreateForm(f => ({ ...f, title: e.target.value }))} placeholder={t('biz.titleProductPh')} /></label>
-                    <label className="bz-setup-field"><span>{t('biz.categoryLabel')} *</span><input type="text" required value={createForm.category} onChange={e => setCreateForm(f => ({ ...f, category: e.target.value }))} placeholder={t('biz.categoryPh')} /></label>
+                    <label className="bz-setup-field"><span>{t('biz.categoryLabel')} *</span><select required value={createForm.category} onChange={e => setCreateForm(f => ({ ...f, category: e.target.value }))}><option value="">{t('biz.categoryPh')}</option>{LISTING_PRODUCT_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}</select></label>
                     <label className="bz-setup-field"><span>{t('biz.cityLabel')} *</span><LocationPicker value={{ lat: createForm.latitude, lng: createForm.longitude, address: createForm.city }} onChange={({ address, city, lat, lng }) => setCreateForm(f => ({ ...f, city: city || address, latitude: lat, longitude: lng }))} onStructuredChange={(loc) => setCreateForm(f => ({ ...f, city: loc.city || loc.formattedAddress, latitude: loc.latitude ?? f.latitude, longitude: loc.longitude ?? f.longitude, country: loc.country || f.country, countryCode: loc.countryCode || f.countryCode, region: loc.region || '', district: loc.district || '', formattedAddress: loc.formattedAddress || '', placeId: loc.placeId || '' }))} placeholder="Kinshasa" /></label>
                     <label className="bz-setup-field"><span>🔒 Visibilité</span><VisibilitySelector value={createForm.locationVisibility} onChange={(v: LocationVisibility) => setCreateForm(f => ({ ...f, locationVisibility: v }))} /></label>
                     <label className="bz-setup-field"><span>{t('biz.priceCdf')} *</span><input type="number" required min={0} value={createForm.priceCdf} onChange={e => setCreateForm(f => ({ ...f, priceCdf: e.target.value }))} placeholder={t('biz.pricePh')} /></label>
@@ -1513,15 +1626,41 @@ export function BusinessDashboard() {
             <section className="ud-glass-panel bz-glass-panel">
               <div className="ud-panel-head">
                 <h2 className="ud-panel-title">{t('biz.myServices')} ({services.length})</h2>
-                <button type="button" className="ud-quick-btn ud-quick-btn--primary bz-cta-gold" onClick={() => setCreateMode(createMode === 'service' ? null : 'service')}>
-                  {createMode === 'service' ? t('biz.cancelBtn') : t('biz.newService')}
-                </button>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button type="button" className="ud-quick-btn ud-quick-btn--primary bz-cta-gold" onClick={() => { setImportOpen(importOpen === 'service' ? null : 'service'); setImportMsg(null); setImportProgress(null); }}>
+                    {importOpen === 'service' ? '✕ Fermer' : '📥 Importer'}
+                  </button>
+                  <button type="button" className="ud-quick-btn ud-quick-btn--primary bz-cta-gold" onClick={() => setCreateMode(createMode === 'service' ? null : 'service')}>
+                    {createMode === 'service' ? t('biz.cancelBtn') : t('biz.newService')}
+                  </button>
+                </div>
               </div>
+              {importOpen === 'service' && (
+                <div className="bz-import-zone" style={{ marginBottom: 'var(--space-lg)' }}>
+                  <h3 style={{ margin: '0 0 var(--space-sm)' }}>📥 Importer des services en masse</h3>
+                  <p style={{ fontSize: '0.85rem', opacity: 0.7, margin: '0 0 var(--space-md)' }}>
+                    Formats acceptés : <strong>.csv</strong>, <strong>.json</strong>, <strong>.xml</strong><br />
+                    Colonnes attendues : titre, categorie, prix (CDF), description, ville
+                  </p>
+                  <label className="bz-photo-drop-zone bz-import-drop">
+                    <input type="file" accept=".csv,.json,.xml" disabled={importBusy} onChange={e => { const f = e.target.files?.[0]; if (f) handleImportFile(f, 'SERVICE'); e.target.value = ''; }} />
+                    <span className="bz-photo-drop-icon">📄</span>
+                    <span className="bz-photo-drop-text">{importBusy ? 'Import en cours…' : 'Glissez ou cliquez pour choisir un fichier'}</span>
+                  </label>
+                  {importProgress && (
+                    <div style={{ marginTop: 'var(--space-sm)' }}>
+                      <div className="bz-import-progress-bar"><div className="bz-import-progress-fill" style={{ width: `${(importProgress.done / importProgress.total) * 100}%` }} /></div>
+                      <small>{importProgress.done} / {importProgress.total}</small>
+                    </div>
+                  )}
+                  {importMsg && <p className={`bz-setup-${importMsg.startsWith('✓') ? 'note' : 'error'}`} style={{ marginTop: 'var(--space-sm)' }}>{importMsg}</p>}
+                </div>
+              )}
               {createMode === 'service' && (
                 <form className="bz-setup-form" style={{ marginBottom: 'var(--space-lg)' }} onSubmit={handleCreateListing}>
                   <div className="bz-setup-grid">
                     <label className="bz-setup-field"><span>{t('biz.titleLabel')} *</span><input type="text" required minLength={2} maxLength={200} value={createForm.title} onChange={e => setCreateForm(f => ({ ...f, title: e.target.value }))} placeholder={t('biz.titleServicePh')} /></label>
-                    <label className="bz-setup-field"><span>{t('biz.categoryLabel')} *</span><input type="text" required value={createForm.category} onChange={e => setCreateForm(f => ({ ...f, category: e.target.value }))} placeholder={t('biz.categoryServicePh')} /></label>
+                    <label className="bz-setup-field"><span>{t('biz.categoryLabel')} *</span><select required value={createForm.category} onChange={e => setCreateForm(f => ({ ...f, category: e.target.value }))}><option value="">{t('biz.categoryServicePh')}</option>{LISTING_SERVICE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}</select></label>
                     <label className="bz-setup-field"><span>{t('biz.cityLabel')} *</span><LocationPicker value={{ lat: createForm.latitude, lng: createForm.longitude, address: createForm.city }} onChange={({ address, city, lat, lng }) => setCreateForm(f => ({ ...f, city: city || address, latitude: lat, longitude: lng }))} onStructuredChange={(loc) => setCreateForm(f => ({ ...f, city: loc.city || loc.formattedAddress, latitude: loc.latitude ?? f.latitude, longitude: loc.longitude ?? f.longitude, country: loc.country || f.country, countryCode: loc.countryCode || f.countryCode, region: loc.region || '', district: loc.district || '', formattedAddress: loc.formattedAddress || '', placeId: loc.placeId || '' }))} placeholder="Kinshasa" /></label>
                     <label className="bz-setup-field"><span>🔒 Visibilité</span><VisibilitySelector value={createForm.locationVisibility} onChange={(v: LocationVisibility) => setCreateForm(f => ({ ...f, locationVisibility: v }))} /></label>
                     <label className="bz-setup-field"><span>📍 Rayon (km)</span><input type="number" min={0} max={500} value={createForm.serviceRadiusKm} onChange={e => setCreateForm(f => ({ ...f, serviceRadiusKm: e.target.value }))} placeholder="Ex: 25" /></label>

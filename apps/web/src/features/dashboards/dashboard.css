@@ -6991,3 +6991,27 @@
 .bz-logout-btn--confirm:hover {
   background: rgba(239, 68, 68, 0.25);
 }
+
+/* ── Import en masse (produits/services) ─────────────── */
+.bz-import-zone {
+  padding: var(--space-md, 16px);
+  border: 1px solid var(--ud-border, rgba(180, 160, 255, 0.2));
+  border-radius: var(--ud-radius-sm, 8px);
+  background: rgba(111, 88, 255, 0.04);
+}
+.bz-import-drop {
+  min-height: 90px;
+}
+.bz-import-progress-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(111, 88, 255, 0.15);
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+.bz-import-progress-fill {
+  height: 100%;
+  background: var(--ud-accent, #6f58ff);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
