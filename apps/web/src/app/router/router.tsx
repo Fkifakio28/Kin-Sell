@@ -78,6 +78,7 @@ export const router = createBrowserRouter([
           { path: "/contact", element: <ContactPage /> },
           { path: "/forfaits", element: <PricingPage /> },
           { path: "/plans", element: <PricingPage /> },
+          { path: "/pricing", element: <PricingPage /> },
           { path: "/cart", element: <CartPage /> },
           { path: "/account", element: <RoleGuard allowed="USER"><UserDashboard /></RoleGuard> },
           { path: "/business/dashboard", element: <RoleGuard allowed="BUSINESS"><BusinessDashboard /></RoleGuard> },

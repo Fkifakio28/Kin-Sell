@@ -4024,7 +4024,6 @@ export function UserDashboard() {
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 10 }}>
                   {[
                     { name: 'IA Marchande', icon: '🤝', desc: 'Aide à la négociation', active: true, locked: false },
-                    { name: 'IA Ads', icon: '📢', desc: 'Boost articles & boutique', active: aiAdviceEnabled, locked: false },
                     { name: 'Kin-Sell Analytique', icon: '📊', desc: 'Analyses marché & conseils', active: hasAnalytics, locked: !hasAnalytics },
                     { name: 'IA Commande', icon: '📦', desc: 'Automatisation des ventes', active: aiCommandeEnabled && (activePlan?.features?.includes('IA_ORDER') ?? false), locked: !(activePlan?.features?.includes('IA_ORDER') ?? false) },
                   ].map((ia) => (
