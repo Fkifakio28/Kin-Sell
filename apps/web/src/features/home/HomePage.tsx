@@ -739,7 +739,7 @@ export function HomePage() {
               <p className="h-dash-amount">{money(sellerStats.revenue)} {t('home.revenue')}</p>
             </div>
 
-            <div role="button" onClick={() => { sessionStorage.setItem('ud-section', 'purchases'); navigate(getDashboardPath(user?.role)); }} className="h-dash-card glass-card" style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}>
+            <div role="button" onClick={() => navigate('/cart')} className="h-dash-card glass-card" style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}>
               <div className="h-dash-icon">
                 <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
               </div>

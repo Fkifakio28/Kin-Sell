@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../app/providers/AuthProvider";
 import { useLocaleCurrency } from "../../app/providers/LocaleCurrencyProvider";
-import { orders, negotiations, billing, orderAi, resolveMediaUrl, type CartSummary, type NegotiationSummary, type BillingPlanSummary, type CheckoutAdvice, ApiError } from "../../lib/api-client";
+import { orders, negotiations, billing, orderAi, resolveMediaUrl, type CartSummary, type NegotiationSummary, type BillingPlanSummary, type CheckoutAdvice, type OrderSummary, type OrderStatus, ApiError } from "../../lib/api-client";
 import { useSocket } from "../../hooks/useSocket";
 import { NegotiationRespondPopup } from "../negotiations/NegotiationRespondPopup";
 import { NegotiatePopup } from "../negotiations/NegotiatePopup";
@@ -51,6 +51,12 @@ export function CartPage() {
     deliveryFormattedAddress: "",
   });
 
+  /* ── Buyer order history ── */
+  const [buyerOrders, setBuyerOrders] = useState<OrderSummary[]>([]);
+  const [buyerOrdersFilter, setBuyerOrdersFilter] = useState<OrderStatus | "">("");
+  const [buyerOrdersLoading, setBuyerOrdersLoading] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState<OrderSummary | null>(null);
+
   const reloadCart = useCallback(async () => {
     try {
       const data = await orders.buyerCart();
@@ -93,6 +99,47 @@ export function CartPage() {
     const poll = setInterval(() => { void load(); }, 30_000); // refresh cart every 30s
     return () => { cancelled = true; clearInterval(poll); };
   }, [isLoggedIn, authLoading]);
+
+  /* ── Fetch buyer orders ── */
+  const loadBuyerOrders = useCallback(async () => {
+    if (!isLoggedIn) return;
+    setBuyerOrdersLoading(true);
+    try {
+      const data = await orders.buyerOrders({ limit: 50 });
+      const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+      setBuyerOrders(data.orders.filter((o) => new Date(o.createdAt).getTime() >= thirtyDaysAgo));
+    } catch {
+      setBuyerOrders([]);
+    } finally {
+      setBuyerOrdersLoading(false);
+    }
+  }, [isLoggedIn]);
+
+  useEffect(() => {
+    void loadBuyerOrders();
+  }, [loadBuyerOrders]);
+
+  const filteredBuyerOrders = useMemo(() => {
+    if (!buyerOrdersFilter) return buyerOrders;
+    return buyerOrders.filter((o) => o.status === buyerOrdersFilter);
+  }, [buyerOrders, buyerOrdersFilter]);
+
+  const statusLabel = (status: string) => {
+    const map: Record<string, string> = {
+      PENDING: '⏳ Attente', CONFIRMED: '✅ Confirmée', PROCESSING: '⚙️ Préparation',
+      SHIPPED: '🚚 Expédiée', DELIVERED: '📬 Livrée', CANCELED: '❌ Annulée',
+    };
+    return map[status] ?? status;
+  };
+
+  const statusBadgeClass = (status: string) => {
+    switch (status) {
+      case 'DELIVERED': return 'cart-status-badge cart-status-badge--success';
+      case 'CANCELED': return 'cart-status-badge cart-status-badge--danger';
+      case 'SHIPPED': case 'PROCESSING': return 'cart-status-badge cart-status-badge--warning';
+      default: return 'cart-status-badge';
+    }
+  };
 
   useEffect(() => {
     if (!isLoggedIn || !user) return;
@@ -431,7 +478,7 @@ export function CartPage() {
           <h2>{t("cart.orderValidated")}</h2>
           <p>{success}</p>
           <div className="cart-actions-row">
-            <button type="button" className="cart-btn cart-btn--primary" onClick={() => { sessionStorage.setItem("ud-section", "purchases"); navigate("/account"); }}>{t("cart.viewOrders")}</button>
+            <button type="button" className="cart-btn cart-btn--primary" onClick={() => navigate("/cart")}>{t("cart.viewOrders")}</button>
             <Link to="/explorer" className="cart-btn cart-btn--secondary">{t("cart.continue")}</Link>
           </div>
         </div>
@@ -712,7 +759,7 @@ export function CartPage() {
 
             <p className="cart-checkout-info">
               La commande sera envoyée aux vendeurs concernés. Vous pourrez suivre l'état depuis votre{" "}
-              <Link to="/account" onClick={() => sessionStorage.setItem("ud-section", "purchases")}>espace d'achat</Link>.
+              <Link to="/cart">panier</Link>.
             </p>
           </div>
         </div>
@@ -722,6 +769,82 @@ export function CartPage() {
       {!isEmpty && (
         <div className="cart-footer glass-container">
           <Link to="/explorer" className="cart-btn cart-btn--secondary">← Continuer mes achats</Link>
+        </div>
+      )}
+
+      {/* ── Buyer order history (last 30 days) ── */}
+      {isLoggedIn && (
+        <div className="cart-history glass-container">
+          <div className="cart-history-head">
+            <h3 className="cart-history-title">📦 Historique des commandes</h3>
+            <span className="cart-history-hint">30 derniers jours</span>
+            <select
+              className="cart-history-filter"
+              value={buyerOrdersFilter}
+              onChange={(e) => setBuyerOrdersFilter(e.target.value as OrderStatus | "")}
+            >
+              <option value="">Tous les statuts</option>
+              <option value="PENDING">⏳ Attente</option>
+              <option value="CONFIRMED">✅ Confirmée</option>
+              <option value="PROCESSING">⚙️ Préparation</option>
+              <option value="SHIPPED">🚚 Expédiée</option>
+              <option value="DELIVERED">📬 Livrée</option>
+              <option value="CANCELED">❌ Annulée</option>
+            </select>
+          </div>
+
+          {buyerOrdersLoading ? (
+            <div className="cart-history-loading">
+              <span className="cart-spinner" />
+              <span>Chargement…</span>
+            </div>
+          ) : filteredBuyerOrders.length === 0 ? (
+            <div className="cart-history-empty">
+              <span style={{ fontSize: '1.8rem' }}>📭</span>
+              <p>Aucune commande{buyerOrdersFilter ? ` "${statusLabel(buyerOrdersFilter)}"` : ''} ces 30 derniers jours.</p>
+            </div>
+          ) : (
+            <div className="cart-history-list">
+              {filteredBuyerOrders.map((order) => (
+                <div
+                  key={order.id}
+                  className="cart-history-card glass-card"
+                  onClick={() => setSelectedOrder(selectedOrder?.id === order.id ? null : order)}
+                  style={{ cursor: 'pointer' }}
+                >
+                  <div className="cart-history-card-head">
+                    <span className="cart-history-card-id">#{order.id.slice(0, 8).toUpperCase()}</span>
+                    <span className={statusBadgeClass(order.status)}>{statusLabel(order.status)}</span>
+                  </div>
+                  <div className="cart-history-card-body">
+                    <span className="cart-history-card-amount">{formatMoneyFromUsdCents(order.totalUsdCents)}</span>
+                    <span className="cart-history-card-meta">
+                      {order.itemsCount} article{order.itemsCount > 1 ? 's' : ''} · {new Date(order.createdAt).toLocaleDateString('fr-FR')}
+                    </span>
+                  </div>
+
+                  {selectedOrder?.id === order.id && (
+                    <div className="cart-history-card-detail">
+                      {order.items.map((item) => (
+                        <div key={item.id} className="cart-history-item">
+                          {item.imageUrl ? (
+                            <img src={resolveMediaUrl(item.imageUrl)} alt={item.title} className="cart-history-item-img" />
+                          ) : (
+                            <span className="cart-history-item-ph">{item.listingType === 'SERVICE' ? '🛠' : '📦'}</span>
+                          )}
+                          <div className="cart-history-item-info">
+                            <strong>{item.title}</strong>
+                            <span>{item.category} · x{item.quantity}</span>
+                          </div>
+                          <span className="cart-history-item-price">{formatMoneyFromUsdCents(item.lineTotalUsdCents)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

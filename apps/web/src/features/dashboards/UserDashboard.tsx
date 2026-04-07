@@ -127,7 +127,6 @@ const SECTION_DEFS: Array<{ key: HubSection; labelKey: string; icon: string }> =
   { key: 'overview', labelKey: 'user.overview', icon: '⊞' },
   { key: 'articles', labelKey: 'user.articles', icon: '🧩' },
   { key: 'sales', labelKey: 'user.sellSpace', icon: '📦' },
-  { key: 'purchases', labelKey: 'user.buySpace', icon: '🛍️' },
   { key: 'messages', labelKey: 'user.messaging', icon: '💬' },
   { key: 'contacts', labelKey: 'user.myContacts', icon: '🤝' },
   { key: 'sokin', labelKey: 'sokin.home', icon: '✦' },
@@ -2001,14 +2000,14 @@ export function UserDashboard() {
                   <strong className="ud-ov-kpi-value">{allSellerOrders.length}</strong>
                 </div>
               </article>
-              <article className="ud-ov-kpi ud-ov-kpi--amber" style={{ cursor: 'pointer' }} onClick={() => setActiveSection('purchases')}>
+              <article className="ud-ov-kpi ud-ov-kpi--amber" style={{ cursor: 'pointer' }} onClick={() => navigate('/cart')}>
                 <span className="ud-ov-kpi-icon">🛍️</span>
                 <div className="ud-ov-kpi-body">
                   <span className="ud-ov-kpi-label">{t('user.purchases')}</span>
                   <strong className="ud-ov-kpi-value">{allBuyerOrders.length}</strong>
                 </div>
               </article>
-              <article className="ud-ov-kpi ud-ov-kpi--violet" style={{ cursor: 'pointer' }} onClick={() => setActiveSection('purchases')}>
+              <article className="ud-ov-kpi ud-ov-kpi--violet" style={{ cursor: 'pointer' }} onClick={() => navigate('/cart')}>
                 <span className="ud-ov-kpi-icon">🛒</span>
                 <div className="ud-ov-kpi-body">
                   <span className="ud-ov-kpi-label">{t('user.cart')}</span>
@@ -2182,7 +2181,7 @@ export function UserDashboard() {
                     <span className="ud-ov-quick-icon">💬</span>
                     <span>{t('user.messaging')}</span>
                   </button>
-                  <button type="button" className="ud-ov-quick-tile" onClick={() => setActiveSection('purchases')}>
+                  <button type="button" className="ud-ov-quick-tile" onClick={() => navigate('/cart')}>
                     <span className="ud-ov-quick-icon">🛒</span>
                     <span>{t('user.cart')}</span>
                   </button>

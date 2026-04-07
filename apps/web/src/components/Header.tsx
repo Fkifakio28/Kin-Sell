@@ -213,7 +213,7 @@ export const Header = React.memo(function Header() {
                         <p className="ks-notif-dropdown-empty">{t('nav.noNotif')}</p>
                       )}
                       <div className="ks-notif-dropdown-footer">
-                        <Link to={getDashboardPath(user?.role)} className="ks-notif-dropdown-footer-link" onClick={() => { setNotifOpen(false); sessionStorage.setItem('ud-section', 'purchases'); }}>
+                        <Link to="/cart" className="ks-notif-dropdown-footer-link" onClick={() => { setNotifOpen(false); }}>
                           {t('nav.viewAllOrders')}
                         </Link>
                       </div>
