@@ -6,6 +6,7 @@ import { getDashboardPath } from '../../utils/role-routing';
 import { useLocaleCurrency } from '../../app/providers/LocaleCurrencyProvider';
 import { useScrollDirection } from '../../hooks/useScrollDirection';
 import { compressAndEncodeMedia } from '../../utils/media-compress';
+import { prepareMediaUrls } from '../../utils/media-upload';
 import { DashboardMessaging } from './DashboardMessaging';
 import {
   ApiError, auth as authApi, businesses, listings, orders, billing, messaging, sokin, reviews as reviewsApi, invalidateCache, analyticsAi, aiRecommendations, aiTrials, resolveMediaUrl,
@@ -185,6 +186,9 @@ export function BusinessDashboard() {
   const [createForm, setCreateForm] = useState({ title: '', category: '', city: 'Kinshasa', priceCdf: '', stock: '', description: '', isNegotiable: true, latitude: -4.3216965, longitude: 15.3124553, country: 'RDC', countryCode: 'CD', region: '', district: '', formattedAddress: '', placeId: '', locationVisibility: 'CITY_PUBLIC' as LocationVisibility, serviceRadiusKm: '' });
   const [createBusy, setCreateBusy] = useState(false);
   const [createMsg, setCreateMsg] = useState<string | null>(null);
+  const [createStep, setCreateStep] = useState(1);
+  const [createUploadFiles, setCreateUploadFiles] = useState<File[]>([]);
+  const [createUploadPreviews, setCreateUploadPreviews] = useState<string[]>([]);
 
   // ─── Contacts ────────────────────────────────────────────
   const [contactFilter, setContactFilter] = useState<'all' | 'online' | 'favorites'>('all');
@@ -527,6 +531,27 @@ export function BusinessDashboard() {
   const produits = myListings.filter(l => l.type === 'PRODUIT');
   const services = myListings.filter(l => l.type === 'SERVICE');
 
+  // ─── Upload fichiers listing ──────────────────────────────
+  const handleCreateFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = Array.from(e.target.files ?? []);
+    const images = selected.filter(f => f.type.startsWith('image/'));
+    const videos = selected.filter(f => f.type.startsWith('video/'));
+    const existingImages = createUploadFiles.filter(f => f.type.startsWith('image/'));
+    const existingVideos = createUploadFiles.filter(f => f.type.startsWith('video/'));
+    if (existingImages.length + images.length > 5) { setCreateMsg('Maximum 5 photos'); return; }
+    if (existingVideos.length + videos.length > 1) { setCreateMsg('Maximum 1 vidéo'); return; }
+    for (const f of videos) { if (f.size > 50 * 1024 * 1024) { setCreateMsg(`Vidéo trop lourde (${f.name})`); return; } }
+    setCreateMsg(null);
+    setCreateUploadFiles(prev => [...prev, ...selected]);
+    setCreateUploadPreviews(prev => [...prev, ...selected.map(f => URL.createObjectURL(f))]);
+    e.target.value = '';
+  };
+  const removeCreateFile = (index: number) => {
+    URL.revokeObjectURL(createUploadPreviews[index]);
+    setCreateUploadFiles(prev => prev.filter((_, i) => i !== index));
+    setCreateUploadPreviews(prev => prev.filter((_, i) => i !== index));
+  };
+
   // ─── Créer un listing ────────────────────────────────────
   const handleCreateListing = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -536,6 +561,10 @@ export function BusinessDashboard() {
     try {
       const priceCdf = parseFloat(createForm.priceCdf.replace(/\s/g, '')) || 0;
       const priceUsdCents = Math.round((priceCdf / USD_TO_CDF) * 100);
+      let mediaUrls: string[] = [];
+      if (createUploadFiles.length > 0) {
+        mediaUrls = await prepareMediaUrls(createUploadFiles);
+      }
       await listings.create({
         type: createMode === 'produit' ? 'PRODUIT' : 'SERVICE',
         title: createForm.title.trim(),
@@ -555,11 +584,17 @@ export function BusinessDashboard() {
         placeId: createForm.placeId || undefined,
         locationVisibility: createForm.locationVisibility || undefined,
         serviceRadiusKm: createForm.serviceRadiusKm ? parseInt(createForm.serviceRadiusKm) : undefined,
+        imageUrl: mediaUrls[0] || undefined,
+        mediaUrls,
       });
       invalidateCache('/listings/mine');
       setCreateMsg(t('biz.listingSuccess'));
       setCreateForm({ title: '', category: '', city: 'Kinshasa', priceCdf: '', stock: '', description: '', isNegotiable: true, latitude: -4.3216965, longitude: 15.3124553, country: 'RDC', countryCode: 'CD', region: '', district: '', formattedAddress: '', placeId: '', locationVisibility: 'CITY_PUBLIC', serviceRadiusKm: '' });
       setCreateMode(null);
+      setCreateStep(1);
+      createUploadPreviews.forEach(u => URL.revokeObjectURL(u));
+      setCreateUploadFiles([]);
+      setCreateUploadPreviews([]);
       const [lRes, sRes] = await Promise.allSettled([listings.mine({ limit: 50 }), listings.mineStats()]);
       if (lRes.status === 'fulfilled') setMyListings(lRes.value.listings);
       if (sRes.status === 'fulfilled') setListingStats(sRes.value);
@@ -824,6 +859,8 @@ export function BusinessDashboard() {
         locationVisibility: pageForm.locationVisibility || undefined,
         contactPhone: pageForm.contactPhone.trim() || null,
         contactEmail: pageForm.contactEmail.trim() || null,
+        highlights: qualities,
+        shopPhotos: shopPhotos,
       });
       setBusiness(updated);
       setPageMsg(t('biz.pageSaved'));
@@ -851,7 +888,10 @@ export function BusinessDashboard() {
     setShopPhotos(next);
   };
   const handleAddShopPhoto = (file: File) => {
-    if (shopPhotos.length >= 8) { alert(t('biz.maxPhotos')); return; }
+    if (shopPhotos.length >= 3) { alert('Maximum 3 médias'); return; }
+    const isVideo = file.type.startsWith('video/');
+    if (isVideo && shopPhotos.some(u => u.startsWith('data:video/'))) { alert('Maximum 1 vidéo'); return; }
+    if (isVideo && file.size > 50 * 1024 * 1024) { alert('Vidéo trop lourde (max 50 Mo)'); return; }
     readFileAndSet(file, url => saveShopPhotos([...shopPhotos, url]));
   };
   const handleRemoveShopPhoto = (idx: number) => saveShopPhotos(shopPhotos.filter((_, i) => i !== idx));
@@ -1182,7 +1222,7 @@ export function BusinessDashboard() {
             <button type="button" className="ud-quick-btn" onClick={() => setActiveSection('publicite')}>
               {t('biz.launchPromo')}
             </button>
-            <button type="button" className="ud-quick-btn ud-quick-btn--primary bz-cta-gold" onClick={() => { setActiveSection('produits'); setCreateMode('produit'); }}>
+            <button type="button" className="ud-quick-btn ud-quick-btn--primary bz-cta-gold" onClick={() => { setActiveSection('produits'); setCreateMode('produit'); setCreateStep(1); }}>
               {t('biz.addProduct')}
             </button>
           </div>
@@ -1319,11 +1359,11 @@ export function BusinessDashboard() {
               <section className="ud-glass-panel bz-glass-panel ud-panel--actions">
                 <h2 className="ud-panel-title">{t('biz.quickActions')}</h2>
                 <div className="ud-actions-grid">
-                  <button type="button" className="ud-action-tile bz-action-tile" onClick={() => { setActiveSection('produits'); setCreateMode('produit'); }}>
+                  <button type="button" className="ud-action-tile bz-action-tile" onClick={() => { setActiveSection('produits'); setCreateMode('produit'); setCreateStep(1); }}>
                     <span className="ud-action-icon">📦</span>
                     <span>{t('biz.addProductAction')}</span>
                   </button>
-                  <button type="button" className="ud-action-tile bz-action-tile" onClick={() => { setActiveSection('services'); setCreateMode('service'); }}>
+                  <button type="button" className="ud-action-tile bz-action-tile" onClick={() => { setActiveSection('services'); setCreateMode('service'); setCreateStep(1); }}>
                     <span className="ud-action-icon">🛠️</span>
                     <span>{t('biz.addServiceAction')}</span>
                   </button>
@@ -1345,203 +1385,235 @@ export function BusinessDashboard() {
         {activeSection === 'boutique' && (
           <div className="ud-section animate-fade-in">
 
-            {/* ─ Barre d'aperçu ─ */}
+            {/* ── Ligne 1 : En-tête ── */}
+            <div className="bz-bout-header">
+              <div className="bz-bout-header-left">
+                <h1 className="bz-bout-header-title">Boutique</h1>
+                <span className="ud-page-sub">Cockpit business — Kin-sell · /business/{businessSlug}</span>
+              </div>
+              <div className="bz-bout-header-right">
+                <button type="button" className="ud-quick-btn bz-cta-gold" onClick={() => setActiveSection('produits')}>🎯 Lancer une promo</button>
+                <button type="button" className="ud-quick-btn ud-quick-btn--primary bz-cta-gold" onClick={() => { setActiveSection('produits'); setCreateMode('produit'); setCreateStep(1); }}>+ Ajouter un produit</button>
+              </div>
+            </div>
+
+            {/* ── Ligne 2 : Lien page publique ── */}
             <div className="bz-public-preview-bar">
               <div>
-                <strong>{t('biz.publicPage')} :</strong>{' '}
+                <strong>Page publique :</strong>{' '}
                 <span className="ud-page-sub">{window.location.origin}/business/{businessSlug}</span>
               </div>
-              <button
-                type="button"
-                className="ud-quick-btn ud-quick-btn--primary bz-cta-gold"
-                onClick={() => window.open(`/business/${businessSlug}`, '_blank', 'noopener,noreferrer')}
-              >
-                🔍 {t('biz.livePreview')} →
+              <button type="button" className="ud-quick-btn ud-quick-btn--primary bz-cta-gold" onClick={() => window.open(`/business/${businessSlug}`, '_blank', 'noopener,noreferrer')}>
+                🔍 Aperçu en direct →
               </button>
             </div>
 
-            {/* ─ Carte identité publique live ─ */}
-            <section className="ud-glass-panel bz-glass-panel bz-public-id-card">
-              <div className="bz-public-id-logo">
-                {(pageForm.logo || businessLogo)
-                  ? <img src={pageForm.logo || businessLogo || undefined} alt={businessName} />
-                  : <span className="ud-avatar-initials bz-public-id-initials">{businessName.slice(0, 2).toUpperCase()}</span>
-                }
-              </div>
-              <div className="bz-public-id-info">
-                <strong className="bz-public-id-name">{pageForm.publicName || businessName}</strong>
-                <span className={tier.cls}>{tier.label}</span>
-                <span className="ud-page-sub">📍 {pageForm.city || business?.shop?.city || 'Kinshasa'}</span>
-                <span className="ud-page-sub biz-boutique-desc">{pageForm.publicDescription || business?.shop?.publicDescription || t('biz.noDesc')}</span>
-                <span className="ud-badge ud-badge--done" style={{ width: 'fit-content', marginTop: 'var(--space-xs)' }}>
-                  {businessVerified ? t('biz.shopActive') : t('biz.shopPending')}
-                </span>
+            {/* ── Ligne 3 : Récapitulatif ── */}
+            <section className="ud-glass-panel bz-glass-panel bz-bout-recap">
+              <div className="bz-bout-recap-left">
+                <div className="bz-bout-recap-logo">
+                  {(pageForm.logo || businessLogo)
+                    ? <img src={pageForm.logo || businessLogo || undefined} alt={pageForm.publicName || businessName} />
+                    : <span className="ud-avatar-initials bz-public-id-initials">{businessName.slice(0, 2).toUpperCase()}</span>
+                  }
+                </div>
+                <div className="bz-bout-recap-info">
+                  <strong className="bz-public-id-name">{pageForm.publicName || businessName}</strong>
+                  <span className={tier.cls}>{tier.label}</span>
+                  <span className="ud-page-sub">📍 {pageForm.city || business?.shop?.city || 'Kinshasa'}{pageForm.country ? `, ${pageForm.country}` : ''}</span>
+                  <p className="bz-bout-recap-bio">{pageForm.publicDescription || business?.shop?.publicDescription || t('biz.noDesc')}</p>
+                  <span className="ud-badge ud-badge--done" style={{ width: 'fit-content' }}>
+                    {businessVerified ? '✓ Boutique active' : '⏳ Boutique en attente'}
+                  </span>
+                </div>
               </div>
               {(pageForm.coverImage || business?.shop?.coverImage) && (
-                <div className="biz-boutique-cover">
-                  <img src={pageForm.coverImage || business?.shop?.coverImage || ''} alt={t('biz.coverAlt')} />
+                <div className="bz-bout-recap-cover">
+                  <span className="bz-bout-recap-cover-label">Couverture</span>
+                  <img src={pageForm.coverImage || business?.shop?.coverImage || ''} alt="Couverture" />
                 </div>
               )}
             </section>
 
-            {/* ─ Formulaire d'édition ─ */}
-            <section className="ud-glass-panel bz-glass-panel">
-              <h2 className="ud-panel-title">{t('biz.editPublicPage')}</h2>
-              <form className="bz-setup-form" onSubmit={handleSavePage}>
+            {/* ── Ligne 4 : Modifier la page publique ── */}
+            <form className="bz-setup-form" onSubmit={handleSavePage}>
+              <section className="ud-glass-panel bz-glass-panel">
+                <h2 className="ud-panel-title">Modifier la page publique</h2>
+
+                {/* Logo cliquable avec badge de suppression */}
+                <div className="bz-bout-edit-logo-wrap">
+                  {pageForm.logo ? (
+                    <div className="bz-bout-edit-logo-preview">
+                      <label className="bz-bout-edit-logo-img-wrap">
+                        <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={e => { const f = e.target.files?.[0]; if (f) readFileAndSet(f, url => setPageForm(p => ({ ...p, logo: url }))); e.target.value = ''; }} style={{ display: 'none' }} />
+                        <img src={pageForm.logo} alt="Logo" className="bz-bout-edit-logo-img" />
+                      </label>
+                      <button type="button" className="bz-bout-edit-logo-remove" onClick={() => setPageForm(f => ({ ...f, logo: '' }))} title="Supprimer le logo">✕</button>
+                      <span className="bz-bout-edit-logo-label">Logo / Photo de profil boutique</span>
+                    </div>
+                  ) : (
+                    <label className="bz-bout-edit-logo-empty">
+                      <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={e => { const f = e.target.files?.[0]; if (f) readFileAndSet(f, url => setPageForm(p => ({ ...p, logo: url }))); e.target.value = ''; }} style={{ display: 'none' }} />
+                      <span className="bz-photo-drop-icon">🖼️</span>
+                      <span className="bz-photo-drop-text">Logo / Photo de profil</span>
+                    </label>
+                  )}
+                </div>
+
+                {/* Ligne 1 du box : Nom public + Ville */}
                 <div className="bz-setup-grid">
                   <label className="bz-setup-field">
-                    <span>{t('biz.publicNameLabel')} *</span>
-                    <input type="text" value={pageForm.publicName} onChange={e => setPageForm(f => ({ ...f, publicName: e.target.value }))} maxLength={150} placeholder={t('biz.publicNamePh')} />
+                    <span>Nom public affiché *</span>
+                    <input type="text" value={pageForm.publicName} onChange={e => setPageForm(f => ({ ...f, publicName: e.target.value }))} maxLength={150} placeholder="City Market" />
                   </label>
                   <label className="bz-setup-field">
-                    <span>{t('biz.cityLabel')}</span>
+                    <span>Ville *</span>
                     <LocationPicker
                       value={pageForm.latitude && pageForm.longitude ? { lat: pageForm.latitude, lng: pageForm.longitude, address: pageForm.city || pageForm.formattedAddress } : undefined}
                       onChange={({ address, city }) => setPageForm(f => ({ ...f, city: city || address }))}
                       onStructuredChange={(loc) => setPageForm(f => ({ ...f, city: loc.city || loc.formattedAddress, address: loc.formattedAddress || f.address, country: loc.country || '', countryCode: loc.countryCode || '', region: loc.region || '', district: loc.district || '', formattedAddress: loc.formattedAddress || '', latitude: loc.latitude, longitude: loc.longitude, placeId: loc.placeId || '' }))}
                       placeholder="Kinshasa"
                     />
+                    {pageForm.latitude && pageForm.longitude && (
+                      <small className="ud-page-sub" style={{ marginTop: 4 }}>📌 {pageForm.latitude.toFixed(6)}, {pageForm.longitude.toFixed(6)}</small>
+                    )}
                   </label>
+                </div>
+
+                {/* Ligne 2 du box : Adresse physique + Visibilité */}
+                <div className="bz-setup-grid" style={{ marginTop: 14 }}>
                   <label className="bz-setup-field">
-                    <span>{t('biz.addressLabel')}</span>
-                    <input type="text" value={pageForm.address} readOnly style={{ opacity: 0.6 }} placeholder={t('biz.addressPh')} />
+                    <span>Adresse physique</span>
+                    <input type="text" value={pageForm.address} readOnly style={{ opacity: 0.6 }} placeholder="Résolu automatiquement depuis la ville" />
                   </label>
                   <div className="bz-setup-field">
                     <span>🔒 Visibilité</span>
                     <VisibilitySelector value={pageForm.locationVisibility} onChange={(v: LocationVisibility) => setPageForm(f => ({ ...f, locationVisibility: v }))} />
                   </div>
-                  <div className="bz-setup-field">
-                    <span>{t('biz.logoLabel')}</span>
-                    {pageForm.logo ? (
-                      <div className="bz-photo-preview">
-                        <img src={pageForm.logo} alt="Logo" className="bz-photo-preview-img bz-photo-preview-img--circle" onError={e => { (e.target as HTMLImageElement).src = ''; }} />
-                        <div className="bz-photo-preview-actions">
-                          <label className="bz-photo-replace-btn">
-                            <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={e => { const f = e.target.files?.[0]; if (f) readFileAndSet(f, url => setPageForm(p => ({ ...p, logo: url }))); e.target.value = ''; }} />
-                            🔄 {t('biz.replace')}
-                          </label>
-                          <button type="button" className="bz-photo-remove-btn" onClick={() => setPageForm(f => ({ ...f, logo: '' }))}>✕ {t('biz.remove')}</button>
-                        </div>
-                      </div>
-                    ) : (
-                      <label className="bz-photo-drop-zone">
-                        <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={e => { const f = e.target.files?.[0]; if (f) readFileAndSet(f, url => setPageForm(p => ({ ...p, logo: url }))); e.target.value = ''; }} />
-                        <span className="bz-photo-drop-icon">🖼️</span>
-                        <span className="bz-photo-drop-text">{t('biz.importLogo')}</span>
-                        <small className="bz-photo-drop-hint">{t('biz.photoHint')}</small>
+                </div>
+
+                {/* Ligne 3 du box : Photo de couverture */}
+                <div style={{ marginTop: 14 }}>
+                  <span className="bz-setup-field-label-text">Photo de couverture</span>
+                  {pageForm.coverImage ? (
+                    <div className="bz-bout-cover-preview">
+                      <label className="bz-bout-cover-img-wrap">
+                        <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={e => { const f = e.target.files?.[0]; if (f) readFileAndSet(f, url => setPageForm(p => ({ ...p, coverImage: url }))); e.target.value = ''; }} style={{ display: 'none' }} />
+                        <img src={pageForm.coverImage} alt="Couverture" className="bz-bout-cover-img" />
                       </label>
-                    )}
-                  </div>
-                  <div className="bz-setup-field">
-                    <span>{t('biz.coverLabel')}</span>
-                    {pageForm.coverImage ? (
-                      <div className="bz-photo-preview">
-                        <img src={pageForm.coverImage} alt={t('biz.coverAlt')} className="bz-photo-preview-img" onError={e => { (e.target as HTMLImageElement).src = ''; }} />
-                        <div className="bz-photo-preview-actions">
-                          <label className="bz-photo-replace-btn">
-                            <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={e => { const f = e.target.files?.[0]; if (f) readFileAndSet(f, url => setPageForm(p => ({ ...p, coverImage: url }))); e.target.value = ''; }} />
-                            🔄 {t('biz.replace')}
-                          </label>
-                          <button type="button" className="bz-photo-remove-btn" onClick={() => setPageForm(f => ({ ...f, coverImage: '' }))}>✕ {t('biz.remove')}</button>
-                        </div>
-                      </div>
-                    ) : (
-                      <label className="bz-photo-drop-zone">
-                        <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={e => { const f = e.target.files?.[0]; if (f) readFileAndSet(f, url => setPageForm(p => ({ ...p, coverImage: url }))); e.target.value = ''; }} />
-                        <span className="bz-photo-drop-icon">🌆</span>
-                        <span className="bz-photo-drop-text">{t('biz.importCover')}</span>
-                        <small className="bz-photo-drop-hint">{t('biz.photoHint')}</small>
-                      </label>
-                    )}
-                  </div>
-                  <label className="bz-setup-field bz-setup-field--full">
-                    <span>{t('biz.publicDescLabel')}</span>
-                    <textarea value={pageForm.publicDescription} onChange={e => setPageForm(f => ({ ...f, publicDescription: e.target.value }))} maxLength={800} rows={5} placeholder={t('biz.publicDescPh')} />
-                  </label>
+                      <button type="button" className="bz-bout-edit-logo-remove" onClick={() => setPageForm(f => ({ ...f, coverImage: '' }))} title="Supprimer la couverture">✕</button>
+                    </div>
+                  ) : (
+                    <label className="bz-photo-drop-zone" style={{ marginTop: 6 }}>
+                      <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={e => { const f = e.target.files?.[0]; if (f) readFileAndSet(f, url => setPageForm(p => ({ ...p, coverImage: url }))); e.target.value = ''; }} />
+                      <span className="bz-photo-drop-icon">🌆</span>
+                      <span className="bz-photo-drop-text">Importer une couverture</span>
+                      <small className="bz-photo-drop-hint">JPEG, PNG, WebP · max 2 Mo</small>
+                    </label>
+                  )}
+                </div>
+              </section>
+
+              {/* ── Ligne 5 : Description ── */}
+              <section className="ud-glass-panel bz-glass-panel">
+                <label className="bz-setup-field bz-setup-field--full">
+                  <span>Description visible par les clients</span>
+                  <textarea value={pageForm.publicDescription} onChange={e => setPageForm(f => ({ ...f, publicDescription: e.target.value }))} maxLength={800} rows={5} placeholder="Décrivez votre boutique, vos produits phares, vos horaires..." />
+                  <small className="ud-page-sub">{pageForm.publicDescription.length}/800 caractères</small>
+                </label>
+              </section>
+
+              {/* ── Ligne 6 : Contact ── */}
+              <div className="bz-bout-contact-row">
+                <section className="ud-glass-panel bz-glass-panel bz-bout-contact-box">
                   <label className="bz-setup-field">
                     <span>📞 Téléphone de contact</span>
                     <input type="tel" value={pageForm.contactPhone} onChange={e => setPageForm(f => ({ ...f, contactPhone: e.target.value }))} maxLength={30} placeholder="+212 6XX XXX XXX" />
                   </label>
+                </section>
+                <section className="ud-glass-panel bz-glass-panel bz-bout-contact-box">
                   <label className="bz-setup-field">
                     <span>✉️ Email de contact</span>
                     <input type="email" value={pageForm.contactEmail} onChange={e => setPageForm(f => ({ ...f, contactEmail: e.target.value }))} maxLength={150} placeholder="contact@mon-entreprise.com" />
                   </label>
-                </div>
-                {pageMsg && <p className={`bz-setup-${pageMsg.startsWith('✓') ? 'note' : 'error'}`}>{pageMsg}</p>}
-                <div className="bz-setup-actions">
-                  <button type="submit" className="ud-quick-btn ud-quick-btn--primary bz-cta-gold" disabled={pageSaving}>
-                    {pageSaving ? t('biz.saving') : t('biz.saveAndPublish')}
-                  </button>
-                  <button
-                    type="button"
-                    className="ud-quick-btn"
-                    onClick={() => window.open(`/business/${businessSlug}`, '_blank', 'noopener,noreferrer')}
-                  >
-                    🔍 {t('biz.viewPage')}
-                  </button>
-                </div>
-              </form>
-            </section>
+                </section>
+              </div>
 
-            {/* ─ Points forts ─ */}
-            <section className="ud-glass-panel bz-glass-panel">
-              <h2 className="ud-panel-title">✨ {t('biz.highlights')}</h2>
-              <p className="ud-page-sub" style={{ marginBottom: 'var(--space-md)' }}>{t('biz.highlightsDesc')}</p>
+              {/* ── Ligne 7 : Points forts ── */}
+              <section className="ud-glass-panel bz-glass-panel">
+                <h2 className="ud-panel-title">✨ Points forts</h2>
+                <p className="ud-page-sub" style={{ marginBottom: 'var(--space-md)' }}>Ces atouts apparaissent sur votre page publique pour rassurer les clients.</p>
 
-              {qualities.length > 0 && (
-                <div className="bz-qualities-list">
-                  {qualities.map(q => (
-                    <div key={q.id} className="bz-quality-row">
-                      <span className="bz-quality-icon">{q.icon}</span>
-                      <div className="bz-quality-info">
-                        <strong>{q.name}</strong>
-                        <span className="ud-page-sub">{q.description}</span>
+                {qualities.length > 0 && (
+                  <div className="bz-qualities-list">
+                    {qualities.map(q => (
+                      <div key={q.id} className="bz-quality-row">
+                        <span className="bz-quality-icon">{q.icon}</span>
+                        <div className="bz-quality-info">
+                          <strong>{q.name}</strong>
+                          <span className="ud-page-sub">{q.description}</span>
+                        </div>
+                        <button type="button" className="bz-photo-remove-btn" onClick={() => handleRemoveQuality(q.id)} title="Supprimer">✕</button>
                       </div>
-                      <button type="button" className="bz-photo-remove-btn" onClick={() => handleRemoveQuality(q.id)} title={t('biz.deleteBtn')}>✕</button>
-                    </div>
-                  ))}
-                </div>
-              )}
+                    ))}
+                  </div>
+                )}
 
-              <div className="bz-quality-add-form">
-                <div className="bz-quality-add-row">
-                  <select value={qualityDraft.icon} onChange={e => setQualityDraft(d => ({ ...d, icon: e.target.value }))} className="bz-quality-icon-select">
-                    {['⭐', '🔒', '📈', '🚀', '💎', '🤝', '⚡', '🎯', '✅', '🏆', '💬', '📍'].map(ic => <option key={ic} value={ic}>{ic}</option>)}
-                  </select>
-                  <input type="text" placeholder={t('biz.highlightNamePh')} value={qualityDraft.name} onChange={e => setQualityDraft(d => ({ ...d, name: e.target.value }))} maxLength={60} />
+                <div className="bz-quality-add-form">
+                  <div className="bz-quality-add-row">
+                    <select value={qualityDraft.icon} onChange={e => setQualityDraft(d => ({ ...d, icon: e.target.value }))} className="bz-quality-icon-select">
+                      {['⭐', '🔒', '📈', '🚀', '💎', '🤝', '⚡', '🎯', '✅', '🏆', '💬', '📍'].map(ic => <option key={ic} value={ic}>{ic}</option>)}
+                    </select>
+                    <input type="text" placeholder="Nom du point fort" value={qualityDraft.name} onChange={e => setQualityDraft(d => ({ ...d, name: e.target.value }))} maxLength={60} />
+                  </div>
+                  <input type="text" placeholder="Description courte (optionnel)" value={qualityDraft.description} onChange={e => setQualityDraft(d => ({ ...d, description: e.target.value }))} maxLength={200} style={{ width: '100%' }} />
+                  <button type="button" className="ud-quick-btn ud-quick-btn--primary" onClick={handleAddQuality} disabled={!qualityDraft.name.trim()}>
+                    + Ajouter un point fort
+                  </button>
                 </div>
-                <input type="text" placeholder={t('biz.highlightDescPh')} value={qualityDraft.description} onChange={e => setQualityDraft(d => ({ ...d, description: e.target.value }))} maxLength={200} style={{ width: '100%' }} />
-                <button type="button" className="ud-quick-btn ud-quick-btn--primary" onClick={handleAddQuality} disabled={!qualityDraft.name.trim()}>
-                  + {t('biz.addHighlight')}
+              </section>
+
+              {/* ── Ligne 8 : Photos & vidéo de la boutique ── */}
+              <section className="ud-glass-panel bz-glass-panel">
+                <h2 className="ud-panel-title">📸 Images et vidéo de la boutique</h2>
+                <p className="ud-page-sub" style={{ marginBottom: 'var(--space-md)' }}>Médias représentant votre espace physique, visibles en bas de votre page publique (max 3). Au moins 3 photos ou au moins 1 vidéo (ex : 3 photos, 1 vidéo, 2 photos + 1 vidéo).</p>
+
+                {shopPhotos.length > 0 && (
+                  <div className="bz-shop-photos-grid">
+                    {shopPhotos.map((url, idx) => {
+                      const isVideo = url.startsWith('data:video/');
+                      return (
+                        <div key={idx} className="bz-shop-photo-item">
+                          {isVideo ? <video src={url} controls muted style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <img src={url} alt={`Boutique ${idx + 1}`} />}
+                          <button type="button" className="bz-photo-remove-btn bz-shop-photo-remove" onClick={() => handleRemoveShopPhoto(idx)}>✕</button>
+                          {isVideo && <span className="bz-bout-media-badge">🎬</span>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {shopPhotos.length < 3 && (
+                  <label className="bz-photo-drop-zone" style={{ marginTop: 'var(--space-sm)' }}>
+                    <input type="file" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm" multiple onChange={e => { const files = e.target.files; if (files) Array.from(files).forEach(f => handleAddShopPhoto(f)); e.target.value = ''; }} />
+                    <span className="bz-photo-drop-icon">📷</span>
+                    <span className="bz-photo-drop-text">Ajouter une photo ou vidéo de votre boutique</span>
+                    <small className="bz-photo-drop-hint">JPEG, PNG, WebP, MP4, WebM · {shopPhotos.length}/3</small>
+                  </label>
+                )}
+              </section>
+
+              {/* ── Ligne 9 : Boutons centré ── */}
+              {pageMsg && <p className={`bz-setup-${pageMsg.startsWith('✓') ? 'note' : 'error'}`} style={{ textAlign: 'center' }}>{pageMsg}</p>}
+              <div className="bz-bout-footer-actions">
+                <button type="submit" className="ud-quick-btn ud-quick-btn--primary bz-cta-gold" disabled={pageSaving}>
+                  {pageSaving ? '⏳ Enregistrement...' : '✓ Enregistrer & publier'}
+                </button>
+                <button type="button" className="ud-quick-btn" onClick={() => window.open(`/business/${businessSlug}`, '_blank', 'noopener,noreferrer')}>
+                  🔍 Voir la page
                 </button>
               </div>
-            </section>
-
-            {/* ─ Photos boutique physique ─ */}
-            <section className="ud-glass-panel bz-glass-panel">
-              <h2 className="ud-panel-title">📸 {t('biz.shopPhotos')}</h2>
-              <p className="ud-page-sub" style={{ marginBottom: 'var(--space-md)' }}>{t('biz.shopPhotosDesc')}</p>
-
-              {shopPhotos.length > 0 && (
-                <div className="bz-shop-photos-grid">
-                  {shopPhotos.map((url, idx) => (
-                    <div key={idx} className="bz-shop-photo-item">
-                      <img src={url} alt={`Boutique photo ${idx + 1}`} />
-                      <button type="button" className="bz-photo-remove-btn bz-shop-photo-remove" onClick={() => handleRemoveShopPhoto(idx)}>✕</button>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {shopPhotos.length < 8 && (
-                <label className="bz-photo-drop-zone" style={{ marginTop: 'var(--space-sm)' }}>
-                  <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={e => { const f = e.target.files?.[0]; if (f) handleAddShopPhoto(f); e.target.value = ''; }} />
-                  <span className="bz-photo-drop-icon">📷</span>
-                  <span className="bz-photo-drop-text">{t('biz.addShopPhoto')}</span>
-                  <small className="bz-photo-drop-hint">{t('biz.photoHint')} · {shopPhotos.length}/8</small>
-                </label>
-              )}
-            </section>
+            </form>
 
           </div>
         )}
@@ -1556,7 +1628,7 @@ export function BusinessDashboard() {
                   <button type="button" className="ud-quick-btn ud-quick-btn--primary bz-cta-gold" onClick={() => { setImportOpen(importOpen === 'produit' ? null : 'produit'); setImportMsg(null); setImportProgress(null); }}>
                     {importOpen === 'produit' ? '✕ Fermer' : '📥 Importer'}
                   </button>
-                  <button type="button" className="ud-quick-btn ud-quick-btn--primary bz-cta-gold" onClick={() => setCreateMode(createMode === 'produit' ? null : 'produit')}>
+                  <button type="button" className="ud-quick-btn ud-quick-btn--primary bz-cta-gold" onClick={() => { setCreateMode(createMode === 'produit' ? null : 'produit'); setCreateStep(1); setCreateUploadFiles([]); setCreateUploadPreviews(p => { p.forEach(u => URL.revokeObjectURL(u)); return []; }); setCreateMsg(null); }}>
                     {createMode === 'produit' ? t('biz.cancelBtn') : t('biz.newProduct')}
                   </button>
                 </div>
@@ -1583,23 +1655,115 @@ export function BusinessDashboard() {
                 </div>
               )}
               {createMode === 'produit' && (
-                <form className="bz-setup-form" style={{ marginBottom: 'var(--space-lg)' }} onSubmit={handleCreateListing}>
-                  <div className="bz-setup-grid">
-                    <label className="bz-setup-field"><span>{t('biz.titleLabel')} *</span><input type="text" required minLength={2} maxLength={200} value={createForm.title} onChange={e => setCreateForm(f => ({ ...f, title: e.target.value }))} placeholder={t('biz.titleProductPh')} /></label>
-                    <label className="bz-setup-field"><span>{t('biz.categoryLabel')} *</span><select required value={createForm.category} onChange={e => setCreateForm(f => ({ ...f, category: e.target.value }))}><option value="">{t('biz.categoryPh')}</option>{LISTING_PRODUCT_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}</select></label>
-                    <label className="bz-setup-field"><span>{t('biz.cityLabel')} *</span><LocationPicker value={{ lat: createForm.latitude, lng: createForm.longitude, address: createForm.city }} onChange={({ address, city, lat, lng }) => setCreateForm(f => ({ ...f, city: city || address, latitude: lat, longitude: lng }))} onStructuredChange={(loc) => setCreateForm(f => ({ ...f, city: loc.city || loc.formattedAddress, latitude: loc.latitude ?? f.latitude, longitude: loc.longitude ?? f.longitude, country: loc.country || f.country, countryCode: loc.countryCode || f.countryCode, region: loc.region || '', district: loc.district || '', formattedAddress: loc.formattedAddress || '', placeId: loc.placeId || '' }))} placeholder="Kinshasa" /></label>
-                    <label className="bz-setup-field"><span>🔒 Visibilité</span><VisibilitySelector value={createForm.locationVisibility} onChange={(v: LocationVisibility) => setCreateForm(f => ({ ...f, locationVisibility: v }))} /></label>
-                    <label className="bz-setup-field"><span>{t('biz.priceCdf')} *</span><input type="number" required min={0} value={createForm.priceCdf} onChange={e => setCreateForm(f => ({ ...f, priceCdf: e.target.value }))} placeholder={t('biz.pricePh')} /></label>
-                    <label className="bz-setup-field"><span>{t('biz.stockLabel')}</span><input type="number" min={0} value={createForm.stock} onChange={e => setCreateForm(f => ({ ...f, stock: e.target.value }))} placeholder={t('biz.stockPh')} /></label>
-                    <label className="bz-setup-field bz-setup-field--full"><span>{t('biz.descriptionLabel')}</span><textarea rows={3} value={createForm.description} onChange={e => setCreateForm(f => ({ ...f, description: e.target.value }))} placeholder={t('biz.descProductPh')} /></label>
-                    <label className="bz-setup-field" style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}><input type="checkbox" checked={createForm.isNegotiable} onChange={e => setCreateForm(f => ({ ...f, isNegotiable: e.target.checked }))} /><span>{t('negotiation.allowPrice')}</span></label>
-                  </div>
-                  {createMsg && <p className={`bz-setup-${createMsg.startsWith('✓') ? 'note' : 'error'}`}>{createMsg}</p>}
-                  <div className="bz-setup-actions">
-                    <button type="submit" className="ud-quick-btn ud-quick-btn--primary bz-cta-gold" disabled={createBusy}>
-                      {createBusy ? t('biz.publishing') : t('biz.publishProduct')}
-                    </button>
-                  </div>
+                <form className="bz-setup-form ud-publish-modal" style={{ marginBottom: 'var(--space-lg)' }} onSubmit={handleCreateListing}>
+                  {/* Étape 1 — Infos */}
+                  {createStep === 1 && (
+                    <div className="ud-publish-step-content">
+                      <label className="ud-publish-field">
+                        <span className="ud-publish-field-label">{t('biz.titleLabel')} *</span>
+                        <input className="ud-input" type="text" required minLength={2} maxLength={140} value={createForm.title} onChange={e => setCreateForm(f => ({ ...f, title: e.target.value }))} placeholder="Ex: iPhone 14 Pro 256GB neuf sous scellé" />
+                      </label>
+                      <label className="ud-publish-field">
+                        <span className="ud-publish-field-label">{t('biz.categoryLabel')} *</span>
+                        <select className="ud-input" required value={createForm.category} onChange={e => setCreateForm(f => ({ ...f, category: e.target.value }))}>
+                          <option value="">Choisir une catégorie</option>
+                          {LISTING_PRODUCT_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                      </label>
+                      <label className="ud-publish-field">
+                        <span className="ud-publish-field-label">{t('biz.descriptionLabel')}</span>
+                        <textarea className="ud-input" rows={4} maxLength={1200} value={createForm.description} onChange={e => setCreateForm(f => ({ ...f, description: e.target.value }))} placeholder="Description détaillée du produit..." />
+                        <span className="ud-publish-field-hint">{createForm.description.length}/1200 caractères</span>
+                      </label>
+                      <div className="ud-publish-nav">
+                        <span />
+                        <button type="button" className="ud-quick-btn ud-quick-btn--primary" onClick={() => { if (!createForm.title.trim()) { setCreateMsg('Le titre est requis'); return; } if (!createForm.category) { setCreateMsg('La catégorie est requise'); return; } setCreateMsg(null); setCreateStep(2); }}>Suivant →</button>
+                      </div>
+                    </div>
+                  )}
+                  {/* Étape 2 — Prix & Localisation */}
+                  {createStep === 2 && (
+                    <div className="ud-publish-step-content">
+                      <label className="ud-publish-field">
+                        <span className="ud-publish-field-label">{t('biz.priceCdf')} *</span>
+                        <div className="ud-publish-price-wrap">
+                          <span className="ud-publish-price-symbol">FC</span>
+                          <input className="ud-input" type="number" required min={0} value={createForm.priceCdf} onChange={e => setCreateForm(f => ({ ...f, priceCdf: e.target.value }))} placeholder="0" />
+                        </div>
+                        {createForm.priceCdf && parseInt(createForm.priceCdf) > 0 && (
+                          <span className="ud-publish-field-hint">≈ {(parseInt(createForm.priceCdf) / USD_TO_CDF).toFixed(2)} $ USD</span>
+                        )}
+                      </label>
+                      <label className="ud-publish-field">
+                        <span className="ud-publish-field-label">{t('biz.cityLabel')} *</span>
+                        <LocationPicker value={{ lat: createForm.latitude, lng: createForm.longitude, address: createForm.city }} onChange={({ address, city, lat, lng }) => setCreateForm(f => ({ ...f, city: city || address, latitude: lat, longitude: lng }))} onStructuredChange={(loc) => setCreateForm(f => ({ ...f, city: loc.city || loc.formattedAddress, latitude: loc.latitude ?? f.latitude, longitude: loc.longitude ?? f.longitude, country: loc.country || f.country, countryCode: loc.countryCode || f.countryCode, region: loc.region || '', district: loc.district || '', formattedAddress: loc.formattedAddress || '', placeId: loc.placeId || '' }))} placeholder="Kinshasa" />
+                      </label>
+                      <label className="ud-publish-field">
+                        <span className="ud-publish-field-label">{t('biz.stockLabel')}</span>
+                        <input className="ud-input" type="number" min={0} value={createForm.stock} onChange={e => setCreateForm(f => ({ ...f, stock: e.target.value }))} placeholder="∞ (illimité)" />
+                      </label>
+                      <label className="ud-publish-field">
+                        <span className="ud-publish-field-label">🔒 Visibilité</span>
+                        <VisibilitySelector value={createForm.locationVisibility} onChange={(v: LocationVisibility) => setCreateForm(f => ({ ...f, locationVisibility: v }))} />
+                      </label>
+                      <label className="ud-publish-field" style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                        <input type="checkbox" checked={createForm.isNegotiable} onChange={e => setCreateForm(f => ({ ...f, isNegotiable: e.target.checked }))} />
+                        <span>{t('negotiation.allowPrice')}</span>
+                      </label>
+                      <div className="ud-publish-nav">
+                        <button type="button" className="ud-quick-btn" onClick={() => setCreateStep(1)}>← Retour</button>
+                        <button type="button" className="ud-quick-btn ud-quick-btn--primary" onClick={() => setCreateStep(3)}>Suivant →</button>
+                      </div>
+                    </div>
+                  )}
+                  {/* Étape 3 — Médias & Validation */}
+                  {createStep === 3 && (
+                    <div className="ud-publish-step-content">
+                      <div className="ud-publish-media-zone">
+                        <p className="ud-publish-field-label">📷 Photos & Vidéo</p>
+                        <p className="ud-publish-field-hint" style={{ marginBottom: '0.75rem' }}>Max 5 photos + 1 vidéo (50 Mo max)</p>
+                        <div className="ud-publish-media-grid">
+                          {createUploadPreviews.map((url, i) => {
+                            const file = createUploadFiles[i];
+                            const isVideo = file?.type.startsWith('video/');
+                            return (
+                              <div key={url} className="ud-publish-media-thumb">
+                                {isVideo ? <video src={url} className="ud-publish-media-img" muted /> : <img src={url} alt={`Media ${i + 1}`} className="ud-publish-media-img" />}
+                                <button type="button" className="ud-publish-media-remove" onClick={() => removeCreateFile(i)}>✕</button>
+                                {isVideo && <span className="ud-publish-media-badge">🎬 Vidéo</span>}
+                              </div>
+                            );
+                          })}
+                          {createUploadFiles.length < 6 && (
+                            <label className="ud-publish-media-add">
+                              <input type="file" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm" multiple onChange={handleCreateFileSelect} style={{ display: 'none' }} />
+                              <span className="ud-publish-media-add-icon">+</span>
+                              <span className="ud-publish-media-add-label">Ajouter</span>
+                            </label>
+                          )}
+                        </div>
+                      </div>
+                      <div className="ud-publish-summary">
+                        <h3 className="ud-publish-summary-title">Récapitulatif</h3>
+                        <div className="ud-publish-summary-grid">
+                          <span>Type</span><strong>📦 Produit</strong>
+                          <span>Titre</span><strong>{createForm.title || '–'}</strong>
+                          <span>Catégorie</span><strong>{createForm.category || '–'}</strong>
+                          <span>Prix</span><strong>{createForm.priceCdf && parseInt(createForm.priceCdf) > 0 ? `${new Intl.NumberFormat('fr-CD').format(parseInt(createForm.priceCdf))} FC` : 'Prix libre'}</strong>
+                          <span>Ville</span><strong>{createForm.city || '–'}</strong>
+                          {createForm.stock && <><span>Stock</span><strong>{createForm.stock}</strong></>}
+                          <span>Médias</span><strong>{createUploadFiles.length} fichier(s)</strong>
+                        </div>
+                      </div>
+                      {createMsg && <p className={`bz-setup-${createMsg.startsWith('✓') ? 'note' : 'error'}`}>{createMsg}</p>}
+                      <div className="ud-publish-nav">
+                        <button type="button" className="ud-quick-btn" onClick={() => setCreateStep(2)}>← Retour</button>
+                        <button type="submit" className="ud-quick-btn ud-quick-btn--primary bz-cta-gold" disabled={createBusy}>
+                          {createBusy ? '⏳ Publication...' : '🚀 Publier le produit'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </form>
               )}
               {produits.length === 0 ? (
@@ -1639,7 +1803,7 @@ export function BusinessDashboard() {
                   <button type="button" className="ud-quick-btn ud-quick-btn--primary bz-cta-gold" onClick={() => { setImportOpen(importOpen === 'service' ? null : 'service'); setImportMsg(null); setImportProgress(null); }}>
                     {importOpen === 'service' ? '✕ Fermer' : '📥 Importer'}
                   </button>
-                  <button type="button" className="ud-quick-btn ud-quick-btn--primary bz-cta-gold" onClick={() => setCreateMode(createMode === 'service' ? null : 'service')}>
+                  <button type="button" className="ud-quick-btn ud-quick-btn--primary bz-cta-gold" onClick={() => { setCreateMode(createMode === 'service' ? null : 'service'); setCreateStep(1); setCreateUploadFiles([]); setCreateUploadPreviews(p => { p.forEach(u => URL.revokeObjectURL(u)); return []; }); setCreateMsg(null); }}>
                     {createMode === 'service' ? t('biz.cancelBtn') : t('biz.newService')}
                   </button>
                 </div>
@@ -1666,23 +1830,115 @@ export function BusinessDashboard() {
                 </div>
               )}
               {createMode === 'service' && (
-                <form className="bz-setup-form" style={{ marginBottom: 'var(--space-lg)' }} onSubmit={handleCreateListing}>
-                  <div className="bz-setup-grid">
-                    <label className="bz-setup-field"><span>{t('biz.titleLabel')} *</span><input type="text" required minLength={2} maxLength={200} value={createForm.title} onChange={e => setCreateForm(f => ({ ...f, title: e.target.value }))} placeholder={t('biz.titleServicePh')} /></label>
-                    <label className="bz-setup-field"><span>{t('biz.categoryLabel')} *</span><select required value={createForm.category} onChange={e => setCreateForm(f => ({ ...f, category: e.target.value }))}><option value="">{t('biz.categoryServicePh')}</option>{LISTING_SERVICE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}</select></label>
-                    <label className="bz-setup-field"><span>{t('biz.cityLabel')} *</span><LocationPicker value={{ lat: createForm.latitude, lng: createForm.longitude, address: createForm.city }} onChange={({ address, city, lat, lng }) => setCreateForm(f => ({ ...f, city: city || address, latitude: lat, longitude: lng }))} onStructuredChange={(loc) => setCreateForm(f => ({ ...f, city: loc.city || loc.formattedAddress, latitude: loc.latitude ?? f.latitude, longitude: loc.longitude ?? f.longitude, country: loc.country || f.country, countryCode: loc.countryCode || f.countryCode, region: loc.region || '', district: loc.district || '', formattedAddress: loc.formattedAddress || '', placeId: loc.placeId || '' }))} placeholder="Kinshasa" /></label>
-                    <label className="bz-setup-field"><span>🔒 Visibilité</span><VisibilitySelector value={createForm.locationVisibility} onChange={(v: LocationVisibility) => setCreateForm(f => ({ ...f, locationVisibility: v }))} /></label>
-                    <label className="bz-setup-field"><span>📍 Rayon (km)</span><input type="number" min={0} max={500} value={createForm.serviceRadiusKm} onChange={e => setCreateForm(f => ({ ...f, serviceRadiusKm: e.target.value }))} placeholder="Ex: 25" /></label>
-                    <label className="bz-setup-field"><span>{t('biz.rateCdf')} *</span><input type="number" required min={0} value={createForm.priceCdf} onChange={e => setCreateForm(f => ({ ...f, priceCdf: e.target.value }))} placeholder={t('biz.ratePh')} /></label>
-                    <label className="bz-setup-field bz-setup-field--full"><span>{t('biz.descriptionLabel')}</span><textarea rows={3} value={createForm.description} onChange={e => setCreateForm(f => ({ ...f, description: e.target.value }))} placeholder={t('biz.descServicePh')} /></label>
-                    <label className="bz-setup-field" style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}><input type="checkbox" checked={createForm.isNegotiable} onChange={e => setCreateForm(f => ({ ...f, isNegotiable: e.target.checked }))} /><span>{t('negotiation.allowPrice')}</span></label>
-                  </div>
-                  {createMsg && <p className={`bz-setup-${createMsg.startsWith('✓') ? 'note' : 'error'}`}>{createMsg}</p>}
-                  <div className="bz-setup-actions">
-                    <button type="submit" className="ud-quick-btn ud-quick-btn--primary bz-cta-gold" disabled={createBusy}>
-                      {createBusy ? t('biz.publishing') : t('biz.publishService')}
-                    </button>
-                  </div>
+                <form className="bz-setup-form ud-publish-modal" style={{ marginBottom: 'var(--space-lg)' }} onSubmit={handleCreateListing}>
+                  {/* Étape 1 — Infos */}
+                  {createStep === 1 && (
+                    <div className="ud-publish-step-content">
+                      <label className="ud-publish-field">
+                        <span className="ud-publish-field-label">{t('biz.titleLabel')} *</span>
+                        <input className="ud-input" type="text" required minLength={2} maxLength={140} value={createForm.title} onChange={e => setCreateForm(f => ({ ...f, title: e.target.value }))} placeholder="Ex: Réparation smartphones toutes marques" />
+                      </label>
+                      <label className="ud-publish-field">
+                        <span className="ud-publish-field-label">{t('biz.categoryLabel')} *</span>
+                        <select className="ud-input" required value={createForm.category} onChange={e => setCreateForm(f => ({ ...f, category: e.target.value }))}>
+                          <option value="">Choisir une catégorie</option>
+                          {LISTING_SERVICE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                      </label>
+                      <label className="ud-publish-field">
+                        <span className="ud-publish-field-label">{t('biz.descriptionLabel')}</span>
+                        <textarea className="ud-input" rows={4} maxLength={1200} value={createForm.description} onChange={e => setCreateForm(f => ({ ...f, description: e.target.value }))} placeholder="Description détaillée du service..." />
+                        <span className="ud-publish-field-hint">{createForm.description.length}/1200 caractères</span>
+                      </label>
+                      <div className="ud-publish-nav">
+                        <span />
+                        <button type="button" className="ud-quick-btn ud-quick-btn--primary" onClick={() => { if (!createForm.title.trim()) { setCreateMsg('Le titre est requis'); return; } if (!createForm.category) { setCreateMsg('La catégorie est requise'); return; } setCreateMsg(null); setCreateStep(2); }}>Suivant →</button>
+                      </div>
+                    </div>
+                  )}
+                  {/* Étape 2 — Tarif & Localisation */}
+                  {createStep === 2 && (
+                    <div className="ud-publish-step-content">
+                      <label className="ud-publish-field">
+                        <span className="ud-publish-field-label">{t('biz.rateCdf')} *</span>
+                        <div className="ud-publish-price-wrap">
+                          <span className="ud-publish-price-symbol">FC</span>
+                          <input className="ud-input" type="number" required min={0} value={createForm.priceCdf} onChange={e => setCreateForm(f => ({ ...f, priceCdf: e.target.value }))} placeholder="0" />
+                        </div>
+                        {createForm.priceCdf && parseInt(createForm.priceCdf) > 0 && (
+                          <span className="ud-publish-field-hint">≈ {(parseInt(createForm.priceCdf) / USD_TO_CDF).toFixed(2)} $ USD</span>
+                        )}
+                      </label>
+                      <label className="ud-publish-field">
+                        <span className="ud-publish-field-label">{t('biz.cityLabel')} *</span>
+                        <LocationPicker value={{ lat: createForm.latitude, lng: createForm.longitude, address: createForm.city }} onChange={({ address, city, lat, lng }) => setCreateForm(f => ({ ...f, city: city || address, latitude: lat, longitude: lng }))} onStructuredChange={(loc) => setCreateForm(f => ({ ...f, city: loc.city || loc.formattedAddress, latitude: loc.latitude ?? f.latitude, longitude: loc.longitude ?? f.longitude, country: loc.country || f.country, countryCode: loc.countryCode || f.countryCode, region: loc.region || '', district: loc.district || '', formattedAddress: loc.formattedAddress || '', placeId: loc.placeId || '' }))} placeholder="Kinshasa" />
+                      </label>
+                      <label className="ud-publish-field">
+                        <span className="ud-publish-field-label">📍 Rayon d'intervention (km)</span>
+                        <input className="ud-input" type="number" min={0} max={500} value={createForm.serviceRadiusKm} onChange={e => setCreateForm(f => ({ ...f, serviceRadiusKm: e.target.value }))} placeholder="Ex: 25" />
+                      </label>
+                      <label className="ud-publish-field">
+                        <span className="ud-publish-field-label">🔒 Visibilité</span>
+                        <VisibilitySelector value={createForm.locationVisibility} onChange={(v: LocationVisibility) => setCreateForm(f => ({ ...f, locationVisibility: v }))} />
+                      </label>
+                      <label className="ud-publish-field" style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                        <input type="checkbox" checked={createForm.isNegotiable} onChange={e => setCreateForm(f => ({ ...f, isNegotiable: e.target.checked }))} />
+                        <span>{t('negotiation.allowPrice')}</span>
+                      </label>
+                      <div className="ud-publish-nav">
+                        <button type="button" className="ud-quick-btn" onClick={() => setCreateStep(1)}>← Retour</button>
+                        <button type="button" className="ud-quick-btn ud-quick-btn--primary" onClick={() => setCreateStep(3)}>Suivant →</button>
+                      </div>
+                    </div>
+                  )}
+                  {/* Étape 3 — Médias & Validation */}
+                  {createStep === 3 && (
+                    <div className="ud-publish-step-content">
+                      <div className="ud-publish-media-zone">
+                        <p className="ud-publish-field-label">📷 Photos & Vidéo</p>
+                        <p className="ud-publish-field-hint" style={{ marginBottom: '0.75rem' }}>Max 5 photos + 1 vidéo (50 Mo max)</p>
+                        <div className="ud-publish-media-grid">
+                          {createUploadPreviews.map((url, i) => {
+                            const file = createUploadFiles[i];
+                            const isVideo = file?.type.startsWith('video/');
+                            return (
+                              <div key={url} className="ud-publish-media-thumb">
+                                {isVideo ? <video src={url} className="ud-publish-media-img" muted /> : <img src={url} alt={`Media ${i + 1}`} className="ud-publish-media-img" />}
+                                <button type="button" className="ud-publish-media-remove" onClick={() => removeCreateFile(i)}>✕</button>
+                                {isVideo && <span className="ud-publish-media-badge">🎬 Vidéo</span>}
+                              </div>
+                            );
+                          })}
+                          {createUploadFiles.length < 6 && (
+                            <label className="ud-publish-media-add">
+                              <input type="file" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm" multiple onChange={handleCreateFileSelect} style={{ display: 'none' }} />
+                              <span className="ud-publish-media-add-icon">+</span>
+                              <span className="ud-publish-media-add-label">Ajouter</span>
+                            </label>
+                          )}
+                        </div>
+                      </div>
+                      <div className="ud-publish-summary">
+                        <h3 className="ud-publish-summary-title">Récapitulatif</h3>
+                        <div className="ud-publish-summary-grid">
+                          <span>Type</span><strong>🛠️ Service</strong>
+                          <span>Titre</span><strong>{createForm.title || '–'}</strong>
+                          <span>Catégorie</span><strong>{createForm.category || '–'}</strong>
+                          <span>Tarif</span><strong>{createForm.priceCdf && parseInt(createForm.priceCdf) > 0 ? `${new Intl.NumberFormat('fr-CD').format(parseInt(createForm.priceCdf))} FC` : 'Tarif libre'}</strong>
+                          <span>Ville</span><strong>{createForm.city || '–'}</strong>
+                          {createForm.serviceRadiusKm && <><span>Rayon</span><strong>{createForm.serviceRadiusKm} km</strong></>}
+                          <span>Médias</span><strong>{createUploadFiles.length} fichier(s)</strong>
+                        </div>
+                      </div>
+                      {createMsg && <p className={`bz-setup-${createMsg.startsWith('✓') ? 'note' : 'error'}`}>{createMsg}</p>}
+                      <div className="ud-publish-nav">
+                        <button type="button" className="ud-quick-btn" onClick={() => setCreateStep(2)}>← Retour</button>
+                        <button type="submit" className="ud-quick-btn ud-quick-btn--primary bz-cta-gold" disabled={createBusy}>
+                          {createBusy ? '⏳ Publication...' : '🚀 Publier le service'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </form>
               )}
               {services.length === 0 ? (

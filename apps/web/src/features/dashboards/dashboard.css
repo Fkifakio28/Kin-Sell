@@ -5300,6 +5300,311 @@
   font-size: 14px;
 }
 
+/* ── Boutique Redesign ─────────────────────────────────────── */
+.bz-bout-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-md, 16px);
+  margin-bottom: var(--space-lg, 24px);
+  flex-wrap: wrap;
+}
+
+.bz-bout-header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.bz-bout-header-title {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: var(--ud-text-1, #fff);
+  margin: 0;
+  line-height: 1.15;
+}
+
+.bz-bout-header-right {
+  display: flex;
+  gap: var(--space-sm, 8px);
+  flex-wrap: wrap;
+}
+
+/* Récapitulatif box */
+.bz-bout-recap {
+  display: flex !important;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-lg, 24px);
+  flex-wrap: wrap;
+}
+
+.bz-bout-recap-left {
+  display: flex;
+  gap: var(--space-md, 16px);
+  flex: 1;
+  min-width: 0;
+}
+
+.bz-bout-recap-logo {
+  flex-shrink: 0;
+  width: 72px;
+  height: 72px;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 2px solid var(--ud-border, rgba(180, 160, 255, 0.3));
+  background: rgba(111, 88, 255, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bz-bout-recap-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.bz-bout-recap-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.bz-bout-recap-bio {
+  margin: 4px 0 0;
+  font-size: 0.85rem;
+  color: var(--ud-text-2, #c7bedf);
+  line-height: 1.45;
+  max-width: 600px;
+}
+
+.bz-bout-recap-cover {
+  flex-shrink: 0;
+  width: 200px;
+  border-radius: var(--ud-radius, 14px);
+  overflow: hidden;
+  border: 1px solid var(--ud-border, rgba(180, 160, 255, 0.3));
+  display: flex;
+  flex-direction: column;
+  text-align: center;
+}
+
+.bz-bout-recap-cover-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ud-text-3, #9d92bb);
+  padding: 6px;
+  background: rgba(0,0,0,0.25);
+}
+
+.bz-bout-recap-cover img {
+  width: 100%;
+  height: 140px;
+  object-fit: cover;
+  display: block;
+}
+
+/* Logo éditable avec badge X */
+.bz-bout-edit-logo-wrap {
+  display: flex;
+  justify-content: center;
+  margin-bottom: var(--space-lg, 24px);
+}
+
+.bz-bout-edit-logo-preview {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.bz-bout-edit-logo-img-wrap {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 2px solid var(--ud-border, rgba(180, 160, 255, 0.3));
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.bz-bout-edit-logo-img-wrap:hover {
+  border-color: var(--ud-accent, #6f58ff);
+}
+
+.bz-bout-edit-logo-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.bz-bout-edit-logo-remove {
+  position: absolute;
+  top: -4px;
+  left: -4px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--color-danger, #f87171);
+  border: 2px solid var(--ud-surface, #1a1040);
+  cursor: pointer;
+  z-index: 2;
+  transition: transform 0.15s;
+  line-height: 1;
+  padding: 0;
+}
+
+.bz-bout-edit-logo-remove:hover {
+  transform: scale(1.15);
+}
+
+.bz-bout-edit-logo-label {
+  font-size: 11px;
+  color: var(--ud-text-3, #9d92bb);
+  text-align: center;
+}
+
+.bz-bout-edit-logo-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  border: 2px dashed var(--ud-border, rgba(180, 160, 255, 0.3));
+  background: rgba(111, 88, 255, 0.05);
+  cursor: pointer;
+  gap: 4px;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.bz-bout-edit-logo-empty:hover {
+  border-color: var(--ud-accent, #6f58ff);
+  background: rgba(111, 88, 255, 0.1);
+}
+
+.bz-bout-edit-logo-empty input[type="file"] { display: none; }
+
+.bz-setup-field-label-text {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ud-text-3, #9d92bb);
+  margin-bottom: 6px;
+}
+
+/* Cover preview avec badge X */
+.bz-bout-cover-preview {
+  position: relative;
+  display: inline-block;
+  margin-top: 6px;
+}
+
+.bz-bout-cover-img-wrap {
+  display: block;
+  cursor: pointer;
+  border-radius: var(--ud-radius, 14px);
+  overflow: hidden;
+  border: 2px solid var(--ud-border, rgba(180, 160, 255, 0.3));
+  transition: border-color 0.2s;
+}
+
+.bz-bout-cover-img-wrap:hover {
+  border-color: var(--ud-accent, #6f58ff);
+}
+
+.bz-bout-cover-img {
+  display: block;
+  width: 100%;
+  max-width: 400px;
+  max-height: 160px;
+  object-fit: cover;
+}
+
+/* Contact row */
+.bz-bout-contact-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-md, 16px);
+  margin-bottom: 0;
+}
+
+.bz-bout-contact-box {
+  margin-bottom: 0 !important;
+}
+
+/* Footer save */
+.bz-bout-footer-actions {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-md, 16px);
+  margin-top: var(--space-lg, 24px);
+  flex-wrap: wrap;
+}
+
+/* Media badge vidéo */
+.bz-bout-media-badge {
+  position: absolute;
+  bottom: 6px;
+  left: 6px;
+  background: rgba(0, 0, 0, 0.7);
+  border-radius: 6px;
+  padding: 2px 6px;
+  font-size: 12px;
+}
+
+@media (max-width: 640px) {
+  .bz-bout-header {
+    flex-direction: column;
+    gap: var(--space-sm, 8px);
+  }
+  .bz-bout-header-right {
+    width: 100%;
+  }
+  .bz-bout-header-right .ud-quick-btn {
+    flex: 1;
+    text-align: center;
+  }
+  .bz-bout-recap {
+    flex-direction: column;
+  }
+  .bz-bout-recap-left {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+  .bz-bout-recap-info {
+    align-items: center;
+  }
+  .bz-bout-recap-bio {
+    text-align: center;
+  }
+  .bz-bout-recap-cover {
+    width: 100%;
+    max-width: 300px;
+    margin: 0 auto;
+  }
+  .bz-bout-contact-row {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ── Carte identité publique ──────────────────────────────── */
 .bz-public-id-card {
   display: flex !important;
