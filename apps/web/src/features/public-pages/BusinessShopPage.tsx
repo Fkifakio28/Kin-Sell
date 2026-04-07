@@ -34,6 +34,10 @@ type PublicBusiness = {
     coverImage?: string | null;
     publicDescription?: string | null;
     city?: string | null;
+    country?: string | null;
+    formattedAddress?: string | null;
+    contactPhone?: string | null;
+    contactEmail?: string | null;
     active: boolean;
     highlights?: { id: string; icon: string; name: string; description: string }[] | null;
     shopPhotos?: string[];
@@ -605,12 +609,21 @@ export function BusinessShopPage({ slug }: BusinessShopPageProps) {
           <article className="business-lux-contact-card">
             <p>Contact</p>
             <h3>Contact via Kin-Sell</h3>
-            <a href={`/messages?contact=${encodeURIComponent(business.publicName)}`}>Ouvrir la conversation</a>
+            <a href={`/messaging`} className="biz-contact-link">💬 Ouvrir la conversation</a>
+            {business.shop?.contactPhone && (
+              <p className="biz-contact-detail">📞 <a href={`tel:${business.shop.contactPhone}`}>{business.shop.contactPhone}</a></p>
+            )}
+            {business.shop?.contactEmail && (
+              <p className="biz-contact-detail">✉️ <a href={`mailto:${business.shop.contactEmail}`}>{business.shop.contactEmail}</a></p>
+            )}
           </article>
           <article className="business-lux-contact-card">
             <p>Localisation</p>
             <h3>{city}</h3>
-            <span>{city}, RDC</span>
+            <span>{[city, business.shop?.country].filter(Boolean).join(', ')}</span>
+            {business.shop?.formattedAddress && (
+              <p className="biz-contact-detail" style={{ marginTop: 6, fontSize: '0.82rem', opacity: 0.7 }}>{business.shop.formattedAddress}</p>
+            )}
           </article>
         </div>
 
@@ -618,7 +631,7 @@ export function BusinessShopPage({ slug }: BusinessShopPageProps) {
         <div className="biz-map-placeholder">
           <div className="biz-map-inner">
             <span className="biz-map-pin">📍</span>
-            <p>{business.publicName} — {city}, RDC</p>
+            <p>{business.publicName} — {[city, business.shop?.country].filter(Boolean).join(', ')}</p>
             <small>Carte interactive bientôt disponible</small>
           </div>
         </div>

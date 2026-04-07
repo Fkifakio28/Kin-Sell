@@ -49,6 +49,8 @@ const updateSchema = z.object({
     description: z.string().max(300),
   })).max(10).optional(),
   shopPhotos: z.array(z.string().refine(isAcceptedImageInput, "Image invalide")).max(8).optional(),
+  contactPhone: z.string().max(30).optional().nullable(),
+  contactEmail: z.string().email().max(150).optional().nullable(),
 });
 
 const router = Router();

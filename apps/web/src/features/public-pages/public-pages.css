@@ -1552,6 +1552,27 @@
   font-weight: var(--font-weight-semibold);
 }
 
+.biz-contact-link {
+  display: inline-block;
+  padding: 6px 14px;
+  border-radius: 10px;
+  background: rgba(217, 181, 109, 0.12);
+  border: 1px solid rgba(217, 181, 109, 0.25);
+  transition: background 0.2s;
+}
+.biz-contact-link:hover { background: rgba(217, 181, 109, 0.22); }
+
+.biz-contact-detail {
+  font-size: 0.84rem;
+  color: var(--color-text-secondary, rgba(255,255,255,0.65));
+  margin: 2px 0 0;
+}
+.biz-contact-detail a {
+  color: var(--business-glow);
+  text-decoration: none;
+}
+.biz-contact-detail a:hover { text-decoration: underline; }
+
 @media (max-width: 1100px) {
   .business-lux-hero-overlay {
     grid-template-columns: 1fr;

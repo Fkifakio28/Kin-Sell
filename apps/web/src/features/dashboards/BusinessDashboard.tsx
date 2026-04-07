@@ -160,7 +160,7 @@ export function BusinessDashboard() {
   // ─── Page publique ───────────────────────────────────────
   const [pageSaving, setPageSaving] = useState(false);
   const [pageMsg, setPageMsg] = useState<string | null>(null);
-  const [pageForm, setPageForm] = useState({ publicName: '', publicDescription: '', city: '', address: '', logo: '', coverImage: '', country: '', countryCode: '', region: '', district: '', formattedAddress: '', latitude: null as number | null, longitude: null as number | null, placeId: '', locationVisibility: 'DISTRICT_PUBLIC' as LocationVisibility });
+  const [pageForm, setPageForm] = useState({ publicName: '', publicDescription: '', city: '', address: '', logo: '', coverImage: '', country: '', countryCode: '', region: '', district: '', formattedAddress: '', latitude: null as number | null, longitude: null as number | null, placeId: '', locationVisibility: 'DISTRICT_PUBLIC' as LocationVisibility, contactPhone: '', contactEmail: '' });
 
   // ─── Points forts (stockés en localStorage) ──────────────
   type Quality = { id: string; icon: string; name: string; description: string };
@@ -473,6 +473,8 @@ export function BusinessDashboard() {
       longitude: (business.shop as any)?.longitude ?? null,
       placeId: (business.shop as any)?.placeId ?? '',
       locationVisibility: (business.shop as any)?.locationVisibility ?? 'DISTRICT_PUBLIC',
+      contactPhone: (business.shop as any)?.contactPhone ?? '',
+      contactEmail: (business.shop as any)?.contactEmail ?? '',
     });
     // ── Charger points forts & photos boutique depuis la DB ──
     const shopAny = business.shop as any;
@@ -730,6 +732,8 @@ export function BusinessDashboard() {
         longitude: pageForm.longitude ?? undefined,
         placeId: pageForm.placeId.trim() || undefined,
         locationVisibility: pageForm.locationVisibility || undefined,
+        contactPhone: pageForm.contactPhone.trim() || null,
+        contactEmail: pageForm.contactEmail.trim() || null,
       });
       setBusiness(updated);
       setPageMsg(t('biz.pageSaved'));
@@ -1357,6 +1361,14 @@ export function BusinessDashboard() {
                   <label className="bz-setup-field bz-setup-field--full">
                     <span>{t('biz.publicDescLabel')}</span>
                     <textarea value={pageForm.publicDescription} onChange={e => setPageForm(f => ({ ...f, publicDescription: e.target.value }))} maxLength={800} rows={5} placeholder={t('biz.publicDescPh')} />
+                  </label>
+                  <label className="bz-setup-field">
+                    <span>📞 Téléphone de contact</span>
+                    <input type="tel" value={pageForm.contactPhone} onChange={e => setPageForm(f => ({ ...f, contactPhone: e.target.value }))} maxLength={30} placeholder="+212 6XX XXX XXX" />
+                  </label>
+                  <label className="bz-setup-field">
+                    <span>✉️ Email de contact</span>
+                    <input type="email" value={pageForm.contactEmail} onChange={e => setPageForm(f => ({ ...f, contactEmail: e.target.value }))} maxLength={150} placeholder="contact@mon-entreprise.com" />
                   </label>
                 </div>
                 {pageMsg && <p className={`bz-setup-${pageMsg.startsWith('✓') ? 'note' : 'error'}`}>{pageMsg}</p>}

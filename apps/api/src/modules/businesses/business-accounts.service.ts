@@ -34,6 +34,8 @@ type UpdateBusinessInput = {
   active?: boolean;
   highlights?: { id: string; icon: string; name: string; description: string }[];
   shopPhotos?: string[];
+  contactPhone?: string | null;
+  contactEmail?: string | null;
 };
 
 const slugify = (value: string): string => {
@@ -181,6 +183,8 @@ export const updateMyBusinessAccount = async (ownerUserId: string, payload: Upda
         active: payload.active,
         highlights: payload.highlights !== undefined ? payload.highlights : undefined,
         shopPhotos: shopPhotos !== undefined ? shopPhotos : undefined,
+        contactPhone: payload.contactPhone !== undefined ? payload.contactPhone : undefined,
+        contactEmail: payload.contactEmail !== undefined ? payload.contactEmail : undefined,
       }
     });
 

@@ -13,10 +13,14 @@ export type BusinessAccount = {
     id: string;
     businessId: string;
     city: string | null;
+    country: string | null;
     address: string | null;
+    formattedAddress: string | null;
     coverImage: string | null;
     logo: string | null;
     publicDescription: string | null;
+    contactPhone: string | null;
+    contactEmail: string | null;
     active: boolean;
     highlights?: { id: string; icon: string; name: string; description: string }[] | null;
     shopPhotos?: string[];

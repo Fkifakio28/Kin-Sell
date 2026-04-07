@@ -682,6 +682,8 @@ model BusinessShop {
   deliveryZones       String[]           @default([])
   highlights          Json?              @default("[]")
   shopPhotos          String[]           @default([])
+  contactPhone        String?
+  contactEmail        String?
   active              Boolean            @default(true)
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
