@@ -1959,6 +1959,86 @@
   pointer-events: auto;
 }
 
+/* ── Gallery left/right arrows ─────────────────────────── */
+.biz-gallery-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 5;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(18, 11, 43, 0.7);
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(111, 88, 255, 0.25);
+  color: #fff;
+  font-size: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.2s;
+  line-height: 1;
+}
+.biz-gallery-arrow:hover {
+  background: rgba(111, 88, 255, 0.5);
+}
+.biz-gallery-arrow:active {
+  transform: translateY(-50%) scale(0.92);
+}
+.biz-gallery-arrow--left {
+  left: 10px;
+}
+.biz-gallery-arrow--right {
+  right: 10px;
+}
+
+/* ── Highlights / Points forts grid ────────────────────── */
+.biz-highlights-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--space-md, 16px);
+}
+.biz-highlight-card {
+  padding: 16px;
+  border-radius: 14px;
+  background: rgba(111, 88, 255, 0.08);
+  border: 1px solid rgba(111, 88, 255, 0.15);
+  text-align: center;
+  transition: background 0.2s, border-color 0.2s;
+}
+.biz-highlight-card:hover {
+  background: rgba(111, 88, 255, 0.14);
+  border-color: rgba(111, 88, 255, 0.3);
+}
+.biz-highlight-icon {
+  font-size: 28px;
+  display: block;
+  margin-bottom: 8px;
+}
+.biz-highlight-name {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--color-text, #fff);
+  margin-bottom: 4px;
+}
+.biz-highlight-desc {
+  font-size: 0.82rem;
+  color: var(--color-text-secondary, #c7bedf);
+  line-height: 1.4;
+}
+
+@media (max-width: 640px) {
+  .biz-highlights-grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  }
+  .biz-gallery-arrow {
+    width: 30px;
+    height: 30px;
+    font-size: 18px;
+  }
+}
+
 /* ── Services grid pleine largeur ──────────────────────── */
 .business-lux-services-grid {
   display: grid;

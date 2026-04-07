@@ -1,7 +1,7 @@
 import { Role } from "../../types/roles.js";
 import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
-import { normalizeImageInput } from "../../shared/utils/media-storage.js";
+import { normalizeImageInput, normalizeImageInputs } from "../../shared/utils/media-storage.js";
 
 type CreateBusinessInput = {
   legalName: string;
@@ -15,11 +15,25 @@ type UpdateBusinessInput = {
   publicName?: string;
   description?: string;
   city?: string;
+  country?: string;
+  countryCode?: string;
+  region?: string;
+  district?: string;
+  postalCode?: string;
   address?: string;
+  formattedAddress?: string;
+  latitude?: number;
+  longitude?: number;
+  placeId?: string;
+  locationVisibility?: string;
+  serviceRadiusKm?: number | null;
+  deliveryZones?: string[];
   coverImage?: string;
   logo?: string;
   publicDescription?: string;
   active?: boolean;
+  highlights?: { id: string; icon: string; name: string; description: string }[];
+  shopPhotos?: string[];
 };
 
 const slugify = (value: string): string => {
@@ -123,9 +137,10 @@ export const updateMyBusinessAccount = async (ownerUserId: string, payload: Upda
     throw new HttpError(404, "Compte entreprise introuvable");
   }
 
-  const [coverImage, logo] = await Promise.all([
+  const [coverImage, logo, shopPhotos] = await Promise.all([
     normalizeImageInput(payload.coverImage, { folder: "business" }),
     normalizeImageInput(payload.logo, { folder: "business" }),
+    normalizeImageInputs(payload.shopPhotos, { folder: "business" }),
   ]);
 
   const nextSlug = payload.publicName
@@ -147,11 +162,25 @@ export const updateMyBusinessAccount = async (ownerUserId: string, payload: Upda
       where: { businessId: current.id },
       data: {
         city: payload.city,
+        country: payload.country,
+        countryCode: payload.countryCode as any,
+        region: payload.region,
+        district: payload.district,
+        postalCode: payload.postalCode,
         address: payload.address,
+        formattedAddress: payload.formattedAddress,
+        latitude: payload.latitude,
+        longitude: payload.longitude,
+        placeId: payload.placeId,
+        locationVisibility: payload.locationVisibility as any,
+        serviceRadiusKm: payload.serviceRadiusKm,
+        deliveryZones: payload.deliveryZones,
         coverImage,
         logo,
         publicDescription: payload.publicDescription,
-        active: payload.active
+        active: payload.active,
+        highlights: payload.highlights !== undefined ? payload.highlights : undefined,
+        shopPhotos: shopPhotos !== undefined ? shopPhotos : undefined,
       }
     });
 

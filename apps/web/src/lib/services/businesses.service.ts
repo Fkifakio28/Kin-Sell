@@ -18,6 +18,8 @@ export type BusinessAccount = {
     logo: string | null;
     publicDescription: string | null;
     active: boolean;
+    highlights?: { id: string; icon: string; name: string; description: string }[] | null;
+    shopPhotos?: string[];
   } | null;
 };
 

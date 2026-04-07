@@ -35,6 +35,8 @@ type PublicBusiness = {
     publicDescription?: string | null;
     city?: string | null;
     active: boolean;
+    highlights?: { id: string; icon: string; name: string; description: string }[] | null;
+    shopPhotos?: string[];
   } | null;
   listings: PublicListing[];
   _count: { sellerOrders: number };
@@ -168,8 +170,26 @@ export function BusinessShopPage({ slug }: BusinessShopPageProps) {
     return () => clearInterval(timer);
   }, [heroImages.length]);
 
-  // Utiliser uniquement des sources backend réelles pour la galerie boutique.
-  const shopPhotos: string[] = useMemo(() => heroImages, [heroImages]);
+  // Utiliser les photos boutique stockées en DB, sinon fallback hero images.
+  const shopPhotos: string[] = useMemo(() => {
+    if (!business) return [];
+    const dbPhotos = business.shop?.shopPhotos;
+    if (dbPhotos && dbPhotos.length > 0) return dbPhotos.map(p => resolveMediaUrl(p));
+    return heroImages;
+  }, [business, heroImages]);
+
+  // ─── Auto-avance shop photos ───────────────────────────────
+  useEffect(() => {
+    if (shopPhotos.length <= 1) return;
+    const timer = setInterval(() => setShopPhotoIdx(i => (i + 1) % shopPhotos.length), 3500);
+    return () => clearInterval(timer);
+  }, [shopPhotos.length]);
+
+  // ─── Highlights / Points forts depuis la DB ────────────────
+  const highlights = useMemo(() => {
+    if (!business?.shop?.highlights) return [];
+    return business.shop.highlights;
+  }, [business]);
 
   // ─── Avis clients depuis API ───────────────────────────────
   const [reviews, setReviews] = useState<Review[]>([]);
@@ -402,6 +422,24 @@ export function BusinessShopPage({ slug }: BusinessShopPageProps) {
         </section>
       )}
 
+      {/* ═══ POINTS FORTS ════════════════════════════════════ */}
+      {highlights.length > 0 && (
+        <section className="public-section" aria-label="Points forts">
+          <div className="public-section-head">
+            <h2>✨ Points forts</h2>
+          </div>
+          <div className="biz-highlights-grid">
+            {highlights.map(h => (
+              <div key={h.id} className="biz-highlight-card">
+                <span className="biz-highlight-icon">{h.icon}</span>
+                <h3 className="biz-highlight-name">{h.name}</h3>
+                {h.description && <p className="biz-highlight-desc">{h.description}</p>}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* ═══ PRODUITS (pleine largeur, si publiés) ═══════════ */}
       {hasProducts && (
         <section className="public-section" aria-label="Produits">
@@ -599,7 +637,20 @@ export function BusinessShopPage({ slug }: BusinessShopPageProps) {
                 />
               ))}
               {shopPhotos.length > 1 && (
-                <div className="biz-carousel-dots" style={{ bottom: '12px' }}>
+                <>
+                  <button
+                    type="button"
+                    className="biz-gallery-arrow biz-gallery-arrow--left"
+                    aria-label="Photo précédente"
+                    onClick={() => setShopPhotoIdx(i => (i - 1 + shopPhotos.length) % shopPhotos.length)}
+                  >‹</button>
+                  <button
+                    type="button"
+                    className="biz-gallery-arrow biz-gallery-arrow--right"
+                    aria-label="Photo suivante"
+                    onClick={() => setShopPhotoIdx(i => (i + 1) % shopPhotos.length)}
+                  >›</button>
+                  <div className="biz-carousel-dots" style={{ bottom: '12px' }}>
                   {shopPhotos.map((_, i) => (
                     <button
                       key={i}
@@ -610,6 +661,7 @@ export function BusinessShopPage({ slug }: BusinessShopPageProps) {
                     />
                   ))}
                 </div>
+                </>
               )}
             </div>
           </div>

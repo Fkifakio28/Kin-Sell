@@ -41,7 +41,14 @@ const updateSchema = z.object({
   coverImage: z.string().refine(isAcceptedImageInput, "Image invalide").optional(),
   logo: z.string().refine(isAcceptedImageInput, "Image invalide").optional(),
   publicDescription: z.string().max(800).optional(),
-  active: z.boolean().optional()
+  active: z.boolean().optional(),
+  highlights: z.array(z.object({
+    id: z.string().max(50),
+    icon: z.string().max(10),
+    name: z.string().max(100),
+    description: z.string().max(300),
+  })).max(10).optional(),
+  shopPhotos: z.array(z.string().refine(isAcceptedImageInput, "Image invalide")).max(8).optional(),
 });
 
 const router = Router();

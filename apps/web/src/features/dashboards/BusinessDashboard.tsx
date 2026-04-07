@@ -4,6 +4,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../app/providers/AuthProvider';
 import { getDashboardPath } from '../../utils/role-routing';
 import { useLocaleCurrency } from '../../app/providers/LocaleCurrencyProvider';
+import { useScrollDirection } from '../../hooks/useScrollDirection';
 import { compressAndEncodeMedia } from '../../utils/media-compress';
 import { DashboardMessaging } from './DashboardMessaging';
 import {
@@ -22,19 +23,17 @@ import './dashboard.css';
 
 type BizSection =
   | 'dashboard' | 'boutique' | 'produits' | 'services'
-  | 'commandes' | 'clients' | 'messages' | 'contacts'
-  | 'avis' | 'sokin' | 'analytics' | 'verification'
+  | 'commandes' | 'messages' | 'contacts'
+  | 'analytics' | 'verification'
   | 'publicite' | 'kinsell' | 'parametres';
 
 type AbonnementTier = 'based' | 'medium' | 'premium';
 
 /* ─── Helpers devise ───────────────────────────────────────── */
-import { USD_TO_CDF_RATE, usdCentsToCdf, formatCdfCompact } from '../../shared/constants/currencies';
+import { USD_TO_CDF_RATE } from '../../shared/constants/currencies';
 import { SK_BIZ_AI_ADVICE, SK_BIZ_AI_AUTO_NEGO, SK_BIZ_AI_COMMANDE } from '../../shared/constants/storage-keys';
 import { DashboardSecurityBlock, DashboardAiSettings, DashboardVerificationSection } from './sections';
 const USD_TO_CDF = USD_TO_CDF_RATE;
-const toCdf = usdCentsToCdf;
-const fmtK = formatCdfCompact;
 
 function deriveTier(planCode?: string | null): AbonnementTier {
   if (!planCode) return 'based';
@@ -69,7 +68,7 @@ const INITIAL_BUSINESS_FORM = {
 export function BusinessDashboard() {
   const navigate = useNavigate();
   const { user, isLoading, isLoggedIn, refreshUser, logout } = useAuth();
-  const { t } = useLocaleCurrency();
+  const { t, formatMoneyFromUsdCents, currency } = useLocaleCurrency();
   const { on, off } = useSocket();
   const [activeSection, setActiveSection] = useState<BizSection>(() => {
     const stored = sessionStorage.getItem('ud-section');
@@ -81,6 +80,11 @@ export function BusinessDashboard() {
   });
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const scrollDir = useScrollDirection();
+  const barsHidden = scrollDir === 'down' && !mobileSidebarOpen;
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+  const [mobileSearchQuery, setMobileSearchQuery] = useState('');
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const [business, setBusiness] = useState<BusinessAccount | null>(null);
   const [businessLoading, setBusinessLoading] = useState(true);
   const [businessError, setBusinessError] = useState<string | null>(null);
@@ -116,7 +120,7 @@ export function BusinessDashboard() {
   // ─── Boutique ────────────────────────────────────────────
   const [shopSaving, setShopSaving] = useState(false);
   const [shopMsg, setShopMsg] = useState<string | null>(null);
-  const [shopForm, setShopForm] = useState({ publicName: '', publicDescription: '', city: '', logo: '', coverImage: '' });
+  const [shopForm, setShopForm] = useState({ publicName: '', publicDescription: '', city: '', address: '', logo: '', coverImage: '' });
 
   // ─── Paramètres ──────────────────────────────────────────
   const [settingsSaving, setSettingsSaving] = useState(false);
@@ -212,11 +216,8 @@ export function BusinessDashboard() {
     { key: 'produits',     labelKey: 'biz.navProduits',    icon: '📦' },
     { key: 'services',     labelKey: 'biz.navServices',    icon: '🛠️' },
     { key: 'commandes',    labelKey: 'biz.navCommandes',   icon: '🛒' },
-    { key: 'clients',      labelKey: 'biz.navClients',     icon: '👥' },
     { key: 'messages',     labelKey: 'biz.navMessages',    icon: '💬' },
     { key: 'contacts',     labelKey: 'biz.navContacts',    icon: '🤝' },
-    { key: 'avis',         labelKey: 'biz.navAvis',        icon: '⭐' },
-    { key: 'sokin',        labelKey: 'biz.navSokin',       icon: '✦' },
     { key: 'analytics',    labelKey: 'biz.navAnalytics',   icon: '📊' },
     { key: 'verification', labelKey: 'biz.navVerification', icon: '✅' },
     { key: 'publicite',    labelKey: 'biz.navPublicite',   icon: '🎯' },
@@ -429,6 +430,7 @@ export function BusinessDashboard() {
       publicName: business.publicName ?? '',
       publicDescription: business.shop?.publicDescription ?? '',
       city: business.shop?.city ?? '',
+      address: business.shop?.address ?? '',
       logo: business.shop?.logo ?? '',
       coverImage: business.shop?.coverImage ?? '',
     });
@@ -472,13 +474,14 @@ export function BusinessDashboard() {
       placeId: (business.shop as any)?.placeId ?? '',
       locationVisibility: (business.shop as any)?.locationVisibility ?? 'DISTRICT_PUBLIC',
     });
-    // ── Charger points forts & photos boutique depuis localStorage ──
-    try {
-      const storedQ = localStorage.getItem(`ks-qualities-${business.id}`);
-      if (storedQ) setQualities(JSON.parse(storedQ));
-      const storedP = localStorage.getItem(`ks-shop-photos-${business.id}`);
-      if (storedP) setShopPhotos(JSON.parse(storedP));
-    } catch { /* ignore corrupt data */ }
+    // ── Charger points forts & photos boutique depuis la DB ──
+    const shopAny = business.shop as any;
+    if (Array.isArray(shopAny?.highlights) && shopAny.highlights.length > 0) {
+      setQualities(shopAny.highlights);
+    }
+    if (Array.isArray(shopAny?.shopPhotos) && shopAny.shopPhotos.length > 0) {
+      setShopPhotos(shopAny.shopPhotos);
+    }
   }, [business]);
 
   // ─── KPIs calculés ───────────────────────────────────────
@@ -488,20 +491,20 @@ export function BusinessDashboard() {
     const delivered = sellerOrders.filter(o => o.status === 'DELIVERED');
     const thisMonth = delivered.filter(o => new Date(o.createdAt) >= monthStart);
     const active = sellerOrders.filter(o => ['PENDING', 'CONFIRMED', 'PROCESSING', 'SHIPPED'].includes(o.status));
-    const totalCdf = delivered.reduce((s, o) => s + toCdf(o.totalUsdCents), 0);
-    const monthCdf = thisMonth.reduce((s, o) => s + toCdf(o.totalUsdCents), 0);
-    const avg = delivered.length > 0 ? Math.round(totalCdf / delivered.length) : 0;
-    return { totalCdf, monthCdf, activeCount: active.length, avgCdf: avg };
+    const totalUsdCents = delivered.reduce((s, o) => s + o.totalUsdCents, 0);
+    const monthUsdCents = thisMonth.reduce((s, o) => s + o.totalUsdCents, 0);
+    const avgUsdCents = delivered.length > 0 ? Math.round(totalUsdCents / delivered.length) : 0;
+    return { totalUsdCents, monthUsdCents, activeCount: active.length, avgUsdCents };
   }, [sellerOrders]);
 
   // ─── Clients uniques dérivés des commandes ───────────────
   const clientsData = useMemo(() => {
-    const map = new Map<string, { name: string; commandes: number; totalCdf: number }>();
+    const map = new Map<string, { name: string; commandes: number; totalUsdCents: number }>();
     for (const o of sellerOrders) {
-      const prev = map.get(o.buyer.userId) ?? { name: o.buyer.displayName, commandes: 0, totalCdf: 0 };
-      map.set(o.buyer.userId, { name: prev.name, commandes: prev.commandes + 1, totalCdf: prev.totalCdf + toCdf(o.totalUsdCents) });
+      const prev = map.get(o.buyer.userId) ?? { name: o.buyer.displayName, commandes: 0, totalUsdCents: 0 };
+      map.set(o.buyer.userId, { name: prev.name, commandes: prev.commandes + 1, totalUsdCents: prev.totalUsdCents + o.totalUsdCents });
     }
-    return Array.from(map.values()).sort((a, b) => b.totalCdf - a.totalCdf);
+    return Array.from(map.values()).sort((a, b) => b.totalUsdCents - a.totalUsdCents);
   }, [sellerOrders]);
 
   const tier = TIER_LABELS[deriveTier(myPlan?.planCode)];
@@ -569,8 +572,11 @@ export function BusinessDashboard() {
         publicName: shopForm.publicName.trim() || undefined,
         publicDescription: shopForm.publicDescription.trim() || undefined,
         city: shopForm.city.trim() || undefined,
+        address: shopForm.address.trim() || undefined,
         logo: shopForm.logo.trim() || undefined,
         coverImage: shopForm.coverImage.trim() || undefined,
+        highlights: qualities,
+        shopPhotos: shopPhotos,
       });
       setBusiness(updated);
       setShopMsg(t('biz.boutiqueSaved'));
@@ -737,7 +743,6 @@ export function BusinessDashboard() {
   // ─── Points forts : ajouter / supprimer ──────────────────
   const saveQualities = (next: Quality[]) => {
     setQualities(next);
-    if (business) localStorage.setItem(`ks-qualities-${business.id}`, JSON.stringify(next));
   };
   const handleAddQuality = () => {
     if (!qualityDraft.name.trim()) return;
@@ -750,7 +755,6 @@ export function BusinessDashboard() {
   // ─── Photos boutique physique : ajouter / supprimer ──────
   const saveShopPhotos = (next: string[]) => {
     setShopPhotos(next);
-    if (business) localStorage.setItem(`ks-shop-photos-${business.id}`, JSON.stringify(next));
   };
   const handleAddShopPhoto = (file: File) => {
     if (shopPhotos.length >= 8) { alert(t('biz.maxPhotos')); return; }
@@ -960,20 +964,41 @@ export function BusinessDashboard() {
 
   return (
     <div className={`ud-shell bz-shell${sidebarCollapsed ? ' ud-sidebar-collapsed' : ''}`}>
-      {/* ─── MOBILE HEADER ───────────────────────────────── */}
-      <header className="dash-mobile-header">
-        <button className="dash-mob-hamburger" onClick={() => setMobileSidebarOpen(o => !o)} aria-label="Menu">☰</button>
-        <Link to="/" className="dash-mob-logo">
+      {/* ─── MOBILE HEADER (scroll-hide) ─────────────────── */}
+      <header className={`dash-mobile-header${barsHidden ? ' dash-bars-hidden' : ''}`}>
+        <button className="dash-mob-hamburger" onClick={() => setMobileSidebarOpen(o => !o)} aria-label="Menu">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </button>
+        <Link to="/" className="dash-mob-logo dash-mob-logo--shimmer" aria-label="Kin-Sell — Accueil">
           <img src="/assets/kin-sell/logo.png" alt="Kin-Sell" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
           <span>Kin-Sell</span>
         </Link>
-        <button className="dash-mob-search" aria-label="Rechercher">🔍</button>
+        <button className="dash-mob-search" onClick={() => setMobileSearchOpen(o => !o)} aria-label="Rechercher">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        </button>
       </header>
+
+      {/* ─── MOBILE SEARCH BAR ───────────────────────────── */}
+      {mobileSearchOpen && (
+        <div className="dash-mob-search-bar">
+          <form onSubmit={e => { e.preventDefault(); if (mobileSearchQuery.trim()) { navigate(`/explorer?q=${encodeURIComponent(mobileSearchQuery.trim())}`); setMobileSearchOpen(false); } }}>
+            <input
+              type="search"
+              className="dash-mob-search-input"
+              placeholder={t('common.searchPlaceholder') || 'Rechercher sur Kin-Sell…'}
+              value={mobileSearchQuery}
+              onChange={e => setMobileSearchQuery(e.target.value)}
+              autoFocus
+            />
+            <button type="button" className="dash-mob-search-close" onClick={() => { setMobileSearchOpen(false); setMobileSearchQuery(''); }}>✕</button>
+          </form>
+        </div>
+      )}
 
       {/* ─── OVERLAY MOBILE ──────────────────────────────── */}
       {mobileSidebarOpen && <div className="dash-mob-overlay" onClick={() => setMobileSidebarOpen(false)} />}
 
-      {/* ─── SIDEBAR ─────────────────────────────────────── */}
+      {/* ─── SIDEBAR / DRAWER ────────────────────────────── */}
       <aside className={`ud-sidebar bz-sidebar${mobileSidebarOpen ? ' ud-sidebar-open' : ''}`}>
         <button
           type="button"
@@ -987,15 +1012,18 @@ export function BusinessDashboard() {
         {/* Profil entreprise */}
         <div className="ud-profile-card bz-profile-card">
           <div className="ud-avatar bz-logo-avatar">
-            {businessLogo
-              ? <img src={businessLogo} alt={businessName} />
-              : <span className="ud-avatar-initials">{businessName.slice(0, 2).toUpperCase()}</span>
+            {user?.profile?.avatarUrl
+              ? <img src={user.profile.avatarUrl} alt={user.profile.displayName} />
+              : businessLogo
+                ? <img src={businessLogo} alt={businessName} />
+                : <span className="ud-avatar-initials">{(user?.profile?.displayName ?? businessName).slice(0, 2).toUpperCase()}</span>
             }
             {businessVerified && <span className="bz-verified-badge" title={t('biz.shopActiveTitle')}>✓</span>}
           </div>
           {!sidebarCollapsed && (
             <div className="ud-profile-info">
-              <strong className="ud-profile-name">{businessName}</strong>
+              <strong className="ud-profile-name">{user?.profile?.displayName ?? businessName}</strong>
+              <span className="bz-drawer-biz-name">{businessName}</span>
               <span className={tier.cls}>{tier.label}</span>
             </div>
           )}
@@ -1070,14 +1098,14 @@ export function BusinessDashboard() {
                 <span className="ud-stat-icon">💰</span>
                 <div>
                   <p className="ud-stat-label">{t('biz.revenue')}</p>
-                  <strong className="ud-stat-value">{fmtK(kpis.totalCdf)}</strong>
+                  <strong className="ud-stat-value">{formatMoneyFromUsdCents(kpis.totalUsdCents)}</strong>
                 </div>
               </article>
               <article className="ud-stat-card ud-stat-card--blue bz-stat-card">
                 <span className="ud-stat-icon">📈</span>
                 <div>
                   <p className="ud-stat-label">{t('biz.monthlySales')}</p>
-                  <strong className="ud-stat-value">{fmtK(kpis.monthCdf)}</strong>
+                  <strong className="ud-stat-value">{formatMoneyFromUsdCents(kpis.monthUsdCents)}</strong>
                 </div>
               </article>
               <article className="ud-stat-card ud-stat-card--amber bz-stat-card">
@@ -1091,7 +1119,7 @@ export function BusinessDashboard() {
                 <span className="ud-stat-icon">🧾</span>
                 <div>
                   <p className="ud-stat-label">{t('biz.avgCart')}</p>
-                  <strong className="ud-stat-value">{fmtK(kpis.avgCdf)}</strong>
+                  <strong className="ud-stat-value">{formatMoneyFromUsdCents(kpis.avgUsdCents)}</strong>
                 </div>
               </article>
             </div>
@@ -1122,7 +1150,7 @@ export function BusinessDashboard() {
                             <td className="ud-table-id">#{o.id.slice(0, 8).toUpperCase()}</td>
                             <td>{o.buyer.displayName}</td>
                             <td>{o.itemsCount} {t('biz.art')}</td>
-                            <td>{fmtK(toCdf(o.totalUsdCents))}</td>
+                            <td>{formatMoneyFromUsdCents(o.totalUsdCents)}</td>
                             <td><span className={s.cls}>{t(s.labelKey)}</span></td>
                           </tr>
                         );
@@ -1176,7 +1204,7 @@ export function BusinessDashboard() {
                         <div className="bz-product-icon">📦</div>
                         <div className="bz-product-info">
                           <strong>{p.title}</strong>
-                          <span>{fmtK(toCdf(p.priceUsdCents))} · {p.category}</span>
+                          <span>{formatMoneyFromUsdCents(p.priceUsdCents)} · {p.category}</span>
                         </div>
                         <span className={`bz-stock-badge${(p.stockQuantity ?? 99) <= 5 ? ' bz-stock-badge--low' : ''}`}>
                           {p.stockQuantity != null ? `${p.stockQuantity} ${t('biz.inStock')}` : '∞'}
@@ -1199,13 +1227,13 @@ export function BusinessDashboard() {
                     <span className="ud-action-icon">🛠️</span>
                     <span>{t('biz.addServiceAction')}</span>
                   </button>
-                  <button type="button" className="ud-action-tile bz-action-tile" onClick={() => navigate('/sokin')}>
-                    <span className="ud-action-icon">✦</span>
-                    <span>{t('biz.publishSokin')}</span>
+                  <button type="button" className="ud-action-tile bz-action-tile" onClick={() => setActiveSection('commandes')}>
+                    <span className="ud-action-icon">🛒</span>
+                    <span>{t('biz.seeOrders')}</span>
                   </button>
-                  <button type="button" className="ud-action-tile bz-action-tile" onClick={() => setActiveSection('clients')}>
-                    <span className="ud-action-icon">👥</span>
-                    <span>{t('biz.seeClients')}</span>
+                  <button type="button" className="ud-action-tile bz-action-tile" onClick={() => setActiveSection('contacts')}>
+                    <span className="ud-action-icon">🤝</span>
+                    <span>{t('biz.contactsTitle')}</span>
                   </button>
                 </div>
               </section>
@@ -1454,7 +1482,7 @@ export function BusinessDashboard() {
                       <tr key={p.id}>
                         <td>{p.title}</td>
                         <td>{p.category}</td>
-                        <td>{fmtK(toCdf(p.priceUsdCents))}</td>
+                        <td>{formatMoneyFromUsdCents(p.priceUsdCents)}</td>
                         <td><span className={`bz-stock-badge${(p.stockQuantity ?? 99) <= 5 ? ' bz-stock-badge--low' : ''}`}>{p.stockQuantity != null ? p.stockQuantity : '∞'}</span></td>
                         <td><button type="button" className={`ud-badge ${p.isNegotiable !== false ? 'ud-badge--done' : ''}`} style={{ cursor: 'pointer', border: 'none' }} onClick={() => { listings.update(p.id, { isNegotiable: p.isNegotiable === false }).then(() => { invalidateCache('/listings/mine'); listings.mine({ limit: 50 }).then(r => setMyListings(r.listings)); }); }}>{p.isNegotiable !== false ? t('negotiation.yes') : t('negotiation.no')}</button></td>
                         <td><span className={p.isPublished ? 'ud-badge ud-badge--done' : 'ud-badge'}>{p.isPublished ? t('biz.published') : t('biz.draft')}</span></td>
@@ -1511,7 +1539,7 @@ export function BusinessDashboard() {
                       <tr key={s.id}>
                         <td>{s.title}</td>
                         <td>{s.category}</td>
-                        <td>{fmtK(toCdf(s.priceUsdCents))}</td>
+                        <td>{formatMoneyFromUsdCents(s.priceUsdCents)}</td>
                         <td>{s.city}</td>
                         <td><button type="button" className={`ud-badge ${s.isNegotiable !== false ? 'ud-badge--done' : ''}`} style={{ cursor: 'pointer', border: 'none' }} onClick={() => { listings.update(s.id, { isNegotiable: s.isNegotiable === false }).then(() => { invalidateCache('/listings/mine'); listings.mine({ limit: 50 }).then(r => setMyListings(r.listings)); }); }}>{s.isNegotiable !== false ? t('negotiation.yes') : t('negotiation.no')}</button></td>
                         <td><span className={s.isPublished ? 'ud-badge ud-badge--done' : 'ud-badge'}>{s.isPublished ? t('biz.published') : t('biz.draft')}</span></td>
@@ -1546,7 +1574,7 @@ export function BusinessDashboard() {
                           <td className="ud-table-id">#{o.id.slice(0, 8).toUpperCase()}</td>
                           <td>{o.buyer.displayName}</td>
                           <td>{new Date(o.createdAt).toLocaleDateString('fr-FR')}</td>
-                          <td>{fmtK(toCdf(o.totalUsdCents))}</td>
+                          <td>{formatMoneyFromUsdCents(o.totalUsdCents)}</td>
                           <td><span className={s.cls}>{t(s.labelKey)}</span></td>
                           <td>
                             <div className="ud-table-action-stack">
@@ -1589,46 +1617,6 @@ export function BusinessDashboard() {
           </div>
         )}
 
-        {/* ── CLIENTS ── */}
-        {activeSection === 'clients' && (
-          <div className="ud-section animate-fade-in">
-            <section className="ud-glass-panel bz-glass-panel">
-              <h2 className="ud-panel-title">{t('biz.clientsTitle')}</h2>
-              <div className="ud-stats-row" style={{ marginBottom: 'var(--space-lg)' }}>
-                <article className="ud-stat-card ud-stat-card--blue">
-                  <span className="ud-stat-icon">👥</span>
-                  <div><p className="ud-stat-label">{t('biz.totalClients')}</p><strong className="ud-stat-value">{clientsData.length}</strong></div>
-                </article>
-                <article className="ud-stat-card ud-stat-card--green">
-                  <span className="ud-stat-icon">⭐</span>
-                  <div><p className="ud-stat-label">{t('biz.loyalClients')}</p><strong className="ud-stat-value">{clientsData.filter(c => c.commandes >= 3).length}</strong></div>
-                </article>
-              </div>
-              {clientsData.length === 0 ? (
-                <p className="ud-placeholder-text" style={{ padding: 'var(--space-md)' }}>
-                  {dataLoading ? t('biz.loadingData') : t('biz.noClients')}
-                </p>
-              ) : (
-                <table className="ud-table">
-                  <thead>
-                    <tr><th>{t('biz.thClient')}</th><th>{t('biz.thOrders')}</th><th>{t('biz.thTotalSpent')}</th><th>{t('biz.thLoyal')}</th></tr>
-                  </thead>
-                  <tbody>
-                    {clientsData.map((c, i) => (
-                      <tr key={i}>
-                        <td>{c.name}</td>
-                        <td>{c.commandes}</td>
-                        <td>{fmtK(c.totalCdf)}</td>
-                        <td>{c.commandes >= 3 ? <span className="ud-badge ud-badge--done">{t('biz.yes')}</span> : <span className="ud-badge">—</span>}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </section>
-          </div>
-        )}
-
         {/* ── MESSAGERIE ── */}
         {activeSection === 'messages' && (
           <div className="ud-section animate-fade-in">
@@ -1638,7 +1626,7 @@ export function BusinessDashboard() {
           </div>
         )}
 
-        {/* ── CONTACTS ── */}
+        {/* ── CONTACTS & AVIS ── */}
         {activeSection === 'contacts' && (
           <div className="ud-section animate-fade-in">
             <section className="ud-glass-panel bz-glass-panel">
@@ -1669,7 +1657,7 @@ export function BusinessDashboard() {
                     </div>
                     <div className="bz-contact-info">
                       <strong>{c.name}</strong>
-                      <span className="ud-page-sub">{c.commandes} {t('biz.orders')} · {fmtK(c.totalCdf)}</span>
+                      <span className="ud-page-sub">{c.commandes} {t('biz.orders')} · {formatMoneyFromUsdCents(c.totalUsdCents)}</span>
                     </div>
                     <div className="bz-contact-actions">
                       <button type="button" className="ud-quick-btn" onClick={() => navigate('/messaging')} title={t('biz.sendMessage')}>💬</button>
@@ -1753,14 +1741,9 @@ export function BusinessDashboard() {
                 </div>
               </div>
             )}
-          </div>
-        )}
 
-        {/* ── GESTION DES AVIS ── */}
-        {activeSection === 'avis' && (
-          <div className="ud-section animate-fade-in">
-            {/* Stats avis */}
-            <div className="ud-stats-row">
+            {/* ── AVIS (intégré) ── */}
+            <div className="ud-stats-row" style={{ marginTop: 'var(--space-lg)' }}>
               <article className="ud-stat-card ud-stat-card--gold bz-stat-card">
                 <span className="ud-stat-icon">⭐</span>
                 <div><p className="ud-stat-label">{t('biz.reviewsReceived')}</p><strong className="ud-stat-value">{bizReviews.length}</strong></div>
@@ -1779,7 +1762,6 @@ export function BusinessDashboard() {
               </article>
             </div>
 
-            {/* Tous les avis */}
             <section className="ud-glass-panel bz-glass-panel">
               <div className="ud-panel-head">
                 <h2 className="ud-panel-title">⭐ {t('biz.allReviews')}</h2>
@@ -1832,116 +1814,6 @@ export function BusinessDashboard() {
           </div>
         )}
 
-        {/* ── SO-KIN ── */}
-        {activeSection === 'sokin' && (
-          <div className="ud-section animate-fade-in">
-            {/* En-tête */}
-            <section className="ud-glass-panel bz-glass-panel">
-              <div className="ud-panel-head">
-                <h2 className="ud-panel-title">✦ {t('biz.sokinTitle')}</h2>
-                <Link to="/sokin" className="ud-panel-see-all">{t('biz.openSokin')} ↗</Link>
-              </div>
-              <p className="ud-page-sub">{t('biz.sokinDesc')}</p>
-            </section>
-
-            {/* Stats */}
-            <div className="ud-stats-row">
-              <article className="ud-stat-card ud-stat-card--gold bz-stat-card">
-                <span className="ud-stat-icon">📢</span>
-                <div><p className="ud-stat-label">{t('biz.publications')}</p><strong className="ud-stat-value">{sokinPosts.filter(p => p.status === 'ACTIVE').length}</strong></div>
-              </article>
-              <article className="ud-stat-card ud-stat-card--green bz-stat-card">
-                <span className="ud-stat-icon">👍</span>
-                <div><p className="ud-stat-label">{t('biz.totalLikes')}</p><strong className="ud-stat-value">{sokinPosts.reduce((s, p) => s + p.likes, 0)}</strong></div>
-              </article>
-              <article className="ud-stat-card ud-stat-card--amber bz-stat-card">
-                <span className="ud-stat-icon">💬</span>
-                <div><p className="ud-stat-label">{t('biz.commentsLabel')}</p><strong className="ud-stat-value">{sokinPosts.reduce((s, p) => s + p.comments, 0)}</strong></div>
-              </article>
-              <article className="ud-stat-card ud-stat-card--blue bz-stat-card">
-                <span className="ud-stat-icon">🔁</span>
-                <div><p className="ud-stat-label">{t('biz.sharesLabel')}</p><strong className="ud-stat-value">{sokinPosts.reduce((s, p) => s + p.shares, 0)}</strong></div>
-              </article>
-            </div>
-
-            {/* Formulaire de publication */}
-            <section className="ud-glass-panel bz-glass-panel">
-              <h3 className="ud-panel-title" style={{ fontSize: '1rem', marginBottom: 12 }}>📝 {t('biz.newPost')}</h3>
-              <textarea
-                className="bz-sokin-compose"
-                placeholder={t('biz.sokinComposePh')}
-                value={sokinDraft.content}
-                onChange={(e) => setSokinDraft(d => ({ ...d, content: e.target.value }))}
-                rows={3}
-                maxLength={500}
-              />
-              <div className="bz-sokin-compose-actions">
-                <label className="ud-quick-btn" style={{ cursor: 'pointer' }}>
-                  🖼️ {t('biz.imageBtn')}
-                  <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => {
-                    const f = e.target.files?.[0];
-                    if (f) readFileAndSet(f, url => setSokinDraft(d => ({ ...d, imageUrl: url })));
-                    e.target.value = '';
-                  }} />
-                </label>
-                {sokinDraft.imageUrl && (
-                  <span className="ud-page-sub" style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    ✓ {t('biz.imageAdded')}
-                    <button type="button" style={{ background: 'none', border: 'none', color: '#ff6b6b', cursor: 'pointer', marginLeft: 8 }} onClick={() => setSokinDraft(d => ({ ...d, imageUrl: '' }))}>✕</button>
-                  </span>
-                )}
-                <button
-                  type="button"
-                  className="ud-quick-btn ud-quick-btn--primary bz-cta-gold"
-                  disabled={sokinPublishing || !sokinDraft.content.trim()}
-                  onClick={handlePublishSokin}
-                >
-                  {sokinPublishing ? t('biz.publishing') : t('biz.publishSokinBtn')}
-                </button>
-              </div>
-            </section>
-
-            {/* Liste des publications */}
-            <section className="ud-glass-panel bz-glass-panel">
-              <h3 className="ud-panel-title" style={{ fontSize: '1rem', marginBottom: 16 }}>{t('biz.yourPosts')}</h3>
-              {sokinPosts.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '32px 16px' }}>
-                  <span style={{ fontSize: '2.5rem', display: 'block', marginBottom: 12 }}>✦</span>
-                  <p className="ud-placeholder-text">{t('biz.noPostsDesc')}</p>
-                </div>
-              ) : (
-                <div className="bz-sokin-list">
-                  {sokinPosts.map(post => (
-                    <article key={post.id} className={`bz-sokin-post${post.status === 'HIDDEN' ? ' bz-sokin-post--archived' : ''}`}>
-                      <div className="bz-sokin-post-body">
-                        {post.mediaUrls.length > 0 && <img src={post.mediaUrls[0]} alt="" className="bz-sokin-post-img" />}
-                        <div className="bz-sokin-post-content">
-                          <p>{post.text}</p>
-                          <span className="ud-page-sub">{new Date(post.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
-                        </div>
-                      </div>
-                      <div className="bz-sokin-post-footer">
-                        <span className="bz-sokin-metric">👍 {post.likes}</span>
-                        <span className="bz-sokin-metric">💬 {post.comments}</span>
-                        <span className="bz-sokin-metric">🔁 {post.shares}</span>
-                        <span className={`ud-badge${post.status === 'ACTIVE' ? ' ud-badge--done' : ''}`}>{post.status === 'ACTIVE' ? t('biz.statusActive') : t('biz.statusHidden')}</span>
-                        <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
-                          <button type="button" className="ud-quick-btn" onClick={() => handleArchiveSokin(post.id)} title={post.status === 'HIDDEN' ? t('biz.reactivate') : t('biz.hide')}>
-                            {post.status === 'HIDDEN' ? '♻️' : '📥'}
-                          </button>
-                          <button type="button" className="ud-quick-btn" style={{ color: '#ff6b6b' }} onClick={() => handleDeleteSokin(post.id)} title={t('biz.deleteBtn')}>
-                            🗑
-                          </button>
-                        </div>
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              )}
-            </section>
-          </div>
-        )}
-
         {/* ── VERIFICATION ── */}
         {activeSection === 'verification' && business && (
           <DashboardVerificationSection t={t} userId={user!.id} businessId={business.id} accountType="BUSINESS" />
@@ -1974,15 +1846,15 @@ export function BusinessDashboard() {
                 <div className="bz-analytics-mini">
                   <div className="bz-analytics-item">
                     <span className="bz-analytics-label">{t('biz.totalRevenue')}</span>
-                    <strong className="bz-analytics-val">{fmtK(kpis.totalCdf)}</strong>
+                    <strong className="bz-analytics-val">{formatMoneyFromUsdCents(kpis.totalUsdCents)}</strong>
                   </div>
                   <div className="bz-analytics-item">
                     <span className="bz-analytics-label">{t('biz.salesThisMonth')}</span>
-                    <strong className="bz-analytics-val">{fmtK(kpis.monthCdf)}</strong>
+                    <strong className="bz-analytics-val">{formatMoneyFromUsdCents(kpis.monthUsdCents)}</strong>
                   </div>
                   <div className="bz-analytics-item">
                     <span className="bz-analytics-label">{t('biz.avgCart')}</span>
-                    <strong className="bz-analytics-val">{fmtK(kpis.avgCdf)}</strong>
+                    <strong className="bz-analytics-val">{formatMoneyFromUsdCents(kpis.avgUsdCents)}</strong>
                   </div>
                   <div className="bz-analytics-item">
                     <span className="bz-analytics-label">{t('biz.productsPublished')}</span>
@@ -2046,7 +1918,7 @@ export function BusinessDashboard() {
                           <span className="ud-analytics-stat-label">Commandes</span>
                         </div>
                         <div className="ud-analytics-stat">
-                          <span className="ud-analytics-stat-value">{fmtK(toCdf(bizBasicInsights.activitySummary.revenueCents))}</span>
+                          <span className="ud-analytics-stat-value">{formatMoneyFromUsdCents(bizBasicInsights.activitySummary.revenueCents)}</span>
                           <span className="ud-analytics-stat-label">Revenus</span>
                         </div>
                       </div>
@@ -2059,8 +1931,8 @@ export function BusinessDashboard() {
                           {bizBasicInsights.marketPosition.position === 'BELOW_MARKET' ? '📉 Sous le marché' :
                            bizBasicInsights.marketPosition.position === 'ON_MARKET' ? '📊 Au marché' : '📈 Au-dessus du marché'}
                         </span>
-                        <p>Prix moyen : {fmtK(toCdf(bizBasicInsights.marketPosition.avgPriceCents))}</p>
-                        <p>Médiane : {fmtK(toCdf(bizBasicInsights.marketPosition.medianCents))}</p>
+                        <p>Prix moyen : {formatMoneyFromUsdCents(bizBasicInsights.marketPosition.avgPriceCents)}</p>
+                        <p>Médiane : {formatMoneyFromUsdCents(bizBasicInsights.marketPosition.medianCents)}</p>
                       </div>
                     </div>
 
@@ -2593,6 +2465,49 @@ export function BusinessDashboard() {
           </div>
         )}
       </main>
+
+      {/* ─── MOBILE FAB (scroll-hide) ───────────────────── */}
+      <nav className={`bz-mobile-fab${barsHidden ? ' bz-mobile-fab--hidden' : ''}`} aria-label="Navigation mobile">
+        <button type="button" className={`bz-fab-item${activeSection === 'produits' ? ' bz-fab-item--active' : ''}`} onClick={() => setActiveSection('produits')}>
+          <span className="bz-fab-icon">📦</span>
+          <span className="bz-fab-label">Produits</span>
+        </button>
+        <button type="button" className={`bz-fab-item${activeSection === 'services' ? ' bz-fab-item--active' : ''}`} onClick={() => setActiveSection('services')}>
+          <span className="bz-fab-icon">🛠️</span>
+          <span className="bz-fab-label">Services</span>
+        </button>
+        <button type="button" className="bz-fab-item" onClick={() => navigate('/')}>
+          <span className="bz-fab-icon bz-fab-icon--home">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          </span>
+          <span className="bz-fab-label">Accueil</span>
+        </button>
+        <button type="button" className={`bz-fab-item${activeSection === 'messages' ? ' bz-fab-item--active' : ''}`} onClick={() => navigate('/messaging')}>
+          <span className="bz-fab-icon">💬</span>
+          <span className="bz-fab-label">Messagerie</span>
+        </button>
+        <button type="button" className={`bz-fab-item${activeSection === 'commandes' ? ' bz-fab-item--active' : ''}`} onClick={() => setActiveSection('commandes')}>
+          <span className="bz-fab-icon">🛒</span>
+          <span className="bz-fab-label">Commandes</span>
+        </button>
+      </nav>
+
+      {/* ─── LOGOUT CONFIRM POPUP ────────────────────────── */}
+      {logoutConfirmOpen && (
+        <div className="bz-logout-overlay" onClick={() => setLogoutConfirmOpen(false)}>
+          <div className="bz-logout-popup glass-container" onClick={e => e.stopPropagation()}>
+            <p className="bz-logout-text">{t('common.logoutConfirm') || 'Voulez-vous vraiment vous déconnecter ?'}</p>
+            <div className="bz-logout-actions">
+              <button type="button" className="bz-logout-btn bz-logout-btn--cancel" onClick={() => setLogoutConfirmOpen(false)}>
+                {t('common.cancel') || 'Annuler'}
+              </button>
+              <button type="button" className="bz-logout-btn bz-logout-btn--confirm" onClick={() => { logout(); navigate('/login'); }}>
+                {t('common.logout') || 'Déconnexion'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

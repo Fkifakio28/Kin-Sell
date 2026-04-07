@@ -680,6 +680,8 @@ model BusinessShop {
   locationVisibility  LocationVisibility @default(DISTRICT_PUBLIC)
   serviceRadiusKm     Int?
   deliveryZones       String[]           @default([])
+  highlights          Json?              @default("[]")
+  shopPhotos          String[]           @default([])
   active              Boolean            @default(true)
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
