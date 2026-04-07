@@ -1159,6 +1159,20 @@
   border: 1px solid rgba(111, 88, 255, 0.3);
 }
 
+/* Boutons Éditer + Publier en bas de la prévisualisation mobile */
+.sk-preview-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--glass-border, rgba(255, 255, 255, 0.08));
+}
+.sk-preview-actions .sk-btn {
+  flex: 1;
+  justify-content: center;
+  min-width: 0;
+}
+
 .sk-modal-error {
   padding: 10px 14px;
   background: rgba(255, 68, 68, 0.14);

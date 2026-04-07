@@ -975,19 +975,37 @@ function DesktopStudioComposer({
     setArticleSuggestions([]);
   };
 
+  const validateDesktopSchedule = (value: string): string | null => {
+    if (!value) return null;
+    const dt = new Date(value);
+    if (Number.isNaN(dt.getTime())) return 'Date de programmation invalide.';
+    const max = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    if (dt > max) return 'Programmation invalide: maximum 30 jours.';
+    if (dt < new Date()) return 'La date de programmation est déjà passée.';
+    return null;
+  };
+
+  const confirmDesktopEditor = () => {
+    const err = validateDesktopSchedule(scheduledAt);
+    if (err) {
+      setLocalError(err);
+      return;
+    }
+    setLocalError(null);
+    setIsEditorOpen(false);
+  };
+
   const submit = () => {
     setLocalError(null);
     if (!canPublish) {
       setLocalError('Texte + au moins 1 média requis pour publier.');
       return;
     }
-    if (scheduledAt) {
-      const dt = new Date(scheduledAt);
-      const max = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-      if (Number.isNaN(dt.getTime()) || dt > max) {
-        setLocalError('Programmation invalide: maximum 30 jours.');
-        return;
-      }
+    const schedErr = validateDesktopSchedule(scheduledAt);
+    if (schedErr) {
+      setLocalError(schedErr);
+      if (!isEditorOpen) setIsEditorOpen(true);
+      return;
     }
 
     onPublish({
@@ -1157,8 +1175,8 @@ function DesktopStudioComposer({
             />
 
             <div className="sk-desktop-editor-actions">
-              <button type="button" className="sk-btn sk-btn--outline" onClick={() => setIsEditorOpen(false)} disabled={isPublishing}>Annuler</button>
-              <button type="button" className="sk-btn sk-btn--primary" onClick={() => setIsEditorOpen(false)} disabled={isPublishing}>Confirmer ✔</button>
+              <button type="button" className="sk-btn sk-btn--outline" onClick={() => { setLocalError(null); setIsEditorOpen(false); }} disabled={isPublishing}>Annuler</button>
+              <button type="button" className="sk-btn sk-btn--primary" onClick={confirmDesktopEditor} disabled={isPublishing}>Confirmer ✔</button>
             </div>
           </section>
         )}
@@ -2017,6 +2035,13 @@ function CreateAnnounceScreen({
               {selectedTags.map((v) => <span key={v} className="sk-preview-meta-item">{v}</span>)}
               {selectedArticles.map((v) => <span key={v} className="sk-preview-meta-item">{v}</span>)}
               {scheduledAt && <span className="sk-preview-meta-item">📅 {new Date(scheduledAt).toLocaleString('fr-FR')}</span>}
+            </div>
+
+            <div className="sk-preview-actions">
+              <button type="button" className="sk-btn sk-btn--outline" onClick={openEditor} disabled={isPublishing}>Éditer</button>
+              <button type="button" className="sk-btn sk-btn--primary" onClick={submit} disabled={!canPublish || isPublishing}>
+                {isPublishing ? '⏳ Publication…' : '🚀 Publier'}
+              </button>
             </div>
           </article>
         )}
