@@ -2120,8 +2120,6 @@ export function SoKinPage() {
         const data = await sokinApi.publicFeed({
           limit,
           offset: currentOffset,
-          city,
-          country,
         });
         const incoming = data.posts;
         if (reset) {
@@ -2144,7 +2142,7 @@ export function SoKinPage() {
         loadingRef.current = false;
       }
     },
-    [hasMore, city, country]
+    [hasMore]
   );
 
   const loadMyPublishedPosts = useCallback(async () => {
@@ -2167,7 +2165,7 @@ export function SoKinPage() {
   useEffect(() => {
     void loadFeed(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [city, country]);
+  }, []);
 
   useEffect(() => {
     void loadMyPublishedPosts();
