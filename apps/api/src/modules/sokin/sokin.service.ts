@@ -130,7 +130,12 @@ export const getPublicFeed = async (
   const countryTerms = resolveCountryTerms(country);
   const andClauses: Record<string, unknown>[] = [
     { status: "ACTIVE" },
-    { scheduledAt: { lte: new Date() } },
+    {
+      OR: [
+        { scheduledAt: null },
+        { scheduledAt: { lte: new Date() } },
+      ],
+    },
   ];
 
   // Filtre par ville
