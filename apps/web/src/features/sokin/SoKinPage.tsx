@@ -88,6 +88,31 @@ const DESKTOP_INFO_ITEMS = [
 const CREATE_DRAFT_STORAGE_KEY = 'ks-sokin-create-draft-v1';
 const OVERLAY_VISIBILITY_LOCK_MS = 180;
 
+type SoKinCreateDraft = {
+  text?: string;
+  location?: string;
+  tags?: string[];
+  hashtags?: string[];
+  scheduledAt?: string;
+};
+
+function readSoKinCreateDraft(): SoKinCreateDraft {
+  try {
+    const raw = localStorage.getItem(CREATE_DRAFT_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as SoKinCreateDraft;
+    return {
+      text: typeof parsed.text === 'string' ? parsed.text.slice(0, 500) : '',
+      location: typeof parsed.location === 'string' ? parsed.location.slice(0, 120) : '',
+      tags: Array.isArray(parsed.tags) ? parsed.tags.filter((v): v is string => typeof v === 'string').slice(0, 20) : [],
+      hashtags: Array.isArray(parsed.hashtags) ? parsed.hashtags.filter((v): v is string => typeof v === 'string').slice(0, 20) : [],
+      scheduledAt: typeof parsed.scheduledAt === 'string' ? parsed.scheduledAt : '',
+    };
+  } catch {
+    return {};
+  }
+}
+
 /* ─────────────────────────────────────────────────────── */
 /* HELPERS                                                  */
 /* ─────────────────────────────────────────────────────── */
@@ -1176,6 +1201,7 @@ function CreateAnnounceScreen({
   displayName,
   userIdentifier,
   cityLabel,
+  country,
 }: {
   onClose: () => void;
   onPublish: (data: SoKinPublishPayload) => void;
@@ -1185,22 +1211,31 @@ function CreateAnnounceScreen({
   displayName: string;
   userIdentifier: string;
   cityLabel: string;
+  country: string;
 }) {
-  const [text, setText] = useState(() => {
-    try {
-      const raw = localStorage.getItem(CREATE_DRAFT_STORAGE_KEY);
-      if (!raw) return '';
-      const parsed = JSON.parse(raw) as { text?: unknown };
-      return typeof parsed.text === 'string' ? parsed.text.slice(0, 500) : '';
-    } catch {
-      return '';
-    }
-  });
+  const initialDraft = useMemo(() => readSoKinCreateDraft(), []);
+  const [text, setText] = useState(initialDraft.text ?? '');
   const [mediaFiles, setMediaFiles] = useState<File[]>([]);
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [localError, setLocalError] = useState<string | null>(null);
-  const [mode, setMode] = useState<'edit' | 'preview'>('edit');
+  const [mode, setMode] = useState<'edit' | 'editor' | 'preview'>('edit');
   const [showRestoreInfo, setShowRestoreInfo] = useState(() => text.trim().length > 0);
+  const [location, setLocation] = useState(initialDraft.location ?? '');
+  const [locationStatus, setLocationStatus] = useState<'idle' | 'loading' | 'ok' | 'denied' | 'error'>('idle');
+
+  const [tagInput, setTagInput] = useState('');
+  const [tagSuggestions, setTagSuggestions] = useState<Array<{ key: string; label: string; handle: string; avatarUrl: string | null }>>([]);
+  const [selectedTags, setSelectedTags] = useState<string[]>((initialDraft.tags ?? []).map((v) => (v.startsWith('@') ? v : `@${v}`)));
+  const [isSearchingTags, setIsSearchingTags] = useState(false);
+  const [tagSearchNonce, setTagSearchNonce] = useState(0);
+
+  const [articleInput, setArticleInput] = useState('');
+  const [articleSuggestions, setArticleSuggestions] = useState<Array<{ id: string; label: string }>>([]);
+  const [selectedArticles, setSelectedArticles] = useState<string[]>((initialDraft.hashtags ?? []).map((v) => (v.startsWith('#') ? v : `#${v}`)));
+  const [isSearchingArticles, setIsSearchingArticles] = useState(false);
+  const [articleSearchNonce, setArticleSearchNonce] = useState(0);
+
+  const [scheduledAt, setScheduledAt] = useState(initialDraft.scheduledAt ?? '');
   const fileRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -1208,7 +1243,18 @@ function CreateAnnounceScreen({
   const canPublish = text.trim().length > 0 && mediaFiles.length >= 1;
   const imageCount = mediaFiles.filter((f) => !f.type.startsWith('video/')).length;
   const videoCount = mediaFiles.filter((f) => f.type.startsWith('video/')).length;
-  const hasUnsavedInput = text.trim().length > 0 || mediaFiles.length > 0;
+  const hasUnsavedInput =
+    text.trim().length > 0 ||
+    mediaFiles.length > 0 ||
+    location.trim().length > 0 ||
+    selectedTags.length > 0 ||
+    selectedArticles.length > 0 ||
+    scheduledAt.trim().length > 0;
+  const maxScheduleLocal = useMemo(() => {
+    const target = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    const offset = target.getTimezoneOffset() * 60_000;
+    return new Date(target.getTime() - offset).toISOString().slice(0, 16);
+  }, []);
 
   const validateMediaSelection = (files: File[]) => {
     if (files.length < 1) return 'Ajoutez au moins 1 média à votre annonce.';
@@ -1236,18 +1282,121 @@ function CreateAnnounceScreen({
   // Autosave minimal du brouillon local (texte)
   useEffect(() => {
     try {
-      if (text.trim().length === 0) {
+      const hasAnyDraft =
+        text.trim().length > 0 ||
+        location.trim().length > 0 ||
+        selectedTags.length > 0 ||
+        selectedArticles.length > 0 ||
+        scheduledAt.trim().length > 0;
+      if (!hasAnyDraft) {
         localStorage.removeItem(CREATE_DRAFT_STORAGE_KEY);
         return;
       }
       localStorage.setItem(
         CREATE_DRAFT_STORAGE_KEY,
-        JSON.stringify({ text, updatedAt: Date.now() })
+        JSON.stringify({
+          text,
+          location,
+          tags: selectedTags.map((v) => v.replace(/^@/, '')),
+          hashtags: selectedArticles.map((v) => v.replace(/^#/, '')),
+          scheduledAt,
+          updatedAt: Date.now(),
+        })
       );
     } catch {
       // Ignorer les erreurs storage (quota / private mode)
     }
-  }, [text]);
+  }, [text, location, selectedTags, selectedArticles, scheduledAt]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const query = tagInput.trim().toLowerCase();
+    if (query.length < 2 && tagSearchNonce === 0) {
+      setTagSuggestions([]);
+      setIsSearchingTags(false);
+      return;
+    }
+
+    const timer = window.setTimeout(async () => {
+      setIsSearchingTags(true);
+      try {
+        const [profiles, shops] = await Promise.all([
+          explorerApi.profiles({ limit: 50, city: cityLabel, country }).catch(() => []),
+          explorerApi.shops({ limit: 50, city: cityLabel, country }).catch(() => []),
+        ]);
+        if (cancelled) return;
+
+        const profileItems = profiles
+          .filter((p) => {
+            if (!query) return true;
+            return `${p.displayName} ${p.username ?? ''}`.toLowerCase().includes(query);
+          })
+          .slice(0, 5)
+          .map((p) => ({
+            key: `u-${p.userId}`,
+            label: p.displayName,
+            handle: `@${(p.username ?? p.displayName).replace(/^@/, '').replace(/\s+/g, '_')}`,
+            avatarUrl: p.avatarUrl,
+          }));
+
+        const shopItems = shops
+          .filter((s) => {
+            if (!query) return true;
+            return `${s.name} ${s.slug}`.toLowerCase().includes(query);
+          })
+          .slice(0, 5)
+          .map((s) => ({
+            key: `b-${s.businessId}`,
+            label: s.name,
+            handle: `@${s.slug.replace(/^@/, '')}`,
+            avatarUrl: s.logo ?? s.coverImage,
+          }));
+
+        setTagSuggestions([...profileItems, ...shopItems].slice(0, 8));
+      } catch {
+        if (!cancelled) setTagSuggestions([]);
+      } finally {
+        if (!cancelled) setIsSearchingTags(false);
+      }
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [tagInput, cityLabel, country, tagSearchNonce]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const query = articleInput.trim();
+    if (query.length < 2 && articleSearchNonce === 0) {
+      setArticleSuggestions([]);
+      setIsSearchingArticles(false);
+      return;
+    }
+
+    const timer = window.setTimeout(async () => {
+      setIsSearchingArticles(true);
+      try {
+        const result = await listingsApi.search({ q: query || undefined, city: cityLabel, country, limit: 8 });
+        if (cancelled) return;
+        const next = result.results.slice(0, 8).map((item) => ({
+          id: item.id,
+          label: `#${item.title.replace(/\s+/g, '_').slice(0, 40)}`,
+        }));
+        setArticleSuggestions(next);
+      } catch {
+        if (!cancelled) setArticleSuggestions([]);
+      } finally {
+        if (!cancelled) setIsSearchingArticles(false);
+      }
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [articleInput, cityLabel, country, articleSearchNonce]);
 
   // Garde-fou abandon navigateur quand le draft est en cours
   useEffect(() => {
@@ -1322,7 +1471,62 @@ function CreateAnnounceScreen({
       setLocalError(mediaError);
       return;
     }
+    if (scheduledAt) {
+      const dt = new Date(scheduledAt);
+      const max = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+      if (Number.isNaN(dt.getTime()) || dt > max) {
+        setLocalError('Programmation invalide: maximum 30 jours dans le futur.');
+        return;
+      }
+    }
     setMode('preview');
+  };
+
+  const resolveLocation = () => {
+    setLocalError(null);
+    if (!navigator.geolocation) {
+      setLocationStatus('error');
+      setLocalError('Géolocalisation indisponible sur cet appareil.');
+      return;
+    }
+    setLocationStatus('loading');
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        try {
+          const reversed = await geoApi.reverse(position.coords.latitude, position.coords.longitude);
+          setLocation(reversed.city ? `${reversed.city}, ${reversed.country ?? 'RDC'}` : reversed.formattedAddress);
+          setLocationStatus('ok');
+        } catch {
+          setLocation(`${position.coords.latitude.toFixed(5)}, ${position.coords.longitude.toFixed(5)}`);
+          setLocationStatus('ok');
+        }
+      },
+      () => {
+        setLocationStatus('denied');
+        setLocalError('Permission localisation refusée. Vous pouvez saisir la localisation manuellement.');
+      },
+      { enableHighAccuracy: true, timeout: 9000 }
+    );
+  };
+
+  const addTag = (handleRaw?: string) => {
+    const handle = (handleRaw ?? tagInput).trim();
+    if (!handle) return;
+    const normalized = handle.startsWith('@') ? handle : `@${handle}`;
+    setSelectedTags((prev) => (prev.includes(normalized) ? prev : [...prev, normalized]));
+    setTagInput('');
+    setTagSuggestions([]);
+    setTagSearchNonce(0);
+  };
+
+  const addArticle = (valueRaw?: string) => {
+    const raw = (valueRaw ?? articleInput).trim();
+    if (!raw) return;
+    const normalized = raw.startsWith('#') ? raw : `#${raw}`;
+    setSelectedArticles((prev) => (prev.includes(normalized) ? prev : [...prev, normalized]));
+    setArticleInput('');
+    setArticleSuggestions([]);
+    setArticleSearchNonce(0);
   };
 
   const submit = () => {
@@ -1338,7 +1542,25 @@ function CreateAnnounceScreen({
       setMode('edit');
       return;
     }
-    onPublish({ text, mediaFiles });
+    if (scheduledAt) {
+      const dt = new Date(scheduledAt);
+      const max = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+      if (Number.isNaN(dt.getTime()) || dt > max) {
+        setLocalError('Programmation invalide: maximum 30 jours dans le futur.');
+        setMode('editor');
+        return;
+      }
+    }
+
+    // La planification est transmise au backend sans simulation locale de succès.
+    onPublish({
+      text,
+      mediaFiles,
+      location: location.trim() || undefined,
+      tags: selectedTags.map((v) => v.replace(/^@/, '')),
+      hashtags: selectedArticles.map((v) => v.replace(/^#/, '')),
+      scheduledAt: scheduledAt ? new Date(scheduledAt).toISOString() : undefined,
+    });
   };
 
   return (
@@ -1352,6 +1574,12 @@ function CreateAnnounceScreen({
               <span>Créer</span>
             </div>
             <div className="sk-studio-head-spacer" aria-hidden="true" />
+          </>
+        ) : mode === 'editor' ? (
+          <>
+            <button type="button" className="sk-btn sk-btn--outline" onClick={() => setMode('edit')} disabled={isPublishing}>← Retour</button>
+            <strong>Édition mobile</strong>
+            <button type="button" className="sk-btn sk-btn--primary" onClick={() => setMode('edit')} disabled={isPublishing}>Valider</button>
           </>
         ) : (
           <>
@@ -1435,7 +1663,7 @@ function CreateAnnounceScreen({
                 <button
                   type="button"
                   className="sk-btn sk-btn--outline"
-                  onClick={() => textareaRef.current?.focus()}
+                  onClick={() => setMode('editor')}
                   disabled={isPublishing}
                 >
                   Éditer
@@ -1479,6 +1707,9 @@ function CreateAnnounceScreen({
               <span className="sk-media-counter" aria-live="polite">
                 {imageCount} image{imageCount > 1 ? 's' : ''} / {videoCount} vidéo{videoCount > 1 ? 's' : ''}
               </span>
+              <span className="sk-media-counter" aria-live="polite">
+                Détails: {selectedTags.length + selectedArticles.length + (location ? 1 : 0) + (scheduledAt ? 1 : 0)}
+              </span>
               <input
                 ref={fileRef}
                 type="file"
@@ -1491,6 +1722,143 @@ function CreateAnnounceScreen({
               />
             </div>
           </>
+        ) : mode === 'editor' ? (
+          <article className="sk-mobile-editor-panel" aria-label="Édition enrichie mobile">
+            <section className="sk-modal-section">
+              <label className="sk-modal-label" htmlFor="sk-mobile-location">📍 Localisation</label>
+              <div className="sk-modal-tags-input-row">
+                <input
+                  id="sk-mobile-location"
+                  className="sk-modal-input"
+                  placeholder="Gombe, Kinshasa"
+                  value={location}
+                  onChange={(e) => setLocation(e.target.value)}
+                />
+                <button type="button" className="sk-btn sk-btn--sm" onClick={resolveLocation} disabled={locationStatus === 'loading'}>
+                  {locationStatus === 'loading' ? '📍…' : '📍'}
+                </button>
+              </div>
+              {locationStatus === 'ok' && <p className="sk-modal-hint">Localisation mise à jour.</p>}
+              {locationStatus === 'denied' && <p className="sk-modal-hint">Permission refusée: saisissez la zone manuellement.</p>}
+              {locationStatus === 'error' && <p className="sk-modal-hint">Localisation indisponible sur cet appareil.</p>}
+            </section>
+
+            <section className="sk-modal-section">
+              <label className="sk-modal-label" htmlFor="sk-mobile-tags">🏷️ Tags</label>
+              <div className="sk-modal-tags-input-row">
+                <input
+                  id="sk-mobile-tags"
+                  className="sk-modal-input"
+                  placeholder="Ajouter un tag"
+                  value={tagInput}
+                  onChange={(e) => {
+                    setTagInput(e.target.value);
+                    setTagSearchNonce(0);
+                  }}
+                />
+                <button
+                  type="button"
+                  className="sk-btn sk-btn--sm"
+                  onClick={() => {
+                    if (tagInput.trim()) {
+                      addTag();
+                      return;
+                    }
+                    setTagSearchNonce((v) => v + 1);
+                  }}
+                >
+                  +
+                </button>
+              </div>
+              {isSearchingTags && <p className="sk-modal-searching">Recherche des profils Kin-Sell…</p>}
+              {tagSuggestions.length > 0 && (
+                <div className="sk-modal-suggestions">
+                  {tagSuggestions.map((item) => (
+                    <button key={item.key} type="button" className="sk-modal-suggestion-item" onClick={() => addTag(item.handle)}>
+                      {item.avatarUrl ? <img src={resolveMediaUrl(item.avatarUrl)} className="sk-modal-suggestion-avatar" alt="" /> : <span className="sk-modal-suggestion-avatar">👤</span>}
+                      <span className="sk-modal-suggestion-text">
+                        <strong>{item.label}</strong>
+                        <span className="sk-modal-suggestion-handle">{item.handle}</span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {selectedTags.length > 0 && (
+                <div className="sk-modal-tags-list">
+                  {selectedTags.map((tag) => (
+                    <span key={tag} className="sk-modal-tag">{tag}
+                      <button type="button" className="sk-modal-tag-remove" onClick={() => setSelectedTags((prev) => prev.filter((v) => v !== tag))}>✕</button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            <section className="sk-modal-section">
+              <label className="sk-modal-label" htmlFor="sk-mobile-articles"># Articles</label>
+              <div className="sk-modal-tags-input-row">
+                <input
+                  id="sk-mobile-articles"
+                  className="sk-modal-input"
+                  placeholder="#Ajouter un article"
+                  value={articleInput}
+                  onChange={(e) => {
+                    setArticleInput(e.target.value);
+                    setArticleSearchNonce(0);
+                  }}
+                />
+                <button
+                  type="button"
+                  className="sk-btn sk-btn--sm"
+                  onClick={() => {
+                    if (articleInput.trim()) {
+                      addArticle();
+                      return;
+                    }
+                    setArticleSearchNonce((v) => v + 1);
+                  }}
+                >
+                  +
+                </button>
+              </div>
+              {isSearchingArticles && <p className="sk-modal-searching">Recherche des articles…</p>}
+              {articleSuggestions.length > 0 && (
+                <div className="sk-modal-suggestions">
+                  {articleSuggestions.map((item) => (
+                    <button key={item.id} type="button" className="sk-modal-suggestion-item" onClick={() => addArticle(item.label)}>
+                      <span className="sk-modal-suggestion-text"><strong>{item.label}</strong></span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {selectedArticles.length > 0 && (
+                <div className="sk-modal-tags-list">
+                  {selectedArticles.map((tag) => (
+                    <span key={tag} className="sk-modal-tag">{tag}
+                      <button type="button" className="sk-modal-tag-remove" onClick={() => setSelectedArticles((prev) => prev.filter((v) => v !== tag))}>✕</button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            <section className="sk-modal-section">
+              <label className="sk-modal-label" htmlFor="sk-mobile-schedule">📅 Programmer (max 30j)</label>
+              <input
+                id="sk-mobile-schedule"
+                type="datetime-local"
+                className="sk-modal-input"
+                value={scheduledAt}
+                max={maxScheduleLocal}
+                onChange={(e) => {
+                  setScheduledAt(e.target.value);
+                  setLocalError(null);
+                }}
+              />
+              <p className="sk-modal-hint">Format: jj/mm/aaaa --:--, limite 30 jours.</p>
+            </section>
+          </article>
         ) : (
           <article className="sk-create-preview-card" aria-label="Prévisualisation annonce">
             <header className="sk-studio-profile">
@@ -1521,6 +1889,12 @@ function CreateAnnounceScreen({
             ) : (
               <p className="sk-modal-media-hint">Aucun média ajouté.</p>
             )}
+            <div className="sk-preview-metadata">
+              {location && <span className="sk-preview-meta-item">📍 {location}</span>}
+              {selectedTags.map((v) => <span key={v} className="sk-preview-meta-item">{v}</span>)}
+              {selectedArticles.map((v) => <span key={v} className="sk-preview-meta-item">{v}</span>)}
+              {scheduledAt && <span className="sk-preview-meta-item">📅 {new Date(scheduledAt).toLocaleString('fr-FR')}</span>}
+            </div>
           </article>
         )}
       </div>
@@ -2333,6 +2707,7 @@ export function SoKinPage() {
           displayName={displayName}
           userIdentifier={user?.profile?.username ? `@${user.profile.username.replace('@', '')}` : `ID ${user?.id?.slice(0, 8) ?? 'invité'}`}
           cityLabel={city}
+          country={country}
         />
       )}
 

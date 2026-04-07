@@ -1079,6 +1079,23 @@
   gap: 10px;
 }
 
+.sk-mobile-editor-panel {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background: rgba(35, 24, 72, 0.4);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: calc(100vh - 170px);
+}
+
+.sk-mobile-editor-panel .sk-modal-section:first-child {
+  border-top: none;
+  margin-top: 0;
+  padding-top: 0;
+}
+
 .sk-create-preview-card {
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 14px;
