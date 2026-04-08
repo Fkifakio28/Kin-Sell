@@ -899,15 +899,16 @@
     top: 50%;
     width: min(760px, calc(100vw - 56px));
     height: min(82vh, 760px);
-    border: 1px solid var(--glass-border, rgba(180, 160, 255, 0.24));
-    border-radius: var(--radius-lg, 16px);
-    transform: translate(-50%, -46%);
+    border: 1px solid rgba(180, 160, 255, 0.28);
+    border-radius: var(--radius-xl, 20px);
+    transform: translate(-50%, -46%) scale(0.95);
     opacity: 0;
-    box-shadow: var(--shadow-lg, 0 12px 40px rgba(16, 8, 34, 0.45));
+    box-shadow: 0 16px 56px rgba(111, 88, 255, 0.1), var(--shadow-lg, 0 12px 40px rgba(16, 8, 34, 0.45));
+    transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s ease;
   }
 
   .sk-comments-drawer--open {
-    transform: translate(-50%, -50%);
+    transform: translate(-50%, -50%) scale(1);
     opacity: 1;
   }
 
@@ -1705,36 +1706,68 @@
 
 .sk-desktop-nav-item,
 .sk-desktop-outline {
-  border: 1px solid var(--glass-border, rgba(180, 160, 255, 0.20));
-  background: rgba(35, 24, 72, 0.5);
+  border: 1px solid rgba(180, 160, 255, 0.16);
+  background: rgba(35, 24, 72, 0.4);
   color: var(--color-text-secondary, #c7bedf);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Shine slide effect on hover */
+.sk-desktop-nav-item::after,
+.sk-desktop-outline::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(185, 166, 255, 0.08), transparent);
+  transition: left 0.5s ease;
+  pointer-events: none;
+}
+
+.sk-desktop-nav-item:hover::after,
+.sk-desktop-outline:hover::after {
+  left: 200%;
 }
 
 .sk-desktop-outline:hover {
-  background: var(--glass-bg-hover, rgba(42, 29, 87, 0.84));
+  background: rgba(42, 29, 87, 0.75);
   border-color: rgba(185, 166, 255, 0.42);
   color: var(--color-text-primary, #fff);
-  box-shadow: 0 4px 12px rgba(111, 88, 255, 0.12);
+  box-shadow: 0 4px 16px rgba(111, 88, 255, 0.14);
+  transform: translateX(3px);
 }
 
 .sk-desktop-nav-item--active {
-  border-color: rgba(185, 166, 255, 0.38);
+  border-color: rgba(185, 166, 255, 0.45);
   color: var(--color-text-primary, #fff);
-  background: rgba(111, 88, 255, 0.2);
+  background: linear-gradient(135deg, rgba(111, 88, 255, 0.25), rgba(73, 12, 128, 0.15));
+  box-shadow: inset 0 0 12px rgba(111, 88, 255, 0.1);
+}
+
+.sk-desktop-nav-item:hover:not(.sk-desktop-nav-item--active) {
+  background: rgba(42, 29, 87, 0.6);
+  border-color: rgba(185, 166, 255, 0.32);
+  color: var(--color-text-primary, #fff);
+  transform: translateX(4px);
 }
 
 .sk-desktop-primary {
   border: 1px solid rgba(185, 166, 255, 0.45);
   background: linear-gradient(135deg, var(--color-primary, #6f58ff), var(--color-accent-dark, #490c80));
+  background-size: 200% 200%;
   color: #fff;
   font-weight: 700;
-  box-shadow: 0 4px 16px rgba(111, 88, 255, 0.2);
-  transition: box-shadow 0.2s, transform 0.15s;
+  box-shadow: 0 4px 18px rgba(111, 88, 255, 0.25);
+  transition: box-shadow 0.3s ease, transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  animation: skGradientFlow 4s ease infinite;
 }
 
 .sk-desktop-primary:hover {
-  box-shadow: 0 8px 28px rgba(111, 88, 255, 0.35);
-  transform: translateY(-1px);
+  box-shadow: 0 10px 36px rgba(111, 88, 255, 0.4), 0 4px 12px rgba(111, 88, 255, 0.2);
+  transform: translateY(-3px) scale(1.02);
 }
 
 .sk-desktop-center-head {
@@ -1742,12 +1775,19 @@
   justify-content: space-between;
   align-items: center;
   gap: var(--space-md, 16px);
-  padding: 14px 16px;
-  border: 1px solid var(--glass-border, rgba(180, 160, 255, 0.20));
-  border-radius: var(--radius-lg, 16px);
-  background: rgba(35, 24, 72, 0.45);
-  margin-bottom: var(--space-md, 16px);
-  box-shadow: var(--shadow-sm, 0 4px 12px rgba(16, 8, 34, 0.28));
+  padding: 16px 18px;
+  border: 1px solid rgba(180, 160, 255, 0.18);
+  border-radius: var(--radius-xl, 20px);
+  background: linear-gradient(135deg, rgba(35, 24, 72, 0.4), rgba(18, 11, 43, 0.35));
+  margin-bottom: var(--space-lg, 24px);
+  animation: skDesktopSlideIn 0.6s ease both;
+  animation-delay: 0.25s;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.sk-desktop-center-head:hover {
+  border-color: rgba(185, 166, 255, 0.32);
+  box-shadow: 0 4px 16px rgba(111, 88, 255, 0.08);
 }
 
 .sk-desktop-center-head h2 {
@@ -1814,24 +1854,28 @@
 }
 
 .sk-desktop-head-icon {
-  width: 40px;
+  width: 42px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   font-size: 18px;
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.2s, border-color 0.2s;
 }
 
 .sk-desktop-head-account {
-  padding: 0 12px;
+  padding: 0 14px;
   font-size: 13px;
   white-space: nowrap;
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.2s, border-color 0.2s;
 }
 
 .sk-desktop-head-icon:hover,
 .sk-desktop-head-account:hover {
-  border-color: rgba(185, 166, 255, 0.35);
+  border-color: rgba(185, 166, 255, 0.4);
   color: var(--color-text-primary, #fff);
-  background: rgba(111, 88, 255, 0.16);
+  background: rgba(111, 88, 255, 0.18);
+  transform: scale(1.08);
+  box-shadow: 0 4px 14px rgba(111, 88, 255, 0.15);
 }
 
 .sk-desktop-right {
@@ -1839,10 +1883,17 @@
 }
 
 .sk-desktop-announces-block {
-  border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.08));
-  border-radius: 14px;
-  background: rgba(35, 24, 72, 0.35);
+  border: 1px solid rgba(180, 160, 255, 0.18);
+  border-radius: var(--radius-xl, 20px);
+  background: linear-gradient(145deg, rgba(35, 24, 72, 0.35), rgba(18, 11, 43, 0.25));
   overflow: hidden;
+  animation: skDesktopSlideIn 0.7s ease both;
+  animation-delay: 0.35s;
+  transition: border-color 0.3s ease;
+}
+
+.sk-desktop-announces-block:hover {
+  border-color: rgba(185, 166, 255, 0.3);
 }
 
 .sk-desktop-announces-head {
@@ -1893,30 +1944,34 @@
   width: 100%;
   min-height: 100%;
   margin: 0;
-  border-radius: var(--radius-lg, 16px);
-  border: 1px solid var(--glass-border, rgba(180, 160, 255, 0.20));
-  transition: border-color 0.2s, box-shadow 0.2s;
+  border-radius: var(--radius-xl, 20px);
+  border: 1px solid rgba(180, 160, 255, 0.16);
+  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), border-color 0.3s ease, box-shadow 0.3s ease;
+  animation: skCardAppear 0.5s ease both;
 }
 
 .sk-feed--immersive .sk-card:hover {
-  border-color: rgba(185, 166, 255, 0.35);
-  box-shadow: 0 4px 20px rgba(111, 88, 255, 0.1);
+  transform: scale(1.008) translateY(-2px);
+  border-color: rgba(185, 166, 255, 0.38);
+  box-shadow: 0 8px 32px rgba(111, 88, 255, 0.12), 0 2px 8px rgba(16, 8, 34, 0.2);
 }
 
 .sk-desktop-panel {
-  border: 1px solid var(--glass-border, rgba(180, 160, 255, 0.20));
-  border-radius: var(--radius-lg, 16px);
-  background: rgba(35, 24, 72, 0.5);
+  border: 1px solid rgba(180, 160, 255, 0.18);
+  border-radius: var(--radius-xl, 20px);
+  background: linear-gradient(145deg, rgba(35, 24, 72, 0.45), rgba(18, 11, 43, 0.35));
   padding: var(--space-md, 16px);
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  gap: 12px;
+  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), border-color 0.3s ease, box-shadow 0.35s ease;
+  animation: skCardAppear 0.5s ease both;
 }
 
 .sk-desktop-panel:hover {
-  border-color: rgba(185, 166, 255, 0.32);
-  box-shadow: 0 4px 16px rgba(111, 88, 255, 0.08);
+  transform: translateY(-2px);
+  border-color: rgba(185, 166, 255, 0.42);
+  box-shadow: 0 8px 28px rgba(111, 88, 255, 0.12), 0 2px 8px rgba(16, 8, 34, 0.2);
 }
 
 .sk-desktop-panel h3 {
@@ -1940,9 +1995,25 @@
 }
 
 .sk-desktop-commercial {
-  gap: 8px;
-  background: linear-gradient(135deg, rgba(111, 88, 255, 0.08), rgba(73, 12, 128, 0.1));
-  border-color: rgba(185, 166, 255, 0.28);
+  gap: 10px;
+  background: linear-gradient(135deg, rgba(111, 88, 255, 0.12), rgba(73, 12, 128, 0.14), rgba(111, 88, 255, 0.08));
+  background-size: 200% 200%;
+  border-color: rgba(185, 166, 255, 0.32);
+  animation: skGradientFlow 6s ease infinite, skCardAppear 0.5s ease both;
+  position: relative;
+  overflow: hidden;
+}
+
+.sk-desktop-commercial::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  right: -50%;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(circle, rgba(111, 88, 255, 0.08), transparent 60%);
+  animation: skOrbDrift 10s ease-in-out infinite;
+  pointer-events: none;
 }
 
 .sk-desktop-commercial-icon {
@@ -1971,19 +2042,28 @@
 }
 
 .sk-desktop-published-item {
-  border: 1px solid var(--glass-border, rgba(180, 160, 255, 0.18));
+  border: 1px solid rgba(180, 160, 255, 0.14);
   border-radius: var(--radius-md, 12px);
-  background: rgba(18, 11, 43, 0.4);
+  background: rgba(18, 11, 43, 0.35);
   padding: 10px 12px;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  transition: border-color 0.2s, background 0.2s;
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), border-color 0.25s ease, background 0.25s ease, box-shadow 0.3s ease;
+  animation: skCardAppear 0.4s ease both;
 }
 
+.sk-desktop-published-item:nth-child(1) { animation-delay: 0.05s; }
+.sk-desktop-published-item:nth-child(2) { animation-delay: 0.1s; }
+.sk-desktop-published-item:nth-child(3) { animation-delay: 0.15s; }
+.sk-desktop-published-item:nth-child(4) { animation-delay: 0.2s; }
+.sk-desktop-published-item:nth-child(5) { animation-delay: 0.25s; }
+
 .sk-desktop-published-item:hover {
-  border-color: rgba(185, 166, 255, 0.35);
-  background: rgba(18, 11, 43, 0.6);
+  transform: translateY(-2px) scale(1.01);
+  border-color: rgba(185, 166, 255, 0.4);
+  background: rgba(18, 11, 43, 0.55);
+  box-shadow: 0 6px 20px rgba(111, 88, 255, 0.1);
 }
 
 .sk-desktop-published-main {
@@ -2079,11 +2159,67 @@
   .sk-comments-drawer {
     transition: none !important;
   }
+
+  .sk-desktop-shell::before,
+  .sk-desktop-shell::after,
+  .sk-desktop-commercial::after {
+    display: none;
+  }
+
+  .sk-desktop-shell *,
+  .sk-desktop-topbar,
+  .sk-desktop-left,
+  .sk-desktop-center,
+  .sk-desktop-right,
+  .sk-desktop-studio,
+  .sk-desktop-panel,
+  .sk-desktop-published-item {
+    animation: none !important;
+  }
 }
 
 /* ════════════════════════════════════════
    DESKTOP REWORK — TOPBAR + GRID 25/50/25
+   Thème vivant : animations, orbes, respiration
    ════════════════════════════════════════ */
+
+/* ── Animations desktop ── */
+@keyframes skDesktopSlideIn {
+  from { opacity: 0; transform: translateY(24px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes skBorderBreathe {
+  0%, 100% { border-color: rgba(180, 160, 255, 0.22); box-shadow: 0 4px 12px rgba(16, 8, 34, 0.28); }
+  50%      { border-color: rgba(185, 166, 255, 0.42); box-shadow: 0 8px 28px rgba(111, 88, 255, 0.12); }
+}
+
+@keyframes skOrbDrift {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); opacity: 0.45; }
+  33%      { transform: translate3d(30px, -25px, 0) scale(1.08); opacity: 0.6; }
+  66%      { transform: translate3d(-20px, 15px, 0) scale(0.94); opacity: 0.35; }
+}
+
+@keyframes skGradientFlow {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes skTopbarGlow {
+  0%, 100% { box-shadow: 0 8px 32px rgba(22, 12, 47, 0.5); }
+  50%      { box-shadow: 0 8px 40px rgba(111, 88, 255, 0.18), 0 4px 20px rgba(22, 12, 47, 0.4); }
+}
+
+@keyframes skStudioPulse {
+  0%, 100% { border-color: rgba(180, 160, 255, 0.24); }
+  50%      { border-color: rgba(111, 88, 255, 0.45); }
+}
+
+@keyframes skCardAppear {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
 
 .sk-desktop-shell {
   width: min(1480px, 100%);
@@ -2091,8 +2227,37 @@
   padding: var(--space-md, 16px) var(--space-lg, 24px);
   display: flex;
   flex-direction: column;
-  gap: var(--space-md, 16px);
+  gap: var(--space-lg, 24px);
   min-height: 100vh;
+  position: relative;
+  overflow: hidden;
+}
+
+/* ── Orbes ambiants flottants ── */
+.sk-desktop-shell::before,
+.sk-desktop-shell::after {
+  content: '';
+  position: fixed;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 0;
+  filter: blur(80px);
+}
+.sk-desktop-shell::before {
+  width: 320px;
+  height: 320px;
+  background: radial-gradient(circle, rgba(111, 88, 255, 0.15), transparent 70%);
+  top: 10%;
+  left: -60px;
+  animation: skOrbDrift 12s ease-in-out infinite;
+}
+.sk-desktop-shell::after {
+  width: 280px;
+  height: 280px;
+  background: radial-gradient(circle, rgba(73, 12, 128, 0.12), transparent 70%);
+  bottom: 15%;
+  right: -40px;
+  animation: skOrbDrift 15s ease-in-out infinite reverse;
 }
 
 .sk-desktop-topbar {
@@ -2103,14 +2268,15 @@
   grid-template-columns: 1fr minmax(360px, 1.8fr) 1fr;
   align-items: center;
   gap: var(--space-md, 16px);
-  border: 1px solid var(--glass-border, rgba(180, 160, 255, 0.24));
-  background: var(--glass-bg, rgba(35, 24, 72, 0.66));
-  border-radius: var(--radius-lg, 16px);
-  padding: 12px 18px;
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  box-shadow: var(--shadow-glass, 0 8px 32px rgba(22, 12, 47, 0.5));
-  transition: box-shadow 0.3s ease;
+  border: 1px solid rgba(180, 160, 255, 0.28);
+  background: linear-gradient(135deg, rgba(35, 24, 72, 0.72), rgba(18, 11, 43, 0.78));
+  background-size: 200% 200%;
+  border-radius: var(--radius-xl, 20px);
+  padding: 14px 22px;
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  animation: skDesktopSlideIn 0.5s ease both, skTopbarGlow 6s ease-in-out infinite;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
 }
 
 .sk-desktop-logo-bubbles {
@@ -2120,8 +2286,8 @@
 }
 
 .sk-desktop-logo-bubble {
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   border-radius: 999px;
   display: inline-flex;
   align-items: center;
@@ -2130,39 +2296,47 @@
   font-weight: 700;
   color: var(--color-text-primary, #fff);
   border: 1px solid rgba(185, 166, 255, 0.35);
-  background: rgba(111, 88, 255, 0.18);
+  background: linear-gradient(135deg, rgba(111, 88, 255, 0.22), rgba(73, 12, 128, 0.18));
   animation: skBubbleFloat 3s ease-in-out infinite;
-  box-shadow: 0 2px 8px rgba(111, 88, 255, 0.15);
-  transition: transform 0.2s, box-shadow 0.2s;
+  box-shadow: 0 2px 10px rgba(111, 88, 255, 0.2);
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.25s ease;
 }
 
 .sk-desktop-logo-bubble:hover {
-  transform: scale(1.12);
-  box-shadow: 0 4px 16px rgba(111, 88, 255, 0.3);
+  transform: scale(1.18) translateY(-2px);
+  box-shadow: 0 6px 20px rgba(111, 88, 255, 0.4);
 }
 
+.sk-desktop-logo-bubble:nth-child(2) { animation-delay: 0.15s; }
+.sk-desktop-logo-bubble:nth-child(3) { animation-delay: 0.3s; }
+.sk-desktop-logo-bubble:nth-child(4) { animation-delay: 0.45s; }
+.sk-desktop-logo-bubble:nth-child(5) { animation-delay: 0.6s; }
+.sk-desktop-logo-bubble:nth-child(6) { animation-delay: 0.75s; }
+
 @keyframes skBubbleFloat {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-2px); }
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  25%      { transform: translateY(-3px) rotate(-2deg); }
+  75%      { transform: translateY(1px) rotate(1deg); }
 }
 
 .sk-desktop-global-search input {
   width: 100%;
-  height: 44px;
+  height: 46px;
   border-radius: var(--radius-md, 12px);
-  border: 1px solid var(--glass-border, rgba(180, 160, 255, 0.24));
-  background: rgba(18, 11, 43, 0.55);
+  border: 1px solid rgba(180, 160, 255, 0.22);
+  background: rgba(18, 11, 43, 0.5);
   color: var(--color-text-primary, #fff);
   font-size: 14px;
   font-family: var(--font-family-base, inherit);
   padding: 0 16px;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition: border-color 0.3s ease, box-shadow 0.4s ease, background 0.3s ease;
 }
 
 .sk-desktop-global-search input:focus {
   outline: none;
   border-color: var(--color-primary, #6f58ff);
-  box-shadow: 0 0 0 3px rgba(111, 88, 255, 0.18), 0 4px 16px rgba(111, 88, 255, 0.12);
+  background: rgba(18, 11, 43, 0.7);
+  box-shadow: 0 0 0 3px rgba(111, 88, 255, 0.2), 0 4px 20px rgba(111, 88, 255, 0.15), inset 0 1px 2px rgba(111, 88, 255, 0.08);
 }
 
 .sk-desktop-topbar-actions {
@@ -2199,14 +2373,15 @@
   top: calc(100% + 8px);
   right: 54px;
   width: min(420px, 92vw);
-  border: 1px solid var(--glass-border, rgba(180, 160, 255, 0.24));
-  border-radius: var(--radius-lg, 16px);
+  border: 1px solid rgba(180, 160, 255, 0.28);
+  border-radius: var(--radius-xl, 20px);
   background: rgba(18, 11, 43, 0.97);
-  padding: 12px;
+  padding: 14px;
   z-index: 60;
-  box-shadow: var(--shadow-lg, 0 12px 40px rgba(16, 8, 34, 0.45));
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  box-shadow: 0 12px 48px rgba(111, 88, 255, 0.1), var(--shadow-lg, 0 12px 40px rgba(16, 8, 34, 0.45));
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  animation: skDesktopSlideIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 
 .sk-desktop-notif-panel header {
@@ -2224,9 +2399,9 @@
 
 .sk-desktop-notif-item {
   width: 100%;
-  border: 1px solid var(--glass-border, rgba(180, 160, 255, 0.15));
+  border: 1px solid rgba(180, 160, 255, 0.12);
   border-radius: var(--radius-md, 12px);
-  background: rgba(35, 24, 72, 0.55);
+  background: rgba(35, 24, 72, 0.45);
   color: var(--color-text-primary, #fff);
   display: flex;
   align-items: flex-start;
@@ -2234,12 +2409,13 @@
   text-align: left;
   padding: 10px;
   cursor: pointer;
-  transition: background 0.2s, border-color 0.2s;
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.2s, border-color 0.25s;
 }
 
 .sk-desktop-notif-item:hover {
-  background: var(--glass-bg-hover, rgba(42, 29, 87, 0.84));
-  border-color: rgba(185, 166, 255, 0.3);
+  background: rgba(42, 29, 87, 0.75);
+  border-color: rgba(185, 166, 255, 0.35);
+  transform: translateX(4px);
 }
 
 .sk-desktop-notif-item div {
@@ -2255,8 +2431,10 @@
 .sk-desktop-grid {
   display: grid;
   grid-template-columns: 1fr 2fr 1fr;
-  gap: var(--space-md, 16px);
+  gap: var(--space-lg, 24px);
   align-items: start;
+  position: relative;
+  z-index: 1;
 }
 
 .sk-desktop-left,
@@ -2268,41 +2446,68 @@
 .sk-desktop-left,
 .sk-desktop-center,
 .sk-desktop-right {
-  border: 1px solid var(--glass-border, rgba(180, 160, 255, 0.24));
-  background: var(--glass-bg, rgba(35, 24, 72, 0.66));
-  border-radius: var(--radius-lg, 16px);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  box-shadow: var(--shadow-sm, 0 4px 12px rgba(16, 8, 34, 0.28));
-  transition: box-shadow 0.3s ease, border-color 0.3s ease;
+  border: 1px solid rgba(180, 160, 255, 0.22);
+  background: rgba(35, 24, 72, 0.58);
+  border-radius: var(--radius-xl, 20px);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  animation: skDesktopSlideIn 0.6s ease both, skBorderBreathe 8s ease-in-out infinite;
+  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.35s ease, border-color 0.3s ease;
+}
+
+.sk-desktop-left {
+  animation-delay: 0.1s, 0s;
+}
+.sk-desktop-center {
+  animation-delay: 0.2s, 2s;
+}
+.sk-desktop-right {
+  animation-delay: 0.3s, 4s;
 }
 
 .sk-desktop-left:hover,
 .sk-desktop-right:hover {
-  border-color: rgba(185, 166, 255, 0.35);
-  box-shadow: var(--shadow-md, 0 8px 24px rgba(16, 8, 34, 0.36));
+  transform: translateY(-3px);
+  border-color: rgba(185, 166, 255, 0.45);
+  box-shadow: 0 12px 36px rgba(111, 88, 255, 0.14), 0 4px 12px rgba(16, 8, 34, 0.3);
 }
 
 .sk-desktop-center {
-  padding: var(--space-md, 16px);
+  padding: var(--space-lg, 24px);
   min-height: calc(100vh - 120px);
 }
 
 .sk-desktop-studio {
-  border: 1px solid var(--glass-border, rgba(180, 160, 255, 0.24));
-  border-radius: var(--radius-lg, 16px);
-  background: rgba(35, 24, 72, 0.45);
-  padding: var(--space-md, 16px);
+  border: 1px solid rgba(180, 160, 255, 0.22);
+  border-radius: var(--radius-xl, 20px);
+  background: linear-gradient(145deg, rgba(35, 24, 72, 0.5), rgba(18, 11, 43, 0.4));
+  padding: var(--space-lg, 24px);
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  margin-bottom: var(--space-md, 16px);
-  box-shadow: var(--shadow-sm, 0 4px 12px rgba(16, 8, 34, 0.28));
-  transition: border-color 0.2s;
+  gap: 14px;
+  margin-bottom: var(--space-lg, 24px);
+  animation: skStudioPulse 5s ease-in-out infinite;
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease, border-color 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Reflet lumineux en haut du studio */
+.sk-desktop-studio::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(185, 166, 255, 0.5), transparent);
+  opacity: 0.6;
 }
 
 .sk-desktop-studio:hover {
-  border-color: rgba(185, 166, 255, 0.38);
+  transform: translateY(-2px);
+  border-color: rgba(185, 166, 255, 0.5);
+  box-shadow: 0 8px 32px rgba(111, 88, 255, 0.15), 0 2px 8px rgba(16, 8, 34, 0.25);
 }
 
 .sk-desktop-studio-head {
@@ -2370,13 +2575,14 @@
 .sk-desktop-help-popup,
 .sk-desktop-account-popup {
   width: min(720px, 94vw);
-  border: 1px solid var(--glass-border, rgba(180, 160, 255, 0.24));
-  border-radius: var(--radius-lg, 16px);
+  border: 1px solid rgba(180, 160, 255, 0.28);
+  border-radius: var(--radius-xl, 20px);
   background: rgba(18, 11, 43, 0.98);
-  padding: 18px;
-  box-shadow: var(--shadow-lg, 0 12px 40px rgba(16, 8, 34, 0.45));
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  padding: 20px;
+  box-shadow: 0 16px 56px rgba(111, 88, 255, 0.12), var(--shadow-lg, 0 12px 40px rgba(16, 8, 34, 0.45));
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  animation: skDesktopSlideIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 
 .sk-desktop-preview-head,
@@ -2396,21 +2602,24 @@
 
 .sk-desktop-help-popup nav button,
 .sk-desktop-account-popup button {
-  border: 1px solid var(--glass-border, rgba(180, 160, 255, 0.20));
+  border: 1px solid rgba(180, 160, 255, 0.16);
   border-radius: var(--radius-md, 12px);
-  background: rgba(35, 24, 72, 0.55);
+  background: rgba(35, 24, 72, 0.45);
   color: #fff;
   text-align: left;
-  padding: 12px 14px;
+  padding: 13px 16px;
   cursor: pointer;
-  transition: background 0.2s, border-color 0.2s, box-shadow 0.2s;
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.2s, border-color 0.25s, box-shadow 0.25s;
+  position: relative;
+  overflow: hidden;
 }
 
 .sk-desktop-help-popup nav button:hover,
 .sk-desktop-account-popup button:hover {
-  background: var(--glass-bg-hover, rgba(42, 29, 87, 0.84));
-  border-color: rgba(185, 166, 255, 0.38);
-  box-shadow: 0 4px 12px rgba(111, 88, 255, 0.1);
+  background: rgba(42, 29, 87, 0.75);
+  border-color: rgba(185, 166, 255, 0.42);
+  box-shadow: 0 4px 16px rgba(111, 88, 255, 0.12);
+  transform: translateX(4px);
 }
 
 .sk-card-text-only {
