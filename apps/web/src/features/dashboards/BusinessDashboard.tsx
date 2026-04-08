@@ -36,6 +36,7 @@ import { USD_TO_CDF_RATE, DEFAULT_CURRENCY_RATES } from '../../shared/constants/
 import { SK_BIZ_AI_ADVICE, SK_BIZ_AI_AUTO_NEGO, SK_BIZ_AI_COMMANDE } from '../../shared/constants/storage-keys';
 import { DashboardSecurityBlock, DashboardVerificationSection } from './sections';
 import { AdsBoostPopup } from '../../components/AdsBoostPopup';
+import { PromoCreator } from '../../components/PromoCreator';
 const USD_TO_CDF = USD_TO_CDF_RATE;
 const CURRENCY_SYMBOLS: Record<string, string> = { CDF: 'FC', USD: '$', EUR: '€', XAF: 'XAF', AOA: 'Kz', XOF: 'XOF', GNF: 'GNF', MAD: 'MAD' };
 const getCurrencyRate = (c: string) => c === 'USD' ? 1 : (DEFAULT_CURRENCY_RATES[c] ?? DEFAULT_CURRENCY_RATES.CDF);
@@ -209,6 +210,11 @@ export function BusinessDashboard() {
   const [bzArticleBusy, setBzArticleBusy] = useState<string | null>(null);
   const [bzActionMsg, setBzActionMsg] = useState<string | null>(null);
   const BZ_PAGE_LIMIT = 12;
+
+  // ─── Sélection produits + promotions ──────────────────────
+  const [selectedProdIds, setSelectedProdIds] = useState<Set<string>>(new Set());
+  const toggleProdSelection = (id: string) => setSelectedProdIds((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+  const [promoProduits, setPromoProduits] = useState<MyListing[] | null>(null);
 
   // ─── Contacts ────────────────────────────────────────────
   const [contactFilter, setContactFilter] = useState<'all' | 'online' | 'favorites'>('all');
@@ -1917,8 +1923,11 @@ export function BusinessDashboard() {
 
             {/* ── Filtres ── */}
             <div className="bz-art-filters">
+              <label className="ud-art-select-all" title="Tout sélectionner">
+                <input type="checkbox" checked={pagedProduits.length > 0 && selectedProdIds.size === pagedProduits.length} onChange={(e) => { if (e.target.checked) setSelectedProdIds(new Set(pagedProduits.map((a) => a.id))); else setSelectedProdIds(new Set()); }} />
+              </label>
               {(['', 'ACTIVE', 'INACTIVE', 'ARCHIVED'] as const).map((f) => (
-                <button key={f} type="button" className={`bz-art-filter-btn${prodFilter === f ? ' active' : ''}`} onClick={() => { setProdFilter(f as ListingStatus | ''); setProdPage(1); }}>
+                <button key={f} type="button" className={`bz-art-filter-btn${prodFilter === f ? ' active' : ''}`} onClick={() => { setProdFilter(f as ListingStatus | ''); setProdPage(1); setSelectedProdIds(new Set()); }}>
                   {f === '' ? '🗂 Tous' : f === 'ACTIVE' ? '🟢 Actifs' : f === 'INACTIVE' ? '⏸ Inactifs' : '📦 Archivés'}
                 </button>
               ))}
@@ -1935,8 +1944,9 @@ export function BusinessDashboard() {
             ) : (
               <div className="bz-art-grid">
                 {pagedProduits.map((p) => (
-                  <article key={p.id} className={`bz-art-card${p.status === 'INACTIVE' ? ' bz-art-card--dim' : ''}`}>
+                  <article key={p.id} className={`bz-art-card${p.status === 'INACTIVE' ? ' bz-art-card--dim' : ''}${selectedProdIds.has(p.id) ? ' ud-art-card--selected' : ''}`}>
                     <div className="bz-art-card-visual">
+                      <input type="checkbox" className="ud-art-chk ud-art-card-chk" checked={selectedProdIds.has(p.id)} onChange={() => toggleProdSelection(p.id)} />
                       {p.imageUrl ? (
                         <img src={resolveMediaUrl(p.imageUrl)} alt={p.title} className="bz-art-card-img" loading="lazy" />
                       ) : (
@@ -1949,7 +1959,11 @@ export function BusinessDashboard() {
                     <div className="bz-art-card-body">
                       <h4 className="bz-art-card-title">{p.title}</h4>
                       <p className="bz-art-card-meta">{p.category} · {p.city}</p>
-                      <p className="bz-art-card-price">{formatPriceLabelFromUsdCents(p.priceUsdCents)}</p>
+                      {p.promoActive && p.promoPriceUsdCents != null ? (
+                        <p className="bz-art-card-price"><s style={{opacity:0.5,fontSize:'0.85em',marginRight:4}}>{formatPriceLabelFromUsdCents(p.priceUsdCents)}</s> {formatPriceLabelFromUsdCents(p.promoPriceUsdCents)} <span style={{fontSize:'0.7em',color:'#ff4444',fontWeight:700}}>PROMO</span></p>
+                      ) : (
+                        <p className="bz-art-card-price">{formatPriceLabelFromUsdCents(p.priceUsdCents)}</p>
+                      )}
                       <p className="bz-art-card-stock">Stock: {p.stockQuantity !== null ? p.stockQuantity : '∞'}</p>
                     </div>
                     <div className="bz-art-card-actions">
@@ -1969,6 +1983,26 @@ export function BusinessDashboard() {
                     </div>
                   </article>
                 ))}
+              </div>
+            )}
+
+            {/* ── Barre d'actions groupées produits ── */}
+            {selectedProdIds.size > 0 && (
+              <div className="ud-art-bulk-bar">
+                <div className="ud-art-bulk-left">
+                  <span className="ud-art-bulk-count">{selectedProdIds.size} produit{selectedProdIds.size > 1 ? 's' : ''} sélectionné{selectedProdIds.size > 1 ? 's' : ''}</span>
+                  <button type="button" className="ud-art-bulk-deselect" onClick={() => setSelectedProdIds(new Set())}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    Tout désélectionner
+                  </button>
+                </div>
+                <button type="button" className="ud-art-bulk-cta" onClick={() => {
+                  const selected = allProduits.filter((a) => selectedProdIds.has(a.id));
+                  if (selected.length > 0) setPromoProduits(selected);
+                }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                  Faire une promotion
+                </button>
               </div>
             )}
 
@@ -3489,6 +3523,26 @@ export function BusinessDashboard() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ─── PromoCreator Produits ─── */}
+      {promoProduits && promoProduits.length > 0 && (
+        <PromoCreator
+          articles={promoProduits}
+          resolveMediaUrl={resolveMediaUrl}
+          onClose={() => { setPromoProduits(null); setSelectedProdIds(new Set()); }}
+          onPublished={() => {
+            setPromoProduits(null);
+            setSelectedProdIds(new Set());
+            invalidateCache('/listings/mine');
+            listings.mine({ limit: 50 }).then(r => setMyListings(r.listings)).catch(() => {});
+          }}
+          onBoost={() => {
+            setBoostPopupBulkCount(promoProduits.length);
+            setPromoProduits(null);
+            setSelectedProdIds(new Set());
+          }}
+        />
       )}
 
       {/* ─── ADS Boost / Highlight popup ─── */}
