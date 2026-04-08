@@ -684,6 +684,14 @@ export const admin = {
   activatePlan: (body: { userId: string; planCode: string; durationDays?: number; reason: string; exempt?: boolean }) =>
     request<unknown>("/admin/subscriptions/activate", { method: "POST", body }),
 
+  // ── Billing admin — Commandes & validation ──
+  billingOrders: (params?: { page?: number; limit?: number; status?: string; method?: string }) =>
+    request<AdminBillingOrderList>("/admin/billing/orders", { params: params as Record<string, string | number | undefined> }),
+  billingValidateOrder: (body: { orderId: string; reason?: string }) =>
+    request<{ plan: unknown; message: string }>("/admin/billing/validate-order", { method: "POST", body }),
+  billingFailOrder: (body: { orderId: string; reason?: string }) =>
+    request<{ orderId: string; status: string; message: string }>("/admin/billing/fail-order", { method: "POST", body }),
+
 };
 
 // ── Admin AI/Subscription types ──
@@ -730,4 +738,26 @@ export type AdminAiTrialItem = {
   user?: { displayName: string; email: string };
 };
 export type AdminAiTrialList = { total: number; page: number; totalPages: number; trials: AdminAiTrialItem[] };
+
+// ── Billing orders types ──
+export type AdminBillingOrderItem = {
+  id: string;
+  userId: string | null;
+  businessId: string | null;
+  targetScope: "USER" | "BUSINESS";
+  planCode: string;
+  amountUsdCents: number;
+  currency: string;
+  method: string;
+  status: string;
+  transferReference: string;
+  depositorNote: string | null;
+  proofUrl: string | null;
+  expiresAt: string;
+  validatedAt: string | null;
+  createdAt: string;
+  user?: { id: string; email: string | null; role: string; profile?: { displayName: string | null } | null } | null;
+  business?: { id: string; publicName: string } | null;
+};
+export type AdminBillingOrderList = { items: AdminBillingOrderItem[]; total: number; page: number; limit: number };
 

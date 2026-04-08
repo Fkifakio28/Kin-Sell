@@ -42,6 +42,7 @@ import {
   type AdminAiRecommendationStats,
   type AdminSubscriptionItem,
   type AdminAiTrialItem,
+  type AdminBillingOrderItem,
 } from '../../lib/api-client';
 import { verification, type VerificationRequestData, type VerificationListResponse } from '../../lib/services/verification.service';
 import { DashboardMessaging } from './DashboardMessaging';
@@ -277,9 +278,18 @@ export function AdminDashboard() {
   const [trialList, setTrialList] = useState<AdminAiTrialItem[]>([]);
   const [trialTotal, setTrialTotal] = useState(0);
   const [trialPage, setTrialPage] = useState(1);
-  const [subSubTab, setSubSubTab] = useState<'stats' | 'subs' | 'trials' | 'activate'>('stats');
+  const [subSubTab, setSubSubTab] = useState<'stats' | 'subs' | 'trials' | 'orders' | 'activate'>('stats');
   const [activateForm, setActivateForm] = useState({ userId: '', planCode: 'BOOST', durationDays: 30, reason: '', exempt: false });
   const [activateMsg, setActivateMsg] = useState<string | null>(null);
+
+  // Billing orders admin
+  const [orderList, setOrderList] = useState<AdminBillingOrderItem[]>([]);
+  const [orderTotal, setOrderTotal] = useState(0);
+  const [orderPage, setOrderPage] = useState(1);
+  const [orderStatusFilter, setOrderStatusFilter] = useState('ALL');
+  const [orderActionBusy, setOrderActionBusy] = useState<string | null>(null);
+  const [orderActionMsg, setOrderActionMsg] = useState<string | null>(null);
+  const [orderReasonInput, setOrderReasonInput] = useState('');
 
   // Currency
   const [currencyRates, setCurrencyRates] = useState<AdminCurrencyRate[]>([]);
@@ -534,23 +544,26 @@ export function AdminDashboard() {
           break;
         }
         case 'subscriptions': {
-          const [stats, subs, trials] = await Promise.all([
+          const [stats, subs, trials, orders] = await Promise.all([
             admin.aiRecommendationStats(),
             admin.subscriptions({ page: subPage, limit: 20 }),
             admin.aiTrials({ page: trialPage, limit: 20 }),
+            admin.billingOrders({ page: orderPage, limit: 20, status: orderStatusFilter !== 'ALL' ? orderStatusFilter : undefined }),
           ]);
           setSubStats(stats);
           setSubList(subs.subscriptions);
           setSubTotal(subs.total);
           setTrialList(trials.trials);
           setTrialTotal(trials.total);
+          setOrderList(orders.items);
+          setOrderTotal(orders.total);
           break;
         }
       }
     } catch (e: any) {
       setError(e?.message ?? 'Erreur de chargement');
     }
-  }, [activeSection, usersPage, usersSearch, usersRoleFilter, usersStatusFilter, blogPage, blogStatusFilter, blogCategoryFilter, blogSearch, blogSortBy, txPage, txStatusFilter, reportsPage, reportsStatusFilter, rankPeriod, rankType, auditPage, secEventsPage, fraudPage, fraudFilter, restrictionsPage, restrictionsFilter, mgLogsPage, mgVerdictFilter, aiStatusFilter, aiDomainFilter, aiTypeFilter, feedPage, feedStatusFilter, feedSearch, donationsPage, donationsStatusFilter, donationsTypeFilter, advPage, advStatusFilter, advTypeFilter, advSearch, adminListingsPage, adminListingsStatusFilter, adminListingsTypeFilter, adminListingsSearch, appealsPage, subPage, trialPage]);
+  }, [activeSection, usersPage, usersSearch, usersRoleFilter, usersStatusFilter, blogPage, blogStatusFilter, blogCategoryFilter, blogSearch, blogSortBy, txPage, txStatusFilter, reportsPage, reportsStatusFilter, rankPeriod, rankType, auditPage, secEventsPage, fraudPage, fraudFilter, restrictionsPage, restrictionsFilter, mgLogsPage, mgVerdictFilter, aiStatusFilter, aiDomainFilter, aiTypeFilter, feedPage, feedStatusFilter, feedSearch, donationsPage, donationsStatusFilter, donationsTypeFilter, advPage, advStatusFilter, advTypeFilter, advSearch, adminListingsPage, adminListingsStatusFilter, adminListingsTypeFilter, adminListingsSearch, appealsPage, subPage, trialPage, orderPage, orderStatusFilter]);
 
   useEffect(() => { if (isLoggedIn) loadSectionData(); }, [loadSectionData, isLoggedIn]);
 
@@ -2648,6 +2661,7 @@ export function AdminDashboard() {
           {([
             { k: 'stats' as const, l: '📊 Stats' },
             { k: 'subs' as const, l: '💳 Abonnements' },
+            { k: 'orders' as const, l: '📦 Commandes' },
             { k: 'trials' as const, l: '🎁 Essais IA' },
             { k: 'activate' as const, l: '🔑 Activer manuellement' },
           ]).map(st => (
@@ -2768,6 +2782,148 @@ export function AdminDashboard() {
                 <button disabled={trialPage <= 1} onClick={() => setTrialPage(p => p - 1)} className="ad-btn ad-btn--sm">◀</button>
                 <span style={{ fontSize: 12, color: '#aaa', alignSelf: 'center' }}>Page {trialPage}</span>
                 <button disabled={trialList.length < 20} onClick={() => setTrialPage(p => p + 1)} className="ad-btn ad-btn--sm">▶</button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Billing orders — commandes de paiement */}
+        {subSubTab === 'orders' && (
+          <div>
+            {orderActionMsg && (
+              <div style={{ padding: '8px 14px', borderRadius: 8, marginBottom: 12, fontSize: 13,
+                background: orderActionMsg.startsWith('✅') ? 'rgba(76,175,80,0.12)' : 'rgba(255,82,82,0.12)',
+                color: orderActionMsg.startsWith('✅') ? '#4caf50' : '#ff5252',
+              }}>{orderActionMsg}</div>
+            )}
+
+            <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap', alignItems: 'center' }}>
+              <span style={{ fontSize: 12, color: 'var(--color-text-secondary, #aaa)' }}>Filtrer :</span>
+              {['ALL', 'PENDING', 'USER_CONFIRMED', 'PAID', 'FAILED', 'CANCELED', 'EXPIRED'].map(s => (
+                <button key={s} onClick={() => { setOrderStatusFilter(s); setOrderPage(1); }}
+                  style={{ padding: '4px 10px', fontSize: 11, fontWeight: 600, border: 'none', borderRadius: 6,
+                    background: orderStatusFilter === s ? 'rgba(111,88,255,0.3)' : 'rgba(255,255,255,0.06)',
+                    color: orderStatusFilter === s ? '#fff' : 'rgba(255,255,255,0.5)', cursor: 'pointer',
+                  }}>{s === 'ALL' ? 'Tous' : s}</button>
+              ))}
+              <span style={{ marginLeft: 'auto', fontSize: 12, color: '#888' }}>{orderTotal} commande{orderTotal > 1 ? 's' : ''}</span>
+            </div>
+
+            <table className="ad-table" style={{ width: '100%', fontSize: 12 }}>
+              <thead>
+                <tr>
+                  <th>Utilisateur</th>
+                  <th>Forfait</th>
+                  <th>Montant</th>
+                  <th>Méthode</th>
+                  <th>Statut</th>
+                  <th>Référence</th>
+                  <th>Date</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {orderList.map(o => {
+                  const userName = o.user?.profile?.displayName || o.user?.email || o.userId || '—';
+                  const bizName = o.business?.publicName;
+                  const canActivate = ['PENDING', 'USER_CONFIRMED'].includes(o.status);
+                  const canFail = ['PENDING', 'USER_CONFIRMED'].includes(o.status);
+                  const statusColor = o.status === 'PAID' || o.status === 'VALIDATED' ? '#4caf50'
+                    : o.status === 'FAILED' ? '#ff5252'
+                    : o.status === 'PENDING' || o.status === 'USER_CONFIRMED' ? '#ff9800'
+                    : '#888';
+
+                  return (
+                    <tr key={o.id}>
+                      <td>
+                        {userName}
+                        {bizName && <><br/><span style={{ fontSize: 10, color: '#6f58ff' }}>🏢 {bizName}</span></>}
+                        <br/><span style={{ fontSize: 9, color: '#666' }}>{o.targetScope}</span>
+                      </td>
+                      <td style={{ fontWeight: 600, color: '#6f58ff' }}>{o.planCode}</td>
+                      <td>{(o.amountUsdCents / 100).toFixed(2)}$</td>
+                      <td style={{ fontSize: 10 }}>{o.method}</td>
+                      <td>
+                        <span style={{ padding: '2px 6px', borderRadius: 4, fontSize: 10,
+                          background: `${statusColor}20`, color: statusColor,
+                        }}>{o.status}</span>
+                      </td>
+                      <td style={{ fontSize: 10, fontFamily: 'monospace' }}>{o.transferReference}</td>
+                      <td style={{ fontSize: 10 }}>{new Date(o.createdAt).toLocaleDateString('fr-FR')}</td>
+                      <td>
+                        {(canActivate || canFail) && (
+                          <div style={{ display: 'flex', gap: 4, flexDirection: 'column' }}>
+                            {canActivate && (
+                              <button
+                                disabled={orderActionBusy !== null}
+                                onClick={async () => {
+                                  const reason = prompt('Raison de l\'activation (optionnel) :') ?? '';
+                                  setOrderActionBusy(o.id);
+                                  setOrderActionMsg(null);
+                                  try {
+                                    await admin.billingValidateOrder({ orderId: o.id, reason });
+                                    setOrderActionMsg(`✅ Forfait ${o.planCode} activé pour ${userName}`);
+                                    loadSectionData();
+                                  } catch (e: any) {
+                                    setOrderActionMsg('❌ ' + (e?.message || 'Erreur'));
+                                  } finally {
+                                    setOrderActionBusy(null);
+                                  }
+                                }}
+                                style={{ padding: '3px 8px', fontSize: 10, fontWeight: 600, border: 'none', borderRadius: 4,
+                                  background: 'rgba(76,175,80,0.2)', color: '#4caf50', cursor: 'pointer',
+                                  opacity: orderActionBusy === o.id ? 0.5 : 1,
+                                }}
+                              >
+                                {orderActionBusy === o.id ? '…' : '✅ Activer'}
+                              </button>
+                            )}
+                            {canFail && (
+                              <button
+                                disabled={orderActionBusy !== null}
+                                onClick={async () => {
+                                  const reason = prompt('Raison du refus :');
+                                  if (!reason) return;
+                                  setOrderActionBusy(o.id);
+                                  setOrderActionMsg(null);
+                                  try {
+                                    await admin.billingFailOrder({ orderId: o.id, reason });
+                                    setOrderActionMsg(`✅ Commande ${o.transferReference} refusée`);
+                                    loadSectionData();
+                                  } catch (e: any) {
+                                    setOrderActionMsg('❌ ' + (e?.message || 'Erreur'));
+                                  } finally {
+                                    setOrderActionBusy(null);
+                                  }
+                                }}
+                                style={{ padding: '3px 8px', fontSize: 10, fontWeight: 600, border: 'none', borderRadius: 4,
+                                  background: 'rgba(255,82,82,0.15)', color: '#ff5252', cursor: 'pointer',
+                                  opacity: orderActionBusy === o.id ? 0.5 : 1,
+                                }}
+                              >
+                                ❌ Refuser
+                              </button>
+                            )}
+                          </div>
+                        )}
+                        {o.status === 'PAID' || o.status === 'VALIDATED' ? (
+                          <span style={{ fontSize: 10, color: '#4caf50' }}>✅ Activé{o.validatedAt ? ` le ${new Date(o.validatedAt).toLocaleDateString('fr-FR')}` : ''}</span>
+                        ) : null}
+                        {o.status === 'FAILED' && o.depositorNote ? (
+                          <span style={{ fontSize: 9, color: '#888', display: 'block', marginTop: 2 }}>{o.depositorNote}</span>
+                        ) : null}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+
+            {orderTotal > 20 && (
+              <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 12 }}>
+                <button disabled={orderPage <= 1} onClick={() => setOrderPage(p => p - 1)} className="ad-btn ad-btn--sm">◀</button>
+                <span style={{ fontSize: 12, color: '#aaa', alignSelf: 'center' }}>Page {orderPage} / {Math.ceil(orderTotal / 20)}</span>
+                <button disabled={orderList.length < 20} onClick={() => setOrderPage(p => p + 1)} className="ad-btn ad-btn--sm">▶</button>
               </div>
             )}
           </div>

@@ -766,6 +766,23 @@ router.post("/subscriptions/activate", asyncHandler(async (req: AuthenticatedReq
     activatedBy: req.auth!.userId,
   });
   if (!result) throw new HttpError(404, "Utilisateur introuvable.");
+
+  // Journaliser l'activation manuelle
+  await prisma.auditLog.create({
+    data: {
+      actorUserId: req.auth!.userId,
+      action: "BILLING_ADMIN_ACTIVATE",
+      entityType: "Subscription",
+      entityId: payload.userId,
+      metadata: {
+        planCode: payload.planCode,
+        durationDays: payload.durationDays,
+        reason: payload.reason,
+        exempt: payload.exempt,
+      },
+    },
+  });
+
   res.json(result);
 }));
 
@@ -1001,13 +1018,46 @@ router.get("/ia/messages", asyncHandler(async (req: AuthenticatedRequest, res) =
 }));
 
 // ══════════════════════════════════════════════
-// BILLING — Validation admin des commandes
+// BILLING — Gestion admin des commandes & activations
 // ══════════════════════════════════════════════
+
+// ── Admin: lister toutes les commandes (avec filtres) ──
+router.get("/billing/orders", asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const page = Number(req.query.page) || 1;
+  const limit = Math.min(Number(req.query.limit) || 20, 100);
+  const status = req.query.status as string | undefined;
+  const method = req.query.method as string | undefined;
+
+  const where: Record<string, unknown> = {};
+  if (status && status !== "ALL") {
+    where.status = status;
+  }
+  if (method && method !== "ALL") {
+    where.method = method;
+  }
+
+  const [items, total] = await Promise.all([
+    prisma.paymentOrder.findMany({
+      where,
+      include: {
+        user: { select: { id: true, email: true, role: true, profile: { select: { displayName: true } } } },
+        business: { select: { id: true, publicName: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      skip: (page - 1) * limit,
+      take: limit,
+    }),
+    prisma.paymentOrder.count({ where }),
+  ]);
+
+  res.json({ items, total, page, limit });
+}));
 
 // ── Admin: valider une commande et activer le forfait ──
 // Flux : commande PENDING/USER_CONFIRMED → PAID → Subscription ACTIVE
 const adminValidateOrderSchema = z.object({
   orderId: z.string().min(8),
+  reason: z.string().max(500).optional(),
 });
 
 router.post("/billing/validate-order", asyncHandler(async (req: AuthenticatedRequest, res) => {
@@ -1016,6 +1066,22 @@ router.post("/billing/validate-order", asyncHandler(async (req: AuthenticatedReq
     orderId: payload.orderId,
     adminUserId: req.auth!.userId,
   });
+
+  // Journaliser l'action admin
+  await prisma.auditLog.create({
+    data: {
+      actorUserId: req.auth!.userId,
+      action: "BILLING_VALIDATE_ORDER",
+      entityType: "PaymentOrder",
+      entityId: payload.orderId,
+      metadata: {
+        reason: payload.reason || "Validation manuelle admin",
+        planCode: result.plan.planCode,
+        scope: result.plan.scope,
+      },
+    },
+  });
+
   res.json(result);
 }));
 
@@ -1065,10 +1131,26 @@ router.post("/billing/fail-order", asyncHandler(async (req: AuthenticatedRequest
     where: { id: orderId },
     data: {
       status: "FAILED",
-      depositorNote: reason ? `FAILED: ${reason}` : order.depositorNote,
+      depositorNote: reason ? `REFUSED: ${reason}` : order.depositorNote,
     },
   });
-  res.json({ orderId, status: "FAILED", message: "Ordre marqué comme échoué" });
+
+  // Journaliser le refus
+  await prisma.auditLog.create({
+    data: {
+      actorUserId: req.auth!.userId,
+      action: "BILLING_FAIL_ORDER",
+      entityType: "PaymentOrder",
+      entityId: orderId,
+      metadata: {
+        reason: reason || "Refusé par admin",
+        planCode: order.planCode,
+        previousStatus: order.status,
+      },
+    },
+  });
+
+  res.json({ orderId, status: "FAILED", message: "Ordre marqué comme refusé" });
 }));
 
 export default router;
