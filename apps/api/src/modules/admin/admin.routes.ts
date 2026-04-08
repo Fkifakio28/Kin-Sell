@@ -13,6 +13,7 @@ import aiAdminRoutes from "../analytics/ai-admin.routes.js";
 import * as iaAdsPlacements from "../ads/ia-ads-placements.service.js";
 import * as iaMessengerPromo from "../ads/ia-messenger-promo.service.js";
 import * as marketIntelligence from "../market-intelligence/market-intelligence.service.js";
+import * as billingService from "../billing/billing.service.js";
 
 const router = Router();
 
@@ -997,6 +998,77 @@ router.get("/ia/messages", asyncHandler(async (req: AuthenticatedRequest, res) =
   await checkPermission(req, "AI_MANAGEMENT");
   const stats = await iaMessengerPromo.getPromoCampaignStats();
   res.json(stats);
+}));
+
+// ══════════════════════════════════════════════
+// BILLING — Validation admin des commandes
+// ══════════════════════════════════════════════
+
+// ── Admin: valider une commande et activer le forfait ──
+// Flux : commande PENDING/USER_CONFIRMED → PAID → Subscription ACTIVE
+const adminValidateOrderSchema = z.object({
+  orderId: z.string().min(8),
+});
+
+router.post("/billing/validate-order", asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const payload = adminValidateOrderSchema.parse(req.body);
+  const result = await billingService.adminValidateOrder({
+    orderId: payload.orderId,
+    adminUserId: req.auth!.userId,
+  });
+  res.json(result);
+}));
+
+// ── Admin: lister les commandes en attente de validation ──
+router.get("/billing/pending-orders", asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const page = Number(req.query.page) || 1;
+  const limit = Math.min(Number(req.query.limit) || 20, 100);
+  const status = req.query.status as string | undefined;
+
+  const where: Record<string, unknown> = {};
+  if (status) {
+    where.status = status;
+  } else {
+    where.status = { in: ["PENDING", "USER_CONFIRMED"] };
+  }
+
+  const [items, total] = await Promise.all([
+    prisma.paymentOrder.findMany({
+      where,
+      include: {
+        user: { select: { id: true, email: true, role: true, profile: { select: { displayName: true } } } },
+        business: { select: { id: true, publicName: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      skip: (page - 1) * limit,
+      take: limit,
+    }),
+    prisma.paymentOrder.count({ where }),
+  ]);
+
+  res.json({ items, total, page, limit });
+}));
+
+// ── Admin: marquer une commande comme échouée ──
+const adminFailOrderSchema = z.object({
+  orderId: z.string().min(8),
+  reason: z.string().max(500).optional(),
+});
+
+router.post("/billing/fail-order", asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const { orderId, reason } = adminFailOrderSchema.parse(req.body);
+  const order = await prisma.paymentOrder.findUnique({ where: { id: orderId } });
+  if (!order) throw new HttpError(404, "Ordre introuvable");
+  if (["PAID", "VALIDATED"].includes(order.status)) throw new HttpError(400, "Impossible : ordre déjà validé");
+
+  await prisma.paymentOrder.update({
+    where: { id: orderId },
+    data: {
+      status: "FAILED",
+      depositorNote: reason ? `FAILED: ${reason}` : order.depositorNote,
+    },
+  });
+  res.json({ orderId, status: "FAILED", message: "Ordre marqué comme échoué" });
 }));
 
 export default router;

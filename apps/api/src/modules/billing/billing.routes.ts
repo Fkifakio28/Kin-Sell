@@ -1,8 +1,9 @@
 import { AddonCode } from "@prisma/client";
 import { Router } from "express";
 import { z } from "zod";
-import { requireAuth, type AuthenticatedRequest } from "../../shared/auth/auth-middleware.js";
+import { requireAuth, requireRoles, type AuthenticatedRequest } from "../../shared/auth/auth-middleware.js";
 import { asyncHandler } from "../../shared/utils/async-handler.js";
+import { Role } from "../../types/roles.js";
 import * as billingService from "./billing.service.js";
 import * as momoService from "../mobile-money/mobile-money.service.js";
 import express from "express";
@@ -59,9 +60,11 @@ router.get(
   })
 );
 
+// SÉCURITÉ : activation manuelle de forfait réservée aux super admins uniquement
 router.post(
   "/subscription/simulate-change",
   requireAuth,
+  requireRoles(Role.SUPER_ADMIN),
   asyncHandler(async (request: AuthenticatedRequest, response) => {
     const payload = changeSubscriptionSchema.parse(request.body);
     const data = await billingService.simulateChangeSubscription(request.auth!.userId, payload);
@@ -69,9 +72,11 @@ router.post(
   })
 );
 
+// SÉCURITÉ : activation manuelle d'add-on réservée aux super admins uniquement
 router.post(
   "/addons/simulate",
   requireAuth,
+  requireRoles(Role.SUPER_ADMIN),
   asyncHandler(async (request: AuthenticatedRequest, response) => {
     const payload = changeAddonSchema.parse(request.body);
     const data = await billingService.simulateAddonChange(request.auth!.userId, payload);
@@ -176,14 +181,10 @@ router.post(
   })
 );
 
-router.post(
-  "/payment-orders/activate",
-  requireAuth,
-  asyncHandler(async (request: AuthenticatedRequest, response) => {
-    const payload = activateOrderSchema.parse(request.body);
-    const data = await billingService.activatePlanFromValidatedOrder(request.auth!.userId, payload);
-    response.json(data);
-  })
-);
+// SUPPRIMÉ : /payment-orders/activate n'est plus accessible aux utilisateurs.
+// L'activation se fait UNIQUEMENT via :
+//   1. PayPal capture automatique (/paypal/capture)
+//   2. Validation admin (/admin/billing/validate-order)
+// Voir admin.routes.ts pour l'endpoint admin.
 
 export default router;

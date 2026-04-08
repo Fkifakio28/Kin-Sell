@@ -1,6 +1,10 @@
 import { Router } from 'express';
 import { asyncHandler } from '../../shared/utils/async-handler.js';
-import { requireAuth, type AuthenticatedRequest } from '../../shared/auth/auth-middleware.js';
+import { requireAuth, requireRoles, type AuthenticatedRequest } from '../../shared/auth/auth-middleware.js';
+import { Role } from '../../types/roles.js';
+import { prisma } from '../../shared/db/prisma.js';
+import { AddonCode, AddonStatus } from '@prisma/client';
+import { HttpError } from '../../shared/errors/http-error.js';
 import * as adsService from './ads.service.js';
 import {
   getBoostProposal,
@@ -47,16 +51,54 @@ router.get('/highlight-proposal', requireAuth, asyncHandler(async (req: Authenti
 }));
 
 // ── IA ADS: Activate boost on a single listing ──────────────────────────────
+// SÉCURITÉ : exige l'add-on BOOST_VISIBILITY actif ou rôle SUPER_ADMIN
 router.post('/boost', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
   const { listingId, durationDays } = req.body as { listingId: string; durationDays?: number };
   if (!listingId) { res.status(400).json({ error: 'listingId requis' }); return; }
+
+  // Super admins peuvent toujours activer un boost
+  if (req.auth!.role !== Role.SUPER_ADMIN) {
+    const hasBoostAddon = await prisma.subscriptionAddon.findFirst({
+      where: {
+        addonCode: AddonCode.BOOST_VISIBILITY,
+        status: AddonStatus.ACTIVE,
+        subscription: {
+          status: 'ACTIVE',
+          userId: req.auth!.userId
+        }
+      }
+    });
+    if (!hasBoostAddon) {
+      throw new HttpError(403, 'Add-on Boost Visibilité requis. Souscrivez via la page Forfaits.');
+    }
+  }
+
   const result = await activateBoost(req.auth!.userId, listingId, durationDays || 7);
   res.json(result);
 }));
 
 // ── IA ADS: Activate highlight (boost all user listings) ─────────────────────
+// SÉCURITÉ : exige l'add-on BOOST_VISIBILITY actif ou rôle SUPER_ADMIN
 router.post('/highlight', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
   const { durationDays, businessId } = req.body as { durationDays?: number; businessId?: string };
+
+  // Super admins peuvent toujours activer une mise en avant
+  if (req.auth!.role !== Role.SUPER_ADMIN) {
+    const hasBoostAddon = await prisma.subscriptionAddon.findFirst({
+      where: {
+        addonCode: AddonCode.BOOST_VISIBILITY,
+        status: AddonStatus.ACTIVE,
+        subscription: {
+          status: 'ACTIVE',
+          userId: req.auth!.userId
+        }
+      }
+    });
+    if (!hasBoostAddon) {
+      throw new HttpError(403, 'Add-on Boost Visibilité requis. Souscrivez via la page Forfaits.');
+    }
+  }
+
   const result = await activateHighlight(req.auth!.userId, durationDays || 7, businessId);
   res.json(result);
 }));

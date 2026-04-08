@@ -119,11 +119,13 @@ enum MomoStatus {
 }
 
 enum PaymentOrderStatus {
-  PENDING
-  USER_CONFIRMED
-  VALIDATED
-  CANCELED
-  EXPIRED
+  PENDING           // Commande créée, en attente de paiement
+  USER_CONFIRMED    // Utilisateur déclare avoir payé (virement)
+  PAID              // Paiement confirmé (PayPal capture / admin / MoMo callback)
+  VALIDATED         // Rétro-compat : alias historique de PAID
+  FAILED            // Paiement échoué
+  CANCELED          // Annulé
+  EXPIRED           // Expiré
 }
 
 enum CartStatus {

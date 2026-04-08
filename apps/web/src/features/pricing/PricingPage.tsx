@@ -379,27 +379,8 @@ export function PricingPage() {
     }
   };
 
-  const handleActivateOrder = async (orderId: string) => {
-    setBusyOrderAction(orderId);
-    setErrorMessage(null);
-    setInfoMessage(null);
-    try {
-      const result = await billing.activateOrder({ orderId });
-      setCurrentPlan(result.plan);
-      const orders = await billing.paymentOrders();
-      setPaymentOrders(orders.orders);
-      setInfoMessage(result.message);
-    } catch (error) {
-      if (error instanceof ApiError && error.data && typeof error.data === "object" && "error" in error.data) {
-        const message = (error.data as { error?: string }).error;
-        setErrorMessage(message ?? "Impossible d'activer le forfait.");
-      } else {
-        setErrorMessage("Impossible d'activer le forfait.");
-      }
-    } finally {
-      setBusyOrderAction(null);
-    }
-  };
+  // handleActivateOrder supprimé — l'activation ne peut plus se faire côté frontend.
+  // Seuls PayPal (capture auto) ou un super admin (validation manuelle) peuvent activer un forfait.
 
   const handleToggleAddon = async (addonCode: AddonCode) => {
     if (!isLoggedIn || !currentPlan) {
@@ -674,17 +655,13 @@ export function PricingPage() {
                       </button>
                     ) : null}
                     {order.status === "USER_CONFIRMED" ? (
-                      <button
-                        type="button"
-                        className="pricing-switch-btn"
-                        disabled={busyOrderAction !== null}
-                        onClick={() => void handleActivateOrder(order.id)}
-                      >
-                        {busyOrderAction === order.id ? "En cours..." : "Activer mon forfait"}
-                      </button>
+                      <span className="pricing-current">⏳ En attente de validation admin</span>
                     ) : null}
-                    {order.status === "VALIDATED" ? (
+                    {order.status === "PAID" || order.status === "VALIDATED" ? (
                       <span className="pricing-current">✅ Forfait activé</span>
+                    ) : null}
+                    {order.status === "FAILED" ? (
+                      <span className="pricing-current" style={{ color: "var(--color-error, #f44)" }}>❌ Paiement échoué</span>
                     ) : null}
                   </div>
                 </article>

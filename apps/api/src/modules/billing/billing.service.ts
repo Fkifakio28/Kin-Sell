@@ -380,46 +380,43 @@ export const confirmDepositSent = async (
   };
 };
 
-export const activatePlanFromValidatedOrder = async (userId: string, payload: { orderId: string }) => {
-  const { scope, businessId } = await resolveContext(userId);
-  const order = await prisma.paymentOrder.findUnique({ where: { id: payload.orderId } });
-
-  if (!order) {
-    throw new HttpError(404, "Ordre de paiement introuvable");
-  }
-
-  const canAccess =
-    (scope === "USER" && order.userId === userId) ||
-    (scope === "BUSINESS" && order.businessId === businessId);
-
-  if (!canAccess) {
-    throw new HttpError(403, "Ordre de paiement non autorisé");
-  }
-
-  if (order.status !== PaymentOrderStatus.USER_CONFIRMED) {
-    throw new HttpError(400, "Ordre non prêt pour activation");
-  }
-
+// ──────────────────────────────────────────────────────────────────────────────
+// LOGIQUE CENTRALE D'ACTIVATION — point unique d'activation d'un abonnement
+// Appelée UNIQUEMENT par : capturePaypalPayment, adminValidateOrder
+// JAMAIS appelable directement par un utilisateur.
+// ──────────────────────────────────────────────────────────────────────────────
+async function activateSubscriptionFromOrder(
+  order: { id: string; planCode: string; userId: string | null; businessId: string | null; transferReference: string; targetScope: SubscriptionScope },
+  source: string,
+  extraMeta: Record<string, unknown> = {}
+) {
+  const scope: RoleScope = order.targetScope === SubscriptionScope.BUSINESS ? "BUSINESS" : "USER";
   const targetPlan = getPlanOrThrow(order.planCode, scope);
-  const current = await findActiveSubscription(userId, scope, businessId);
 
   await prisma.$transaction(async (tx) => {
+    // Annuler l'abonnement actif existant
+    const current = await tx.subscription.findFirst({
+      where: {
+        scope: order.targetScope,
+        status: SubscriptionStatus.ACTIVE,
+        userId: scope === "USER" ? order.userId : null,
+        businessId: scope === "BUSINESS" ? order.businessId : null,
+      },
+    });
+
     if (current) {
       await tx.subscription.update({
         where: { id: current.id },
-        data: {
-          status: SubscriptionStatus.CANCELED,
-          endsAt: new Date(),
-          autoRenew: false
-        }
+        data: { status: SubscriptionStatus.CANCELED, endsAt: new Date(), autoRenew: false },
       });
     }
 
+    // Créer le nouvel abonnement ACTIF
     await tx.subscription.create({
       data: {
-        scope: scope as SubscriptionScope,
-        userId: scope === "USER" ? userId : null,
-        businessId: scope === "BUSINESS" ? businessId : null,
+        scope: order.targetScope,
+        userId: scope === "USER" ? order.userId : null,
+        businessId: scope === "BUSINESS" ? order.businessId : null,
         planCode: targetPlan.code,
         status: SubscriptionStatus.ACTIVE,
         billingCycle: BillingCycle.MONTHLY,
@@ -427,33 +424,65 @@ export const activatePlanFromValidatedOrder = async (userId: string, payload: { 
         startsAt: new Date(),
         autoRenew: true,
         metadata: {
-          source: "BANK_TRANSFER_NICKEL",
+          source,
           orderId: order.id,
-          transferReference: order.transferReference
-        } as Prisma.JsonObject
-      }
+          transferReference: order.transferReference,
+          ...extraMeta,
+        } as Prisma.JsonObject,
+      },
     });
 
+    // Marquer la commande comme PAID
     await tx.paymentOrder.update({
       where: { id: order.id },
       data: {
-        status: PaymentOrderStatus.VALIDATED,
-        validatedAt: new Date()
-      }
+        status: PaymentOrderStatus.PAID,
+        validatedAt: new Date(),
+      },
     });
 
-    if (scope === "BUSINESS" && businessId) {
+    if (scope === "BUSINESS" && order.businessId) {
       await tx.businessAccount.update({
-        where: { id: businessId },
-        data: { subscriptionStatus: targetPlan.code }
+        where: { id: order.businessId },
+        data: { subscriptionStatus: targetPlan.code },
       });
     }
   });
+}
 
-  const refreshed = await findActiveSubscription(userId, scope, businessId);
+// ──────────────────────────────────────────────────────────────────────────────
+// ADMIN ONLY — Valider et activer une commande manuellement
+// Accepte les commandes PENDING ou USER_CONFIRMED uniquement.
+// ──────────────────────────────────────────────────────────────────────────────
+export const adminValidateOrder = async (payload: { orderId: string; adminUserId: string }) => {
+  const order = await prisma.paymentOrder.findUnique({ where: { id: payload.orderId } });
+
+  if (!order) {
+    throw new HttpError(404, "Ordre de paiement introuvable");
+  }
+
+  if (order.status === PaymentOrderStatus.PAID || order.status === PaymentOrderStatus.VALIDATED) {
+    throw new HttpError(400, "Cet ordre est déjà validé et le forfait activé");
+  }
+
+  if (order.status !== PaymentOrderStatus.PENDING && order.status !== PaymentOrderStatus.USER_CONFIRMED) {
+    throw new HttpError(400, `Impossible de valider un ordre avec le statut ${order.status}`);
+  }
+
+  await activateSubscriptionFromOrder(order, "ADMIN_VALIDATION", {
+    validatedByAdmin: payload.adminUserId,
+  });
+
+  const scope: RoleScope = order.targetScope === SubscriptionScope.BUSINESS ? "BUSINESS" : "USER";
+  const refreshed = await findActiveSubscription(
+    order.userId ?? "",
+    scope,
+    order.businessId
+  );
+
   return {
     plan: serializePlan(scope, refreshed),
-    message: "Forfait activé après validation du virement"
+    message: "Forfait activé par validation admin",
   };
 };
 
@@ -525,6 +554,7 @@ export const createPaypalCheckout = async (
 /**
  * Capture PayPal payment after user returns from PayPal.
  * Called from frontend with the orderId after PayPal approval.
+ * FLUX : PayPal confirme → backend valide → activation automatique.
  */
 export const capturePaypalPayment = async (userId: string, payload: { orderId: string }) => {
   const { scope, businessId } = await resolveContext(userId);
@@ -538,79 +568,41 @@ export const capturePaypalPayment = async (userId: string, payload: { orderId: s
   if (!canAccess) throw new HttpError(403, "Accès refusé");
 
   if (order.method !== PaymentMethod.PAYPAL) throw new HttpError(400, "Cet ordre n'est pas un paiement PayPal");
-  if (order.status === "VALIDATED") {
+  if (order.status === PaymentOrderStatus.PAID || order.status === PaymentOrderStatus.VALIDATED) {
     const refreshed = await findActiveSubscription(userId, scope, businessId);
     return { plan: serializePlan(scope, refreshed), message: "Forfait déjà activé" };
   }
-  if (["CANCELED", "EXPIRED"].includes(order.status)) throw new HttpError(400, "Ordre expiré ou annulé");
+  if (order.status === PaymentOrderStatus.CANCELED || order.status === PaymentOrderStatus.EXPIRED || order.status === PaymentOrderStatus.FAILED) {
+    throw new HttpError(400, "Ordre expiré, échoué ou annulé");
+  }
 
   // Extract PayPal order ID
   const paypalOrderId = order.depositorNote?.replace("paypal_order:", "");
   if (!paypalOrderId) throw new HttpError(400, "PayPal order ID introuvable");
 
-  // Capture the payment
+  // Capture the payment via PayPal API — seule validation de paiement fiable
   const capture = await paypal.captureOrder(paypalOrderId);
 
   if (!capture.captured) {
+    // Marquer la commande comme FAILED
+    await prisma.paymentOrder.update({
+      where: { id: order.id },
+      data: { status: PaymentOrderStatus.FAILED },
+    });
     throw new HttpError(400, `Paiement PayPal non finalisé. Statut: ${capture.status}`);
   }
 
-  // Payment successful — activate subscription
-  const targetPlan = getPlanOrThrow(order.planCode, scope);
+  // Payment successful — activation automatique via logique centralisée
+  await activateSubscriptionFromOrder(order, "PAYPAL_REST", {
+    paypalOrderId,
+    transactionId: capture.transactionId,
+    payerEmail: capture.payerEmail,
+  });
 
-  await prisma.$transaction(async (tx) => {
-    const current = await tx.subscription.findFirst({
-      where: {
-        scope: scope as SubscriptionScope,
-        status: SubscriptionStatus.ACTIVE,
-        userId: scope === "USER" ? userId : null,
-        businessId: scope === "BUSINESS" ? businessId : null,
-      },
-    });
-
-    if (current) {
-      await tx.subscription.update({
-        where: { id: current.id },
-        data: { status: SubscriptionStatus.CANCELED, endsAt: new Date(), autoRenew: false },
-      });
-    }
-
-    await tx.subscription.create({
-      data: {
-        scope: scope as SubscriptionScope,
-        userId: scope === "USER" ? userId : null,
-        businessId: scope === "BUSINESS" ? businessId : null,
-        planCode: targetPlan.code,
-        status: SubscriptionStatus.ACTIVE,
-        billingCycle: BillingCycle.MONTHLY,
-        priceUsdCents: targetPlan.monthlyPriceUsdCents,
-        startsAt: new Date(),
-        autoRenew: true,
-        metadata: {
-          source: "PAYPAL_REST",
-          orderId: order.id,
-          paypalOrderId,
-          transactionId: capture.transactionId,
-          payerEmail: capture.payerEmail,
-        } as Prisma.JsonObject,
-      },
-    });
-
-    await tx.paymentOrder.update({
-      where: { id: order.id },
-      data: {
-        status: PaymentOrderStatus.VALIDATED,
-        validatedAt: new Date(),
-        depositorNote: `paypal_txn:${capture.transactionId}`,
-      },
-    });
-
-    if (scope === "BUSINESS" && businessId) {
-      await tx.businessAccount.update({
-        where: { id: businessId },
-        data: { subscriptionStatus: targetPlan.code },
-      });
-    }
+  // Mettre à jour la note avec l'ID de transaction
+  await prisma.paymentOrder.update({
+    where: { id: order.id },
+    data: { depositorNote: `paypal_txn:${capture.transactionId}` },
   });
 
   const refreshed = await findActiveSubscription(userId, scope, businessId);
