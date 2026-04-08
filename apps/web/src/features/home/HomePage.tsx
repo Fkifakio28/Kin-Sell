@@ -775,15 +775,20 @@ export function HomePage() {
                   <div key={p.id} className="h-article-card glass-card" role="button" tabIndex={0}
                     onClick={() => navigateToArticle(p)}
                     onKeyDown={(e) => { if (e.key === 'Enter') navigateToArticle(p); }}
-                    onMouseEnter={(e) => articleHover.handleMouseEnter({ title: p.title, description: p.description, price: formatPriceLabelFromUsdCents(p.priceUsdCents), sellerName: p.owner.displayName || t("common.seller") }, e)}
+                    onMouseEnter={(e) => articleHover.handleMouseEnter({ title: p.title, description: p.description, price: formatPriceLabelFromUsdCents(p.promoActive && p.promoPriceUsdCents != null ? p.promoPriceUsdCents : p.priceUsdCents), sellerName: p.owner.displayName || t("common.seller") }, e)}
                     onMouseLeave={articleHover.handleMouseLeave}
                   >
                     <div className="h-article-thumb" style={p.imageUrl ? { backgroundImage: `url(${resolveMediaUrl(p.imageUrl)})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}>
                       <span className="h-article-cat">{p.category}</span>
+                      {p.promoActive && p.promoPriceUsdCents != null && <span className="h-article-promo-badge">Promo -{Math.round((1 - p.promoPriceUsdCents / p.priceUsdCents) * 100)}%</span>}
                     </div>
                     <div className="h-article-body">
                       <strong className="h-article-title">{p.title}</strong>
-                      <span className="h-article-price">{formatPriceLabelFromUsdCents(p.priceUsdCents)}</span>
+                      {p.promoActive && p.promoPriceUsdCents != null ? (
+                        <span className="h-article-price"><s style={{opacity:0.5,fontSize:'0.85em',marginRight:4}}>{formatPriceLabelFromUsdCents(p.priceUsdCents)}</s> {formatPriceLabelFromUsdCents(p.promoPriceUsdCents)}</span>
+                      ) : (
+                        <span className="h-article-price">{formatPriceLabelFromUsdCents(p.priceUsdCents)}</span>
+                      )}
                       {p.owner.displayName && (
                         <span className="h-article-seller">
                           {p.owner.avatarUrl ? <img src={resolveMediaUrl(p.owner.avatarUrl)} alt="" className="h-article-seller-avatar" loading="lazy" /> : <span className="h-article-seller-dot" />}
@@ -825,15 +830,20 @@ export function HomePage() {
                   <div key={s.id} className="h-article-card h-article-card--svc glass-card" role="button" tabIndex={0}
                     onClick={() => { if (s.owner.username) navigate(`/user/${s.owner.username}#listing-${s.id}`); else navigate('/explorer?type=services'); }}
                     onKeyDown={(e) => { if (e.key === 'Enter') { if (s.owner.username) navigate(`/user/${s.owner.username}#listing-${s.id}`); else navigate('/explorer?type=services'); } }}
-                    onMouseEnter={(e) => articleHover.handleMouseEnter({ title: s.title, description: s.description, price: formatPriceLabelFromUsdCents(s.priceUsdCents), sellerName: s.owner.displayName || t("common.seller") }, e)}
+                    onMouseEnter={(e) => articleHover.handleMouseEnter({ title: s.title, description: s.description, price: formatPriceLabelFromUsdCents(s.promoActive && s.promoPriceUsdCents != null ? s.promoPriceUsdCents : s.priceUsdCents), sellerName: s.owner.displayName || t("common.seller") }, e)}
                     onMouseLeave={articleHover.handleMouseLeave}
                   >
                     <div className="h-article-thumb h-article-thumb--svc" style={s.imageUrl ? { backgroundImage: `url(${resolveMediaUrl(s.imageUrl)})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}>
                       <span className="h-article-cat">{s.category}</span>
+                      {s.promoActive && s.promoPriceUsdCents != null && <span className="h-article-promo-badge">Promo -{Math.round((1 - s.promoPriceUsdCents / s.priceUsdCents) * 100)}%</span>}
                     </div>
                     <div className="h-article-body">
                       <strong className="h-article-title">{s.title}</strong>
-                      <span className="h-article-price">{formatPriceLabelFromUsdCents(s.priceUsdCents)}</span>
+                      {s.promoActive && s.promoPriceUsdCents != null ? (
+                        <span className="h-article-price"><s style={{opacity:0.5,fontSize:'0.85em',marginRight:4}}>{formatPriceLabelFromUsdCents(s.priceUsdCents)}</s> {formatPriceLabelFromUsdCents(s.promoPriceUsdCents)}</span>
+                      ) : (
+                        <span className="h-article-price">{formatPriceLabelFromUsdCents(s.priceUsdCents)}</span>
+                      )}
                       {s.owner.displayName && (
                         <span className="h-article-seller">
                           {s.owner.avatarUrl ? <img src={resolveMediaUrl(s.owner.avatarUrl)} alt="" className="h-article-seller-avatar" loading="lazy" /> : <span className="h-article-seller-dot" />}

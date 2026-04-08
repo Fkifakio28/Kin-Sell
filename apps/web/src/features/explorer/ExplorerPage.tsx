@@ -407,7 +407,7 @@ function ExplorerPageMobile() {
           listingsApi.search({ type: 'SERVICE', q, country: effectiveCountry, city: defaultCity, limit: 24 }),
         ]);
         const map = (item: (typeof pRes.results)[number]): ExplorerArticlePreview => ({
-          id: item.id, title: item.title, priceLabel: formatPriceLabelFromUsdCents(item.priceUsdCents), priceUsdCents: item.priceUsdCents,
+          id: item.id, title: item.title, priceLabel: formatPriceLabelFromUsdCents(item.promoActive && item.promoPriceUsdCents != null ? item.promoPriceUsdCents : item.priceUsdCents), priceUsdCents: item.priceUsdCents,
           kind: item.type === 'PRODUIT' ? 'product' : 'service', category: item.category,
           publisherName: item.owner.displayName, publisherType: 'personne',
           publisherLink: item.owner.username ? `/user/${item.owner.username}` : '#',
@@ -415,6 +415,7 @@ function ExplorerPageMobile() {
           coverImage: resolveMediaUrl(item.imageUrl) || '/assets/kin-sell/black-man-standing-cafe-with-shopping-bags.jpg',
           media: [], ownerId: item.owner.userId, isNegotiable: item.isNegotiable !== false,
           isBoosted: !!(item as any).isBoosted,
+          promoLabel: item.promoActive && item.promoPriceUsdCents != null ? `Promo -${Math.round((1 - item.promoPriceUsdCents / item.priceUsdCents) * 100)}%` : undefined,
           latitude: item.latitude ?? undefined, longitude: item.longitude ?? undefined,
         });
         if (!cancelled) setLiveArticles([...pRes.results.map(map), ...sRes.results.map(map)]);

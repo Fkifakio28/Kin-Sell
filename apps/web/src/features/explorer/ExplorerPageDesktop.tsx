@@ -412,7 +412,7 @@ export function ExplorerPageDesktop() {
         const mapToPreview = (item: (typeof productsRes.results)[number]): ExplorerArticlePreview => ({
           id: item.id,
           title: item.title,
-          priceLabel: formatPriceLabelFromUsdCents(item.priceUsdCents),
+          priceLabel: formatPriceLabelFromUsdCents(item.promoActive && item.promoPriceUsdCents != null ? item.promoPriceUsdCents : item.priceUsdCents),
           priceUsdCents: item.priceUsdCents,
           kind: item.type === 'PRODUIT' ? 'product' : 'service',
           category: item.category,
@@ -425,6 +425,7 @@ export function ExplorerPageDesktop() {
           ownerId: item.owner.userId,
           isNegotiable: item.isNegotiable !== false,
           isBoosted: !!(item as any).isBoosted,
+          promoLabel: item.promoActive && item.promoPriceUsdCents != null ? `Promo -${Math.round((1 - item.promoPriceUsdCents / item.priceUsdCents) * 100)}%` : undefined,
           latitude: item.latitude ?? undefined,
           longitude: item.longitude ?? undefined,
         });

@@ -7,6 +7,29 @@ export type SearchParams = {
 
 export type ListingStatus = "ACTIVE" | "INACTIVE" | "ARCHIVED" | "DELETED";
 
+export type PromotionSummary = {
+  id: string;
+  title: string | null;
+  status: "DRAFT" | "ACTIVE" | "PAUSED" | "EXPIRED" | "CANCELLED";
+  diffusion: "SIMPLE" | "BOOSTED";
+  startsAt: string;
+  expiresAt: string | null;
+  createdAt: string;
+  items: Array<{
+    id: string;
+    originalPriceUsdCents: number;
+    promoPriceUsdCents: number;
+    listing: {
+      id: string;
+      title: string;
+      imageUrl: string | null;
+      priceUsdCents: number;
+      promoActive: boolean;
+      promoPriceUsdCents: number | null;
+    };
+  }>;
+};
+
 export type MyListing = {
   id: string;
   type: string;
@@ -58,6 +81,8 @@ export type PublicListing = {
   imageUrl: string | null;
   priceUsdCents: number;
   isNegotiable: boolean;
+  promoActive?: boolean;
+  promoPriceUsdCents?: number | null;
   createdAt: string;
   owner: {
     userId: string;
@@ -86,6 +111,8 @@ export type ListingSearchResponse = {
     imageUrl: string | null;
     priceUsdCents: number;
     isNegotiable: boolean;
+    promoActive?: boolean;
+    promoPriceUsdCents?: number | null;
     createdAt: string;
     distanceKm: number | null;
     owner: {
@@ -127,10 +154,12 @@ export const listings = {
     mutate<BulkImportResult>("/listings/bulk-import", { method: "POST", body: { items } }, ["/listings"]),
   dbPreview: (config: DbPreviewConfig) =>
     mutate<DbPreviewResult>("/listings/bulk-import/db-preview", { method: "POST", body: config }, []),
-  setPromo: (listingIds: string[], promoPriceUsdCents: number, activate = true) =>
-    mutate<{ updated: number; listingIds: string[]; promoActive: boolean }>(
-      "/listings/promo", { method: "PATCH", body: { listingIds, promoPriceUsdCents, activate } }, ["/listings"]
+  setPromo: (listingIds: string[], promoPriceUsdCents: number, activate = true, options?: { title?: string; diffusion?: "SIMPLE" | "BOOSTED"; expiresAt?: string }) =>
+    mutate<{ updated: number; listingIds: string[]; promoActive: boolean; promotionId: string | null }>(
+      "/listings/promo", { method: "PATCH", body: { listingIds, promoPriceUsdCents, activate, ...options } }, ["/listings"]
     ),
+  getMyPromotions: () =>
+    request<PromotionSummary[]>("/listings/promotions"),
 };
 
 export type BulkImportItemInput = {

@@ -182,6 +182,9 @@ export const getPublicProfileByUsername = async (username: string) => {
       city: listing.city,
       imageUrl: listing.imageUrl,
       priceUsdCents: listing.priceUsdCents,
+      isNegotiable: listing.isNegotiable,
+      promoActive: listing.promoActive,
+      promoPriceUsdCents: listing.promoPriceUsdCents,
       createdAt: listing.createdAt
     }))
   };

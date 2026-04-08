@@ -240,6 +240,7 @@ model User {
   adCampaigns              AiAdCampaign[]             @relation("AiAdCampaignUser")
   verificationRequests      VerificationRequest[]      @relation("VerificationRequests")
   verificationResolved      VerificationRequest[]      @relation("VerificationResolver")
+  promotions                Promotion[]                @relation("UserPromotions")
 
   @@index([role])
   @@index([accountStatus])
@@ -305,6 +306,7 @@ model BusinessAccount {
   adCreatives       AiAdCreative[]     @relation("AiAdCreativeBusiness")
   adCampaigns       AiAdCampaign[]     @relation("AiAdCampaignBusiness")
   verificationRequests VerificationRequest[] @relation("BusinessVerificationRequests")
+  promotions           Promotion[]            @relation("BusinessPromotions")
 
   @@index([ownerUserId])
 }
@@ -545,17 +547,19 @@ model Listing {
   promoActive        Boolean       @default(false)
   promoPriceUsdCents Int?
   promoExpiresAt     DateTime?
+  promotionId        String?       // Lien vers la Promotion groupée
   ownerUserId        String
   businessId         String?
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
 
-  ownerUser    User                    @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
-  business     BusinessAccount?        @relation(fields: [businessId], references: [id], onDelete: SetNull)
-  cartItems    CartItem[]
-  orderItems   OrderItem[]
-  negotiations Negotiation[]
-  bundleItems  NegotiationBundleItem[]
+  ownerUser      User                    @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  business       BusinessAccount?        @relation(fields: [businessId], references: [id], onDelete: SetNull)
+  cartItems      CartItem[]
+  orderItems     OrderItem[]
+  negotiations   Negotiation[]
+  bundleItems    NegotiationBundleItem[]
+  promotionItems PromotionItem[]
 
   @@index([type])
   @@index([city])
@@ -566,6 +570,8 @@ model Listing {
   @@index([isPublished])
   @@index([status])
   @@index([isBoosted])
+  @@index([promoActive])
+  @@index([promotionId])
   @@index([createdAt])
   @@index([countryCode, isPublished, createdAt])
   @@index([city, isPublished, createdAt])
@@ -2168,4 +2174,59 @@ model AiAdPerformance {
 
   @@unique([campaignId, date])
   @@index([date])
+}
+
+// ═══════════════════════════════════════════════════════
+// PROMOTIONS — Groupement d'articles en promotion
+// ═══════════════════════════════════════════════════════
+
+enum PromotionStatus {
+  DRAFT     // Brouillon, pas encore publié
+  ACTIVE    // En cours
+  PAUSED    // Mise en pause manuellement
+  EXPIRED   // Expirée automatiquement
+  CANCELLED // Annulée par le vendeur
+}
+
+enum PromotionDiffusion {
+  SIMPLE  // Publication normale
+  BOOSTED // Avec boost payant (IA Ads)
+}
+
+model Promotion {
+  id             String             @id @default(cuid())
+  ownerUserId    String
+  businessId     String?
+  title          String?            // Nom optionnel de la promo ("Soldes avril", etc.)
+  status         PromotionStatus    @default(ACTIVE)
+  diffusion      PromotionDiffusion @default(SIMPLE)
+  startsAt       DateTime           @default(now())
+  expiresAt      DateTime?          // Null = pas d'expiration auto
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  ownerUser User             @relation("UserPromotions", fields: [ownerUserId], references: [id], onDelete: Cascade)
+  business  BusinessAccount? @relation("BusinessPromotions", fields: [businessId], references: [id], onDelete: SetNull)
+  items     PromotionItem[]
+
+  @@index([ownerUserId, status])
+  @@index([businessId, status])
+  @@index([status, expiresAt])
+  @@index([createdAt])
+}
+
+model PromotionItem {
+  id                    String @id @default(cuid())
+  promotionId           String
+  listingId             String
+  originalPriceUsdCents Int    // Snapshot du prix au moment de la création
+  promoPriceUsdCents    Int    // Prix promo appliqué
+  createdAt             DateTime @default(now())
+
+  promotion Promotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  listing   Listing   @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@unique([promotionId, listingId])
+  @@index([promotionId])
+  @@index([listingId])
 }

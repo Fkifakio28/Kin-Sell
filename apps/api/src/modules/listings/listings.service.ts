@@ -1,4 +1,4 @@
-import { ListingStatus } from "@prisma/client";
+import { ListingStatus, PromotionStatus, PromotionDiffusion } from "@prisma/client";
 import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
 import { Role } from "../../types/roles.js";
@@ -255,12 +255,13 @@ export const setPromo = async (
   userId: string,
   listingIds: string[],
   promoPriceUsdCents: number,
-  activate: boolean
+  activate: boolean,
+  options?: { title?: string; diffusion?: PromotionDiffusion; expiresAt?: string }
 ) => {
   // Verify all listings belong to the user
   const listings = await prisma.listing.findMany({
     where: { id: { in: listingIds }, ownerUserId: userId },
-    select: { id: true, priceUsdCents: true, status: true },
+    select: { id: true, priceUsdCents: true, status: true, businessId: true },
   });
   if (listings.length === 0) throw new HttpError(404, "Aucun article trouv\u00e9");
   const foundIds = listings.map((l) => l.id);
@@ -272,26 +273,89 @@ export const setPromo = async (
         throw new HttpError(400, `Le prix promo doit \u00eatre inf\u00e9rieur au prix original pour "${listing.id}"`);
       }
     }
-    await prisma.listing.updateMany({
-      where: { id: { in: foundIds } },
-      data: {
-        promoActive: true,
-        promoPriceUsdCents: promoPriceUsdCents,
-        promoExpiresAt: null,
-      },
-    });
-  } else {
-    await prisma.listing.updateMany({
-      where: { id: { in: foundIds } },
-      data: {
-        promoActive: false,
-        promoPriceUsdCents: null,
-        promoExpiresAt: null,
-      },
-    });
-  }
 
-  return { updated: foundIds.length, listingIds: foundIds, promoActive: activate };
+    // Create Promotion group + items in a transaction
+    const promotion = await prisma.$transaction(async (tx) => {
+      const promo = await tx.promotion.create({
+        data: {
+          ownerUserId: userId,
+          businessId: listings[0].businessId ?? undefined,
+          title: options?.title ?? null,
+          status: PromotionStatus.ACTIVE,
+          diffusion: options?.diffusion ?? PromotionDiffusion.SIMPLE,
+          expiresAt: options?.expiresAt ? new Date(options.expiresAt) : null,
+          items: {
+            create: listings.map((l) => ({
+              listingId: l.id,
+              originalPriceUsdCents: l.priceUsdCents,
+              promoPriceUsdCents,
+            })),
+          },
+        },
+      });
+
+      // Update denormalized fields on Listing for fast queries
+      await tx.listing.updateMany({
+        where: { id: { in: foundIds } },
+        data: {
+          promoActive: true,
+          promoPriceUsdCents,
+          promoExpiresAt: options?.expiresAt ? new Date(options.expiresAt) : null,
+          promotionId: promo.id,
+        },
+      });
+
+      return promo;
+    });
+
+    return { updated: foundIds.length, listingIds: foundIds, promoActive: true, promotionId: promotion.id };
+  } else {
+    // Cancel: clear promo on listings + cancel linked promotions
+    await prisma.$transaction(async (tx) => {
+      const promoItems = await tx.promotionItem.findMany({
+        where: { listingId: { in: foundIds } },
+        select: { promotionId: true },
+      });
+      const promoIds = [...new Set(promoItems.map((pi) => pi.promotionId))];
+      if (promoIds.length > 0) {
+        await tx.promotion.updateMany({
+          where: { id: { in: promoIds }, status: PromotionStatus.ACTIVE },
+          data: { status: PromotionStatus.CANCELLED },
+        });
+      }
+
+      await tx.listing.updateMany({
+        where: { id: { in: foundIds } },
+        data: {
+          promoActive: false,
+          promoPriceUsdCents: null,
+          promoExpiresAt: null,
+          promotionId: null,
+        },
+      });
+    });
+
+    return { updated: foundIds.length, listingIds: foundIds, promoActive: false, promotionId: null };
+  }
+};
+
+/* ── Get promotions for a user ── */
+export const getMyPromotions = async (userId: string) => {
+  const promotions = await prisma.promotion.findMany({
+    where: { ownerUserId: userId },
+    include: {
+      items: {
+        include: {
+          listing: {
+            select: { id: true, title: true, imageUrl: true, priceUsdCents: true, promoActive: true, promoPriceUsdCents: true },
+          },
+        },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 50,
+  });
+  return promotions;
 };
 
 /* ── Update listing ── */
@@ -506,6 +570,8 @@ export const searchListings = async (input: SearchListingsInput) => {
         priceUsdCents: row.priceUsdCents,
         isNegotiable: row.isNegotiable,
         isBoosted: row.isBoosted && (!row.boostExpiresAt || row.boostExpiresAt > new Date()),
+        promoActive: row.promoActive,
+        promoPriceUsdCents: row.promoPriceUsdCents,
         createdAt: row.createdAt,
         distanceKm,
         owner: {
@@ -556,6 +622,8 @@ export const searchListings = async (input: SearchListingsInput) => {
           category: row.category, city: row.city, latitude: row.latitude, longitude: row.longitude,
           imageUrl: row.imageUrl, priceUsdCents: row.priceUsdCents, isNegotiable: row.isNegotiable,
           isBoosted: row.isBoosted && (!row.boostExpiresAt || row.boostExpiresAt > new Date()),
+          promoActive: row.promoActive,
+          promoPriceUsdCents: row.promoPriceUsdCents,
           createdAt: row.createdAt, distanceKm: null,
           owner: {
             userId: row.ownerUserId,
@@ -595,6 +663,8 @@ export const searchListings = async (input: SearchListingsInput) => {
           category: row.category, city: row.city, latitude: row.latitude, longitude: row.longitude,
           imageUrl: row.imageUrl, priceUsdCents: row.priceUsdCents, isNegotiable: row.isNegotiable,
           isBoosted: row.isBoosted && (!row.boostExpiresAt || row.boostExpiresAt > new Date()),
+          promoActive: row.promoActive,
+          promoPriceUsdCents: row.promoPriceUsdCents,
           createdAt: row.createdAt, distanceKm: null,
           owner: {
             userId: row.ownerUserId,
@@ -699,6 +769,8 @@ export const latestListings = async (input: { type?: ListingType; city?: string;
     priceUsdCents: row.priceUsdCents,
     isNegotiable: row.isNegotiable,
     isBoosted: row.isBoosted && (!row.boostExpiresAt || row.boostExpiresAt > new Date()),
+    promoActive: row.promoActive,
+    promoPriceUsdCents: row.promoPriceUsdCents,
     latitude: row.latitude,
     longitude: row.longitude,
     createdAt: row.createdAt,

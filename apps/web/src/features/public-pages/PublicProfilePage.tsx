@@ -31,6 +31,8 @@ type ApiListing = {
   imageUrl: string | null;
   priceUsdCents: number;
   isNegotiable?: boolean;
+  promoActive?: boolean;
+  promoPriceUsdCents?: number | null;
   createdAt: string;
 };
 
@@ -72,6 +74,9 @@ type CatalogItem = {
   imageUrl: string;
   isNegotiable?: boolean;
   category?: string;
+  promoActive?: boolean;
+  promoPriceUsdCents?: number | null;
+  originalPriceLabel?: string;
 };
 
 type ProfileData = {
@@ -180,11 +185,14 @@ export function PublicProfilePage({ username }: { username: string }) {
           id: l.id,
           type: l.type,
           title: l.title,
-          priceLabel: formatPriceLabelFromUsdCents(l.priceUsdCents),
+          priceLabel: formatPriceLabelFromUsdCents(l.promoActive && l.promoPriceUsdCents != null ? l.promoPriceUsdCents : l.priceUsdCents),
           priceUsdCents: l.priceUsdCents,
           imageUrl: l.imageUrl ?? '',
           isNegotiable: l.isNegotiable,
           category: l.category,
+          promoActive: l.promoActive,
+          promoPriceUsdCents: l.promoPriceUsdCents,
+          originalPriceLabel: l.promoActive && l.promoPriceUsdCents != null ? formatPriceLabelFromUsdCents(l.priceUsdCents) : undefined,
         });
 
         setProfile({
@@ -527,7 +535,11 @@ export function PublicProfilePage({ username }: { username: string }) {
                   </div>
                   <div className="up-card-body">
                     <h3 className="up-card-title">{item.title}</h3>
-                    <p className="up-card-price">{item.priceLabel}</p>
+                    {item.originalPriceLabel ? (
+                      <p className="up-card-price"><s style={{opacity:0.5,fontSize:'0.85em',marginRight:4}}>{item.originalPriceLabel}</s> {item.priceLabel}</p>
+                    ) : (
+                      <p className="up-card-price">{item.priceLabel}</p>
+                    )}
                     <div className="up-card-actions">
                       <span className="up-card-qty">
                         <button type="button" onClick={() => changeQty(item.id, -1)} disabled={getQty(item.id) <= 1}>−</button>

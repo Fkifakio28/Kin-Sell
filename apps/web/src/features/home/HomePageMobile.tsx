@@ -554,7 +554,9 @@ function SuggestionsSection({
                 </div>
                 <p className="hm-suggestion-title">{item.title}</p>
                 <p className="hm-suggestion-price">
-                  {item.priceUsdCents === 0
+                  {item.promoActive && item.promoPriceUsdCents != null
+                    ? <><s style={{opacity:0.5,fontSize:'0.85em',marginRight:3}}>{formatMoney(item.priceUsdCents)}</s> {formatMoney(item.promoPriceUsdCents)}</>
+                    : item.priceUsdCents === 0
                     ? formatLabel(0)
                     : formatMoney(item.priceUsdCents)}
                 </p>
@@ -749,7 +751,9 @@ function MarketCard({
       <div className="hm-market-card-body">
         <p className="hm-market-card-title">{listing.title}</p>
         <p className="hm-market-card-price">
-          {listing.priceUsdCents === 0
+          {listing.promoActive && listing.promoPriceUsdCents != null
+            ? <><s style={{opacity:0.5,fontSize:'0.85em',marginRight:3}}>{formatMoney(listing.priceUsdCents)}</s> {formatMoney(listing.promoPriceUsdCents)}</>
+            : listing.priceUsdCents === 0
             ? formatLabel(0)
             : formatMoney(listing.priceUsdCents)}
         </p>
