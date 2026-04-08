@@ -38,10 +38,9 @@ export const PromoCreator: FC<PromoCreatorProps> = ({
   });
   const [useUniformPrice, setUseUniformPrice] = useState(articles.length > 1);
   const [uniformPriceStr, setUniformPriceStr] = useState('');
-  const [step, setStep] = useState<'edit' | 'confirm'>('edit');
+  const [step, setStep] = useState<'edit' | 'confirm' | 'done'>('edit');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState<'published' | 'boost' | null>(null);
 
   const setPromoPrice = (id: string, val: string) => {
     // Allow only numbers and dot
@@ -75,7 +74,7 @@ export const PromoCreator: FC<PromoCreatorProps> = ({
   const totalPromo = articles.reduce((s, a) => s + getPromoCents(a.id), 0);
   const totalSavingPct = totalOriginal > 0 ? Math.round(((totalOriginal - totalPromo) / totalOriginal) * 100) : 0;
 
-  const handleSavePromo = async (andBoost: boolean) => {
+  const handleSavePromo = async () => {
     if (!isValid) return;
     setSaving(true);
     setError(null);
@@ -97,13 +96,7 @@ export const PromoCreator: FC<PromoCreatorProps> = ({
           await listingsApi.setPromo(ids, cents, true);
         }
       }
-      setDone(andBoost ? 'boost' : 'published');
-      if (!andBoost) {
-        setTimeout(() => {
-          onPublished();
-          onClose();
-        }, 1500);
-      }
+      setStep('done');
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Erreur lors de la sauvegarde';
       setError(message);
@@ -112,26 +105,43 @@ export const PromoCreator: FC<PromoCreatorProps> = ({
     }
   };
 
-  // ── Success state ──
-  if (done === 'published') {
+  // ── Done step: choose publish or boost ──
+  if (step === 'done') {
     return (
       <div className="promo-overlay" onClick={onClose}>
-        <div className="promo-popup promo-popup--success" onClick={(e) => e.stopPropagation()}>
-          <div className="promo-success-icon">🎉</div>
-          <h3>Promotion publiée !</h3>
-          <p>Vos articles sont maintenant en promotion. Les acheteurs verront le nouveau prix.</p>
+        <div className="promo-popup promo-popup--done" onClick={(e) => e.stopPropagation()}>
+          <div className="promo-done-header">
+            <div className="promo-done-check">✓</div>
+            <h3 className="promo-done-title">Promotion créée !</h3>
+            <p className="promo-done-subtitle">
+              {articles.length} article{articles.length > 1 ? 's' : ''} en promotion · Réduction de {totalSavingPct}%
+            </p>
+          </div>
+
+          <div className="promo-done-choices">
+            {/* ── Publier ── */}
+            <button type="button" className="promo-done-card promo-done-card--publish" onClick={() => { onPublished(); onClose(); }}>
+              <span className="promo-done-card-icon">📢</span>
+              <span className="promo-done-card-title">Publier la promotion</span>
+              <span className="promo-done-card-desc">
+                Vos prix promo sont immédiatement visibles par les acheteurs
+              </span>
+              <span className="promo-done-card-action">Publier maintenant →</span>
+            </button>
+
+            {/* ── Booster ── */}
+            <button type="button" className="promo-done-card promo-done-card--boost" onClick={() => { onBoost(); onClose(); }}>
+              <span className="promo-done-card-icon">⚡</span>
+              <span className="promo-done-card-title">Booster la promotion</span>
+              <span className="promo-done-card-desc">
+                Visibilité accrue · Apparaître en premier dans l'Explorer · Toucher plus d'acheteurs
+              </span>
+              <span className="promo-done-card-action">Configurer le boost →</span>
+            </button>
+          </div>
         </div>
       </div>
     );
-  }
-
-  if (done === 'boost') {
-    // Trigger boost flow
-    setTimeout(() => {
-      onBoost();
-      onClose();
-    }, 300);
-    return null;
   }
 
   return (
@@ -288,19 +298,11 @@ export const PromoCreator: FC<PromoCreatorProps> = ({
                 </button>
                 <button
                   type="button"
-                  className="promo-btn promo-btn--publish"
+                  className="promo-btn promo-btn--next"
                   disabled={saving}
-                  onClick={() => void handleSavePromo(false)}
+                  onClick={() => void handleSavePromo()}
                 >
-                  {saving ? '...' : '📢 Publier la promotion'}
-                </button>
-                <button
-                  type="button"
-                  className="promo-btn promo-btn--boost"
-                  disabled={saving}
-                  onClick={() => void handleSavePromo(true)}
-                >
-                  {saving ? '...' : '⚡ Booster la promotion'}
+                  {saving ? 'Enregistrement…' : 'Confirmer la promotion ✓'}
                 </button>
               </div>
             </div>
