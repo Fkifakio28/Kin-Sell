@@ -86,11 +86,11 @@ const DESKTOP_INFO_ITEMS = [
 ] as const;
 
 const DESKTOP_PRODUCT_CATEGORIES = [
-  '🍔 Nourriture',
-  '📱 Téléphones',
-  '💻 Informatique',
-  '🎮 Jeux vidéo',
-  '💊 Pharmacie',
+  { code: '🍔', label: 'Nourriture' },
+  { code: '📱', label: 'Téléphones' },
+  { code: '💻', label: 'Informatique' },
+  { code: '🎮', label: 'Jeux vidéo' },
+  { code: '💊', label: 'Pharmacie' },
 ] as const;
 
 const CREATE_DRAFT_STORAGE_KEY = 'ks-sokin-create-draft-v1';
@@ -2763,9 +2763,14 @@ export function SoKinPage() {
 
               <section className="sk-desktop-left-categories" aria-label="Catégories produits">
                 <h3>Catégories Produits</h3>
-                {DESKTOP_PRODUCT_CATEGORIES.map((category) => (
-                  <p key={category}>{category}</p>
-                ))}
+                <div className="sk-desktop-left-categories-list">
+                  {DESKTOP_PRODUCT_CATEGORIES.map((category) => (
+                    <p key={category.label} className="sk-desktop-left-category-item">
+                      <span className="sk-desktop-left-category-code">{category.code}</span>
+                      <span>{category.label}</span>
+                    </p>
+                  ))}
+                </div>
                 <p>...</p>
               </section>
             </aside>

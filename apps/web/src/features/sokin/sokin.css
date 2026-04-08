@@ -2429,8 +2429,13 @@
 }
 
 .sk-desktop-center {
-  padding: var(--space-md, 16px);
+  padding: 0;
   min-height: calc(100vh - 120px);
+  border: 0;
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
 }
 
 .sk-desktop-center .sk-feed--immersive {
@@ -2441,19 +2446,68 @@
 
 .sk-desktop-left-categories {
   margin-top: 14px;
-  padding: 0 2px;
+  padding: 2px 4px 0;
 }
 
 .sk-desktop-left-categories h3 {
-  margin: 0 0 8px;
-  font-size: 14px;
+  margin: 0 0 10px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--color-primary-hover, #b9a6ff);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sk-desktop-left-categories h3::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(111, 88, 255, 0.32), transparent);
+}
+
+.sk-desktop-left-categories-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sk-desktop-left-category-item {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 6px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  color: var(--color-text-secondary, rgba(255, 255, 255, 0.82));
+  font-size: 12px;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.sk-desktop-left-category-item:hover {
+  background: var(--glass-bg-hover, rgba(111, 88, 255, 0.16));
+  border-color: rgba(111, 88, 255, 0.28);
   color: var(--color-text-primary, #fff);
 }
 
-.sk-desktop-left-categories p {
-  margin: 0 0 6px;
+.sk-desktop-left-category-code {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(145deg, rgba(111, 88, 255, 0.34), rgba(73, 12, 128, 0.24));
   font-size: 13px;
-  color: var(--color-text-secondary, rgba(255, 255, 255, 0.82));
+  flex-shrink: 0;
+}
+
+.sk-desktop-left-categories > p {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--color-text-tertiary, rgba(255, 255, 255, 0.55));
 }
 
 .sk-desktop-studio {
