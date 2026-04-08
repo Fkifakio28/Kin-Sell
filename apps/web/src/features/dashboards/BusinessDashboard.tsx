@@ -216,6 +216,11 @@ export function BusinessDashboard() {
   const toggleProdSelection = (id: string) => setSelectedProdIds((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
   const [promoProduits, setPromoProduits] = useState<MyListing[] | null>(null);
 
+  // ─── Sélection services + promotions ─────────────────────
+  const [selectedSvcIds, setSelectedSvcIds] = useState<Set<string>>(new Set());
+  const toggleSvcSelection = (id: string) => setSelectedSvcIds((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+  const [promoServices, setPromoServices] = useState<MyListing[] | null>(null);
+
   // ─── Contacts ────────────────────────────────────────────
   const [contactFilter, setContactFilter] = useState<'all' | 'online' | 'favorites'>('all');
   const [contactSearchOpen, setContactSearchOpen] = useState(false);
@@ -2183,8 +2188,11 @@ export function BusinessDashboard() {
 
             {/* ── Filtres ── */}
             <div className="bz-art-filters">
+              <label className="ud-art-select-all" title="Tout sélectionner">
+                <input type="checkbox" checked={pagedServices.length > 0 && selectedSvcIds.size === pagedServices.length} onChange={(e) => { if (e.target.checked) setSelectedSvcIds(new Set(pagedServices.map((a) => a.id))); else setSelectedSvcIds(new Set()); }} />
+              </label>
               {(['', 'ACTIVE', 'INACTIVE', 'ARCHIVED'] as const).map((f) => (
-                <button key={f} type="button" className={`bz-art-filter-btn${svcFilter === f ? ' active' : ''}`} onClick={() => { setSvcFilter(f as ListingStatus | ''); setSvcPage(1); }}>
+                <button key={f} type="button" className={`bz-art-filter-btn${svcFilter === f ? ' active' : ''}`} onClick={() => { setSvcFilter(f as ListingStatus | ''); setSvcPage(1); setSelectedSvcIds(new Set()); }}>
                   {f === '' ? '🗂 Tous' : f === 'ACTIVE' ? '🟢 Actifs' : f === 'INACTIVE' ? '⏸ Inactifs' : '📦 Archivés'}
                 </button>
               ))}
@@ -2201,8 +2209,9 @@ export function BusinessDashboard() {
             ) : (
               <div className="bz-art-grid">
                 {pagedServices.map((s) => (
-                  <article key={s.id} className={`bz-art-card${s.status === 'INACTIVE' ? ' bz-art-card--dim' : ''}`}>
+                  <article key={s.id} className={`bz-art-card${s.status === 'INACTIVE' ? ' bz-art-card--dim' : ''}${selectedSvcIds.has(s.id) ? ' ud-art-card--selected' : ''}`}>
                     <div className="bz-art-card-visual">
+                      <input type="checkbox" className="ud-art-chk ud-art-card-chk" checked={selectedSvcIds.has(s.id)} onChange={() => toggleSvcSelection(s.id)} />
                       {s.imageUrl ? (
                         <img src={resolveMediaUrl(s.imageUrl)} alt={s.title} className="bz-art-card-img" loading="lazy" />
                       ) : (
@@ -2215,7 +2224,15 @@ export function BusinessDashboard() {
                     <div className="bz-art-card-body">
                       <h4 className="bz-art-card-title">{s.title}</h4>
                       <p className="bz-art-card-meta">{s.category} · {s.city}</p>
-                      <p className="bz-art-card-price">{formatPriceLabelFromUsdCents(s.priceUsdCents)}</p>
+                      {s.promoActive && s.promoPriceUsdCents != null ? (
+                        <p className="bz-art-card-price">
+                          <s style={{ opacity: 0.5, marginRight: 6 }}>{formatPriceLabelFromUsdCents(s.priceUsdCents)}</s>
+                          {formatPriceLabelFromUsdCents(s.promoPriceUsdCents)}
+                          <span style={{ marginLeft: 6, fontSize: '0.7rem', color: '#ff9800', fontWeight: 700 }}>PROMO</span>
+                        </p>
+                      ) : (
+                        <p className="bz-art-card-price">{formatPriceLabelFromUsdCents(s.priceUsdCents)}</p>
+                      )}
                     </div>
                     <div className="bz-art-card-actions">
                       <button type="button" className="bz-art-action bz-art-action--edit" title="Modifier" disabled={bzArticleBusy !== null} onClick={() => handleBzEdit(s)}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
@@ -2234,6 +2251,26 @@ export function BusinessDashboard() {
                     </div>
                   </article>
                 ))}
+              </div>
+            )}
+
+            {/* ── Barre d'actions groupées services ── */}
+            {selectedSvcIds.size > 0 && (
+              <div className="ud-art-bulk-bar">
+                <div className="ud-art-bulk-left">
+                  <span className="ud-art-bulk-count">{selectedSvcIds.size} service{selectedSvcIds.size > 1 ? 's' : ''} sélectionné{selectedSvcIds.size > 1 ? 's' : ''}</span>
+                  <button type="button" className="ud-art-bulk-deselect" onClick={() => setSelectedSvcIds(new Set())}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    Tout désélectionner
+                  </button>
+                </div>
+                <button type="button" className="ud-art-bulk-cta" onClick={() => {
+                  const selected = allServices.filter((a) => selectedSvcIds.has(a.id));
+                  if (selected.length > 0) setPromoServices(selected);
+                }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                  Faire une promotion
+                </button>
               </div>
             )}
 
@@ -3523,6 +3560,26 @@ export function BusinessDashboard() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ─── PromoCreator Services ─── */}
+      {promoServices && promoServices.length > 0 && (
+        <PromoCreator
+          articles={promoServices}
+          resolveMediaUrl={resolveMediaUrl}
+          onClose={() => { setPromoServices(null); setSelectedSvcIds(new Set()); }}
+          onPublished={() => {
+            setPromoServices(null);
+            setSelectedSvcIds(new Set());
+            invalidateCache('/listings/mine');
+            listings.mine({ limit: 50 }).then(r => setMyListings(r.listings)).catch(() => {});
+          }}
+          onBoost={() => {
+            setBoostPopupBulkCount(promoServices.length);
+            setPromoServices(null);
+            setSelectedSvcIds(new Set());
+          }}
+        />
       )}
 
       {/* ─── PromoCreator Produits ─── */}
