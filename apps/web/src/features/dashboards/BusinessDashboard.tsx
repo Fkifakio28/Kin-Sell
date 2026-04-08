@@ -1528,18 +1528,6 @@ export function BusinessDashboard() {
         {activeSection === 'boutique' && (
           <div className="ud-section animate-fade-in">
 
-            {/* ── Ligne 1 : En-tête ── */}
-            <div className="bz-bout-header">
-              <div className="bz-bout-header-left">
-                <h1 className="bz-bout-header-title">Boutique</h1>
-                <span className="ud-page-sub">Cockpit business — Kin-sell · /business/{businessSlug}</span>
-              </div>
-              <div className="bz-bout-header-right">
-                <button type="button" className="ud-quick-btn bz-cta-gold" onClick={() => setActiveSection('produits')}>🎯 Lancer une promo</button>
-                <button type="button" className="ud-quick-btn ud-quick-btn--primary bz-cta-gold" onClick={() => { setActiveSection('produits'); setCreateMode('produit'); setCreateStep(1); setEditingArticleId(null); }}>+ Ajouter un produit</button>
-              </div>
-            </div>
-
             {/* ── Ligne 2 : Lien page publique ── */}
             <div className="bz-public-preview-bar">
               <div>
