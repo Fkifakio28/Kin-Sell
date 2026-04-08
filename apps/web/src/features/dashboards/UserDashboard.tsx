@@ -384,6 +384,8 @@ export function UserDashboard() {
   const [articlesFilter, setArticlesFilter] = useState<ListingStatus | ''>('');
   const [loadingArticles, setLoadingArticles] = useState(false);
   const [artViewMode, setArtViewMode] = useState<'grid' | 'list'>(() => (localStorage.getItem('ks-art-view') as 'grid' | 'list') || 'grid');
+  const [selectedArticleIds, setSelectedArticleIds] = useState<Set<string>>(new Set());
+  const toggleArticleSelection = (id: string) => setSelectedArticleIds((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
   const [articleBusy, setArticleBusy] = useState<string | null>(null);
   const [editingArticle, setEditingArticle] = useState<MyListing | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -2448,6 +2450,10 @@ export function UserDashboard() {
 
             {/* ── Filtres articles ── */}
             <div className="ud-art-filters-bar">
+              <label className="ud-art-select-all" title="Tout sélectionner">
+                <input type="checkbox" checked={myArticles.length > 0 && selectedArticleIds.size === myArticles.length} onChange={(e) => { if (e.target.checked) setSelectedArticleIds(new Set(myArticles.map((a) => a.id))); else setSelectedArticleIds(new Set()); }} />
+                <span className="ud-art-select-all-check" />
+              </label>
               <div className="ud-art-filters">
                 {(['', 'ACTIVE', 'INACTIVE', 'ARCHIVED'] as const).map((f) => (
                   <button
@@ -2486,6 +2492,7 @@ export function UserDashboard() {
               /* ═══ VUE LISTE ═══ */
               <div className="ud-art-list">
                 <div className="ud-art-list-header">
+                  <span className="ud-art-list-col ud-art-list-col--chk"></span>
                   <span className="ud-art-list-col ud-art-list-col--img"></span>
                   <span className="ud-art-list-col ud-art-list-col--title">Article</span>
                   <span className="ud-art-list-col ud-art-list-col--type">Type</span>
@@ -2494,7 +2501,11 @@ export function UserDashboard() {
                   <span className="ud-art-list-col ud-art-list-col--actions">Actions</span>
                 </div>
                 {myArticles.map((article) => (
-                  <div key={article.id} className={`ud-art-list-row${article.status === 'INACTIVE' ? ' ud-art-list-row--dim' : ''}`}>
+                  <div key={article.id} className={`ud-art-list-row${article.status === 'INACTIVE' ? ' ud-art-list-row--dim' : ''}${selectedArticleIds.has(article.id) ? ' ud-art-list-row--selected' : ''}`}>
+                    <label className="ud-art-list-col ud-art-list-col--chk" onClick={(e) => e.stopPropagation()}>
+                      <input type="checkbox" checked={selectedArticleIds.has(article.id)} onChange={() => toggleArticleSelection(article.id)} />
+                      <span className="ud-art-chk" />
+                    </label>
                     <div className="ud-art-list-col ud-art-list-col--img">
                       {article.imageUrl ? (
                         <img src={resolveMediaUrl(article.imageUrl)} alt={article.title} className="ud-art-list-thumb" loading="lazy" />
@@ -2538,7 +2549,11 @@ export function UserDashboard() {
               <div className="ud-art-slider-wrap">
                 <div className="ud-art-grid">
                   {myArticles.map((article) => (
-                    <article key={article.id} className={`ud-art-card${article.status === 'INACTIVE' ? ' ud-art-card--dim' : ''}`}>
+                    <article key={article.id} className={`ud-art-card${article.status === 'INACTIVE' ? ' ud-art-card--dim' : ''}${selectedArticleIds.has(article.id) ? ' ud-art-card--selected' : ''}`}>
+                      <label className="ud-art-card-chk" onClick={(e) => e.stopPropagation()}>
+                        <input type="checkbox" checked={selectedArticleIds.has(article.id)} onChange={() => toggleArticleSelection(article.id)} />
+                        <span className="ud-art-chk" />
+                      </label>
                       <div className="ud-art-card-visual">
                         {article.imageUrl ? (
                           <img src={resolveMediaUrl(article.imageUrl)} alt={article.title} className="ud-art-card-img" loading="lazy" />
@@ -2581,6 +2596,23 @@ export function UserDashboard() {
                     </article>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {/* ── Barre d'actions groupées ── */}
+            {selectedArticleIds.size > 0 && (
+              <div className="ud-art-bulk-bar">
+                <div className="ud-art-bulk-left">
+                  <span className="ud-art-bulk-count">{selectedArticleIds.size} article{selectedArticleIds.size > 1 ? 's' : ''} sélectionné{selectedArticleIds.size > 1 ? 's' : ''}</span>
+                  <button type="button" className="ud-art-bulk-deselect" onClick={() => setSelectedArticleIds(new Set())}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    Tout désélectionner
+                  </button>
+                </div>
+                <button type="button" className="ud-art-bulk-cta" onClick={() => { setBoostPopupBulkCount(selectedArticleIds.size); setSelectedArticleIds(new Set()); }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                  Faire une promotion
+                </button>
               </div>
             )}
 
