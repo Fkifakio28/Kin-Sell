@@ -18,10 +18,10 @@ const ENGINE_ICONS: Record<string, string> = {
 };
 
 const ACTION_LABELS: Record<string, string> = {
-  BOOST_ARTICLE: "Booster l'article",
-  BOOST_SHOP: "Booster ma boutique",
+  BOOST_ARTICLE: "Voir les forfaits Boost",
+  BOOST_SHOP: "Voir les forfaits Boost",
   UPGRADE_PLAN: "Voir les forfaits",
-  ACTIVATE_TRIAL: "Activer l'essai gratuit",
+  ACTIVATE_TRIAL: "Démarrer l'essai gratuit",
   VIEW_ANALYTICS: "Voir les analyses",
   ENABLE_AUTO_SALES: "Découvrir la vente auto",
   PRICE_ADVICE: "Conseils prix",

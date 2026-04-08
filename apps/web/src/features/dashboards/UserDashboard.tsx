@@ -4458,7 +4458,7 @@ export function UserDashboard() {
                             }}
                             style={{ padding: '8px 16px', fontSize: 12, fontWeight: 600, border: 'none', borderRadius: 8, background: 'linear-gradient(135deg, #6f58ff, #9b7aff)', color: '#fff', cursor: 'pointer' }}
                           >
-                            Activer l'essai
+                            Démarrer l'essai gratuit (15 j)
                           </button>
                         )}
                       </div>
@@ -4499,7 +4499,7 @@ export function UserDashboard() {
                                 }}
                                 style={{ padding: '6px 12px', fontSize: 11, fontWeight: 600, border: 'none', borderRadius: 6, background: 'linear-gradient(135deg, #6f58ff, #9b7aff)', color: '#fff', cursor: 'pointer' }}
                               >
-                                {rec.actionType === 'BOOST_ARTICLE' ? 'Booster' : rec.actionType === 'ACTIVATE_TRIAL' ? 'Activer l\'essai' : rec.actionType === 'VIEW_ANALYTICS' ? 'Voir mes analyses' : 'Voir les forfaits'}
+                                {rec.actionType === 'BOOST_ARTICLE' ? 'Voir les forfaits' : rec.actionType === 'ACTIVATE_TRIAL' ? 'Démarrer l\'essai gratuit' : rec.actionType === 'VIEW_ANALYTICS' ? 'Voir mes analyses' : 'Voir les forfaits'}
                               </button>
                               <button
                                 onClick={async () => {

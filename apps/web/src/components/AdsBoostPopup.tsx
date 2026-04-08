@@ -4,6 +4,7 @@
  */
 
 import { useState, useEffect, useCallback, type FC } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { adsBoostApi, type BoostProposal, type HighlightProposal } from '../lib/services/ads.service';
 import './ads-boost-popup.css';
 
@@ -33,6 +34,8 @@ export const AdsBoostPopup: FC<AdsBoostPopupProps> = ({
   const [activating, setActivating] = useState(false);
   const [activated, setActivated] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [needsAddon, setNeedsAddon] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     let cancelled = false;
@@ -59,12 +62,20 @@ export const AdsBoostPopup: FC<AdsBoostPopupProps> = ({
   const handleActivateBoost = useCallback(async () => {
     if (!boostProposal || activating) return;
     setActivating(true);
+    setError(null);
+    setNeedsAddon(false);
     try {
       await adsBoostApi.activateBoost(boostProposal.listingId, boostProposal.suggestedDurationDays);
       setActivated(true);
       onBoosted?.();
-    } catch {
-      setError('Erreur lors de l\'activation du boost.');
+    } catch (err: unknown) {
+      const status = (err as { status?: number })?.status;
+      if (status === 403) {
+        setNeedsAddon(true);
+        setError('Add-on Boost Visibilité requis pour booster vos articles.');
+      } else {
+        setError('Erreur lors du boost. Réessayez plus tard.');
+      }
     } finally {
       setActivating(false);
     }
@@ -73,12 +84,20 @@ export const AdsBoostPopup: FC<AdsBoostPopupProps> = ({
   const handleActivateHighlight = useCallback(async () => {
     if (!highlightProposal || activating) return;
     setActivating(true);
+    setError(null);
+    setNeedsAddon(false);
     try {
       await adsBoostApi.activateHighlight(highlightProposal.suggestedDurationDays, businessId);
       setActivated(true);
       onBoosted?.();
-    } catch {
-      setError('Erreur lors de l\'activation de la mise en avant.');
+    } catch (err: unknown) {
+      const status = (err as { status?: number })?.status;
+      if (status === 403) {
+        setNeedsAddon(true);
+        setError('Add-on Boost Visibilité requis pour la mise en avant.');
+      } else {
+        setError('Erreur lors de la mise en avant. Réessayez plus tard.');
+      }
     } finally {
       setActivating(false);
     }
@@ -109,7 +128,19 @@ export const AdsBoostPopup: FC<AdsBoostPopupProps> = ({
               <p>L'IA ADS Kin-Sell analyse votre publication…</p>
             </div>
           ) : error && !activated ? (
-            <p className="ads-boost-error">{error}</p>
+            <div className="ads-boost-error">
+              <p>{error}</p>
+              {needsAddon ? (
+                <button
+                  type="button"
+                  className="ads-boost-btn ads-boost-btn--primary"
+                  style={{ marginTop: 12 }}
+                  onClick={() => { navigate('/forfaits'); onClose(); }}
+                >
+                  🛒 Souscrire au Boost Visibilité
+                </button>
+              ) : null}
+            </div>
           ) : activated ? (
             <div className="ads-boost-success">
               <span className="ads-boost-success-icon">✅</span>
@@ -162,7 +193,7 @@ export const AdsBoostPopup: FC<AdsBoostPopupProps> = ({
                   onClick={isBoost ? handleActivateBoost : handleActivateHighlight}
                   disabled={activating}
                 >
-                  {activating ? '⏳ Activation…' : isBoost ? '🚀 Booster maintenant' : '⭐ Activer la mise en avant'}
+                  {activating ? '⏳ En cours…' : isBoost ? '🚀 Booster cet article' : '⭐ Mettre en avant'}
                 </button>
                 <button type="button" className="ads-boost-btn ads-boost-btn--ghost" onClick={onClose}>
                   Plus tard

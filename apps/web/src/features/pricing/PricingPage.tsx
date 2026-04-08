@@ -186,7 +186,6 @@ export function PricingPage() {
   const { t } = useLocaleCurrency();
   const [currentPlan, setCurrentPlan] = useState<BillingPlanSummary | null>(null);
   const [busyPlanCode, setBusyPlanCode] = useState<string | null>(null);
-  const [busyAddonCode, setBusyAddonCode] = useState<string | null>(null);
   const [busyOrderAction, setBusyOrderAction] = useState<string | null>(null);
   const [paymentOrders, setPaymentOrders] = useState<PaymentOrder[]>([]);
   const [latestCheckout, setLatestCheckout] = useState<CheckoutResult | null>(null);
@@ -382,33 +381,9 @@ export function PricingPage() {
   // handleActivateOrder supprimé — l'activation ne peut plus se faire côté frontend.
   // Seuls PayPal (capture auto) ou un super admin (validation manuelle) peuvent activer un forfait.
 
-  const handleToggleAddon = async (addonCode: AddonCode) => {
-    if (!isLoggedIn || !currentPlan) {
-      setInfoMessage("Connectez-vous et activez un forfait pour gérer les add-ons.");
-      return;
-    }
-
-    const isActive = currentPlan.addOns.some((item) => item.code === addonCode && item.status === "ACTIVE");
-
-    setErrorMessage(null);
-    setInfoMessage(null);
-    setBusyAddonCode(addonCode);
-
-    try {
-      const updated = await billing.toggleAddon({ addonCode, action: isActive ? "DISABLE" : "ENABLE" });
-      setCurrentPlan(updated);
-      setInfoMessage(isActive ? `${addonCode} désactivé.` : `${addonCode} activé.`);
-    } catch (error) {
-      if (error instanceof ApiError && error.data && typeof error.data === "object" && "error" in error.data) {
-        const message = (error.data as { error?: string }).error;
-        setErrorMessage(message ?? "Impossible de modifier l'add-on.");
-      } else {
-        setErrorMessage("Impossible de modifier l'add-on.");
-      }
-    } finally {
-      setBusyAddonCode(null);
-    }
-  };
+  // handleToggleAddon supprimé — les add-ons ne peuvent plus être activés côté frontend.
+  // L'activation se fait uniquement via paiement validé ou action admin.
+  // Le bouton redirige vers un upgrade de forfait ou contact support.
 
   const roleHint =
     role === "USER"
@@ -495,10 +470,18 @@ export function PricingPage() {
                   <li key={detail}>{detail}</li>
                 ))}
               </ul>
-              {isLoggedIn ? (
-                <button type="button" className="pricing-cta pricing-cta-btn" onClick={() => void handleToggleAddon(addon.code)} disabled={busyAddonCode !== null}>
-                  {busyAddonCode === addon.code ? "Mise à jour..." : "Activer / désactiver"}
-                </button>
+              {isLoggedIn && currentPlan ? (
+                currentPlan.addOns.some((a) => a.code === addon.code && a.status === "ACTIVE") ? (
+                  <span className="pricing-current">✅ Actif</span>
+                ) : currentPlan.addOns.some((a) => a.code === addon.code && a.status === "DISABLED") ? (
+                  <span className="pricing-current" style={{ color: "var(--color-text-secondary, #999)" }}>Désactivé</span>
+                ) : (
+                  <button type="button" className="pricing-cta pricing-cta-btn" onClick={() => { setActiveTab("users"); setInfoMessage("Choisissez un forfait payant pour accéder à cet add-on, ou contactez le support."); }}>
+                    Souscrire
+                  </button>
+                )
+              ) : !isLoggedIn ? (
+                <Link className="pricing-cta" to="/register">Créer un compte</Link>
               ) : null}
             </article>
           ))}
