@@ -216,9 +216,11 @@ export function BusinessDashboard() {
 
   // ─── Sélection produits + promotions ──────────────────────
   const { selectedIds: selectedProdIds, toggle: toggleProdSelection, selectAll: selectAllProd, deselectAll: deselectAllProd, promoItems: promoProduits, openPromo: openProdPromo, closePromo: closeProdPromo } = useListingSelection();
+  const [prodViewMode, setProdViewMode] = useState<'grid' | 'list'>(() => (localStorage.getItem('ks-bz-prod-view') as 'grid' | 'list') || 'grid');
 
   // ─── Sélection services + promotions ─────────────────────
   const { selectedIds: selectedSvcIds, toggle: toggleSvcSelection, selectAll: selectAllSvc, deselectAll: deselectAllSvc, promoItems: promoServices, openPromo: openSvcPromo, closePromo: closeSvcPromo } = useListingSelection();
+  const [svcViewMode, setSvcViewMode] = useState<'grid' | 'list'>(() => (localStorage.getItem('ks-bz-svc-view') as 'grid' | 'list') || 'grid');
 
   // ─── Contacts ────────────────────────────────────────────
   const [contactFilter, setContactFilter] = useState<'all' | 'online' | 'favorites'>('all');
@@ -1362,7 +1364,11 @@ export function BusinessDashboard() {
             <p className="ud-page-sub">{t('biz.cockpit')} — {businessName} · /business/{businessSlug}</p>
           </div>
           <div className="ud-page-header-actions">
-            <button type="button" className="ud-quick-btn" onClick={() => setActiveSection('kinsell')}>
+            <button type="button" className="ud-quick-btn" onClick={() => {
+              if (activeSection === 'produits' && allProduits.length > 0) { openProdPromo(allProduits); }
+              else if (activeSection === 'services' && allServices.length > 0) { openSvcPromo(allServices); }
+              else { setActiveSection('produits'); }
+            }}>
               {t('biz.launchPromo')}
             </button>
             <button type="button" className="ud-quick-btn ud-quick-btn--primary bz-cta-gold" onClick={() => { setActiveSection('produits'); setCreateMode('produit'); setCreateStep(1); setEditingArticleId(null); }}>
@@ -1924,15 +1930,76 @@ export function BusinessDashboard() {
                   {f === '' ? '🗂 Tous' : f === 'ACTIVE' ? '🟢 Actifs' : f === 'INACTIVE' ? '⏸ Inactifs' : '📦 Archivés'}
                 </button>
               ))}
+              <div className="ud-art-view-toggle">
+                <button type="button" className={`ud-art-view-btn${prodViewMode === 'grid' ? ' active' : ''}`} title="Vue grille" onClick={() => { setProdViewMode('grid'); localStorage.setItem('ks-bz-prod-view', 'grid'); }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+                </button>
+                <button type="button" className={`ud-art-view-btn${prodViewMode === 'list' ? ' active' : ''}`} title="Vue liste" onClick={() => { setProdViewMode('list'); localStorage.setItem('ks-bz-prod-view', 'list'); }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="4" width="18" height="3" rx="1"/><rect x="3" y="10.5" width="18" height="3" rx="1"/><rect x="3" y="17" width="18" height="3" rx="1"/></svg>
+                </button>
+              </div>
             </div>
 
-            {/* ── Grille cards ── */}
+            {/* ── Grille / Liste cards ── */}
             {dataLoading ? (
               <div className="bz-art-loading"><span className="bz-art-loading-spinner" /><span>Chargement…</span></div>
             ) : pagedProduits.length === 0 ? (
               <div className="bz-art-empty">
                 <span className="bz-art-empty-icon">📦</span>
                 <p>{prodFilter ? 'Aucun produit avec ce statut.' : t('biz.noProductsEmpty')}</p>
+              </div>
+            ) : prodViewMode === 'list' ? (
+              <div className="ud-art-list">
+                <div className="ud-art-list-header">
+                  <span className="ud-art-list-col ud-art-list-col--chk"></span>
+                  <span className="ud-art-list-col ud-art-list-col--img"></span>
+                  <span className="ud-art-list-col ud-art-list-col--title">Produit</span>
+                  <span className="ud-art-list-col ud-art-list-col--price">Prix</span>
+                  <span className="ud-art-list-col ud-art-list-col--status">Statut</span>
+                  <span className="ud-art-list-col ud-art-list-col--actions">Actions</span>
+                </div>
+                {pagedProduits.map((p) => (
+                  <div key={p.id} className={`ud-art-list-row${p.status === 'INACTIVE' ? ' ud-art-list-row--dim' : ''}${selectedProdIds.has(p.id) ? ' ud-art-list-row--selected' : ''}`}>
+                    <label className="ud-art-list-col ud-art-list-col--chk" onClick={(e) => e.stopPropagation()}>
+                      <input type="checkbox" checked={selectedProdIds.has(p.id)} onChange={() => toggleProdSelection(p.id)} />
+                      <span className="ud-art-chk" />
+                    </label>
+                    <div className="ud-art-list-col ud-art-list-col--img">
+                      {p.imageUrl ? (
+                        <img src={resolveMediaUrl(p.imageUrl)} alt={p.title} className="ud-art-list-thumb" loading="lazy" />
+                      ) : (
+                        <div className="ud-art-list-thumb-placeholder">📦</div>
+                      )}
+                    </div>
+                    <div className="ud-art-list-col ud-art-list-col--title">
+                      <span className="ud-art-list-name">{p.title}</span>
+                      <span className="ud-art-list-meta">{p.category} · {p.city}{p.stockQuantity !== null ? ` · Stock: ${p.stockQuantity}` : ''}</span>
+                    </div>
+                    <span className="ud-art-list-col ud-art-list-col--price ud-art-list-price">
+                      <PromoPriceLabel priceUsdCents={p.priceUsdCents} promoActive={p.promoActive} promoPriceUsdCents={p.promoPriceUsdCents} formatPrice={formatPriceLabelFromUsdCents} />
+                    </span>
+                    <span className="ud-art-list-col ud-art-list-col--status">
+                      <span className={`ud-art-list-status${p.status === 'ACTIVE' ? ' ud-art-list-status--active' : p.status === 'INACTIVE' ? ' ud-art-list-status--inactive' : ' ud-art-list-status--archived'}`}>
+                        {p.status === 'ACTIVE' ? '🟢 Actif' : p.status === 'INACTIVE' ? '⏸ Inactif' : '📦 Archivé'}
+                      </span>
+                    </span>
+                    <div className="ud-art-list-col ud-art-list-col--actions">
+                      <button type="button" className="bz-art-action bz-art-action--edit" title="Modifier" disabled={bzArticleBusy !== null} onClick={() => handleBzEdit(p)}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+                      {p.status === 'ACTIVE' && (
+                        <button type="button" className="bz-art-action bz-art-action--toggle" title="Désactiver" disabled={bzArticleBusy !== null} onClick={() => void handleBzStatusChange(p.id, 'INACTIVE')}><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg></button>
+                      )}
+                      {p.status === 'INACTIVE' && (
+                        <button type="button" className="bz-art-action bz-art-action--toggle" title="Activer" disabled={bzArticleBusy !== null} onClick={() => void handleBzStatusChange(p.id, 'ACTIVE')}><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg></button>
+                      )}
+                      {(p.status === 'ACTIVE' || p.status === 'INACTIVE') && (
+                        <button type="button" className="bz-art-action bz-art-action--archive" title="Archiver" disabled={bzArticleBusy !== null} onClick={() => void handleBzStatusChange(p.id, 'ARCHIVED')}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg></button>
+                      )}
+                      {p.status !== 'DELETED' && (
+                        <button type="button" className="bz-art-action bz-art-action--delete" title="Supprimer" disabled={bzArticleBusy !== null} onClick={() => void handleBzStatusChange(p.id, 'DELETED')}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
             ) : (
               <div className="bz-art-grid">
@@ -2167,15 +2234,76 @@ export function BusinessDashboard() {
                   {f === '' ? '🗂 Tous' : f === 'ACTIVE' ? '🟢 Actifs' : f === 'INACTIVE' ? '⏸ Inactifs' : '📦 Archivés'}
                 </button>
               ))}
+              <div className="ud-art-view-toggle">
+                <button type="button" className={`ud-art-view-btn${svcViewMode === 'grid' ? ' active' : ''}`} title="Vue grille" onClick={() => { setSvcViewMode('grid'); localStorage.setItem('ks-bz-svc-view', 'grid'); }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+                </button>
+                <button type="button" className={`ud-art-view-btn${svcViewMode === 'list' ? ' active' : ''}`} title="Vue liste" onClick={() => { setSvcViewMode('list'); localStorage.setItem('ks-bz-svc-view', 'list'); }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="4" width="18" height="3" rx="1"/><rect x="3" y="10.5" width="18" height="3" rx="1"/><rect x="3" y="17" width="18" height="3" rx="1"/></svg>
+                </button>
+              </div>
             </div>
 
-            {/* ── Grille cards ── */}
+            {/* ── Grille / Liste cards ── */}
             {dataLoading ? (
               <div className="bz-art-loading"><span className="bz-art-loading-spinner" /><span>Chargement…</span></div>
             ) : pagedServices.length === 0 ? (
               <div className="bz-art-empty">
                 <span className="bz-art-empty-icon">🛠️</span>
                 <p>{svcFilter ? 'Aucun service avec ce statut.' : t('biz.noServicesEmpty')}</p>
+              </div>
+            ) : svcViewMode === 'list' ? (
+              <div className="ud-art-list">
+                <div className="ud-art-list-header">
+                  <span className="ud-art-list-col ud-art-list-col--chk"></span>
+                  <span className="ud-art-list-col ud-art-list-col--img"></span>
+                  <span className="ud-art-list-col ud-art-list-col--title">Service</span>
+                  <span className="ud-art-list-col ud-art-list-col--price">Prix</span>
+                  <span className="ud-art-list-col ud-art-list-col--status">Statut</span>
+                  <span className="ud-art-list-col ud-art-list-col--actions">Actions</span>
+                </div>
+                {pagedServices.map((s) => (
+                  <div key={s.id} className={`ud-art-list-row${s.status === 'INACTIVE' ? ' ud-art-list-row--dim' : ''}${selectedSvcIds.has(s.id) ? ' ud-art-list-row--selected' : ''}`}>
+                    <label className="ud-art-list-col ud-art-list-col--chk" onClick={(e) => e.stopPropagation()}>
+                      <input type="checkbox" checked={selectedSvcIds.has(s.id)} onChange={() => toggleSvcSelection(s.id)} />
+                      <span className="ud-art-chk" />
+                    </label>
+                    <div className="ud-art-list-col ud-art-list-col--img">
+                      {s.imageUrl ? (
+                        <img src={resolveMediaUrl(s.imageUrl)} alt={s.title} className="ud-art-list-thumb" loading="lazy" />
+                      ) : (
+                        <div className="ud-art-list-thumb-placeholder">🛠️</div>
+                      )}
+                    </div>
+                    <div className="ud-art-list-col ud-art-list-col--title">
+                      <span className="ud-art-list-name">{s.title}</span>
+                      <span className="ud-art-list-meta">{s.category} · {s.city}</span>
+                    </div>
+                    <span className="ud-art-list-col ud-art-list-col--price ud-art-list-price">
+                      <PromoPriceLabel priceUsdCents={s.priceUsdCents} promoActive={s.promoActive} promoPriceUsdCents={s.promoPriceUsdCents} formatPrice={formatPriceLabelFromUsdCents} />
+                    </span>
+                    <span className="ud-art-list-col ud-art-list-col--status">
+                      <span className={`ud-art-list-status${s.status === 'ACTIVE' ? ' ud-art-list-status--active' : s.status === 'INACTIVE' ? ' ud-art-list-status--inactive' : ' ud-art-list-status--archived'}`}>
+                        {s.status === 'ACTIVE' ? '🟢 Actif' : s.status === 'INACTIVE' ? '⏸ Inactif' : '📦 Archivé'}
+                      </span>
+                    </span>
+                    <div className="ud-art-list-col ud-art-list-col--actions">
+                      <button type="button" className="bz-art-action bz-art-action--edit" title="Modifier" disabled={bzArticleBusy !== null} onClick={() => handleBzEdit(s)}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+                      {s.status === 'ACTIVE' && (
+                        <button type="button" className="bz-art-action bz-art-action--toggle" title="Désactiver" disabled={bzArticleBusy !== null} onClick={() => void handleBzStatusChange(s.id, 'INACTIVE')}><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg></button>
+                      )}
+                      {s.status === 'INACTIVE' && (
+                        <button type="button" className="bz-art-action bz-art-action--toggle" title="Activer" disabled={bzArticleBusy !== null} onClick={() => void handleBzStatusChange(s.id, 'ACTIVE')}><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg></button>
+                      )}
+                      {(s.status === 'ACTIVE' || s.status === 'INACTIVE') && (
+                        <button type="button" className="bz-art-action bz-art-action--archive" title="Archiver" disabled={bzArticleBusy !== null} onClick={() => void handleBzStatusChange(s.id, 'ARCHIVED')}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg></button>
+                      )}
+                      {s.status !== 'DELETED' && (
+                        <button type="button" className="bz-art-action bz-art-action--delete" title="Supprimer" disabled={bzArticleBusy !== null} onClick={() => void handleBzStatusChange(s.id, 'DELETED')}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
             ) : (
               <div className="bz-art-grid">
