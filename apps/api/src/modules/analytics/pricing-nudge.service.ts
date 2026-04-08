@@ -194,9 +194,13 @@ function detectFreqPublisher(ctx: NudgeContext): PricingNudge | null {
   return {
     triggerType: "PRICING_FREQ_PUBLISHER",
     priority: 6,
-    title: "Boostez vos publications",
-    message: `Vous avez publié ${ctx.listingsLast7d} annonces cette semaine ! Avec un forfait adapté, chaque article gagne en visibilité automatiquement.`,
-    ctaLabel: "Voir les forfaits",
+    title: ctx.isBusiness
+      ? "Optimisez le rendement de vos publications"
+      : "Donnez plus de visibilité à vos annonces",
+    message: ctx.isBusiness
+      ? `Votre boutique a publié ${ctx.listingsLast7d} articles en 7 jours. Un forfait adapté assure un référencement prioritaire et une couverture optimale pour chaque produit du catalogue.`
+      : `Vous avez publié ${ctx.listingsLast7d} annonces cette semaine ! Avec un forfait adapté, chaque article est vu par plus d'acheteurs automatiquement.`,
+    ctaLabel: ctx.isBusiness ? "Optimiser ma boutique" : "Voir les forfaits",
     ctaTarget: `/forfaits?highlight=${suggestedPlan}`,
     reason: `${ctx.listingsLast7d} publications en 7j sans boost addon`,
     metric: { listingsLast7d: ctx.listingsLast7d },
@@ -210,10 +214,14 @@ function detectPromoCreator(ctx: NudgeContext): PricingNudge | null {
   return {
     triggerType: "PRICING_PROMO_CREATOR",
     priority: 5,
-    title: "Maximisez vos promotions",
-    message: "Vos articles en promotion méritent plus de visibilité. Un forfait avec boost intégré multiplie l'impact de vos promos.",
-    ctaLabel: "Découvrir les forfaits",
-    ctaTarget: "/forfaits",
+    title: ctx.isBusiness
+      ? "Maximisez l'impact de vos campagnes promo"
+      : "Rendez vos promos visibles",
+    message: ctx.isBusiness
+      ? "Vos promotions méritent une stratégie. Un forfait Business amplifie leur portée et vous permet de mesurer leur performance réelle."
+      : "Vos promotions sont en place, mais peu d'acheteurs les voient. Un forfait avec boost intégré multiplie leur portée.",
+    ctaLabel: ctx.isBusiness ? "Voir les forfaits Business" : "Découvrir les forfaits",
+    ctaTarget: ctx.isBusiness ? "/forfaits?highlight=BUSINESS" : "/forfaits",
     reason: "Promotions actives sur plan gratuit/starter",
   };
 }
@@ -227,9 +235,13 @@ function detectLowPerformance(ctx: NudgeContext): PricingNudge | null {
   return {
     triggerType: "PRICING_LOW_PERFORMANCE",
     priority: 7,
-    title: "Relancez vos annonces",
-    message: `${ctx.stagnantListings} de vos ${ctx.totalListings} annonces n'ont reçu aucune interaction depuis 7 jours. Le boost visibilité peut relancer votre activité.`,
-    ctaLabel: "Booster mes annonces",
+    title: ctx.isBusiness
+      ? "Votre catalogue perd en momentum"
+      : "Relancez vos annonces inactives",
+    message: ctx.isBusiness
+      ? `${ctx.stagnantListings} articles sur ${ctx.totalListings} stagnent sans interaction depuis 7 jours. Activez la visibilité renforcée pour relancer le trafic sur votre boutique.`
+      : `${ctx.stagnantListings} de vos ${ctx.totalListings} annonces n'ont reçu aucune interaction depuis 7 jours. Le boost visibilité les remet en avant auprès des acheteurs actifs.`,
+    ctaLabel: ctx.isBusiness ? "Relancer mon catalogue" : "Booster mes annonces",
     ctaTarget: `/forfaits?highlight=${ctx.isBusiness ? "BUSINESS" : "BOOST"}`,
     reason: `${Math.round(stagnantRatio * 100)}% d'annonces stagnantes`,
     metric: { stagnant: ctx.stagnantListings, total: ctx.totalListings },
@@ -243,9 +255,13 @@ function detectHighMessaging(ctx: NudgeContext): PricingNudge | null {
   return {
     triggerType: "PRICING_HIGH_MESSAGING",
     priority: 6,
-    title: "Automatisez vos réponses",
-    message: `${ctx.messagesLast7d} messages envoyés cette semaine ! L'IA Marchand peut négocier et répondre automatiquement à votre place.`,
-    ctaLabel: "Activer IA Marchand",
+    title: ctx.isBusiness
+      ? "Automatisez le traitement de vos conversations"
+      : "Plus besoin de tout répondre manuellement",
+    message: ctx.isBusiness
+      ? `${ctx.messagesLast7d} messages en 7 jours — votre équipe passe trop de temps en messagerie. L'IA Marchand gère les réponses et négociations automatiquement pour traiter plus de volume.`
+      : `${ctx.messagesLast7d} messages cette semaine ! L'IA Marchand répond et négocie à votre place, pour que vous vendiez sans stress.`,
+    ctaLabel: ctx.isBusiness ? "Automatiser les échanges" : "Activer IA Marchand",
     ctaTarget: "/forfaits?addon=IA_MERCHANT",
     reason: `${ctx.messagesLast7d} messages/7j sans IA Marchand`,
     metric: { messagesLast7d: ctx.messagesLast7d },
@@ -278,9 +294,13 @@ function detectSalesMilestone(ctx: NudgeContext): PricingNudge | null {
   return {
     triggerType: "PRICING_SALES_MILESTONE",
     priority: 8,
-    title: `${milestone} ventes atteintes !`,
-    message: `Félicitations pour vos ${milestone} ventes ! Passez au forfait supérieur pour débloquer l'automatisation et l'analytics avancé.`,
-    ctaLabel: "Évoluer maintenant",
+    title: ctx.isBusiness
+      ? `Palier de ${milestone} ventes franchi — industrialisez votre croissance`
+      : `${milestone} ventes, bravo ! Passez à la vitesse supérieure`,
+    message: ctx.isBusiness
+      ? `Votre boutique a franchi les ${milestone} ventes. Le forfait supérieur apporte analytics marché, automatisation avancée et outils de pilotage pour accélérer votre croissance.`
+      : `Félicitations pour vos ${milestone} ventes ! Le forfait supérieur débloque des outils pour vendre plus facilement : visibilité accrue, automatisation et conseils personnalisés.`,
+    ctaLabel: ctx.isBusiness ? "Accélérer ma croissance" : "Évoluer maintenant",
     ctaTarget: `/forfaits?highlight=${suggestedPlan}`,
     reason: `Milestone ${milestone} ventes, plan actuel ${ctx.currentPlanCode}`,
     metric: { totalSales: sales, milestone },
@@ -294,9 +314,13 @@ function detectCategoryDominance(ctx: NudgeContext): PricingNudge | null {
   return {
     triggerType: "PRICING_CATEGORY_DOMINANCE",
     priority: 7,
-    title: `Expert ${ctx.topCategory.category}`,
-    message: `Vous dominez la catégorie "${ctx.topCategory.category}" avec ${ctx.topCategory.count} ventes. L'analytics avancé vous donnera des insights marché exclusifs.`,
-    ctaLabel: "Débloquer l'analytics",
+    title: ctx.isBusiness
+      ? `Position dominante en ${ctx.topCategory.category} — consolidez`
+      : `Expert ${ctx.topCategory.category} — vendez encore mieux`,
+    message: ctx.isBusiness
+      ? `${ctx.topCategory.count} ventes en "${ctx.topCategory.category}". L'analytics marché vous donne les insights concurrentiels et les tendances pour piloter votre stratégie dans cette catégorie.`
+      : `Vous dominez "${ctx.topCategory.category}" avec ${ctx.topCategory.count} ventes. L'analytics vous montre les prix du marché et les tendances pour garder votre avance.`,
+    ctaLabel: ctx.isBusiness ? "Piloter ma stratégie" : "Débloquer l'analytics",
     ctaTarget: `/forfaits?highlight=${ctx.isBusiness ? "BUSINESS" : "PRO_VENDOR"}`,
     reason: `${ctx.topCategory.count} ventes dans ${ctx.topCategory.category} sans analytics`,
     metric: { category: ctx.topCategory.category, count: ctx.topCategory.count },
@@ -319,9 +343,13 @@ function detectGrowingActivity(ctx: NudgeContext): PricingNudge | null {
   return {
     triggerType: "PRICING_GROWING_ACTIVITY",
     priority: 8,
-    title: "Votre activité explose !",
-    message: `+${Math.round(growth)}% de ventes ce mois ! C'est le moment d'investir dans un forfait supérieur pour accompagner votre croissance.`,
-    ctaLabel: "Accompagner ma croissance",
+    title: ctx.isBusiness
+      ? `Croissance confirmée : +${Math.round(growth)}% — équipez votre boutique`
+      : `Vos ventes décollent : +${Math.round(growth)}% !`,
+    message: ctx.isBusiness
+      ? `Votre boutique affiche +${Math.round(growth)}% de ventes. C'est le moment d'investir dans les outils de pilotage pour maintenir et accélérer cette trajectoire.`
+      : `+${Math.round(growth)}% de ventes ce mois ! Profitez de cette dynamique avec un forfait qui accompagne votre montée en puissance.`,
+    ctaLabel: ctx.isBusiness ? "Piloter ma croissance" : "Accompagner ma croissance",
     ctaTarget: `/forfaits?highlight=${nextPlan}`,
     reason: `Croissance ${Math.round(growth)}%, plan ${ctx.currentPlanCode} → ${nextPlan}`,
     metric: { growth: Math.round(growth), salesLast30d: ctx.salesLast30d, salesPrev30d: ctx.salesPrev30d },
@@ -363,9 +391,13 @@ function detectAutomationNeed(ctx: NudgeContext): PricingNudge | null {
   return {
     triggerType: "PRICING_AUTOMATION_NEED",
     priority: 7,
-    title: "Gagnez du temps avec l'IA",
-    message: `Avec ${ctx.salesLast7d} ventes et ${ctx.messagesLast7d} messages cette semaine, l'IA Commande automatise le suivi, les confirmations et les relances.`,
-    ctaLabel: "Activer l'automatisation",
+    title: ctx.isBusiness
+      ? "Industrialisez le traitement de vos commandes"
+      : "Gagnez du temps sur vos commandes",
+    message: ctx.isBusiness
+      ? `${ctx.salesLast7d} ventes et ${ctx.messagesLast7d} messages cette semaine — l'IA Commande automatise confirmations, suivi et relances pour libérer votre équipe.`
+      : `${ctx.salesLast7d} ventes et ${ctx.messagesLast7d} messages cette semaine — l'IA Commande suit et confirme automatiquement, vous n'avez qu'à expédier.`,
+    ctaLabel: ctx.isBusiness ? "Automatiser les opérations" : "Activer l'automatisation",
     ctaTarget: `/forfaits?addon=IA_ORDER`,
     reason: `${ctx.salesLast7d} ventes + ${ctx.messagesLast7d} messages/7j sans IA_ORDER`,
     metric: { salesLast7d: ctx.salesLast7d, messagesLast7d: ctx.messagesLast7d },
@@ -380,9 +412,13 @@ function detectAnalyticsNeed(ctx: NudgeContext): PricingNudge | null {
   return {
     triggerType: "PRICING_ANALYTICS_NEED",
     priority: 6,
-    title: "Comprenez votre marché",
-    message: `Avec ${ctx.profile.completedSales} ventes réalisées, l'analytics avancé vous révèle les tendances, les prix du marché et les opportunités dans votre zone.`,
-    ctaLabel: "Activer l'analytics",
+    title: ctx.isBusiness
+      ? "Pilotez votre performance avec la data"
+      : "Vendez mieux grâce aux données",
+    message: ctx.isBusiness
+      ? `Avec ${ctx.profile.completedSales} ventes réalisées, l'Analytique révèle les tendances marché, les opportunités de croissance et les leviers pour optimiser votre stratégie commerciale.`
+      : `Avec ${ctx.profile.completedSales} ventes, l'Analytique vous montre les prix du marché, les articles qui performent et les meilleurs créneaux pour publier.`,
+    ctaLabel: ctx.isBusiness ? "Activer le pilotage data" : "Activer l'analytics",
     ctaTarget: `/forfaits?highlight=${ctx.isBusiness ? "BUSINESS" : "PRO_VENDOR"}`,
     reason: `${ctx.profile.completedSales} ventes, lifecycle ${ctx.profile.lifecycle}, sans analytics`,
     metric: { sales: ctx.profile.completedSales, lifecycle: ctx.profile.lifecycle },

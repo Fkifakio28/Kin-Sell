@@ -394,10 +394,14 @@ const ruleNeedsIaMerchant: AdvisorRule = (ctx) => {
     productCode: "IA_MERCHANT",
     priority: 6,
     confidence: Math.min(90, 40 + ctx.profile.negotiationCount * 2 + (60 - ctx.profile.conversionRate)),
-    title: "IA Marchand : négociez mieux",
-    message: `${ctx.profile.negotiationCount} négociations avec ${ctx.profile.conversionRate}% de conversion — l'IA Marchand analyse le marché et suggère le bon prix pour convertir plus de ventes.`,
+    title: ctx.isBusiness
+      ? "IA Marchand : optimisez votre taux de conversion"
+      : "IA Marchand : vendez plus facilement",
+    message: ctx.isBusiness
+      ? `${ctx.profile.negotiationCount} négociations avec ${ctx.profile.conversionRate}% de conversion — l'IA Marchand ajuste automatiquement vos contre-offres et optimise chaque échange pour maximiser le volume de ventes converti.`
+      : `${ctx.profile.negotiationCount} négociations avec ${ctx.profile.conversionRate}% de conversion — l'IA Marchand vous aide à trouver le bon prix et répondre plus vite pour ne rater aucune vente.`,
     rationale: `Négociations fréquentes (${ctx.profile.negotiationCount}) mais conversion faible (${ctx.profile.conversionRate}%) — IA_MERCHANT utile`,
-    ctaLabel: "Activer IA Marchand",
+    ctaLabel: ctx.isBusiness ? "Optimiser mes conversions" : "Activer IA Marchand",
     ctaTarget: "/forfaits?addon=IA_MERCHANT",
     pricing: "3$/mois",
     signals,
@@ -421,10 +425,14 @@ const ruleNeedsIaOrder: AdvisorRule = (ctx) => {
     productCode: "IA_ORDER",
     priority: 7,
     confidence: Math.min(95, 40 + ctx.ordersLast30d * 2 + Math.min(30, ctx.messagesLast30d / 3)),
-    title: "IA Commande : gagnez du temps",
-    message: `${ctx.ordersLast30d} commandes et ${ctx.messagesLast30d} messages ce mois — l'IA Commande automatise le suivi, les confirmations et les relances client. Vous vendez, elle gère.`,
+    title: ctx.isBusiness
+      ? "IA Commande : industrialisez votre fulfillment"
+      : "IA Commande : vendez sans stress",
+    message: ctx.isBusiness
+      ? `${ctx.ordersLast30d} commandes et ${ctx.messagesLast30d} messages ce mois — l'IA Commande automatise tout le cycle de commande pour libérer votre équipe et traiter plus de volume.`
+      : `${ctx.ordersLast30d} commandes et ${ctx.messagesLast30d} messages ce mois — plus besoin de relancer manuellement. L'IA Commande confirme, suit et relance pour vous.`,
     rationale: `Volume élevé commandes/messages → automation nécessaire — IA_ORDER`,
-    ctaLabel: "Activer IA Commande",
+    ctaLabel: ctx.isBusiness ? "Automatiser les opérations" : "Activer IA Commande",
     ctaTarget: "/forfaits?addon=IA_ORDER",
     pricing: "7$/mois",
     signals,
@@ -448,10 +456,14 @@ const rulePromoNeedsBoost: AdvisorRule = (ctx) => {
     productCode: "BOOST_LISTING",
     priority: 6,
     confidence: Math.min(85, 50 + ctx.promoWithoutBoost * 10),
-    title: "Boostez vos promotions",
-    message: `${ctx.promoWithoutBoost} de vos articles en promotion n'ont pas de boost actif. Un boost multiplie la visibilité de vos promos par 2 à 5×.`,
+    title: ctx.isBusiness
+      ? "Maximisez le ROI de vos campagnes promo"
+      : "Boostez vos promotions",
+    message: ctx.isBusiness
+      ? `${ctx.promoWithoutBoost} promos actives sans boost — amplifiez leur portée pour maximiser le retour sur vos opérations commerciales.`
+      : `${ctx.promoWithoutBoost} de vos articles en promotion n'ont pas de boost actif. Un boost multiplie la visibilité de vos promos par 2 à 5×.`,
     rationale: `Promos actives sans boost — visibilité perdue`,
-    ctaLabel: "Booster mes promos",
+    ctaLabel: ctx.isBusiness ? "Amplifier mes campagnes" : "Booster mes promos",
     ctaTarget: "/dashboard",
     pricing: "Inclus dans votre add-on",
     signals,
@@ -477,10 +489,14 @@ const ruleNeedsBoostAddon: AdvisorRule = (ctx) => {
     productCode: "BOOST_VISIBILITY",
     priority: 7,
     confidence: Math.min(90, 45 + ctx.stagnantCount * 5 + (ctx.hasEverBoosted ? 0 : 10)),
-    title: "Add-on Boost Visibilité",
-    message: `${ctx.stagnantCount} de vos ${ctx.profile.totalListings} annonces n'ont reçu aucune interaction depuis 7 jours. L'add-on Boost Visibilité relance leur exposition auprès des acheteurs.`,
+    title: ctx.isBusiness
+      ? "Relancez le trafic de votre catalogue"
+      : "Remettez vos annonces en avant",
+    message: ctx.isBusiness
+      ? `${ctx.stagnantCount} articles sur ${ctx.profile.totalListings} stagnent sans interaction. Le Boost Visibilité maintient le flux de prospects sur votre boutique.`
+      : `${ctx.stagnantCount} de vos ${ctx.profile.totalListings} annonces n'ont reçu aucune interaction depuis 7 jours. Le Boost Visibilité les relance auprès des acheteurs actifs.`,
     rationale: `${Math.round(ctx.stagnantRatio * 100)}% d'annonces stagnantes sans boost addon — BOOST_VISIBILITY recommandé`,
-    ctaLabel: "Débloquer le boost",
+    ctaLabel: ctx.isBusiness ? "Relancer mon catalogue" : "Débloquer le boost",
     ctaTarget: "/forfaits?addon=BOOST_VISIBILITY",
     pricing: "1$/24h · 5$/7j",
     signals,
@@ -508,10 +524,14 @@ const ruleNeedsAdsPack: AdvisorRule = (ctx) => {
     productCode: ctx.salesLast30d >= 10 ? "ADS_PACK_10" : ctx.salesLast30d >= 5 ? "ADS_PACK_7" : "ADS_PACK_3",
     priority: 5,
     confidence: Math.min(85, 40 + ctx.salesLast30d * 3),
-    title: "Lancez une campagne pub",
-    message: `Vous réalisez ${ctx.salesLast30d} ventes/mois sans publicité. Un Pack Pub diffuse vos articles${ctx.topCategory ? ` (${ctx.topCategory.name})` : ""} à travers la marketplace et touche les acheteurs qui cherchent.`,
+    title: ctx.isBusiness
+      ? "Étendez votre couverture marketplace"
+      : "Touchez plus d'acheteurs",
+    message: ctx.isBusiness
+      ? `${ctx.salesLast30d} ventes/mois sans campagne publicitaire. Un Pack Pub amplifie la présence de votre boutique${ctx.topCategory ? ` (${ctx.topCategory.name})` : ""} et génère du trafic qualifié vers votre catalogue.`
+      : `Vous réalisez ${ctx.salesLast30d} ventes/mois sans publicité. Un Pack Pub diffuse vos articles${ctx.topCategory ? ` (${ctx.topCategory.name})` : ""} auprès des acheteurs qui cherchent.`,
     rationale: `Vendeur établi avec ventes mais aucune pub — potentiel pub inexploité`,
-    ctaLabel: "Voir les packs pub",
+    ctaLabel: ctx.isBusiness ? "Lancer une campagne" : "Voir les packs pub",
     ctaTarget: "/forfaits?addon=ADS_PACK",
     pricing: "à partir de 5$ (3 pubs)",
     signals,
@@ -538,10 +558,14 @@ const ruleNeedsAdsPremium: AdvisorRule = (ctx) => {
     productCode: "ADS_PREMIUM",
     priority: 6,
     confidence: Math.min(90, 50 + ctx.salesLast30d + (ctx.profile.budgetTier === "PREMIUM" ? 15 : 0)),
-    title: "Publicité Premium — Homepage",
-    message: `Avec ${(ctx.profile.revenueLastThirtyDays / 100).toFixed(0)}$ de revenus ce mois, investissez dans la visibilité maximale. La Pub Premium place vos articles en homepage et en tête des résultats de recherche.`,
+    title: ctx.isBusiness
+      ? "Pub Premium : dominez la marketplace"
+      : "Publicité Premium — Homepage",
+    message: ctx.isBusiness
+      ? `Avec ${(ctx.profile.revenueLastThirtyDays / 100).toFixed(0)}$ de revenus ce mois, placez votre boutique en homepage et en tête des résultats pour capter le maximum de trafic qualifié et maximiser votre part de marché.`
+      : `Avec ${(ctx.profile.revenueLastThirtyDays / 100).toFixed(0)}$ de revenus ce mois, la Pub Premium place vos articles en homepage et en tête des résultats pour toucher un maximum d'acheteurs.`,
     rationale: `Power/Established seller avec budget ${ctx.profile.budgetTier} — ADS_PREMIUM rentable`,
-    ctaLabel: "Pub Premium",
+    ctaLabel: ctx.isBusiness ? "Dominer la marketplace" : "Pub Premium",
     ctaTarget: "/forfaits?addon=ADS_PREMIUM",
     pricing: "25$",
     signals,
@@ -573,10 +597,14 @@ const ruleNeedsAnalytics: AdvisorRule = (ctx) => {
     productCode: `ANALYTICS_VIA_${targetPlan}`,
     priority: 7,
     confidence: Math.min(90, 40 + ctx.profile.completedSales * 2 + (ctx.topCategory ? ctx.topCategory.salesCount * 3 : 0)),
-    title: "Kin-Sell Analytique",
-    message: `Avec ${ctx.profile.completedSales} ventes${ctx.topCategory ? ` et une expertise en ${ctx.topCategory.name}` : ""}, l'analytics vous révèle les prix du marché, les tendances de votre zone, et les opportunités cachées dans vos données.`,
+    title: ctx.isBusiness
+      ? "Kin-Sell Analytique : pilotez avec la data"
+      : "Kin-Sell Analytique : vendez mieux",
+    message: ctx.isBusiness
+      ? `Avec ${ctx.profile.completedSales} ventes${ctx.topCategory ? ` et une expertise en ${ctx.topCategory.name}` : ""}, l'Analytique révèle tendances marché, opportunités de croissance et leviers d'optimisation pour piloter votre stratégie commerciale.`
+      : `Avec ${ctx.profile.completedSales} ventes${ctx.topCategory ? ` et une expertise en ${ctx.topCategory.name}` : ""}, l'Analytique vous montre les prix du marché, les tendances de votre zone et des conseils personnalisés pour vendre mieux.`,
     rationale: `Vendeur ${ctx.profile.lifecycle} avec historique suffisant pour tirer profit d'analytics — ${targetPlan}`,
-    ctaLabel: "Activer l'Analytique",
+    ctaLabel: ctx.isBusiness ? "Activer le pilotage data" : "Activer l'Analytique",
     ctaTarget: `/forfaits?highlight=${targetPlan}`,
     pricing: targetPrice,
     signals,
@@ -604,10 +632,14 @@ const ruleCategorySpecialist: AdvisorRule = (ctx) => {
     productCode: targetPlan,
     priority: 7,
     confidence: Math.min(90, 45 + ctx.topCategory.salesCount * 3),
-    title: `Expert ${ctx.topCategory.name}`,
-    message: `Vous dominez la catégorie "${ctx.topCategory.name}" avec ${ctx.topCategory.salesCount} ventes. Un forfait supérieur vous donne les outils analytics pour comprendre votre marché et optimiser vos prix.`,
+    title: ctx.isBusiness
+      ? `Leader ${ctx.topCategory.name} — consolidez votre position`
+      : `Expert ${ctx.topCategory.name} — vendez encore mieux`,
+    message: ctx.isBusiness
+      ? `${ctx.topCategory.salesCount} ventes en "${ctx.topCategory.name}". L'Analytics Premium donne les insights concurrentiels, les tendances catégorielles et les recommandations stratégiques pour protéger et étendre votre position dominante.`
+      : `Vous dominez "${ctx.topCategory.name}" avec ${ctx.topCategory.salesCount} ventes. Un forfait supérieur vous donne les outils analytics pour comprendre votre marché, optimiser vos prix et garder votre avance.`,
     rationale: `Dominance catégorie ${ctx.topCategory.name} (${ctx.topCategory.salesCount} ventes) — analytics premium utile`,
-    ctaLabel: `Passer à ${targetPlan}`,
+    ctaLabel: ctx.isBusiness ? `Piloter ${ctx.topCategory.name}` : `Passer à ${targetPlan}`,
     ctaTarget: `/forfaits?highlight=${targetPlan}`,
     pricing: price,
     signals,
