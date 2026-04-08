@@ -52,7 +52,7 @@ const KIN_SELL_PROMOS: KinSellPromo[] = [
     title: 'Publiez votre premier article',
     description: 'En 3 étapes simples. Photos, prix, description. Votre vitrine en 5 min.',
     ctaText: 'Publier maintenant',
-    link: '/account?section=articles',
+    link: '/account?section=articles&action=publish',
   },
   {
     id: 'ks-6',
