@@ -4179,10 +4179,10 @@ export function UserDashboard() {
                 <h3 style={{ margin: '0 0 10px', fontSize: 15, color: 'var(--color-text-primary, #fff)' }}>💡 Recommandations</h3>
                 {ksLoading ? (
                   <p style={{ color: 'var(--color-text-secondary, #aaa)', fontSize: 13 }}>Chargement…</p>
-                ) : ksRecommendations.length === 0 ? (
-                  <p style={{ color: 'var(--color-text-secondary, #aaa)', fontSize: 13, fontStyle: 'italic' }}>Aucune recommandation en cours. Continuez à vendre pour recevoir des suggestions.</p>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+
+                    {/* ═══ Backend AI recommendations ═══ */}
                     {ksRecommendations.map((rec) => (
                       <div key={rec.id} style={{
                         background: 'rgba(111,88,255,0.04)',
@@ -4227,6 +4227,114 @@ export function UserDashboard() {
                         </div>
                       </div>
                     ))}
+
+                    {/* ═══ Smart IA ADS recommendation ═══ */}
+                    <div style={{
+                      background: 'linear-gradient(135deg, rgba(111,88,255,0.08), rgba(255,165,0,0.06))',
+                      border: '1px solid rgba(255,165,0,0.2)',
+                      borderRadius: 10, padding: 14,
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <div style={{ flex: 1 }}>
+                          <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--color-text-primary, #fff)' }}>
+                            {(articlesStats?.active ?? 0) > 0
+                              ? '⚡ Boostez vos articles pour plus de visibilité'
+                              : '⚡ Publiez et boostez votre premier article'}
+                          </span>
+                          <p style={{ margin: '4px 0 8px', fontSize: 12, color: 'var(--color-text-secondary, #aaa)', lineHeight: 1.5 }}>
+                            {(articlesStats?.active ?? 0) > 0
+                              ? `Vous avez ${articlesStats?.active} article${(articlesStats?.active ?? 0) > 1 ? 's' : ''} actif${(articlesStats?.active ?? 0) > 1 ? 's' : ''}. L'IA ADS peut les placer dans les 9 espaces publicitaires de Kin-Sell pour multiplier vos vues par 5x et attirer plus d'acheteurs.`
+                              : 'Publiez votre premier article et l\'IA ADS le mettra automatiquement en avant dans l\'Explorer, So-Kin et les bannières Kin-Sell pour un maximum de visibilité.'}
+                          </p>
+                          <div style={{ display: 'flex', gap: 6 }}>
+                            <button
+                              onClick={() => {
+                                if ((articlesStats?.active ?? 0) > 0) {
+                                  setActiveSection('articles');
+                                } else {
+                                  resetArticleForm();
+                                  if (settingsForm.city) setArticleForm(p => ({ ...p, city: settingsForm.city }));
+                                  setShowCreateForm(true);
+                                  setActiveSection('articles');
+                                }
+                              }}
+                              style={{ padding: '6px 12px', fontSize: 11, fontWeight: 600, border: 'none', borderRadius: 6, background: 'linear-gradient(135deg, #ff8c00, #ffa500)', color: '#fff', cursor: 'pointer' }}
+                            >
+                              {(articlesStats?.active ?? 0) > 0 ? '🚀 Booster mes articles' : '📝 Publier maintenant'}
+                            </button>
+                          </div>
+                        </div>
+                        <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, background: 'rgba(255,165,0,0.15)', color: '#ffa500', whiteSpace: 'nowrap', marginLeft: 8 }}>
+                          📢 IA ADS
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* ═══ Kin-Sell Analytique teaser recommendation ═══ */}
+                    {!hasAnalytics && (
+                      <div style={{
+                        background: 'linear-gradient(135deg, rgba(111,88,255,0.08), rgba(0,200,150,0.06))',
+                        border: '1px solid rgba(0,200,150,0.2)',
+                        borderRadius: 10, padding: 14,
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                          <div style={{ flex: 1 }}>
+                            <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--color-text-primary, #fff)' }}>
+                              📊 Découvrez ce que vos concurrents ne savent pas
+                            </span>
+                            <p style={{ margin: '4px 0 8px', fontSize: 12, color: 'var(--color-text-secondary, #aaa)', lineHeight: 1.5 }}>
+                              Kin-Sell Analytique analyse le marché en temps réel : prix moyens par catégorie, produits tendance à Kinshasa, et conseils personnalisés pour maximiser vos ventes. Les vendeurs abonnés vendent en moyenne 3x plus.
+                            </p>
+                            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                              <button
+                                onClick={() => navigate('/pricing')}
+                                style={{ padding: '6px 12px', fontSize: 11, fontWeight: 600, border: 'none', borderRadius: 6, background: 'linear-gradient(135deg, #00c896, #00e6ac)', color: '#fff', cursor: 'pointer' }}
+                              >
+                                📈 Débloquer Analytique
+                              </button>
+                            </div>
+                          </div>
+                          <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, background: 'rgba(0,200,150,0.15)', color: '#00c896', whiteSpace: 'nowrap', marginLeft: 8 }}>
+                            📊 Analytique
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ═══ Upgrade CTA recommendation ═══ */}
+                    {(!activePlan || activePlan.planCode === 'FREE') && (
+                      <div style={{
+                        background: 'linear-gradient(135deg, rgba(111,88,255,0.12), rgba(155,122,255,0.08))',
+                        border: '1px solid rgba(111,88,255,0.25)',
+                        borderRadius: 10, padding: 14,
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                          <div style={{ flex: 1 }}>
+                            <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--color-text-primary, #fff)' }}>
+                              🏆 Passez au niveau supérieur avec un forfait Kin-Sell
+                            </span>
+                            <p style={{ margin: '4px 0 8px', fontSize: 12, color: 'var(--color-text-secondary, #aaa)', lineHeight: 1.5 }}>
+                              Avec le forfait FREE, vous manquez : IA Analytique, IA Commande, boost automatique, statistiques avancées et support prioritaire. Passez à BOOST dès maintenant et débloquez tout le potentiel de Kin-Sell !
+                            </p>
+                            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                              <button
+                                onClick={() => navigate('/pricing')}
+                                style={{ padding: '6px 14px', fontSize: 11, fontWeight: 700, border: 'none', borderRadius: 6, background: 'linear-gradient(135deg, #6f58ff, #9b7aff)', color: '#fff', cursor: 'pointer', boxShadow: '0 2px 8px rgba(111,88,255,0.3)' }}
+                              >
+                                🚀 Voir les forfaits
+                              </button>
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>
+                                À partir de 2$/mois
+                              </span>
+                            </div>
+                          </div>
+                          <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, background: 'rgba(111,88,255,0.15)', color: '#9b7aff', whiteSpace: 'nowrap', marginLeft: 8 }}>
+                            💎 Premium
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
                   </div>
                 )}
               </div>
