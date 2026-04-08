@@ -3,10 +3,9 @@
  * Orchestre les providers, crée les enregistrements MobileMoneyPayment, gère les callbacks.
  */
 
-import { MomoStatus, PaymentMethod, BillingCycle, SubscriptionScope, SubscriptionStatus } from "@prisma/client";
+import { MomoStatus, PaymentMethod } from "@prisma/client";
 import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
-import { getPlanOrThrow } from "../billing/billing.catalog.js";
 import * as orangeMoney from "../../shared/payment/orange-money.provider.js";
 import * as mpesa from "../../shared/payment/mpesa.provider.js";
 
@@ -18,7 +17,9 @@ type InitiateInput = {
   amountCDF: number;
   /** Devise locale du paiement (défaut CDF pour RDC). */
   currency?: string;
-  purpose: "ORDER" | "SUBSCRIPTION" | "AD_PAYMENT";
+  // SÉCURITÉ : seul ORDER est autorisé via Mobile Money.
+  // SUBSCRIPTION et AD_PAYMENT passent obligatoirement par PayPal.
+  purpose: "ORDER";
   targetId?: string;
 };
 
@@ -317,72 +318,21 @@ async function handlePaymentSuccess(record: {
   purpose: string;
   targetId: string | null;
 }) {
-  if (record.purpose === "SUBSCRIPTION" && record.targetId) {
-    // Valider le PaymentOrder relié et activer l'abonnement
-    const order = await prisma.paymentOrder.findUnique({ where: { id: record.targetId } });
-    if (!order || ["VALIDATED", "CANCELED", "EXPIRED"].includes(order.status)) return;
-
-    const scope: "USER" | "BUSINESS" = order.targetScope as "USER" | "BUSINESS";
-    const targetPlan = getPlanOrThrow(order.planCode, scope);
-
-    await prisma.$transaction(async (tx) => {
-      // Cancel current active subscription
-      const current = await tx.subscription.findFirst({
-        where: {
-          scope: scope as SubscriptionScope,
-          status: SubscriptionStatus.ACTIVE,
-          userId: scope === "USER" ? record.userId : null,
-          businessId: scope === "BUSINESS" ? order.businessId : null,
-        },
-      });
-
-      if (current) {
-        await tx.subscription.update({
-          where: { id: current.id },
-          data: { status: SubscriptionStatus.CANCELED, endsAt: new Date(), autoRenew: false },
-        });
-      }
-
-      // Create new subscription
-      await tx.subscription.create({
-        data: {
-          scope: scope as SubscriptionScope,
-          userId: scope === "USER" ? record.userId : null,
-          businessId: scope === "BUSINESS" ? order.businessId : null,
-          planCode: targetPlan.code,
-          status: SubscriptionStatus.ACTIVE,
-          billingCycle: BillingCycle.MONTHLY,
-          priceUsdCents: targetPlan.monthlyPriceUsdCents,
-          startsAt: new Date(),
-          autoRenew: true,
-          metadata: { source: "MOBILE_MONEY", paymentId: record.id, orderId: order.id },
-        },
-      });
-
-      // Validate the PaymentOrder
-      await tx.paymentOrder.update({
-        where: { id: order.id },
-        data: { status: "VALIDATED", validatedAt: new Date() },
-      });
-
-      // Update business subscription status
-      if (scope === "BUSINESS" && order.businessId) {
-        await tx.businessAccount.update({
-          where: { id: order.businessId },
-          data: { subscriptionStatus: targetPlan.code },
-        });
-      }
-    });
-  }
+  // SÉCURITÉ : seul le purpose ORDER est traité.
+  // Les abonnements et publicités passent obligatoirement par PayPal.
+  // Bloc SUBSCRIPTION et AD_PAYMENT supprimés pour empêcher toute activation
+  // via webhook non authentifié.
 
   if (record.purpose === "ORDER" && record.targetId) {
-    // Confirmer la commande
-    await prisma.order.updateMany({
-      where: { id: record.targetId, status: "PENDING" },
+    // Vérifier que la commande appartient bien à l'utilisateur (buyer)
+    const order = await prisma.order.findFirst({
+      where: { id: record.targetId, buyerUserId: record.userId, status: "PENDING" },
+    });
+    if (!order) return;
+
+    await prisma.order.update({
+      where: { id: order.id },
       data: { status: "CONFIRMED" },
     });
   }
-
-  // AD_PAYMENT: on pourrait activer la pub ici
-  // Pour l'instant, c'est un placeholder
 }

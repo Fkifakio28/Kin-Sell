@@ -41,7 +41,7 @@ export function CartPage() {
     deliveryAddress: "",
     serviceMaintenanceAddress: "",
     serviceExecutionAddress: "",
-    paymentMethod: "MPESA" as "CARD" | "PAYPAL" | "MPESA" | "ORANGE_MONEY" | "CASH_ON_DELIVERY",
+    paymentMethod: "CASH_ON_DELIVERY" as "PAYPAL" | "CASH_ON_DELIVERY",
     additionalNote: "",
     deliveryCity: "",
     deliveryCountry: "",
@@ -273,7 +273,7 @@ export function CartPage() {
         deliveryAddress: "",
         serviceMaintenanceAddress: "",
         serviceExecutionAddress: "",
-        paymentMethod: "MPESA",
+        paymentMethod: "CASH_ON_DELIVERY",
         additionalNote: "",
         deliveryCity: "",
         deliveryCountry: "",
@@ -941,12 +941,9 @@ export function CartPage() {
 
             <label className="cart-checkout-modal-field">
               <span>Mode de paiement</span>
-              <select value={checkoutForm.paymentMethod} onChange={(e) => setCheckoutForm((prev) => ({ ...prev, paymentMethod: e.target.value as "CARD" | "PAYPAL" | "MPESA" | "ORANGE_MONEY" | "CASH_ON_DELIVERY" }))}>
-                <option value="CARD">Carte bancaire</option>
-                <option value="PAYPAL">PayPal</option>
-                <option value="MPESA">M-Pesa</option>
-                <option value="ORANGE_MONEY">Orange Money</option>
+              <select value={checkoutForm.paymentMethod} onChange={(e) => setCheckoutForm((prev) => ({ ...prev, paymentMethod: e.target.value as "PAYPAL" | "CASH_ON_DELIVERY" }))}>
                 <option value="CASH_ON_DELIVERY">Paiement à la livraison</option>
+                <option value="PAYPAL">PayPal</option>
               </select>
             </label>
 

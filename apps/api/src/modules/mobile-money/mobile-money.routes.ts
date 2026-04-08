@@ -20,7 +20,9 @@ const initiateSchema = z.object({
     .string()
     .regex(/^243\d{9}$/, "Le numéro doit être au format 243XXXXXXXXX (RDC)"),
   amountCDF: z.number().int().min(100, "Montant minimum: 100 CDF"),
-  purpose: z.enum(["ORDER", "SUBSCRIPTION", "AD_PAYMENT"]),
+  // SÉCURITÉ : seuls les paiements de commandes (ORDER) sont autorisés via Mobile Money.
+  // Les abonnements (SUBSCRIPTION) et publicités (AD_PAYMENT) passent obligatoirement par PayPal.
+  purpose: z.enum(["ORDER"]),
   targetId: z.string().optional(),
 });
 

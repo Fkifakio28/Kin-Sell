@@ -302,7 +302,7 @@ export function UserDashboard() {
     deliveryAddress: '',
     serviceMaintenanceAddress: '',
     serviceExecutionAddress: '',
-    paymentMethod: 'MPESA' as 'CARD' | 'PAYPAL' | 'MPESA' | 'ORANGE_MONEY' | 'CASH_ON_DELIVERY',
+    paymentMethod: 'CASH_ON_DELIVERY' as 'PAYPAL' | 'CASH_ON_DELIVERY',
     additionalNote: ''
   });
   const [orderStatusBusyId, setOrderStatusBusyId] = useState<string | null>(null);
@@ -1775,7 +1775,7 @@ export function UserDashboard() {
         deliveryAddress: '',
         serviceMaintenanceAddress: '',
         serviceExecutionAddress: '',
-        paymentMethod: 'MPESA',
+        paymentMethod: 'CASH_ON_DELIVERY',
         additionalNote: ''
       });
       await loadCommerce(sellerHistoryPage, buyerHistoryPage);
@@ -3514,13 +3514,10 @@ export function UserDashboard() {
                 <span>{t('user.paymentLabel')}</span>
                 <select
                   value={checkoutForm.paymentMethod}
-                  onChange={(e) => setCheckoutForm((prev) => ({ ...prev, paymentMethod: e.target.value as 'CARD' | 'PAYPAL' | 'MPESA' | 'ORANGE_MONEY' | 'CASH_ON_DELIVERY' }))}
+                  onChange={(e) => setCheckoutForm((prev) => ({ ...prev, paymentMethod: e.target.value as 'PAYPAL' | 'CASH_ON_DELIVERY' }))}
                 >
-                  <option value="CARD">{t('user.paymentCard')}</option>
-                  <option value="PAYPAL">{t('user.paymentPaypal')}</option>
-                  <option value="MPESA">{t('user.paymentMpesa')}</option>
-                  <option value="ORANGE_MONEY">{t('user.paymentOrange')}</option>
                   <option value="CASH_ON_DELIVERY">{t('user.paymentCash')}</option>
+                  <option value="PAYPAL">{t('user.paymentPaypal')}</option>
                 </select>
               </label>
 
