@@ -187,3 +187,24 @@ export type PricingNudge = {
 export const pricingNudges = {
   evaluate: () => request<PricingNudge[]>("/analytics/ai/pricing-nudges"),
 };
+
+// ── Commercial Advisor ──
+
+export type CommercialRecommendation = {
+  productType: "PLAN" | "ADDON" | "BOOST" | "ADS_PACK" | "ADS_PREMIUM" | "ANALYTICS";
+  productCode: string;
+  priority: number;
+  confidence: number;
+  title: string;
+  message: string;
+  rationale: string;
+  ctaLabel: string;
+  ctaTarget: string;
+  pricing: string;
+  signals: string[];
+  metric: Record<string, number | string>;
+};
+
+export const commercialAdvisor = {
+  getAdvice: () => request<CommercialRecommendation[]>("/analytics/ai/commercial-advice"),
+};

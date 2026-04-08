@@ -10,6 +10,7 @@ import { runDiagnostic } from "./ai-orchestrator.service.js";
 import * as aiMemory from "./ai-memory.service.js";
 import * as aiTrigger from "./ai-trigger.service.js";
 import * as pricingNudge from "./pricing-nudge.service.js";
+import * as commercialAdvisor from "./commercial-advisor.service.js";
 import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
 
@@ -244,6 +245,23 @@ router.get(
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     const nudges = await pricingNudge.evaluateNudges(req.auth!.userId);
     res.json(nudges);
+  })
+);
+
+// ─────────────────────────────────────────────
+// COMMERCIAL ADVISOR — recommandations produit contextuelles
+// ─────────────────────────────────────────────
+
+/**
+ * GET /analytics/ai/commercial-advice
+ * Recommandations commerciales contextuelles (plan, addon, boost, pub, analytics)
+ */
+router.get(
+  "/ai/commercial-advice",
+  requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const advice = await commercialAdvisor.getCommercialAdvice(req.auth!.userId);
+    res.json(advice);
   })
 );
 

@@ -26,6 +26,7 @@ import { runAutoAdOptimization } from "../ads/ad-advisor.service.js";
 import { batchCreateWeeklySnapshots } from "../analytics/ai-memory.service.js";
 import { runPeriodicSmartCheck } from "../analytics/ai-trigger.service.js";
 import { runBatchPricingNudges } from "../analytics/pricing-nudge.service.js";
+import { runBatchCommercialAdvice } from "../analytics/commercial-advisor.service.js";
 
 // ─────────────────────────────────────────────
 // State
@@ -89,6 +90,7 @@ async function runSlowCycle(): Promise<void> {
   await safeRun("IA_COMMANDE auto-validation", runBatchOrderAutoValidation);
   await safeRun("IA_ADS recommandations intelligentes", runBatchSmartRecommendations);
   await safeRun("IA_PRICING nudges intelligents", runBatchPricingNudges);
+  await safeRun("IA_COMMERCIAL conseiller commercial", runBatchCommercialAdvice);
 }
 
 /**
