@@ -380,6 +380,7 @@ export function UserDashboard() {
   });
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [showPw, setShowPw] = useState<{ cur: boolean; new: boolean; confirm: boolean }>({ cur: false, new: false, confirm: false });
 
   /* ── Articles state ── */
   const [myArticles, setMyArticles] = useState<MyListing[]>([]);
@@ -4013,11 +4014,17 @@ export function UserDashboard() {
                 <div className="ud-settings-fields">
                   <label className="ud-settings-field">
                     <span className="ud-settings-field-label">🔑 Mot de passe actuel</span>
-                    <input className="ud-input" type="password" value={settingsForm.currentPassword} onChange={(e) => setSettingsForm((prev) => ({ ...prev, currentPassword: e.target.value }))} placeholder="••••••••" autoComplete="current-password" />
+                    <div className="bz-pw-input-wrap">
+                      <input className="ud-input" type={showPw.cur ? 'text' : 'password'} value={settingsForm.currentPassword} onChange={(e) => setSettingsForm((prev) => ({ ...prev, currentPassword: e.target.value }))} placeholder="••••••••" autoComplete="current-password" />
+                      <button type="button" className="bz-pw-toggle" onClick={() => setShowPw(s => ({ ...s, cur: !s.cur }))} tabIndex={-1} aria-label={showPw.cur ? 'Masquer' : 'Afficher'}>{showPw.cur ? '🙈' : '👁️'}</button>
+                    </div>
                   </label>
                   <div className="ud-settings-field">
                     <span className="ud-settings-field-label">🔑 Nouveau mot de passe</span>
-                    <input className="ud-input" type="password" value={settingsForm.newPassword} onChange={(e) => setSettingsForm((prev) => ({ ...prev, newPassword: e.target.value }))} placeholder="Min. 8 caractères" autoComplete="new-password" />
+                    <div className="bz-pw-input-wrap">
+                      <input className="ud-input" type={showPw.new ? 'text' : 'password'} value={settingsForm.newPassword} onChange={(e) => setSettingsForm((prev) => ({ ...prev, newPassword: e.target.value }))} placeholder="Min. 8 caractères" autoComplete="new-password" />
+                      <button type="button" className="bz-pw-toggle" onClick={() => setShowPw(s => ({ ...s, new: !s.new }))} tabIndex={-1} aria-label={showPw.new ? 'Masquer' : 'Afficher'}>{showPw.new ? '🙈' : '👁️'}</button>
+                    </div>
                     {settingsForm.newPassword && (() => {
                       const pw = settingsForm.newPassword;
                       const hasUpper = /[A-Z]/.test(pw);
@@ -4046,7 +4053,10 @@ export function UserDashboard() {
                   </div>
                   <div className="ud-settings-field">
                     <span className="ud-settings-field-label">🔑 Confirmer le nouveau mot de passe</span>
-                    <input className="ud-input" type="password" value={settingsForm.confirmPassword} onChange={(e) => setSettingsForm((prev) => ({ ...prev, confirmPassword: e.target.value }))} placeholder="••••••••" autoComplete="new-password" />
+                    <div className="bz-pw-input-wrap">
+                      <input className="ud-input" type={showPw.confirm ? 'text' : 'password'} value={settingsForm.confirmPassword} onChange={(e) => setSettingsForm((prev) => ({ ...prev, confirmPassword: e.target.value }))} placeholder="••••••••" autoComplete="new-password" />
+                      <button type="button" className="bz-pw-toggle" onClick={() => setShowPw(s => ({ ...s, confirm: !s.confirm }))} tabIndex={-1} aria-label={showPw.confirm ? 'Masquer' : 'Afficher'}>{showPw.confirm ? '🙈' : '👁️'}</button>
+                    </div>
                     {settingsForm.confirmPassword && (
                       <span className={`bz-pw-match ${settingsForm.confirmPassword === settingsForm.newPassword ? 'bz-pw-match--ok' : 'bz-pw-match--no'}`}>
                         {settingsForm.confirmPassword === settingsForm.newPassword ? '✓ OK' : '✗ Ne correspond pas'}

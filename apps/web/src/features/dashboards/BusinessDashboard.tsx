@@ -147,6 +147,7 @@ export function BusinessDashboard() {
   // ─── Paramètres ──────────────────────────────────────────
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [settingsMsg, setSettingsMsg] = useState<string | null>(null);
+  const [showPw, setShowPw] = useState<{ cur: boolean; new: boolean; confirm: boolean }>({ cur: false, new: false, confirm: false });
   const [settingsForm, setSettingsForm] = useState({
     legalName: '', publicName: '', description: '', city: '',
     avatar: '', address: '',
@@ -3135,11 +3136,17 @@ export function BusinessDashboard() {
                   </label>
                   <label className="bz-setup-field">
                     <span>🔑 Mot de passe actuel</span>
-                    <input type="password" value={settingsForm.currentPassword} onChange={e => setSettingsForm(f => ({ ...f, currentPassword: e.target.value }))} placeholder="••••••••" autoComplete="current-password" />
+                    <div className="bz-pw-input-wrap">
+                      <input type={showPw.cur ? 'text' : 'password'} value={settingsForm.currentPassword} onChange={e => setSettingsForm(f => ({ ...f, currentPassword: e.target.value }))} placeholder="••••••••" autoComplete="current-password" />
+                      <button type="button" className="bz-pw-toggle" onClick={() => setShowPw(s => ({ ...s, cur: !s.cur }))} tabIndex={-1} aria-label={showPw.cur ? 'Masquer' : 'Afficher'}>{showPw.cur ? '🙈' : '👁️'}</button>
+                    </div>
                   </label>
                   <div className="bz-setup-field">
                     <span>🔑 Nouveau mot de passe</span>
-                    <input type="password" value={settingsForm.newPassword} onChange={e => setSettingsForm(f => ({ ...f, newPassword: e.target.value }))} placeholder="Min. 8 caractères" autoComplete="new-password" />
+                    <div className="bz-pw-input-wrap">
+                      <input type={showPw.new ? 'text' : 'password'} value={settingsForm.newPassword} onChange={e => setSettingsForm(f => ({ ...f, newPassword: e.target.value }))} placeholder="Min. 8 caractères" autoComplete="new-password" />
+                      <button type="button" className="bz-pw-toggle" onClick={() => setShowPw(s => ({ ...s, new: !s.new }))} tabIndex={-1} aria-label={showPw.new ? 'Masquer' : 'Afficher'}>{showPw.new ? '🙈' : '👁️'}</button>
+                    </div>
                     {settingsForm.newPassword && (() => {
                       const pw = settingsForm.newPassword;
                       const hasUpper = /[A-Z]/.test(pw);
@@ -3168,7 +3175,10 @@ export function BusinessDashboard() {
                   </div>
                   <div className="bz-setup-field">
                     <span>🔑 Confirmer le nouveau mot de passe</span>
-                    <input type="password" value={settingsForm.confirmPassword} onChange={e => setSettingsForm(f => ({ ...f, confirmPassword: e.target.value }))} placeholder="••••••••" autoComplete="new-password" />
+                    <div className="bz-pw-input-wrap">
+                      <input type={showPw.confirm ? 'text' : 'password'} value={settingsForm.confirmPassword} onChange={e => setSettingsForm(f => ({ ...f, confirmPassword: e.target.value }))} placeholder="••••••••" autoComplete="new-password" />
+                      <button type="button" className="bz-pw-toggle" onClick={() => setShowPw(s => ({ ...s, confirm: !s.confirm }))} tabIndex={-1} aria-label={showPw.confirm ? 'Masquer' : 'Afficher'}>{showPw.confirm ? '🙈' : '👁️'}</button>
+                    </div>
                     {settingsForm.confirmPassword && (
                       <span className={`bz-pw-match ${settingsForm.confirmPassword === settingsForm.newPassword ? 'bz-pw-match--ok' : 'bz-pw-match--no'}`}>
                         {settingsForm.confirmPassword === settingsForm.newPassword ? '✓ OK' : '✗ Ne correspond pas'}

@@ -864,6 +864,32 @@
   grid-column: 1 / -1;
 }
 
+/* ── Password input wrapper with toggle ── */
+.bz-pw-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.bz-pw-input-wrap input {
+  flex: 1;
+  padding-right: 40px;
+}
+.bz-pw-toggle {
+  position: absolute;
+  right: 6px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1.15rem;
+  line-height: 1;
+  padding: 4px;
+  opacity: 0.6;
+  transition: opacity 0.2s;
+}
+.bz-pw-toggle:hover {
+  opacity: 1;
+}
+
 /* ── Password strength meter ── */
 .bz-pw-strength {
   margin-top: 6px;
