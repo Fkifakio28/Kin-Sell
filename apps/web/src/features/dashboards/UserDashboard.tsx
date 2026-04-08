@@ -2312,6 +2312,10 @@ export function UserDashboard() {
                   <span className="ud-art-publish-icon">📥</span>
                   Importer
                 </button>
+                <button type="button" className="ud-art-publish-btn" style={{ background: 'rgba(255,152,0,.12)', color: '#ff9800' }} disabled={myArticles.length === 0} onClick={() => openArticlePromo(myArticles)}>
+                  <span className="ud-art-publish-icon">🎯</span>
+                  Promouvoir
+                </button>
                 <button type="button" className="ud-art-publish-btn" onClick={() => {
                   resetArticleForm();
                   if (settingsForm.city) setArticleForm(p => ({ ...p, city: settingsForm.city }));
