@@ -70,6 +70,8 @@ export const sokin = {
     mutate<SoKinApiPost>('/sokin/posts', { method: 'POST', body }, ['/sokin/posts']),
   archivePost: (id: string) =>
     mutate<SoKinApiPost>(`/sokin/posts/${encodeURIComponent(id)}/archive`, { method: 'PATCH' }, ['/sokin/posts']),
+  togglePost: (id: string) =>
+    mutate<{ post: SoKinApiPost }>(`/sokin/posts/${encodeURIComponent(id)}/toggle`, { method: 'PATCH' }, ['/sokin/posts']),
   deletePost: (id: string) =>
     mutate<{ success: boolean }>(`/sokin/posts/${encodeURIComponent(id)}`, { method: 'DELETE' }, ['/sokin/posts']),
   publicFeed: (params?: { limit?: number; offset?: number; cursor?: string; city?: string; country?: string }) =>

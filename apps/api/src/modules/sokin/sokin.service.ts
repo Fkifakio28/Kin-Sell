@@ -117,6 +117,26 @@ export const deleteSoKinPost = async (authorId: string, postId: string) => {
 };
 
 /**
+ * Bascule le statut d'une annonce entre ACTIVE et HIDDEN
+ */
+export const toggleSoKinPost = async (authorId: string, postId: string) => {
+  const post = await prisma.soKinPost.findUnique({ where: { id: postId } });
+  if (!post || post.status === "DELETED") {
+    throw new HttpError(404, "Publication introuvable");
+  }
+  if (post.authorId !== authorId) {
+    throw new HttpError(403, "Non autorisé");
+  }
+  const newStatus = post.status === "ACTIVE" ? "HIDDEN" : "ACTIVE";
+  const updated = await prisma.soKinPost.update({
+    where: { id: postId },
+    data: { status: newStatus },
+    include: { author: { include: { profile: true } } },
+  });
+  return updated;
+};
+
+/**
  * Récupère le fil public des annonces (filtré par localisation)
  */
 export const getPublicFeed = async (

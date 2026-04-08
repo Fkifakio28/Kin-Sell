@@ -20,6 +20,7 @@ import {
   createSoKinPost,
   getMySoKinPosts,
   deleteSoKinPost,
+  toggleSoKinPost,
   getPublicFeed,
   getPublicPostById,
   getPostComments,
@@ -179,6 +180,19 @@ router.post(
       parsed.parentCommentId
     );
     res.status(201).json({ comment });
+  })
+);
+
+/**
+ * PATCH /posts/:id/toggle
+ * Bascule le statut d'une annonce entre ACTIVE et HIDDEN
+ */
+router.patch(
+  "/posts/:id/toggle",
+  requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const post = await toggleSoKinPost(req.auth!.userId, req.params.id);
+    res.json({ post });
   })
 );
 

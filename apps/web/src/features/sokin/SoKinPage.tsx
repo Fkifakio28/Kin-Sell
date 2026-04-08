@@ -2079,6 +2079,7 @@ export function SoKinPage() {
   const [myPublishedPosts, setMyPublishedPosts] = useState<SoKinApiPost[]>([]);
   const [loadingMyPublishedPosts, setLoadingMyPublishedPosts] = useState(false);
   const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
+  const [togglingPostId, setTogglingPostId] = useState<string | null>(null);
 
   // Viewer (géré au niveau page : un seul à la fois)
   const [viewerItem, setViewerItem] = useState<MediaItem | null>(null);
@@ -2153,7 +2154,7 @@ export function SoKinPage() {
     setLoadingMyPublishedPosts(true);
     try {
       const data = await sokinApi.myPosts();
-      setMyPublishedPosts((data.posts ?? []).filter((p) => p.status === 'ACTIVE'));
+      setMyPublishedPosts((data.posts ?? []).filter((p) => p.status === 'ACTIVE' || p.status === 'HIDDEN'));
     } catch {
       setMyPublishedPosts([]);
     } finally {
@@ -2500,6 +2501,23 @@ export function SoKinPage() {
     }
   }, [deletingPostId]);
 
+  const handleTogglePublishedPost = useCallback(async (postId: string) => {
+    if (togglingPostId) return;
+    setTogglingPostId(postId);
+    try {
+      const data = await sokinApi.togglePost(postId);
+      const updated = data.post;
+      setMyPublishedPosts((prev) => prev.map((p) => (p.id === postId ? { ...p, status: updated.status } : p)));
+      if (updated.status === 'HIDDEN') {
+        setPosts((prev) => prev.filter((item) => item.id !== postId));
+      }
+    } catch {
+      // no-op
+    } finally {
+      setTogglingPostId(null);
+    }
+  }, [togglingPostId]);
+
   const handleEditPublishedPost = useCallback((postId: string) => {
     try {
       sessionStorage.setItem('ud-section', 'articles');
@@ -2662,12 +2680,18 @@ export function SoKinPage() {
                     <p className="sk-mobile-manage-empty">Aucune annonce publiée.</p>
                   ) : (
                     myPublishedPosts.map((post) => (
-                      <article key={post.id} className="sk-mobile-manage-item">
+                      <article key={post.id} className={`sk-mobile-manage-item${post.status === 'HIDDEN' ? ' sk-mobile-manage-item--hidden' : ''}`}>
                         <button type="button" className="sk-mobile-manage-main" onClick={() => { setShowMobileManage(false); void handleOpenPublishedPost(post.id); }}>
                           <strong>{post.text?.slice(0, 50) || 'Annonce sans texte'}</strong>
                           <span>{new Date(post.createdAt).toLocaleDateString('fr-FR')}</span>
+                          <span className={`sk-mobile-manage-status ${post.status === 'ACTIVE' ? 'sk-mobile-manage-status--active' : 'sk-mobile-manage-status--hidden'}`}>
+                            {post.status === 'ACTIVE' ? '🟢 Active' : '🟡 Désactivée'}
+                          </span>
                         </button>
                         <div className="sk-mobile-manage-actions">
+                          <button type="button" className="sk-mobile-manage-btn sk-mobile-manage-btn--toggle" onClick={() => void handleTogglePublishedPost(post.id)} disabled={togglingPostId === post.id}>
+                            {togglingPostId === post.id ? '⏳' : post.status === 'ACTIVE' ? '⏸️ Désactiver' : '▶️ Activer'}
+                          </button>
                           <button type="button" className="sk-mobile-manage-btn sk-mobile-manage-btn--edit" onClick={() => { setShowMobileManage(false); handleEditPublishedPost(post.id); }}>✏️ Modifier</button>
                           <button type="button" className="sk-mobile-manage-btn sk-mobile-manage-btn--delete" onClick={() => void handleDeletePublishedPost(post.id)} disabled={deletingPostId === post.id}>
                             {deletingPostId === post.id ? '⏳' : '🗑️ Supprimer'}
