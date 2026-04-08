@@ -542,6 +542,9 @@ model Listing {
   isNegotiable       Boolean       @default(true)
   isBoosted          Boolean       @default(false)
   boostExpiresAt     DateTime?
+  promoActive        Boolean       @default(false)
+  promoPriceUsdCents Int?
+  promoExpiresAt     DateTime?
   ownerUserId        String
   businessId         String?
   createdAt          DateTime      @default(now())

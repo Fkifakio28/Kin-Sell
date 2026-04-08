@@ -39,6 +39,7 @@ import { compressAndEncodeMedia } from '../../utils/media-compress';
 import { prepareMediaUrls } from '../../utils/media-upload';
 import { AdBanner } from '../../components/AdBanner';
 import { AdsBoostPopup } from '../../components/AdsBoostPopup';
+import { PromoCreator } from '../../components/PromoCreator';
 import { OrderValidationQrModal } from '../../components/OrderValidationQrModal';
 import LocationPicker from '../../components/LocationPicker';
 import VisibilitySelector from '../../components/VisibilitySelector';
@@ -386,6 +387,7 @@ export function UserDashboard() {
   const [artViewMode, setArtViewMode] = useState<'grid' | 'list'>(() => (localStorage.getItem('ks-art-view') as 'grid' | 'list') || 'grid');
   const [selectedArticleIds, setSelectedArticleIds] = useState<Set<string>>(new Set());
   const toggleArticleSelection = (id: string) => setSelectedArticleIds((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+  const [promoArticles, setPromoArticles] = useState<MyListing[] | null>(null);
   const [articleBusy, setArticleBusy] = useState<string | null>(null);
   const [editingArticle, setEditingArticle] = useState<MyListing | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -2609,7 +2611,10 @@ export function UserDashboard() {
                     Tout désélectionner
                   </button>
                 </div>
-                <button type="button" className="ud-art-bulk-cta" onClick={() => { setBoostPopupBulkCount(selectedArticleIds.size); setSelectedArticleIds(new Set()); }}>
+                <button type="button" className="ud-art-bulk-cta" onClick={() => {
+                  const selected = myArticles.filter((a) => selectedArticleIds.has(a.id));
+                  if (selected.length > 0) setPromoArticles(selected);
+                }}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
                   Faire une promotion
                 </button>
@@ -4907,6 +4912,21 @@ export function UserDashboard() {
           bulkImportedCount={boostPopupBulkCount ?? undefined}
           onClose={() => { setBoostPopupListingId(null); setBoostPopupBulkCount(null); }}
           onBoosted={() => void refreshArticles(1, articlesFilter)}
+        />
+      )}
+
+      {/* ── PromoCreator popup ── */}
+      {promoArticles && promoArticles.length > 0 && (
+        <PromoCreator
+          articles={promoArticles}
+          resolveMediaUrl={resolveMediaUrl}
+          onClose={() => { setPromoArticles(null); setSelectedArticleIds(new Set()); }}
+          onPublished={() => { void refreshArticles(1, articlesFilter); }}
+          onBoost={() => {
+            setBoostPopupBulkCount(promoArticles.length);
+            setPromoArticles(null);
+            setSelectedArticleIds(new Set());
+          }}
         />
       )}
     </div>

@@ -231,6 +231,10 @@ export const myListings = async (
       serviceLocation: row.serviceLocation,
       isPublished: row.isPublished,
       isNegotiable: row.isNegotiable,
+      isBoosted: row.isBoosted,
+      promoActive: row.promoActive,
+      promoPriceUsdCents: row.promoPriceUsdCents,
+      promoExpiresAt: row.promoExpiresAt,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     })),
@@ -244,6 +248,50 @@ export const getMyListing = async (userId: string, listingId: string) => {
   });
   if (!listing) throw new HttpError(404, "Article introuvable");
   return listing;
+};
+
+/* ── Set promo on one or more listings ── */
+export const setPromo = async (
+  userId: string,
+  listingIds: string[],
+  promoPriceUsdCents: number,
+  activate: boolean
+) => {
+  // Verify all listings belong to the user
+  const listings = await prisma.listing.findMany({
+    where: { id: { in: listingIds }, ownerUserId: userId },
+    select: { id: true, priceUsdCents: true, status: true },
+  });
+  if (listings.length === 0) throw new HttpError(404, "Aucun article trouv\u00e9");
+  const foundIds = listings.map((l) => l.id);
+
+  if (activate) {
+    // Validate promo price is less than original for each
+    for (const listing of listings) {
+      if (promoPriceUsdCents >= listing.priceUsdCents) {
+        throw new HttpError(400, `Le prix promo doit \u00eatre inf\u00e9rieur au prix original pour "${listing.id}"`);
+      }
+    }
+    await prisma.listing.updateMany({
+      where: { id: { in: foundIds } },
+      data: {
+        promoActive: true,
+        promoPriceUsdCents: promoPriceUsdCents,
+        promoExpiresAt: null,
+      },
+    });
+  } else {
+    await prisma.listing.updateMany({
+      where: { id: { in: foundIds } },
+      data: {
+        promoActive: false,
+        promoPriceUsdCents: null,
+        promoExpiresAt: null,
+      },
+    });
+  }
+
+  return { updated: foundIds.length, listingIds: foundIds, promoActive: activate };
 };
 
 /* ── Update listing ── */

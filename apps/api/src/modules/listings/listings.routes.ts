@@ -372,4 +372,20 @@ router.post(
   })
 );
 
+/* ── Promotion: activer/désactiver une promo sur un ou plusieurs articles ── */
+router.patch(
+  "/promo",
+  requireAuth,
+  asyncHandler(async (request: AuthenticatedRequest, response) => {
+    const schema = z.object({
+      listingIds: z.array(z.string()).min(1).max(50),
+      promoPriceUsdCents: z.number().int().min(0),
+      activate: z.boolean().default(true),
+    });
+    const { listingIds, promoPriceUsdCents, activate } = schema.parse(request.body);
+    const result = await listingsService.setPromo(request.auth!.userId, listingIds, promoPriceUsdCents, activate);
+    response.json(result);
+  })
+);
+
 export default router;

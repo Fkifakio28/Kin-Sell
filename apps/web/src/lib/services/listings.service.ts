@@ -25,6 +25,10 @@ export type MyListing = {
   serviceLocation: string | null;
   isPublished: boolean;
   isNegotiable: boolean;
+  isBoosted?: boolean;
+  promoActive?: boolean;
+  promoPriceUsdCents?: number | null;
+  promoExpiresAt?: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -123,6 +127,10 @@ export const listings = {
     mutate<BulkImportResult>("/listings/bulk-import", { method: "POST", body: { items } }, ["/listings"]),
   dbPreview: (config: DbPreviewConfig) =>
     mutate<DbPreviewResult>("/listings/bulk-import/db-preview", { method: "POST", body: config }, []),
+  setPromo: (listingIds: string[], promoPriceUsdCents: number, activate = true) =>
+    mutate<{ updated: number; listingIds: string[]; promoActive: boolean }>(
+      "/listings/promo", { method: "PATCH", body: { listingIds, promoPriceUsdCents, activate } }, ["/listings"]
+    ),
 };
 
 export type BulkImportItemInput = {
