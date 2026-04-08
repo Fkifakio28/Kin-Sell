@@ -34,7 +34,7 @@ type AbonnementTier = 'based' | 'medium' | 'premium';
 /* ─── Helpers devise ───────────────────────────────────────── */
 import { USD_TO_CDF_RATE, DEFAULT_CURRENCY_RATES } from '../../shared/constants/currencies';
 import { SK_BIZ_AI_ADVICE, SK_BIZ_AI_AUTO_NEGO, SK_BIZ_AI_COMMANDE } from '../../shared/constants/storage-keys';
-import { DashboardSecurityBlock, DashboardAiSettings, DashboardVerificationSection } from './sections';
+import { DashboardSecurityBlock, DashboardVerificationSection } from './sections';
 const USD_TO_CDF = USD_TO_CDF_RATE;
 const CURRENCY_SYMBOLS: Record<string, string> = { CDF: 'FC', USD: '$', EUR: '€', XAF: 'XAF', AOA: 'Kz', XOF: 'XOF', GNF: 'GNF', MAD: 'MAD' };
 const getCurrencyRate = (c: string) => c === 'USD' ? 1 : (DEFAULT_CURRENCY_RATES[c] ?? DEFAULT_CURRENCY_RATES.CDF);
@@ -144,8 +144,11 @@ export function BusinessDashboard() {
     shopPhoto1: '', shopPhoto2: '', shopPhoto3: '',
     country: '', countryCode: '', region: '', district: '', postalCode: '', formattedAddress: '',
     latitude: null as number | null, longitude: null as number | null, placeId: '',
-    locationVisibility: 'DISTRICT_PUBLIC' as LocationVisibility, serviceRadiusKm: '', deliveryZones: '' ,
+    locationVisibility: 'DISTRICT_PUBLIC' as LocationVisibility, serviceRadiusKm: '', deliveryZones: '',
+    email: '', phone: '', newPassword: '',
   });
+  const [settingsAvatarFile, setSettingsAvatarFile] = useState<File | null>(null);
+  const [settingsAvatarPreview, setSettingsAvatarPreview] = useState<string | null>(null);
   // Suppression de compte
   const [bzDeleteStep, setBzDeleteStep] = useState<'idle' | 'confirm' | 'reason' | 'done'>('idle');
   const [bzDeleteReason, setBzDeleteReason] = useState('');
@@ -481,6 +484,9 @@ export function BusinessDashboard() {
       locationVisibility: (business.shop as any)?.locationVisibility ?? 'DISTRICT_PUBLIC',
       serviceRadiusKm: (business.shop as any)?.serviceRadiusKm?.toString() ?? '',
       deliveryZones: (business.shop as any)?.deliveryZones?.join(', ') ?? '',
+      email: user?.email ?? '',
+      phone: user?.phone ?? '',
+      newPassword: '',
     });
     setPageForm({
       publicName: business.publicName ?? '',
@@ -804,13 +810,20 @@ export function BusinessDashboard() {
     setSettingsSaving(true);
     setSettingsMsg(null);
     try {
+      // Upload avatar if new file selected
+      let avatarUrl = settingsForm.avatar;
+      if (settingsAvatarFile) {
+        const encoded = await compressAndEncodeMedia([settingsAvatarFile]);
+        avatarUrl = encoded[0] ?? avatarUrl;
+      }
+      // Update business info
       const updated = await businesses.updateMe({
         legalName: settingsForm.legalName.trim() || undefined,
         publicName: settingsForm.publicName.trim() || undefined,
         description: settingsForm.description.trim() || undefined,
         city: settingsForm.city.trim() || undefined,
         address: settingsForm.address.trim() || undefined,
-        logo: settingsForm.avatar.trim() || undefined,
+        logo: avatarUrl.trim() || undefined,
         country: settingsForm.country.trim() || undefined,
         countryCode: settingsForm.countryCode.trim() || undefined,
         region: settingsForm.region.trim() || undefined,
@@ -825,6 +838,19 @@ export function BusinessDashboard() {
         deliveryZones: settingsForm.deliveryZones ? settingsForm.deliveryZones.split(',').map(z => z.trim()).filter(Boolean) : undefined,
       });
       setBusiness(updated);
+      // Update user profile (email, phone, avatar)
+      const profilePayload: Record<string, unknown> = {};
+      if (avatarUrl && avatarUrl !== user?.profile?.avatarUrl) profilePayload.avatarUrl = avatarUrl;
+      if (settingsForm.email.trim() && settingsForm.email.trim() !== user?.email) profilePayload.email = settingsForm.email.trim();
+      if (settingsForm.phone.trim() && settingsForm.phone.trim() !== user?.phone) profilePayload.phone = settingsForm.phone.trim();
+      if (Object.keys(profilePayload).length > 0) {
+        await authApi.completeProfile(profilePayload as any);
+      }
+      // Clean up avatar preview
+      if (settingsAvatarPreview) URL.revokeObjectURL(settingsAvatarPreview);
+      setSettingsAvatarFile(null);
+      setSettingsAvatarPreview(null);
+      setSettingsForm(f => ({ ...f, avatar: avatarUrl, newPassword: '' }));
       await refreshUser();
       setSettingsMsg(t('biz.settingsSaved'));
     } catch {
@@ -2846,10 +2872,53 @@ export function BusinessDashboard() {
         {activeSection === 'parametres' && (
           <div className="ud-section animate-fade-in">
 
-            {/* Identité légale */}
+            {/* Identité & Coordonnées */}
             <section className="ud-glass-panel bz-glass-panel">
               <h2 className="ud-panel-title">{t('biz.settingsTitle')}</h2>
               <form className="bz-setup-form" onSubmit={handleSaveSettings}>
+
+                {/* Photo de profil */}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+                  <div style={{ width: 90, height: 90, borderRadius: '50%', overflow: 'hidden', border: '2px solid rgba(111,88,255,0.3)', background: 'rgba(255,255,255,0.04)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {settingsAvatarPreview ? (
+                      <img src={settingsAvatarPreview} alt="avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ) : settingsForm.avatar ? (
+                      <img src={resolveMediaUrl(settingsForm.avatar)} alt="avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ) : (
+                      <span style={{ fontSize: 28, fontWeight: 700, color: 'var(--color-text-secondary, #aaa)' }}>{(settingsForm.publicName || settingsForm.legalName || 'B').slice(0, 2).toUpperCase()}</span>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <label className="ud-quick-btn" style={{ cursor: 'pointer', fontSize: '0.82rem' }}>
+                      📷 {settingsForm.avatar || settingsAvatarPreview ? 'Modifier' : 'Ajouter'} la photo
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        style={{ display: 'none' }}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          if (file.size > 10 * 1024 * 1024) { setSettingsMsg('Photo trop lourde (max 10 Mo)'); return; }
+                          if (settingsAvatarPreview) URL.revokeObjectURL(settingsAvatarPreview);
+                          setSettingsAvatarFile(file);
+                          setSettingsAvatarPreview(URL.createObjectURL(file));
+                          e.target.value = '';
+                        }}
+                      />
+                    </label>
+                    {(settingsForm.avatar || settingsAvatarPreview) && (
+                      <button type="button" className="ud-quick-btn" style={{ fontSize: '0.82rem', color: 'var(--color-error, #ff6b6b)' }} onClick={() => {
+                        if (settingsAvatarPreview) URL.revokeObjectURL(settingsAvatarPreview);
+                        setSettingsAvatarFile(null);
+                        setSettingsAvatarPreview(null);
+                        setSettingsForm(f => ({ ...f, avatar: '' }));
+                      }}>
+                        🗑️ Supprimer
+                      </button>
+                    )}
+                  </div>
+                </div>
+
                 <div className="bz-setup-grid">
                   <label className="bz-setup-field">
                     <span>{t('biz.legalNameFull')}</span>
@@ -2860,38 +2929,21 @@ export function BusinessDashboard() {
                     <input type="text" value={settingsForm.publicName} onChange={e => setSettingsForm(f => ({ ...f, publicName: e.target.value }))} minLength={2} maxLength={150} />
                   </label>
                   <label className="bz-setup-field">
-                    <span>{t('biz.cityLabel')}</span>
-                    <LocationPicker
-                      value={settingsForm.latitude && settingsForm.longitude ? { lat: settingsForm.latitude, lng: settingsForm.longitude, address: settingsForm.city || settingsForm.formattedAddress } : undefined}
-                      onChange={({ address, city }) => setSettingsForm(f => ({ ...f, city: city || address }))}
-                      onStructuredChange={(loc) => setSettingsForm(f => ({ ...f, city: loc.city || loc.formattedAddress, address: loc.formattedAddress || f.address, country: loc.country || '', countryCode: loc.countryCode || '', region: loc.region || '', district: loc.district || '', postalCode: loc.postalCode || '', formattedAddress: loc.formattedAddress || '', latitude: loc.latitude, longitude: loc.longitude, placeId: loc.placeId || '' }))}
-                      placeholder="Kinshasa"
-                    />
+                    <span>📧 Email</span>
+                    <input type="email" value={settingsForm.email} onChange={e => setSettingsForm(f => ({ ...f, email: e.target.value }))} placeholder="email@exemple.com" />
                   </label>
                   <label className="bz-setup-field">
-                    <span>{t('biz.addressShop')}</span>
-                    <input type="text" value={settingsForm.address} readOnly style={{ opacity: 0.6 }} placeholder={t('biz.addressPh')} />
-                  </label>
-                  <div className="bz-setup-field">
-                    <span>🔒 Visibilité</span>
-                    <VisibilitySelector value={settingsForm.locationVisibility} onChange={(v: LocationVisibility) => setSettingsForm(f => ({ ...f, locationVisibility: v }))} />
-                  </div>
-                  <label className="bz-setup-field">
-                    <span>📍 Rayon de service (km)</span>
-                    <input type="number" min={0} max={500} value={settingsForm.serviceRadiusKm} onChange={e => setSettingsForm(f => ({ ...f, serviceRadiusKm: e.target.value }))} placeholder="Ex: 25" />
-                  </label>
-                  <label className="bz-setup-field">
-                    <span>🚚 Zones de livraison</span>
-                    <input type="text" value={settingsForm.deliveryZones} onChange={e => setSettingsForm(f => ({ ...f, deliveryZones: e.target.value }))} placeholder="Gombe, Lingwala, Kintambo" />
+                    <span>📱 Téléphone</span>
+                    <input type="tel" value={settingsForm.phone} onChange={e => setSettingsForm(f => ({ ...f, phone: e.target.value }))} placeholder="+243 ..." />
                   </label>
                   <label className="bz-setup-field bz-setup-field--full">
-                    <span>{t('biz.internalDesc')}</span>
-                    <textarea value={settingsForm.description} onChange={e => setSettingsForm(f => ({ ...f, description: e.target.value }))} maxLength={800} rows={4} placeholder={t('biz.internalDescPh')} />
+                    <span>🔑 Nouveau mot de passe</span>
+                    <input type="password" value={settingsForm.newPassword} onChange={e => setSettingsForm(f => ({ ...f, newPassword: e.target.value }))} placeholder="Laisser vide pour ne pas changer" autoComplete="new-password" minLength={6} />
                   </label>
                 </div>
 
                 {settingsMsg && <p className={`bz-setup-${settingsMsg.startsWith('✓') ? 'note' : 'error'}`}>{settingsMsg}</p>}
-                <div className="bz-setup-actions">
+                <div className="bz-setup-actions" style={{ display: 'flex', justifyContent: 'center', gap: 12 }}>
                   <button type="submit" className="ud-quick-btn ud-quick-btn--primary bz-cta-gold" disabled={settingsSaving}>
                     {settingsSaving ? t('biz.saving') : t('biz.saveSettings')}
                   </button>
@@ -3007,15 +3059,6 @@ export function BusinessDashboard() {
                 </div>
               )}
             </section>
-
-            {/* ── Section: Gestion IA ── */}
-            <DashboardAiSettings
-              t={t}
-              storageKeys={{ advice: SK_BIZ_AI_ADVICE, autoNego: SK_BIZ_AI_AUTO_NEGO, commande: SK_BIZ_AI_COMMANDE }}
-              hasIaMarchandPlan={bizHasIaMarchandPlan}
-              hasIaOrderPlan={bizHasIaOrderPlan}
-              autoNegoActive={bizAutoNegoActive}
-            />
 
           </div>
         )}
