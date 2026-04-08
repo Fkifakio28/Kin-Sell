@@ -2566,8 +2566,24 @@ export function SoKinPage() {
     return () => window.clearTimeout(timer);
   }, [showCreateScreen, openCommentsPostId, viewerItem]);
 
+  // ── Mobile: retour physique ferme les commentaires au lieu de quitter la page ──
+  useEffect(() => {
+    if (!openCommentsPostId) return;
+    const onPopState = (e: PopStateEvent) => {
+      e.preventDefault();
+      handleCloseComments();
+    };
+    window.history.pushState({ skComments: true }, '');
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, [openCommentsPostId, handleCloseComments]);
+
+  // ── Mobile manage posts drawer ──
+  const [showMobileManage, setShowMobileManage] = useState(false);
+
   // ── Visibility des barres (top bar + FAB) ──
-  const hasActiveOverlay = showCreateScreen || Boolean(openCommentsPostId) || Boolean(viewerItem);
+  const hasActiveOverlay = showCreateScreen || Boolean(openCommentsPostId) || Boolean(viewerItem) || showMobileManage;
+  const fabVisible = !showCreateScreen && !openCommentsPostId && !viewerItem && !showMobileManage && (overlayUiLock || scrollDir === 'up');
   const barsVisible =
     hasActiveOverlay ||
     overlayUiLock ||
@@ -2624,12 +2640,49 @@ export function SoKinPage() {
 
           <button
             type="button"
-            className={`sk-floating-create${barsVisible ? '' : ' sk-floating-create--hidden'}`}
-            aria-label="Créer une annonce So-Kin"
-            onClick={handleOpenCreate}
+            className={`sk-floating-create${fabVisible ? '' : ' sk-floating-create--hidden'}`}
+            aria-label="Gérer mes annonces"
+            onClick={() => { if (!isLoggedIn) { navigate('/login'); return; } void loadMyPublishedPosts(); setShowMobileManage(true); }}
           >
-            <span>+</span>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
           </button>
+
+          {/* ── Mobile: Manage Posts Drawer ── */}
+          {showMobileManage && (
+            <div className="sk-mobile-manage-overlay" onClick={() => setShowMobileManage(false)}>
+              <aside className="sk-mobile-manage-drawer" onClick={(e) => e.stopPropagation()}>
+                <header className="sk-mobile-manage-header">
+                  <h3>📋 Mes annonces</h3>
+                  <button type="button" onClick={() => setShowMobileManage(false)} className="sk-mobile-manage-close">✕</button>
+                </header>
+                <div className="sk-mobile-manage-body">
+                  {loadingMyPublishedPosts ? (
+                    <p className="sk-mobile-manage-empty">Chargement…</p>
+                  ) : myPublishedPosts.length === 0 ? (
+                    <p className="sk-mobile-manage-empty">Aucune annonce publiée.</p>
+                  ) : (
+                    myPublishedPosts.map((post) => (
+                      <article key={post.id} className="sk-mobile-manage-item">
+                        <button type="button" className="sk-mobile-manage-main" onClick={() => { setShowMobileManage(false); void handleOpenPublishedPost(post.id); }}>
+                          <strong>{post.text?.slice(0, 50) || 'Annonce sans texte'}</strong>
+                          <span>{new Date(post.createdAt).toLocaleDateString('fr-FR')}</span>
+                        </button>
+                        <div className="sk-mobile-manage-actions">
+                          <button type="button" className="sk-mobile-manage-btn sk-mobile-manage-btn--edit" onClick={() => { setShowMobileManage(false); handleEditPublishedPost(post.id); }}>✏️ Modifier</button>
+                          <button type="button" className="sk-mobile-manage-btn sk-mobile-manage-btn--delete" onClick={() => void handleDeletePublishedPost(post.id)} disabled={deletingPostId === post.id}>
+                            {deletingPostId === post.id ? '⏳' : '🗑️ Supprimer'}
+                          </button>
+                        </div>
+                      </article>
+                    ))
+                  )}
+                </div>
+                <footer className="sk-mobile-manage-footer">
+                  <button type="button" className="sk-mobile-manage-new" onClick={() => { setShowMobileManage(false); handleOpenCreate(); }}>+ Nouvelle annonce</button>
+                </footer>
+              </aside>
+            </div>
+          )}
         </>
       ) : (
         <div className="sk-desktop-shell">
