@@ -36,6 +36,7 @@ import { USD_TO_CDF_RATE, DEFAULT_CURRENCY_RATES } from '../../shared/constants/
 import { SK_BIZ_AI_ADVICE, SK_BIZ_AI_AUTO_NEGO, SK_BIZ_AI_COMMANDE } from '../../shared/constants/storage-keys';
 import { DashboardSecurityBlock, DashboardVerificationSection } from './sections';
 import { AdsBoostPopup } from '../../components/AdsBoostPopup';
+import { PostPublishAdvisor } from '../../components/PostPublishAdvisor';
 import { SmartUpsellBanner, SmartUpsellCard, PostActionTip } from '../../components/SmartUpsell';
 import { PromoCreator } from '../../components/PromoCreator';
 import { PromoBulkBar } from '../../components/PromoBulkBar';
@@ -144,6 +145,11 @@ export function BusinessDashboard() {
   const [boostPopupListingId, setBoostPopupListingId] = useState<string | null>(null);
   const [boostPopupBulkCount, setBoostPopupBulkCount] = useState<number | null>(null);
   const [importProgress, setImportProgress] = useState<{ done: number; total: number } | null>(null);
+
+  // ─── Post-Publish Advisor ────────────────────────────────
+  const [advisorListingId, setAdvisorListingId] = useState<string | null>(null);
+  const [advisorPromo, setAdvisorPromo] = useState(false);
+  const [advisorBulkCount, setAdvisorBulkCount] = useState<number | null>(null);
 
   // ─── Smart Upsell post-action tips ───────────────────────
   const [showBizPublishTip, setShowBizPublishTip] = useState(false);
@@ -711,7 +717,7 @@ export function BusinessDashboard() {
         await listings.update(editingArticleId, payload);
       } else {
         const createdListing = await listings.create(payload as any);
-        if (createdListing?.id) setBoostPopupListingId(createdListing.id);
+        if (createdListing?.id) { setBoostPopupListingId(createdListing.id); setAdvisorListingId(createdListing.id); }
       }
       invalidateCache('/listings/mine');
       setCreateMsg(editingArticleId ? '✓ Article modifié avec succès' : t('biz.listingSuccess'));
@@ -3715,11 +3721,13 @@ export function BusinessDashboard() {
           onPublished={() => {
             closeSvcPromo();
             setShowBizPromoTip(true);
+            setAdvisorPromo(true);
             invalidateCache('/listings/mine');
             listings.mine({ limit: 50 }).then(r => setMyListings(r.listings)).catch(() => {});
           }}
           onBoost={() => {
             setBoostPopupBulkCount(promoServices.length);
+            setAdvisorBulkCount(promoServices.length);
             closeSvcPromo();
           }}
         />
@@ -3734,23 +3742,39 @@ export function BusinessDashboard() {
           onPublished={() => {
             closeProdPromo();
             setShowBizPromoTip(true);
+            setAdvisorPromo(true);
             invalidateCache('/listings/mine');
             listings.mine({ limit: 50 }).then(r => setMyListings(r.listings)).catch(() => {});
           }}
           onBoost={() => {
             setBoostPopupBulkCount(promoProduits.length);
+            setAdvisorBulkCount(promoProduits.length);
             closeProdPromo();
           }}
         />
       )}
 
       {/* ─── ADS Boost / Highlight popup ─── */}
-      {(boostPopupListingId || boostPopupBulkCount) && (
+      {(boostPopupListingId || boostPopupBulkCount) && !advisorListingId && !advisorPromo && !advisorBulkCount && (
         <AdsBoostPopup
           listingId={boostPopupListingId ?? undefined}
           bulkImportedCount={boostPopupBulkCount ?? undefined}
           businessId={business?.id}
           onClose={() => { setBoostPopupListingId(null); setBoostPopupBulkCount(null); }}
+        />
+      )}
+
+      {/* ─── Post-Publish Advisor — Conseiller IA multi-recommandations ─── */}
+      {(advisorListingId || advisorPromo || advisorBulkCount) && (
+        <PostPublishAdvisor
+          listingId={advisorListingId ?? undefined}
+          promoPublished={advisorPromo || undefined}
+          bulkCount={advisorBulkCount ?? undefined}
+          onClose={() => { setAdvisorListingId(null); setAdvisorPromo(false); setAdvisorBulkCount(null); setBoostPopupListingId(null); setBoostPopupBulkCount(null); }}
+          onBoost={() => {
+            invalidateCache('/listings/mine');
+            listings.mine({ limit: 50 }).then(r => setMyListings(r.listings)).catch(() => {});
+          }}
         />
       )}
     </div>

@@ -41,6 +41,7 @@ import { compressAndEncodeMedia } from '../../utils/media-compress';
 import { prepareMediaUrls } from '../../utils/media-upload';
 import { AdBanner } from '../../components/AdBanner';
 import { AdsBoostPopup } from '../../components/AdsBoostPopup';
+import { PostPublishAdvisor } from '../../components/PostPublishAdvisor';
 import { SmartUpsellBanner, SmartUpsellCard, PostActionTip } from '../../components/SmartUpsell';
 import { PromoCreator } from '../../components/PromoCreator';
 import { OrderValidationQrModal } from '../../components/OrderValidationQrModal';
@@ -336,6 +337,11 @@ export function UserDashboard() {
   // ── IA ADS Boost popup state ──
   const [boostPopupListingId, setBoostPopupListingId] = useState<string | null>(null);
   const [boostPopupBulkCount, setBoostPopupBulkCount] = useState<number | null>(null);
+
+  // ── Post-Publish Advisor state ──
+  const [advisorListingId, setAdvisorListingId] = useState<string | null>(null);
+  const [advisorPromo, setAdvisorPromo] = useState(false);
+  const [advisorBulkCount, setAdvisorBulkCount] = useState<number | null>(null);
 
   // ── Smart Upsell post-action tips ──
   const [showPublishTip, setShowPublishTip] = useState(false);
@@ -1239,6 +1245,7 @@ export function UserDashboard() {
       // IA ADS Kin-Sell: proposer un boost pour l'article publié
       if (createdListing?.id) {
         setBoostPopupListingId(createdListing.id);
+        setAdvisorListingId(createdListing.id);
       }
       setShowPublishTip(true);
     } catch (err) {
@@ -5116,12 +5123,23 @@ export function UserDashboard() {
       )}
 
       {/* ── IA ADS Kin-Sell: Boost / Mise en avant popup ── */}
-      {(boostPopupListingId || boostPopupBulkCount) && (
+      {(boostPopupListingId || boostPopupBulkCount) && !advisorListingId && !advisorPromo && !advisorBulkCount && (
         <AdsBoostPopup
           listingId={boostPopupListingId ?? undefined}
           bulkImportedCount={boostPopupBulkCount ?? undefined}
           onClose={() => { setBoostPopupListingId(null); setBoostPopupBulkCount(null); }}
           onBoosted={() => void refreshArticles(1, articlesFilter)}
+        />
+      )}
+
+      {/* ── Post-Publish Advisor — Conseiller IA multi-recommandations ── */}
+      {(advisorListingId || advisorPromo || advisorBulkCount) && (
+        <PostPublishAdvisor
+          listingId={advisorListingId ?? undefined}
+          promoPublished={advisorPromo || undefined}
+          bulkCount={advisorBulkCount ?? undefined}
+          onClose={() => { setAdvisorListingId(null); setAdvisorPromo(false); setAdvisorBulkCount(null); setBoostPopupListingId(null); setBoostPopupBulkCount(null); }}
+          onBoost={() => void refreshArticles(1, articlesFilter)}
         />
       )}
 
@@ -5131,9 +5149,10 @@ export function UserDashboard() {
           articles={promoArticles}
           resolveMediaUrl={resolveMediaUrl}
           onClose={() => { closeArticlePromo(); setShowPromoTip(true); }}
-          onPublished={() => { void refreshArticles(1, articlesFilter); setShowPromoTip(true); }}
+          onPublished={() => { void refreshArticles(1, articlesFilter); setShowPromoTip(true); setAdvisorPromo(true); }}
           onBoost={() => {
             setBoostPopupBulkCount(promoArticles.length);
+            setAdvisorBulkCount(promoArticles.length);
             closeArticlePromo();
           }}
         />

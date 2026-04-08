@@ -208,3 +208,39 @@ export type CommercialRecommendation = {
 export const commercialAdvisor = {
   getAdvice: () => request<CommercialRecommendation[]>("/analytics/ai/commercial-advice"),
 };
+
+// ── Post-Publish Advisor ──
+
+export type AdviceCategory = "BOOST" | "ADS_PACK" | "ADS_PREMIUM" | "PLAN" | "ANALYTICS" | "CONTENT_TIP";
+
+export type PostPublishAdvice = {
+  category: AdviceCategory;
+  priority: number;
+  icon: string;
+  title: string;
+  message: string;
+  rationale: string;
+  ctaLabel: string;
+  ctaTarget: string;
+  ctaAction?: string;
+  metric?: Record<string, number | string>;
+};
+
+export type PostPublishReport = {
+  context: "SINGLE" | "PROMO" | "BULK";
+  listingTitle?: string;
+  qualityScore: number;
+  qualitySignals: string[];
+  advice: PostPublishAdvice[];
+  sellerLifecycle: string;
+};
+
+export const postPublishAdvisor = {
+  getAdvice: (params: { type: "SINGLE" | "PROMO" | "BULK"; listingId?: string; promoCount?: number }) => {
+    const query = new URLSearchParams();
+    query.set("type", params.type);
+    if (params.listingId) query.set("listingId", params.listingId);
+    if (params.promoCount) query.set("promoCount", String(params.promoCount));
+    return request<PostPublishReport>(`/analytics/ai/post-publish-advice?${query.toString()}`);
+  },
+};

@@ -11,6 +11,7 @@ import * as aiMemory from "./ai-memory.service.js";
 import * as aiTrigger from "./ai-trigger.service.js";
 import * as pricingNudge from "./pricing-nudge.service.js";
 import * as commercialAdvisor from "./commercial-advisor.service.js";
+import { getPostPublishAdvice, type PublishContext } from "../ads/post-publish-advisor.service.js";
 import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
 
@@ -262,6 +263,32 @@ router.get(
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     const advice = await commercialAdvisor.getCommercialAdvice(req.auth!.userId);
     res.json(advice);
+  })
+);
+
+// ─────────────────────────────────────────────
+// POST-PUBLISH ADVISOR — conseiller IA après publication
+// ─────────────────────────────────────────────
+
+/**
+ * GET /analytics/ai/post-publish-advice?type=SINGLE|PROMO|BULK&listingId=X&promoCount=N
+ * Analyse post-publication : qualité, boost, pub, forfait, analytics, tips contenu
+ */
+router.get(
+  "/ai/post-publish-advice",
+  requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const type = (req.query.type as string) || "SINGLE";
+    if (!["SINGLE", "PROMO", "BULK"].includes(type)) {
+      throw new HttpError(400, "type must be SINGLE, PROMO, or BULK");
+    }
+    const ctx: PublishContext = {
+      type: type as PublishContext["type"],
+      listingId: req.query.listingId as string | undefined,
+      promoCount: req.query.promoCount ? Number(req.query.promoCount) : undefined,
+    };
+    const report = await getPostPublishAdvice(req.auth!.userId, ctx);
+    res.json(report);
   })
 );
 
