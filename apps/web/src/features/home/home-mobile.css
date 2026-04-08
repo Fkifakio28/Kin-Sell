@@ -101,8 +101,8 @@
 /* ─── Content ─── */
 
 .hm-content {
-  padding-top: 64px;
-  padding-bottom: 72px;
+  padding-top: 58px;
+  padding-bottom: 64px;
   transition: padding-top 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -113,7 +113,7 @@
 /* ─── Sections ─── */
 
 .hm-section {
-  padding: 16px 0;
+  padding: 10px 0;
 }
 
 .hm-section-title {
@@ -121,7 +121,7 @@
   font-size: 1.05rem;
   font-weight: 700;
   color: var(--color-text);
-  padding: 0 16px 10px;
+  padding: 0 14px 6px;
   margin: 0;
 }
 
@@ -142,7 +142,7 @@
 
 .hm-empty {
   text-align: center;
-  padding: 24px 16px;
+  padding: 14px 14px;
   color: var(--color-text-muted, rgba(255, 255, 255, 0.45));
   font-size: 0.88rem;
 }
@@ -151,8 +151,8 @@
 
 .hm-hscroll {
   display: flex;
-  gap: 12px;
-  padding: 0 16px 4px;
+  gap: 8px;
+  padding: 0 14px 2px;
   overflow-x: auto;
   scroll-snap-type: x mandatory;
   -webkit-overflow-scrolling: touch;
@@ -181,7 +181,7 @@
 }
 
 .hm-letter-skeleton {
-  margin: 0 16px 16px;
+  margin: 0 14px 10px;
   height: 280px;
   border-radius: 16px;
   background: var(--color-glass-bg, rgba(255, 255, 255, 0.05));
@@ -264,8 +264,8 @@
 
 .hm-tabs {
   display: flex;
-  gap: 8px;
-  padding: 0 16px 12px;
+  gap: 6px;
+  padding: 0 14px 8px;
 }
 
 .hm-tab {
@@ -353,7 +353,7 @@
 }
 
 .hm-market-card-body {
-  padding: 8px 10px 10px;
+  padding: 6px 8px 8px;
 }
 
 .hm-market-card-title {
@@ -397,8 +397,8 @@
 .hm-sokin-feed {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  padding: 0 12px;
+  gap: 10px;
+  padding: 0 10px;
 }
 
 .hm-sentinel {
@@ -420,8 +420,8 @@
 .hm-letter-head {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 12px 14px 8px;
+  gap: 8px;
+  padding: 10px 12px 6px;
 }
 
 .hm-letter-avatar {
@@ -498,7 +498,7 @@
 }
 
 .hm-letter-text {
-  padding: 0 14px 8px;
+  padding: 0 12px 6px;
   font-size: 0.88rem;
   line-height: 1.5;
   color: var(--color-text);
@@ -570,7 +570,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 14px 12px;
+  padding: 6px 12px 8px;
 }
 
 .hm-letter-foot-left,
@@ -760,7 +760,7 @@
   height: 4px;
   border-radius: 2px;
   background: var(--color-text-muted, rgba(255, 255, 255, 0.2));
-  margin: 0 auto 14px;
+  margin: 0 auto 10px;
 }
 
 .hm-fab-menu-title {
@@ -768,15 +768,15 @@
   font-size: 0.95rem;
   font-weight: 700;
   color: var(--color-text);
-  margin: 0 0 14px;
+  margin: 0 0 10px;
 }
 
 .hm-fab-menu-item {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   width: 100%;
-  padding: 12px;
+  padding: 10px;
   border: none;
   background: var(--color-glass-bg, rgba(255, 255, 255, 0.04));
   color: var(--color-text);
@@ -784,7 +784,7 @@
   font-size: 0.9rem;
   font-weight: 600;
   cursor: pointer;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
   transition: background 0.15s;
 }
 
@@ -1190,7 +1190,7 @@
   }
 
   .hm-content {
-    padding-top: calc(64px + env(safe-area-inset-top));
+    padding-top: calc(58px + env(safe-area-inset-top));
   }
 
   .hm-bottomnav {
@@ -1199,7 +1199,7 @@
   }
 
   .hm-content {
-    padding-bottom: calc(72px + env(safe-area-inset-bottom));
+    padding-bottom: calc(64px + env(safe-area-inset-bottom));
   }
 
   .hm-fab-menu {
