@@ -1,4 +1,4 @@
-import { request } from "../api-core";
+import { request, mutate } from "../api-core";
 
 export type AdvertisementItem = {
   id: string;
@@ -70,4 +70,39 @@ export const aiAdsSlot = {
     request<{ ok: boolean }>(`/ads/ai-campaign/${encodeURIComponent(campaignId)}/dismiss`, { method: 'POST' }),
   recordConvert: (campaignId: string, type: 'subscription' | 'trial' | 'generic') =>
     request<{ ok: boolean }>(`/ads/ai-campaign/${encodeURIComponent(campaignId)}/convert`, { method: 'POST', body: { type } }),
+};
+
+// ══════════════════════════════════════════════════════════════
+// IA ADS Kin-Sell — Boost & Mise en avant
+// ══════════════════════════════════════════════════════════════
+
+export type BoostProposal = {
+  type: 'SINGLE_BOOST';
+  listingId: string;
+  listingTitle: string;
+  message: string;
+  benefits: string[];
+  suggestedDurationDays: number;
+  estimatedExtraViews: { min: number; max: number };
+};
+
+export type HighlightProposal = {
+  type: 'PROFILE_HIGHLIGHT' | 'SHOP_HIGHLIGHT';
+  targetId: string;
+  targetName: string;
+  message: string;
+  benefits: string[];
+  articleCount: number;
+  suggestedDurationDays: number;
+};
+
+export const adsBoostApi = {
+  getBoostProposal: (listingId: string) =>
+    request<{ proposal: BoostProposal }>(`/ads/boost-proposal?listingId=${encodeURIComponent(listingId)}`),
+  getHighlightProposal: (count: number) =>
+    request<{ proposal: HighlightProposal }>(`/ads/highlight-proposal?count=${count}`),
+  activateBoost: (listingId: string, durationDays?: number) =>
+    mutate<{ listingId: string; isBoosted: boolean; boostExpiresAt: string | null }>('/ads/boost', { method: 'POST', body: { listingId, durationDays } }, []),
+  activateHighlight: (durationDays?: number, businessId?: string) =>
+    mutate<{ boostedCount: number; expiresAt: string }>('/ads/highlight', { method: 'POST', body: { durationDays, businessId } }, []),
 };

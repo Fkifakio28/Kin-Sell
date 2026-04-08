@@ -457,6 +457,7 @@ export const searchListings = async (input: SearchListingsInput) => {
         imageUrl: row.imageUrl,
         priceUsdCents: row.priceUsdCents,
         isNegotiable: row.isNegotiable,
+        isBoosted: row.isBoosted && (!row.boostExpiresAt || row.boostExpiresAt > new Date()),
         createdAt: row.createdAt,
         distanceKm,
         owner: {
@@ -506,6 +507,7 @@ export const searchListings = async (input: SearchListingsInput) => {
           id: row.id, type: row.type, title: row.title, description: row.description,
           category: row.category, city: row.city, latitude: row.latitude, longitude: row.longitude,
           imageUrl: row.imageUrl, priceUsdCents: row.priceUsdCents, isNegotiable: row.isNegotiable,
+          isBoosted: row.isBoosted && (!row.boostExpiresAt || row.boostExpiresAt > new Date()),
           createdAt: row.createdAt, distanceKm: null,
           owner: {
             userId: row.ownerUserId,
@@ -544,6 +546,7 @@ export const searchListings = async (input: SearchListingsInput) => {
           id: row.id, type: row.type, title: row.title, description: row.description,
           category: row.category, city: row.city, latitude: row.latitude, longitude: row.longitude,
           imageUrl: row.imageUrl, priceUsdCents: row.priceUsdCents, isNegotiable: row.isNegotiable,
+          isBoosted: row.isBoosted && (!row.boostExpiresAt || row.boostExpiresAt > new Date()),
           createdAt: row.createdAt, distanceKm: null,
           owner: {
             userId: row.ownerUserId,
@@ -557,6 +560,15 @@ export const searchListings = async (input: SearchListingsInput) => {
       if (globalRows.length > 0) fallbackLevel = "global";
     }
   }
+
+  // Tri : articles boostés en tête, puis par distance ou date
+  enriched.sort((a, b) => {
+    const aBoosted = a.isBoosted ? 1 : 0;
+    const bBoosted = b.isBoosted ? 1 : 0;
+    if (aBoosted !== bBoosted) return bBoosted - aBoosted;
+    if (byCoordinates) return (a.distanceKm ?? 0) - (b.distanceKm ?? 0);
+    return 0;
+  });
 
   return {
     location: byCoordinates
@@ -628,7 +640,7 @@ export const latestListings = async (input: { type?: ListingType; city?: string;
 
   // Note: le filtre pays (andClauses) est toujours conservé
 
-  return rows.map((row) => ({
+  const mapped = rows.map((row) => ({
     id: row.id,
     type: row.type,
     title: row.title,
@@ -638,6 +650,7 @@ export const latestListings = async (input: { type?: ListingType; city?: string;
     imageUrl: row.imageUrl,
     priceUsdCents: row.priceUsdCents,
     isNegotiable: row.isNegotiable,
+    isBoosted: row.isBoosted && (!row.boostExpiresAt || row.boostExpiresAt > new Date()),
     latitude: row.latitude,
     longitude: row.longitude,
     createdAt: row.createdAt,
@@ -648,4 +661,8 @@ export const latestListings = async (input: { type?: ListingType; city?: string;
       avatarUrl: row.ownerUser.profile?.avatarUrl ?? null,
     },
   }));
+
+  // Boosted en tête
+  mapped.sort((a, b) => (a.isBoosted === b.isBoosted ? 0 : a.isBoosted ? -1 : 1));
+  return mapped;
 };

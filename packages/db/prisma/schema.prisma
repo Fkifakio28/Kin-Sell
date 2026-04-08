@@ -540,6 +540,8 @@ model Listing {
   serviceLocation    String?
   isPublished        Boolean       @default(true)
   isNegotiable       Boolean       @default(true)
+  isBoosted          Boolean       @default(false)
+  boostExpiresAt     DateTime?
   ownerUserId        String
   businessId         String?
   createdAt          DateTime      @default(now())
@@ -560,6 +562,7 @@ model Listing {
   @@index([businessId])
   @@index([isPublished])
   @@index([status])
+  @@index([isBoosted])
   @@index([createdAt])
   @@index([countryCode, isPublished, createdAt])
   @@index([city, isPublished, createdAt])

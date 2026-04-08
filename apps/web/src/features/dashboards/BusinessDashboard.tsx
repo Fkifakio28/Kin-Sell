@@ -35,6 +35,7 @@ type AbonnementTier = 'based' | 'medium' | 'premium';
 import { USD_TO_CDF_RATE, DEFAULT_CURRENCY_RATES } from '../../shared/constants/currencies';
 import { SK_BIZ_AI_ADVICE, SK_BIZ_AI_AUTO_NEGO, SK_BIZ_AI_COMMANDE } from '../../shared/constants/storage-keys';
 import { DashboardSecurityBlock, DashboardVerificationSection } from './sections';
+import { AdsBoostPopup } from '../../components/AdsBoostPopup';
 const USD_TO_CDF = USD_TO_CDF_RATE;
 const CURRENCY_SYMBOLS: Record<string, string> = { CDF: 'FC', USD: '$', EUR: '€', XAF: 'XAF', AOA: 'Kz', XOF: 'XOF', GNF: 'GNF', MAD: 'MAD' };
 const getCurrencyRate = (c: string) => c === 'USD' ? 1 : (DEFAULT_CURRENCY_RATES[c] ?? DEFAULT_CURRENCY_RATES.CDF);
@@ -133,6 +134,10 @@ export function BusinessDashboard() {
   const [importOpen, setImportOpen] = useState<'produit' | 'service' | null>(null);
   const [importBusy, setImportBusy] = useState(false);
   const [importMsg, setImportMsg] = useState<string | null>(null);
+
+  // ─── ADS Boost popup ─────────────────────────────────────
+  const [boostPopupListingId, setBoostPopupListingId] = useState<string | null>(null);
+  const [boostPopupBulkCount, setBoostPopupBulkCount] = useState<number | null>(null);
   const [importProgress, setImportProgress] = useState<{ done: number; total: number } | null>(null);
 
   // ─── Paramètres ──────────────────────────────────────────
@@ -687,7 +692,8 @@ export function BusinessDashboard() {
       if (editingArticleId) {
         await listings.update(editingArticleId, payload);
       } else {
-        await listings.create(payload as any);
+        const createdListing = await listings.create(payload as any);
+        if (createdListing?.id) setBoostPopupListingId(createdListing.id);
       }
       invalidateCache('/listings/mine');
       setCreateMsg(editingArticleId ? '✓ Article modifié avec succès' : t('biz.listingSuccess'));
@@ -784,6 +790,7 @@ export function BusinessDashboard() {
       if (lRes.status === 'fulfilled') setMyListings(lRes.value.listings);
       if (sRes.status === 'fulfilled') setListingStats(sRes.value);
       setImportMsg(`✓ ${created} importé(s)${errors ? `, ${errors} erreur(s)` : ''}`);
+      if (created >= 5) setBoostPopupBulkCount(created);
     } catch (err) {
       setImportMsg(err instanceof Error ? err.message : 'Erreur lors de l\'import');
     } finally {
@@ -3320,6 +3327,16 @@ export function BusinessDashboard() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ─── ADS Boost / Highlight popup ─── */}
+      {(boostPopupListingId || boostPopupBulkCount) && (
+        <AdsBoostPopup
+          listingId={boostPopupListingId ?? undefined}
+          bulkImportedCount={boostPopupBulkCount ?? undefined}
+          businessId={business?.id}
+          onClose={() => { setBoostPopupListingId(null); setBoostPopupBulkCount(null); }}
+        />
       )}
     </div>
   );

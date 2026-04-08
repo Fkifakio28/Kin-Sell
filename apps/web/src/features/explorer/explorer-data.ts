@@ -56,6 +56,7 @@ export type ExplorerArticlePreview = {
   media: ExplorerArticleMedia[];
   ownerId?: string;
   isNegotiable?: boolean;
+  isBoosted?: boolean;
   latitude?: number;
   longitude?: number;
 };

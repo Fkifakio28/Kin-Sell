@@ -10,6 +10,9 @@ import * as messageGuardService from "../message-guard/message-guard.service.js"
 import * as adsService from "../ads/ads.service.js";
 import * as aiTrigger from "../analytics/ai-trigger.service.js";
 import aiAdminRoutes from "../analytics/ai-admin.routes.js";
+import * as iaAdsPlacements from "../ads/ia-ads-placements.service.js";
+import * as iaMessengerPromo from "../ads/ia-messenger-promo.service.js";
+import * as marketIntelligence from "../market-intelligence/market-intelligence.service.js";
 
 const router = Router();
 
@@ -818,6 +821,182 @@ router.get("/ai-trials", asyncHandler(async (req: AuthenticatedRequest, res) => 
   ]);
 
   res.json({ items, total, page, limit });
+}));
+
+// ════════════════════════════════════════════
+// IA TABS — Dashboard Admin
+// ════════════════════════════════════════════
+
+// ── Kin-Sell Analytique ──
+router.get("/ia/analytique", asyncHandler(async (req: AuthenticatedRequest, res) => {
+  await checkPermission(req, "AI_MANAGEMENT");
+  const now = new Date();
+  const last24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  const last7d = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const last30d = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+  const [
+    totalUsers, newUsers24h, newUsers7d,
+    totalListings, activeListings, newListings24h,
+    totalOrders, orders7d, revenue7d,
+    totalBusinesses,
+    trendingCategories,
+    topCities,
+  ] = await Promise.all([
+    prisma.user.count(),
+    prisma.user.count({ where: { createdAt: { gte: last24h } } }),
+    prisma.user.count({ where: { createdAt: { gte: last7d } } }),
+    prisma.listing.count(),
+    prisma.listing.count({ where: { status: "ACTIVE" } }),
+    prisma.listing.count({ where: { createdAt: { gte: last24h } } }),
+    prisma.order.count(),
+    prisma.order.count({ where: { createdAt: { gte: last7d } } }),
+    prisma.order.aggregate({ _sum: { totalUsdCents: true }, where: { createdAt: { gte: last7d }, status: "DELIVERED" } }),
+    prisma.businessAccount.count(),
+    prisma.listing.groupBy({ by: ["category"], where: { createdAt: { gte: last30d }, status: "ACTIVE" }, _count: true, orderBy: { _count: { id: "desc" } }, take: 10 }),
+    prisma.listing.groupBy({ by: ["city"], where: { status: "ACTIVE", city: { not: "" } }, _count: true, orderBy: { _count: { id: "desc" } }, take: 5 }),
+  ]);
+
+  res.json({
+    users: { total: totalUsers, new24h: newUsers24h, new7d: newUsers7d },
+    listings: { total: totalListings, active: activeListings, new24h: newListings24h },
+    orders: { total: totalOrders, last7d: orders7d, revenue7dCents: revenue7d._sum.totalUsdCents ?? 0 },
+    businesses: totalBusinesses,
+    trendingCategories: trendingCategories.map(c => ({ category: c.category, count: c._count })),
+    topCities: topCities.map(c => ({ city: c.city, count: c._count })),
+  });
+}));
+
+// ── IA Marchande ──
+router.get("/ia/marchande", asyncHandler(async (req: AuthenticatedRequest, res) => {
+  await checkPermission(req, "AI_MANAGEMENT");
+  const last24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+  const [recentListings, priceStats, categoryBreakdown] = await Promise.all([
+    prisma.listing.findMany({
+      where: { createdAt: { gte: last24h } },
+      orderBy: { createdAt: "desc" },
+      take: 30,
+      select: {
+        id: true, title: true, category: true, city: true,
+        priceUsdCents: true, type: true, stockQuantity: true,
+        createdAt: true, status: true,
+        ownerUser: { select: { profile: { select: { displayName: true } } } },
+      },
+    }),
+    prisma.listing.aggregate({
+      where: { status: "ACTIVE" },
+      _avg: { priceUsdCents: true },
+      _min: { priceUsdCents: true },
+      _max: { priceUsdCents: true },
+      _count: { id: true },
+    }),
+    prisma.listing.groupBy({
+      by: ["category", "type"],
+      where: { status: "ACTIVE" },
+      _count: { id: true },
+      _avg: { priceUsdCents: true },
+      orderBy: { _count: { id: "desc" } },
+      take: 20,
+    }),
+  ]);
+
+  res.json({
+    recentListings: recentListings.map(l => ({
+      ...l,
+      sellerName: l.ownerUser?.profile?.displayName ?? "Inconnu",
+      ownerUser: undefined,
+    })),
+    priceStats: {
+      avg: priceStats._avg.priceUsdCents ?? 0,
+      min: priceStats._min.priceUsdCents ?? 0,
+      max: priceStats._max.priceUsdCents ?? 0,
+      total: priceStats._count.id,
+    },
+    categoryBreakdown: categoryBreakdown.map(c => ({
+      category: c.category,
+      type: c.type,
+      count: c._count.id,
+      avgPrice: Math.round(c._avg.priceUsdCents ?? 0),
+    })),
+  });
+}));
+
+// ── IA de Commande ──
+router.get("/ia/commande", asyncHandler(async (req: AuthenticatedRequest, res) => {
+  await checkPermission(req, "AI_MANAGEMENT");
+  const last7d = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const last30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+  const [
+    autoOrders7d, autoOrders30d,
+    totalAutoOrders,
+    autoRevenue,
+    recentAutoLogs,
+    autoShops,
+  ] = await Promise.all([
+    prisma.aiAutonomyLog.count({ where: { agentName: "IA_COMMANDE", createdAt: { gte: last7d }, success: true } }),
+    prisma.aiAutonomyLog.count({ where: { agentName: "IA_COMMANDE", createdAt: { gte: last30d }, success: true } }),
+    prisma.aiAutonomyLog.count({ where: { agentName: "IA_COMMANDE", success: true } }),
+    prisma.aiAutonomyLog.count({ where: { agentName: "IA_COMMANDE", actionType: "AUTO_VALIDATE_ORDER", success: true } }),
+    prisma.aiAutonomyLog.findMany({
+      where: { agentName: "IA_COMMANDE" },
+      orderBy: { createdAt: "desc" },
+      take: 30,
+      select: {
+        id: true, actionType: true, targetUserId: true,
+        decision: true, reasoning: true, success: true, createdAt: true,
+      },
+    }),
+    // Boutiques en mode automatique (by AI agent config)
+    prisma.aiAgent.findFirst({
+      where: { name: "IA_COMMANDE" },
+      select: { enabled: true, config: true },
+    }),
+  ]);
+
+  // Utilisateurs gérés par IA Commande
+  const managedUserIds = [...new Set(recentAutoLogs.map(l => l.targetUserId).filter(Boolean))] as string[];
+  const managedUsers = managedUserIds.length
+    ? await prisma.user.findMany({
+        where: { id: { in: managedUserIds } },
+        select: {
+          id: true,
+          profile: { select: { displayName: true } },
+          businesses: { select: { id: true, publicName: true } },
+        },
+      })
+    : [];
+
+  res.json({
+    stats: {
+      autoActions7d: autoOrders7d,
+      autoActions30d: autoOrders30d,
+      totalAutoActions: totalAutoOrders,
+      autoValidations: autoRevenue,
+    },
+    agentStatus: autoShops ?? { enabled: false, config: {} },
+    recentLogs: recentAutoLogs,
+    managedUsers: managedUsers.map(u => ({
+      id: u.id,
+      name: u.profile?.displayName ?? "Inconnu",
+      business: u.businesses[0]?.publicName ?? null,
+    })),
+  });
+}));
+
+// ── IA ADS ──
+router.get("/ia/ads", asyncHandler(async (req: AuthenticatedRequest, res) => {
+  await checkPermission(req, "ADS");
+  const dashboard = await iaAdsPlacements.getIaAdsDashboard();
+  res.json(dashboard);
+}));
+
+// ── IA Message ──
+router.get("/ia/messages", asyncHandler(async (req: AuthenticatedRequest, res) => {
+  await checkPermission(req, "AI_MANAGEMENT");
+  const stats = await iaMessengerPromo.getPromoCampaignStats();
+  res.json(stats);
 }));
 
 export default router;

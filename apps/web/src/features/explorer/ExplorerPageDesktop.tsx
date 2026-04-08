@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import '../../styles/design-tokens.css';
 import './explorer-desktop.css';
+import '../../components/ads-boost-popup.css';
 import {
   PRODUCT_CATEGORIES,
   SERVICE_CATEGORIES,
@@ -423,6 +424,7 @@ export function ExplorerPageDesktop() {
           media: [],
           ownerId: item.owner.userId,
           isNegotiable: item.isNegotiable !== false,
+          isBoosted: !!(item as any).isBoosted,
           latitude: item.latitude ?? undefined,
           longitude: item.longitude ?? undefined,
         });
@@ -607,6 +609,7 @@ export function ExplorerPageDesktop() {
                 >
                   <div className="explorer-article-cover-wrap">
                     <img className="explorer-article-cover" src={article.coverImage} alt={article.title} />
+                    {article.isBoosted && <span className="ks-sponsored-badge">⚡ Sponsorisé</span>}
                     {article.promoLabel ? <span className="explorer-article-badge">{article.promoLabel}</span> : null}
                     <div className="explorer-hover-details" aria-hidden="true">
                       <strong>{article.title}</strong>

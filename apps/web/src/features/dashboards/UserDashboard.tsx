@@ -38,6 +38,7 @@ import { NegotiationRespondPopup } from '../negotiations/NegotiationRespondPopup
 import { compressAndEncodeMedia } from '../../utils/media-compress';
 import { prepareMediaUrls } from '../../utils/media-upload';
 import { AdBanner } from '../../components/AdBanner';
+import { AdsBoostPopup } from '../../components/AdsBoostPopup';
 import { OrderValidationQrModal } from '../../components/OrderValidationQrModal';
 import LocationPicker from '../../components/LocationPicker';
 import VisibilitySelector from '../../components/VisibilitySelector';
@@ -321,6 +322,10 @@ export function UserDashboard() {
   const [purchasesFilter, setPurchasesFilter] = useState<OrderStatus | ''>('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  // ── IA ADS Boost popup state ──
+  const [boostPopupListingId, setBoostPopupListingId] = useState<string | null>(null);
+  const [boostPopupBulkCount, setBoostPopupBulkCount] = useState<number | null>(null);
 
   // ── Review / rating state ──
   const [reviewModalOrder, setReviewModalOrder] = useState<{ orderId: string } | null>(null);
@@ -1126,6 +1131,10 @@ export function UserDashboard() {
         setSuccessMessage(`${result.created} article(s) importé(s) avec succès !`);
         await refreshArticles(1, articlesFilter);
         setArticlesPage(1);
+        // IA ADS Kin-Sell: proposer mise en avant si ≥ 5 articles importés
+        if (result.created >= 5) {
+          setBoostPopupBulkCount(result.created);
+        }
       }
     } catch (err) {
       setBulkError(err instanceof ApiError ? (err.data as any)?.error ?? err.message : err instanceof Error ? err.message : 'Erreur lors de l\'import');
@@ -1149,7 +1158,7 @@ export function UserDashboard() {
       if (uploadFiles.length > 0) {
         mediaUrls = await prepareMediaUrls(uploadFiles);
       }
-      await listingsApi.create({
+      const createdListing = await listingsApi.create({
         type: articleForm.type,
         title: articleForm.title.trim(),
         description: articleForm.description.trim() || undefined,
@@ -1176,6 +1185,10 @@ export function UserDashboard() {
       resetArticleForm();
       await refreshArticles(1, articlesFilter);
       setArticlesPage(1);
+      // IA ADS Kin-Sell: proposer un boost pour l'article publié
+      if (createdListing?.id) {
+        setBoostPopupListingId(createdListing.id);
+      }
     } catch (err) {
       let msg = t('error.createListing');
       if (err instanceof ApiError) {
@@ -4670,6 +4683,16 @@ export function UserDashboard() {
             </form>
           </div>
         </div>
+      )}
+
+      {/* ── IA ADS Kin-Sell: Boost / Mise en avant popup ── */}
+      {(boostPopupListingId || boostPopupBulkCount) && (
+        <AdsBoostPopup
+          listingId={boostPopupListingId ?? undefined}
+          bulkImportedCount={boostPopupBulkCount ?? undefined}
+          onClose={() => { setBoostPopupListingId(null); setBoostPopupBulkCount(null); }}
+          onBoosted={() => void refreshArticles(1, articlesFilter)}
+        />
       )}
     </div>
   );

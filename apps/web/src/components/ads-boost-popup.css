@@ -1,0 +1,293 @@
+/* ════════════════════════════════════════
+   ADS Boost Popup — IA ADS Kin-Sell
+   ════════════════════════════════════════ */
+
+.ads-boost-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  animation: adsBoostFadeIn 0.2s ease;
+}
+
+@keyframes adsBoostFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.ads-boost-popup {
+  width: 100%;
+  max-width: 420px;
+  max-height: 85vh;
+  overflow-y: auto;
+  border-radius: 20px;
+  background: var(--glass-bg, rgba(35, 24, 72, 0.95));
+  border: 1px solid var(--glass-border, rgba(180, 160, 255, 0.2));
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
+  animation: adsBoostSlide 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes adsBoostSlide {
+  from { transform: translateY(30px) scale(0.95); opacity: 0; }
+  to { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+.ads-boost-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid rgba(111, 88, 255, 0.15);
+}
+
+.ads-boost-icon {
+  font-size: 1.6rem;
+  flex-shrink: 0;
+}
+
+.ads-boost-title {
+  flex: 1;
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--color-text-primary, #fff);
+}
+
+.ads-boost-close {
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--color-text-secondary, rgba(255, 255, 255, 0.7));
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.ads-boost-close:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.ads-boost-body {
+  padding: 16px 20px 20px;
+}
+
+.ads-boost-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 30px 0;
+}
+
+.ads-boost-loading p {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--color-text-secondary, rgba(255, 255, 255, 0.7));
+  text-align: center;
+}
+
+.ads-boost-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid rgba(111, 88, 255, 0.2);
+  border-top-color: var(--color-primary, #6f58ff);
+  border-radius: 50%;
+  animation: adsBoostSpin 1s linear infinite;
+}
+
+@keyframes adsBoostSpin {
+  to { transform: rotate(360deg); }
+}
+
+.ads-boost-error {
+  text-align: center;
+  color: #f87171;
+  padding: 20px 0;
+  font-size: 0.88rem;
+}
+
+.ads-boost-success {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 0;
+  text-align: center;
+}
+
+.ads-boost-success-icon {
+  font-size: 2rem;
+}
+
+.ads-boost-success p {
+  margin: 0;
+  font-size: 0.92rem;
+  color: var(--color-text-primary, #fff);
+  line-height: 1.45;
+}
+
+.ads-boost-ai-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  background: linear-gradient(135deg, rgba(111, 88, 255, 0.2), rgba(73, 12, 128, 0.15));
+  border: 1px solid rgba(111, 88, 255, 0.25);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--color-primary-hover, #b9a6ff);
+  margin-bottom: 12px;
+}
+
+.ads-boost-message {
+  margin: 0 0 14px;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--color-text-primary, #fff);
+}
+
+.ads-boost-benefits {
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ads-boost-benefits li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 0.84rem;
+  color: var(--color-text-secondary, rgba(255, 255, 255, 0.82));
+  line-height: 1.4;
+}
+
+.ads-boost-check {
+  color: #4ade80;
+  font-weight: 700;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.ads-boost-stats {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.ads-boost-stat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px;
+  border-radius: var(--radius-md, 12px);
+  background: rgba(111, 88, 255, 0.08);
+  border: 1px solid rgba(111, 88, 255, 0.12);
+}
+
+.ads-boost-stat strong {
+  font-size: 1.1rem;
+  color: var(--color-primary-hover, #b9a6ff);
+}
+
+.ads-boost-stat span {
+  font-size: 0.72rem;
+  color: var(--color-text-tertiary, rgba(255, 255, 255, 0.5));
+}
+
+.ads-boost-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ads-boost-btn {
+  width: 100%;
+  padding: 12px;
+  border-radius: var(--radius-md, 12px);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  border: none;
+}
+
+.ads-boost-btn--primary {
+  background: linear-gradient(135deg, var(--color-primary, #6f58ff), var(--color-primary-hover, #b9a6ff));
+  color: #fff;
+}
+
+.ads-boost-btn--primary:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.ads-boost-btn--primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.ads-boost-btn--ghost {
+  background: transparent;
+  color: var(--color-text-tertiary, rgba(255, 255, 255, 0.5));
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.ads-boost-btn--ghost:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--color-text-secondary, rgba(255, 255, 255, 0.7));
+}
+
+.ads-boost-btn--done {
+  background: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
+  border: 1px solid rgba(34, 197, 94, 0.25);
+}
+
+.ads-boost-btn--done:hover {
+  background: rgba(34, 197, 94, 0.25);
+}
+
+/* ════════════════════════════════════════
+   Sponsored Badge — articles boostés
+   ════════════════════════════════════════ */
+
+.ks-sponsored-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 20px;
+  background: linear-gradient(135deg, rgba(111, 88, 255, 0.2), rgba(245, 158, 11, 0.15));
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #fbbf24;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.ks-sponsored-badge::before {
+  content: '⚡';
+  font-size: 0.7rem;
+}

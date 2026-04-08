@@ -55,7 +55,8 @@ type AdminSection =
   | 'reports' | 'feed' | 'donations' | 'ads' | 'advertisements' | 'listings' | 'negotiation-rules'
   | 'security' | 'antifraud' | 'security-ai' | 'ai-management'
   | 'rankings' | 'admins' | 'currency' | 'audit'
-  | 'settings' | 'messaging' | 'appeals' | 'subscriptions' | 'verification';
+  | 'settings' | 'messaging' | 'appeals' | 'subscriptions' | 'verification'
+  | 'ia-analytique' | 'ia-marchande' | 'ia-commande' | 'ia-ads' | 'ia-message';
 
 type ModalType =
   | null | 'user-detail' | 'user-role' | 'user-message' | 'user-suspend'
@@ -110,6 +111,13 @@ const SECTION_DEFS: Array<{
   { key: 'messaging',     label: 'Messagerie',         icon: '💬', permission: 'MESSAGING',     group: 'Système' },
   { key: 'subscriptions',  label: 'Abonnements & IA',   icon: '💳', permission: 'SUBSCRIPTIONS', group: 'Outils' },
   { key: 'verification',   label: 'Vérifications',      icon: '✅', permission: 'VERIFICATION',  group: 'Outils' },
+
+  // Intelligence Artificielle
+  { key: 'ia-analytique',  label: 'Kin-Sell Analytique', icon: '📈', permission: 'AI_MANAGEMENT', group: 'Intelligence Artificielle' },
+  { key: 'ia-marchande',   label: 'IA Marchande',       icon: '🏷️', permission: 'AI_MANAGEMENT', group: 'Intelligence Artificielle' },
+  { key: 'ia-commande',    label: 'IA de Commande',     icon: '🤖', permission: 'AI_MANAGEMENT', group: 'Intelligence Artificielle' },
+  { key: 'ia-ads',         label: 'IA ADS',             icon: '📣', permission: 'ADS',           group: 'Intelligence Artificielle' },
+  { key: 'ia-message',     label: 'IA Message',         icon: '📨', permission: 'AI_MANAGEMENT', group: 'Intelligence Artificielle' },
 ];
 
 function roleBadgeClass(role: string) {
@@ -3040,6 +3048,387 @@ export function AdminDashboard() {
     );
   };
 
+  // ═══════════════════════════════════════════════
+  // IA TABS — 5 sections Intelligence Artificielle
+  // ═══════════════════════════════════════════════
+
+  const [iaData, setIaData] = useState<Record<string, unknown> | null>(null);
+  const [iaLoading, setIaLoading] = useState(false);
+
+  const loadIaData = useCallback(async (endpoint: string) => {
+    setIaLoading(true);
+    setIaData(null);
+    try {
+      const res = await fetch(`${(import.meta as any).env?.VITE_API_URL ?? '/api'}/admin/ia/${endpoint}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+      });
+      if (res.ok) setIaData(await res.json());
+    } catch { /* ignore */ }
+    setIaLoading(false);
+  }, []);
+
+  useEffect(() => {
+    if (activeSection === 'ia-analytique') loadIaData('analytique');
+    else if (activeSection === 'ia-marchande') loadIaData('marchande');
+    else if (activeSection === 'ia-commande') loadIaData('commande');
+    else if (activeSection === 'ia-ads') loadIaData('ads');
+    else if (activeSection === 'ia-message') loadIaData('messages');
+  }, [activeSection, loadIaData]);
+
+  const renderIaAnalytique = () => {
+    const d = iaData as any;
+    return (
+      <div className="ad-content-block">
+        <h2 className="ad-content-title">📈 Kin-Sell Analytique</h2>
+        <p className="ad-content-subtitle" style={{ color: 'var(--ad-text-3)', marginBottom: 16 }}>Vue globale du marché, des utilisateurs et de l'activité de la plateforme.</p>
+        {iaLoading ? <p className="ad-content-subtitle">Chargement des données analytiques…</p> : !d ? <p className="ad-content-subtitle">Aucune donnée</p> : (
+          <>
+            {/* KPIs principaux */}
+            <div className="ad-stats-row" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, marginBottom: 20 }}>
+              <div className="ad-stat-card glass-card" style={{ padding: 16, borderRadius: 12, textAlign: 'center' }}>
+                <div style={{ fontSize: 28, fontWeight: 700, color: '#6f58ff' }}>{d.users?.total ?? 0}</div>
+                <div style={{ fontSize: 12, color: 'var(--ad-text-3)' }}>Utilisateurs total</div>
+                <div style={{ fontSize: 11, color: '#4ecdc4' }}>+{d.users?.new24h ?? 0} (24h) · +{d.users?.new7d ?? 0} (7j)</div>
+              </div>
+              <div className="ad-stat-card glass-card" style={{ padding: 16, borderRadius: 12, textAlign: 'center' }}>
+                <div style={{ fontSize: 28, fontWeight: 700, color: '#6f58ff' }}>{d.listings?.active ?? 0}</div>
+                <div style={{ fontSize: 12, color: 'var(--ad-text-3)' }}>Articles actifs</div>
+                <div style={{ fontSize: 11, color: '#4ecdc4' }}>+{d.listings?.new24h ?? 0} (24h) / {d.listings?.total ?? 0} total</div>
+              </div>
+              <div className="ad-stat-card glass-card" style={{ padding: 16, borderRadius: 12, textAlign: 'center' }}>
+                <div style={{ fontSize: 28, fontWeight: 700, color: '#6f58ff' }}>{d.orders?.last7d ?? 0}</div>
+                <div style={{ fontSize: 12, color: 'var(--ad-text-3)' }}>Commandes (7j)</div>
+                <div style={{ fontSize: 11, color: '#4ecdc4' }}>{money(d.orders?.revenue7dCents ?? 0)} revenu</div>
+              </div>
+              <div className="ad-stat-card glass-card" style={{ padding: 16, borderRadius: 12, textAlign: 'center' }}>
+                <div style={{ fontSize: 28, fontWeight: 700, color: '#6f58ff' }}>{d.businesses ?? 0}</div>
+                <div style={{ fontSize: 12, color: 'var(--ad-text-3)' }}>Comptes Business</div>
+              </div>
+            </div>
+
+            {/* Catégories tendance */}
+            <h3 style={{ fontSize: 15, marginBottom: 8 }}>🔥 Catégories tendance (30j)</h3>
+            <div className="ad-table-wrap" style={{ marginBottom: 20 }}>
+              <table className="ad-table">
+                <thead><tr><th>Catégorie</th><th>Articles</th></tr></thead>
+                <tbody>
+                  {(d.trendingCategories ?? []).map((c: any, i: number) => (
+                    <tr key={i}><td>{c.category}</td><td>{c.count}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Top villes */}
+            <h3 style={{ fontSize: 15, marginBottom: 8 }}>🏙️ Top villes</h3>
+            <div className="ad-table-wrap">
+              <table className="ad-table">
+                <thead><tr><th>Ville</th><th>Articles actifs</th></tr></thead>
+                <tbody>
+                  {(d.topCities ?? []).map((c: any, i: number) => (
+                    <tr key={i}><td>{c.city ?? 'Non spécifié'}</td><td>{c.count}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </div>
+    );
+  };
+
+  const renderIaMarchande = () => {
+    const d = iaData as any;
+    return (
+      <div className="ad-content-block">
+        <h2 className="ad-content-title">🏷️ IA Marchande</h2>
+        <p className="ad-content-subtitle" style={{ color: 'var(--ad-text-3)', marginBottom: 16 }}>Informations en temps réel sur chaque marchandise ajoutée — conseils intelligents.</p>
+        {iaLoading ? <p className="ad-content-subtitle">Analyse du marché en cours…</p> : !d ? <p className="ad-content-subtitle">Aucune donnée</p> : (
+          <>
+            {/* Prix globaux */}
+            <div className="ad-stats-row" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12, marginBottom: 20 }}>
+              <div className="ad-stat-card glass-card" style={{ padding: 14, borderRadius: 12, textAlign: 'center' }}>
+                <div style={{ fontSize: 22, fontWeight: 700, color: '#6f58ff' }}>{d.priceStats?.total ?? 0}</div>
+                <div style={{ fontSize: 11, color: 'var(--ad-text-3)' }}>Articles actifs</div>
+              </div>
+              <div className="ad-stat-card glass-card" style={{ padding: 14, borderRadius: 12, textAlign: 'center' }}>
+                <div style={{ fontSize: 22, fontWeight: 700, color: '#4ecdc4' }}>{money(d.priceStats?.avg ?? 0)}</div>
+                <div style={{ fontSize: 11, color: 'var(--ad-text-3)' }}>Prix moyen</div>
+              </div>
+              <div className="ad-stat-card glass-card" style={{ padding: 14, borderRadius: 12, textAlign: 'center' }}>
+                <div style={{ fontSize: 22, fontWeight: 700, color: '#ff6b6b' }}>{money(d.priceStats?.min ?? 0)}</div>
+                <div style={{ fontSize: 11, color: 'var(--ad-text-3)' }}>Prix min</div>
+              </div>
+              <div className="ad-stat-card glass-card" style={{ padding: 14, borderRadius: 12, textAlign: 'center' }}>
+                <div style={{ fontSize: 22, fontWeight: 700, color: '#ffd93d' }}>{money(d.priceStats?.max ?? 0)}</div>
+                <div style={{ fontSize: 11, color: 'var(--ad-text-3)' }}>Prix max</div>
+              </div>
+            </div>
+
+            {/* Catégories par type */}
+            <h3 style={{ fontSize: 15, marginBottom: 8 }}>📊 Répartition par catégorie</h3>
+            <div className="ad-table-wrap" style={{ marginBottom: 20 }}>
+              <table className="ad-table">
+                <thead><tr><th>Catégorie</th><th>Type</th><th>Nombre</th><th>Prix moyen</th></tr></thead>
+                <tbody>
+                  {(d.categoryBreakdown ?? []).map((c: any, i: number) => (
+                    <tr key={i}>
+                      <td>{c.category}</td>
+                      <td><span className={`ad-badge ${c.type === 'PRODUIT' ? 'ad-badge--active' : 'ad-badge--pending'}`}>{c.type}</span></td>
+                      <td>{c.count}</td>
+                      <td>{money(c.avgPrice)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Articles récents (temps réel) */}
+            <h3 style={{ fontSize: 15, marginBottom: 8 }}>⚡ Articles ajoutés récemment (24h)</h3>
+            <div className="ad-table-wrap">
+              <table className="ad-table">
+                <thead><tr><th>Article</th><th>Catégorie</th><th>Ville</th><th>Prix</th><th>Vendeur</th><th>Heure</th></tr></thead>
+                <tbody>
+                  {(d.recentListings ?? []).map((l: any) => (
+                    <tr key={l.id}>
+                      <td style={{ maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.title}</td>
+                      <td>{l.category}</td>
+                      <td>{l.city ?? '—'}</td>
+                      <td>{money(l.priceUsdCents)}</td>
+                      <td>{l.sellerName}</td>
+                      <td style={{ fontSize: 11 }}>{new Date(l.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</td>
+                    </tr>
+                  ))}
+                  {(d.recentListings ?? []).length === 0 && <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--ad-text-3)' }}>Aucun article ajouté dans les dernières 24h</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </div>
+    );
+  };
+
+  const renderIaCommande = () => {
+    const d = iaData as any;
+    return (
+      <div className="ad-content-block">
+        <h2 className="ad-content-title">🤖 IA de Commande</h2>
+        <p className="ad-content-subtitle" style={{ color: 'var(--ad-text-3)', marginBottom: 16 }}>Suivi des boutiques en automatique, ventes IA et personnes gérées.</p>
+        {iaLoading ? <p className="ad-content-subtitle">Chargement…</p> : !d ? <p className="ad-content-subtitle">Aucune donnée</p> : (
+          <>
+            {/* Stats */}
+            <div className="ad-stats-row" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, marginBottom: 20 }}>
+              <div className="ad-stat-card glass-card" style={{ padding: 16, borderRadius: 12, textAlign: 'center' }}>
+                <div style={{ fontSize: 28, fontWeight: 700, color: '#6f58ff' }}>{d.stats?.autoActions7d ?? 0}</div>
+                <div style={{ fontSize: 12, color: 'var(--ad-text-3)' }}>Actions auto (7j)</div>
+              </div>
+              <div className="ad-stat-card glass-card" style={{ padding: 16, borderRadius: 12, textAlign: 'center' }}>
+                <div style={{ fontSize: 28, fontWeight: 700, color: '#4ecdc4' }}>{d.stats?.autoActions30d ?? 0}</div>
+                <div style={{ fontSize: 12, color: 'var(--ad-text-3)' }}>Actions auto (30j)</div>
+              </div>
+              <div className="ad-stat-card glass-card" style={{ padding: 16, borderRadius: 12, textAlign: 'center' }}>
+                <div style={{ fontSize: 28, fontWeight: 700, color: '#ffd93d' }}>{d.stats?.autoValidations ?? 0}</div>
+                <div style={{ fontSize: 12, color: 'var(--ad-text-3)' }}>Validations auto</div>
+              </div>
+              <div className="ad-stat-card glass-card" style={{ padding: 16, borderRadius: 12, textAlign: 'center' }}>
+                <div style={{ fontSize: 28, fontWeight: 700, color: d.agentStatus?.enabled ? '#4ecdc4' : '#ff6b6b' }}>{d.agentStatus?.enabled ? 'ACTIF' : 'INACTIF'}</div>
+                <div style={{ fontSize: 12, color: 'var(--ad-text-3)' }}>Statut agent</div>
+              </div>
+            </div>
+
+            {/* Utilisateurs gérés */}
+            <h3 style={{ fontSize: 15, marginBottom: 8 }}>👥 Personnes / Boutiques gérées</h3>
+            <div className="ad-table-wrap" style={{ marginBottom: 20 }}>
+              <table className="ad-table">
+                <thead><tr><th>Nom</th><th>Boutique</th></tr></thead>
+                <tbody>
+                  {(d.managedUsers ?? []).map((u: any) => (
+                    <tr key={u.id}><td>{u.name}</td><td>{u.business ?? '—'}</td></tr>
+                  ))}
+                  {(d.managedUsers ?? []).length === 0 && <tr><td colSpan={2} style={{ textAlign: 'center', color: 'var(--ad-text-3)' }}>Aucune personne gérée en automatique</td></tr>}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Journal d'actions récentes */}
+            <h3 style={{ fontSize: 15, marginBottom: 8 }}>📋 Journal d&apos;actions récentes</h3>
+            <div className="ad-table-wrap">
+              <table className="ad-table">
+                <thead><tr><th>Action</th><th>Décision</th><th>Statut</th><th>Date</th></tr></thead>
+                <tbody>
+                  {(d.recentLogs ?? []).map((l: any) => (
+                    <tr key={l.id}>
+                      <td><span className="ad-badge">{l.actionType}</span></td>
+                      <td style={{ maxWidth: 250, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.decision}</td>
+                      <td><span className={`ad-badge ${l.success ? 'ad-badge--active' : 'ad-badge--danger'}`}>{l.success ? '✓' : '✗'}</span></td>
+                      <td style={{ fontSize: 11 }}>{fmtDate(l.createdAt)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </div>
+    );
+  };
+
+  const renderIaAds = () => {
+    const d = iaData as any;
+    return (
+      <div className="ad-content-block">
+        <h2 className="ad-content-title">📣 IA ADS</h2>
+        <p className="ad-content-subtitle" style={{ color: 'var(--ad-text-3)', marginBottom: 16 }}>
+          Gestion intelligente des publicités Kin-Sell et des pubs clients.<br/>
+          <span style={{ fontSize: 11, color: '#6f58ff' }}>💡 Pour les pubs Kin-Sell : utilisez Gemini / ChatGPT pour la création. Placez manuellement les pubs clients dans les bons emplacements.</span>
+        </p>
+        {iaLoading ? <p className="ad-content-subtitle">Chargement des données publicitaires…</p> : !d ? <p className="ad-content-subtitle">Aucune donnée</p> : (
+          <>
+            {/* Stats globales */}
+            <div className="ad-stats-row" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12, marginBottom: 20 }}>
+              <div className="ad-stat-card glass-card" style={{ padding: 14, borderRadius: 12, textAlign: 'center' }}>
+                <div style={{ fontSize: 22, fontWeight: 700, color: '#6f58ff' }}>{d.stats?.activeAds ?? 0}</div>
+                <div style={{ fontSize: 11, color: 'var(--ad-text-3)' }}>Pubs actives</div>
+              </div>
+              <div className="ad-stat-card glass-card" style={{ padding: 14, borderRadius: 12, textAlign: 'center' }}>
+                <div style={{ fontSize: 22, fontWeight: 700, color: '#4ecdc4' }}>{d.stats?.activeBoosts ?? 0}</div>
+                <div style={{ fontSize: 11, color: 'var(--ad-text-3)' }}>Boosts actifs</div>
+              </div>
+              <div className="ad-stat-card glass-card" style={{ padding: 14, borderRadius: 12, textAlign: 'center' }}>
+                <div style={{ fontSize: 22, fontWeight: 700, color: '#ffd93d' }}>{d.stats?.impressions?.last24h ?? 0}</div>
+                <div style={{ fontSize: 11, color: 'var(--ad-text-3)' }}>Impressions (24h)</div>
+              </div>
+              <div className="ad-stat-card glass-card" style={{ padding: 14, borderRadius: 12, textAlign: 'center' }}>
+                <div style={{ fontSize: 22, fontWeight: 700, color: '#ff6b6b' }}>{d.stats?.clicks?.last24h ?? 0}</div>
+                <div style={{ fontSize: 11, color: 'var(--ad-text-3)' }}>Clics (24h)</div>
+              </div>
+              <div className="ad-stat-card glass-card" style={{ padding: 14, borderRadius: 12, textAlign: 'center' }}>
+                <div style={{ fontSize: 22, fontWeight: 700, color: '#6f58ff' }}>{d.stats?.ctr24h ?? '0.00'}%</div>
+                <div style={{ fontSize: 11, color: 'var(--ad-text-3)' }}>CTR (24h)</div>
+              </div>
+            </div>
+
+            {/* Emplacements publicitaires */}
+            <h3 style={{ fontSize: 15, marginBottom: 8 }}>📍 Emplacements publicitaires ({(d.placements ?? []).length})</h3>
+            <div className="ad-table-wrap" style={{ marginBottom: 20 }}>
+              <table className="ad-table">
+                <thead><tr><th>Emplacement</th><th>Page</th><th>Type</th><th>Scope</th><th>Impr./jour est.</th><th>Contenu accepté</th></tr></thead>
+                <tbody>
+                  {(d.placements ?? []).map((p: any) => (
+                    <tr key={p.id}>
+                      <td style={{ fontSize: 12 }}>{p.description}</td>
+                      <td><span className="ad-badge">{p.page}</span></td>
+                      <td>{p.type}</td>
+                      <td><span className={`ad-badge ${p.scope === 'PUBLIC' ? 'ad-badge--active' : 'ad-badge--pending'}`}>{p.scope}</span></td>
+                      <td style={{ textAlign: 'center' }}>{p.avgImpressionsPerDay}</td>
+                      <td style={{ fontSize: 10 }}>{p.supportedContent.join(', ')}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Top pubs */}
+            <h3 style={{ fontSize: 15, marginBottom: 8 }}>🏆 Top publicités actives</h3>
+            <div className="ad-table-wrap">
+              <table className="ad-table">
+                <thead><tr><th>Titre</th><th>Page</th><th>Impressions</th><th>Clics</th><th>CTR</th></tr></thead>
+                <tbody>
+                  {(d.topAds ?? []).map((a: any) => (
+                    <tr key={a.id}>
+                      <td>{a.title}</td>
+                      <td><span className="ad-badge">{a.page}</span></td>
+                      <td>{a.impressions}</td>
+                      <td>{a.clicks}</td>
+                      <td>{a.ctr}%</td>
+                    </tr>
+                  ))}
+                  {(d.topAds ?? []).length === 0 && <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--ad-text-3)' }}>Aucune publicité active</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </div>
+    );
+  };
+
+  const renderIaMessage = () => {
+    const d = iaData as any;
+    return (
+      <div className="ad-content-block">
+        <h2 className="ad-content-title">📨 IA Message</h2>
+        <p className="ad-content-subtitle" style={{ color: 'var(--ad-text-3)', marginBottom: 16 }}>Messages promotionnels envoyés par l&apos;IA Messenger — emails via ADS@Kin-sell.com et notifications push.</p>
+        {iaLoading ? <p className="ad-content-subtitle">Chargement…</p> : !d ? <p className="ad-content-subtitle">Aucune donnée</p> : (
+          <>
+            {/* Stats campagne */}
+            <div className="ad-stats-row" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12, marginBottom: 20 }}>
+              <div className="ad-stat-card glass-card" style={{ padding: 14, borderRadius: 12, textAlign: 'center' }}>
+                <div style={{ fontSize: 22, fontWeight: 700, color: '#6f58ff' }}>{d.totalSent ?? 0}</div>
+                <div style={{ fontSize: 11, color: 'var(--ad-text-3)' }}>Messages envoyés (30j)</div>
+              </div>
+              <div className="ad-stat-card glass-card" style={{ padding: 14, borderRadius: 12, textAlign: 'center' }}>
+                <div style={{ fontSize: 22, fontWeight: 700, color: '#4ecdc4' }}>{d.totalDelivered ?? 0}</div>
+                <div style={{ fontSize: 11, color: 'var(--ad-text-3)' }}>Délivrés</div>
+              </div>
+              <div className="ad-stat-card glass-card" style={{ padding: 14, borderRadius: 12, textAlign: 'center' }}>
+                <div style={{ fontSize: 22, fontWeight: 700, color: d.totalSent ? '#ffd93d' : 'var(--ad-text-3)' }}>
+                  {d.totalSent ? ((d.totalDelivered / d.totalSent) * 100).toFixed(0) : 0}%
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--ad-text-3)' }}>Taux de livraison</div>
+              </div>
+            </div>
+
+            {/* Par canal */}
+            <h3 style={{ fontSize: 15, marginBottom: 8 }}>📊 Par canal</h3>
+            <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
+              {(d.byChannel ?? []).map((c: any) => (
+                <div key={c.channel} className="glass-card" style={{ padding: '10px 18px', borderRadius: 10, textAlign: 'center' }}>
+                  <div style={{ fontSize: 18, fontWeight: 700 }}>{c.count}</div>
+                  <div style={{ fontSize: 11, color: 'var(--ad-text-3)' }}>{c.channel === 'EMAIL' ? '📧 Email' : c.channel === 'PUSH' ? '🔔 Push' : '💬 Interne'}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Par raison */}
+            <h3 style={{ fontSize: 15, marginBottom: 8 }}>🎯 Par raison d&apos;envoi</h3>
+            <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
+              {(d.byReason ?? []).map((r: any) => (
+                <div key={r.reason} className="glass-card" style={{ padding: '10px 18px', borderRadius: 10, textAlign: 'center' }}>
+                  <div style={{ fontSize: 18, fontWeight: 700 }}>{r.count}</div>
+                  <div style={{ fontSize: 11, color: 'var(--ad-text-3)' }}>{r.reason.replace(/_/g, ' ')}</div>
+                </div>
+              ))}
+              {(d.byReason ?? []).length === 0 && <p style={{ color: 'var(--ad-text-3)', fontSize: 13 }}>Aucune campagne envoyée</p>}
+            </div>
+
+            {/* Messages récents */}
+            <h3 style={{ fontSize: 15, marginBottom: 8 }}>📋 Messages récents</h3>
+            <div className="ad-table-wrap">
+              <table className="ad-table">
+                <thead><tr><th>Canal</th><th>Destinataire</th><th>Sujet</th><th>Raison</th><th>Statut</th><th>Date</th></tr></thead>
+                <tbody>
+                  {(d.recentMessages ?? []).map((m: any) => (
+                    <tr key={m.id}>
+                      <td><span className={`ad-badge ${m.channel === 'EMAIL' ? 'ad-badge--pending' : 'ad-badge--active'}`}>{m.channel}</span></td>
+                      <td>{m.recipientName}</td>
+                      <td style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.subject}</td>
+                      <td style={{ fontSize: 11 }}>{m.reason.replace(/_/g, ' ')}</td>
+                      <td><span className={`ad-badge ${m.delivered ? 'ad-badge--active' : 'ad-badge--danger'}`}>{m.delivered ? '✓ Délivré' : '✗ Échoué'}</span></td>
+                      <td style={{ fontSize: 11 }}>{new Date(m.sentAt).toLocaleDateString('fr-FR')} {new Date(m.sentAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</td>
+                    </tr>
+                  ))}
+                  {(d.recentMessages ?? []).length === 0 && <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--ad-text-3)' }}>Aucun message promotionnel envoyé</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </div>
+    );
+  };
+
   const renderSection = () => {
     switch (activeSection) {
       case 'dashboard': return renderDashboard();
@@ -3066,6 +3455,11 @@ export function AdminDashboard() {
       case 'messaging': return renderMessaging();
       case 'subscriptions': return renderSubscriptions();
       case 'verification': return renderVerification();
+      case 'ia-analytique': return renderIaAnalytique();
+      case 'ia-marchande': return renderIaMarchande();
+      case 'ia-commande': return renderIaCommande();
+      case 'ia-ads': return renderIaAds();
+      case 'ia-message': return renderIaMessage();
       default: return null;
     }
   };

@@ -1,0 +1,282 @@
+/**
+ * IA ADS Kin-Sell — Boost & Mise en avant automatique
+ *
+ * Règles :
+ * 1. Publication unique → proposer un boost de l'article
+ * 2. Import en masse ≥ 5 articles → proposer une mise en avant du profil/boutique
+ * 3. Les articles boostés/sponsorisés sont clairement identifiés (badge)
+ * 4. Séparation visuelle dans la recherche et le feed
+ */
+
+import { prisma } from "../../shared/db/prisma.js";
+import { HttpError } from "../../shared/errors/http-error.js";
+import { logger } from "../../shared/logger.js";
+import { promoteListingBoost, promoteHighlight as promoHighlight } from "./ia-messenger-promo.service.js";
+
+// ─────────────────────────────────────────────
+// Types
+// ─────────────────────────────────────────────
+
+export interface BoostProposal {
+  type: "SINGLE_BOOST";
+  listingId: string;
+  listingTitle: string;
+  message: string;
+  benefits: string[];
+  suggestedDurationDays: number;
+  estimatedExtraViews: { min: number; max: number };
+}
+
+export interface HighlightProposal {
+  type: "PROFILE_HIGHLIGHT" | "SHOP_HIGHLIGHT";
+  targetId: string;
+  targetName: string;
+  message: string;
+  benefits: string[];
+  articleCount: number;
+  suggestedDurationDays: number;
+}
+
+export interface AdsBoostStatus {
+  listingId: string;
+  isBoosted: boolean;
+  boostExpiresAt: string | null;
+}
+
+// ─────────────────────────────────────────────
+// Boost Proposal — après publication unique
+// ─────────────────────────────────────────────
+
+export async function getBoostProposal(
+  userId: string,
+  listingId: string
+): Promise<BoostProposal> {
+  const listing = await prisma.listing.findUnique({
+    where: { id: listingId },
+    select: {
+      id: true,
+      title: true,
+      category: true,
+      city: true,
+      priceUsdCents: true,
+      ownerUserId: true,
+      isBoosted: true,
+    },
+  });
+
+  if (!listing) throw new HttpError(404, "Article introuvable");
+  if (listing.ownerUserId !== userId) throw new HttpError(403, "Non autorisé");
+
+  if (listing.isBoosted) {
+    return {
+      type: "SINGLE_BOOST",
+      listingId: listing.id,
+      listingTitle: listing.title,
+      message: `Votre article « ${listing.title} » est déjà boosté ! Il apparaît en priorité dans les résultats de recherche.`,
+      benefits: [],
+      suggestedDurationDays: 0,
+      estimatedExtraViews: { min: 0, max: 0 },
+    };
+  }
+
+  // Analyser la concurrence dans la même catégorie/ville
+  const competitorCount = await prisma.listing.count({
+    where: {
+      category: listing.category,
+      city: listing.city,
+      status: "ACTIVE",
+      isPublished: true,
+      id: { not: listing.id },
+    },
+  });
+
+  const durationDays = competitorCount > 20 ? 14 : competitorCount > 10 ? 7 : 3;
+  const baseViews = competitorCount > 10 ? 150 : 80;
+
+  return {
+    type: "SINGLE_BOOST",
+    listingId: listing.id,
+    listingTitle: listing.title,
+    message: `🚀 Boostez « ${listing.title} » pour qu'il apparaisse en tête des résultats de recherche à ${listing.city} ! ${competitorCount} articles similaires sont en compétition dans la catégorie ${listing.category}.`,
+    benefits: [
+      "Apparition prioritaire dans les résultats de recherche",
+      "Badge « Sponsorisé » visible — crédibilité renforcée",
+      "Position haute dans le feed Explorer",
+      `Visibilité accrue face à ${competitorCount} concurrent(s)`,
+    ],
+    suggestedDurationDays: durationDays,
+    estimatedExtraViews: {
+      min: baseViews,
+      max: Math.round(baseViews * 2.5),
+    },
+  };
+}
+
+// ─────────────────────────────────────────────
+// Highlight Proposal — après import bulk ≥ 5
+// ─────────────────────────────────────────────
+
+export async function getHighlightProposal(
+  userId: string,
+  importedCount: number
+): Promise<HighlightProposal> {
+  if (importedCount < 5) {
+    throw new HttpError(400, "La mise en avant nécessite au moins 5 articles importés");
+  }
+
+  // Vérifier si l'utilisateur a un business account
+  const business = await (prisma as any).businessAccount.findFirst({
+    where: {
+      OR: [
+        { ownerUserId: userId },
+        { members: { some: { userId, role: { in: ["OWNER", "ADMIN"] } } } },
+      ],
+    },
+    select: { id: true, shopName: true, slug: true },
+  });
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      profile: {
+        select: { displayName: true, username: true },
+      },
+    },
+  });
+
+  if (business) {
+    return {
+      type: "SHOP_HIGHLIGHT",
+      targetId: business.id,
+      targetName: business.shopName || "Votre boutique",
+      message: `🏪 Vous venez d'importer ${importedCount} articles ! Mettez en avant votre boutique « ${business.shopName || "Votre boutique"} » pour que tous vos produits soient plus visibles. Les acheteurs verront votre boutique en priorité dans Explorer et le Marché.`,
+      benefits: [
+        "Boutique mise en avant dans Explorer → Boutiques en ligne",
+        "Badge « Boutique mise en avant » sur tous vos articles",
+        "Position prioritaire dans les résultats de recherche",
+        "Visibilité accrue sur le marché public So-Kin",
+        `${importedCount} articles bénéficient automatiquement du boost`,
+      ],
+      articleCount: importedCount,
+      suggestedDurationDays: importedCount >= 20 ? 30 : importedCount >= 10 ? 14 : 7,
+    };
+  }
+
+  // Utilisateur sans business → mise en avant du profil public
+  const displayName = user?.profile?.displayName || "Votre profil";
+  return {
+    type: "PROFILE_HIGHLIGHT",
+    targetId: userId,
+    targetName: displayName,
+    message: `👤 Vous venez d'importer ${importedCount} articles ! Mettez en avant votre profil « ${displayName} » pour gagner en visibilité. Les acheteurs verront votre profil en priorité dans les profils publics.`,
+    benefits: [
+      "Profil mis en avant dans Explorer → Profils publics",
+      "Badge « Profil mis en avant » visible par les acheteurs",
+      "Vos articles remontent dans les résultats de recherche",
+      `${importedCount} articles bénéficient automatiquement de la visibilité`,
+    ],
+    articleCount: importedCount,
+    suggestedDurationDays: importedCount >= 20 ? 30 : importedCount >= 10 ? 14 : 7,
+  };
+}
+
+// ─────────────────────────────────────────────
+// Activer le boost d'un article
+// ─────────────────────────────────────────────
+
+export async function activateBoost(
+  userId: string,
+  listingId: string,
+  durationDays: number
+): Promise<AdsBoostStatus> {
+  const listing = await prisma.listing.findUnique({
+    where: { id: listingId },
+    select: { id: true, ownerUserId: true },
+  });
+
+  if (!listing) throw new HttpError(404, "Article introuvable");
+  if (listing.ownerUserId !== userId) throw new HttpError(403, "Non autorisé");
+
+  const expiresAt = new Date();
+  expiresAt.setDate(expiresAt.getDate() + Math.min(durationDays, 90));
+
+  await prisma.listing.update({
+    where: { id: listingId },
+    data: {
+      isBoosted: true,
+      boostExpiresAt: expiresAt,
+    },
+  });
+
+  // Déclencher la promotion via IA Messenger (non-bloquant)
+  promoteListingBoost(listingId).catch((err) =>
+    logger.error({ err, listingId }, "[IA ADS] Erreur promo boost")
+  );
+
+  return {
+    listingId,
+    isBoosted: true,
+    boostExpiresAt: expiresAt.toISOString(),
+  };
+}
+
+// ─────────────────────────────────────────────
+// Activer la mise en avant d'un profil/boutique
+// → boost tous les articles de l'utilisateur
+// ─────────────────────────────────────────────
+
+export async function activateHighlight(
+  userId: string,
+  durationDays: number,
+  businessId?: string
+): Promise<{ boostedCount: number; expiresAt: string }> {
+  const expiresAt = new Date();
+  expiresAt.setDate(expiresAt.getDate() + Math.min(durationDays, 90));
+
+  const whereClause: Record<string, unknown> = {
+    ownerUserId: userId,
+    status: "ACTIVE",
+    isPublished: true,
+  };
+  if (businessId) {
+    whereClause.businessId = businessId;
+  }
+
+  const result = await prisma.listing.updateMany({
+    where: whereClause,
+    data: {
+      isBoosted: true,
+      boostExpiresAt: expiresAt,
+    },
+  });
+
+  // Déclencher la promotion via IA Messenger (non-bloquant)
+  const hlType = businessId ? "SHOP" : "PROFILE";
+  promoHighlight(userId, hlType).catch((err) =>
+    logger.error({ err, userId }, "[IA ADS] Erreur promo highlight")
+  );
+
+  return {
+    boostedCount: result.count,
+    expiresAt: expiresAt.toISOString(),
+  };
+}
+
+// ─────────────────────────────────────────────
+// Expiration automatique des boosts
+// ─────────────────────────────────────────────
+
+export async function expireBoosts(): Promise<number> {
+  const result = await prisma.listing.updateMany({
+    where: {
+      isBoosted: true,
+      boostExpiresAt: { lte: new Date() },
+    },
+    data: {
+      isBoosted: false,
+      boostExpiresAt: null,
+    },
+  });
+  return result.count;
+}

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import '../../styles/design-tokens.css';
 import './explorer.css';
+import '../../components/ads-boost-popup.css';
 import { PRODUCT_CATEGORIES, SERVICE_CATEGORIES } from './explorer-data';
 import type { ExplorerArticlePreview } from './explorer-data';
 import { explorer as explorerApi, orders as ordersApi, listings as listingsApi, resolveMediaUrl, type ExplorerShopApi, type ExplorerProfileApi } from '../../lib/api-client';
@@ -413,6 +414,7 @@ function ExplorerPageMobile() {
           targetPath: item.owner.username ? `/user/${item.owner.username}#${item.id}` : '#',
           coverImage: resolveMediaUrl(item.imageUrl) || '/assets/kin-sell/black-man-standing-cafe-with-shopping-bags.jpg',
           media: [], ownerId: item.owner.userId, isNegotiable: item.isNegotiable !== false,
+          isBoosted: !!(item as any).isBoosted,
           latitude: item.latitude ?? undefined, longitude: item.longitude ?? undefined,
         });
         if (!cancelled) setLiveArticles([...pRes.results.map(map), ...sRes.results.map(map)]);
@@ -480,6 +482,7 @@ function ExplorerPageMobile() {
                   >
                     <div className="ex-article-img">
                       <img src={article.coverImage} alt={article.title} loading="lazy" />
+                      {article.isBoosted && <span className="ks-sponsored-badge">⚡ Sponsorisé</span>}
                       {article.promoLabel && <span className="ex-article-badge">{article.promoLabel}</span>}
                     </div>
                     <div className="ex-article-body">
