@@ -154,7 +154,7 @@ export function BusinessDashboard() {
     country: '', countryCode: '', region: '', district: '', postalCode: '', formattedAddress: '',
     latitude: null as number | null, longitude: null as number | null, placeId: '',
     locationVisibility: 'DISTRICT_PUBLIC' as LocationVisibility, serviceRadiusKm: '', deliveryZones: '',
-    email: '', phone: '', currentPassword: '', newPassword: '',
+    email: '', phone: '', currentPassword: '', newPassword: '', confirmPassword: '',
   });
   const [settingsAvatarFile, setSettingsAvatarFile] = useState<File | null>(null);
   const [settingsAvatarPreview, setSettingsAvatarPreview] = useState<string | null>(null);
@@ -505,6 +505,7 @@ export function BusinessDashboard() {
       phone: user?.phone ?? '',
       currentPassword: '',
       newPassword: '',
+      confirmPassword: '',
     });
     setPageForm({
       publicName: business.publicName ?? '',
@@ -880,13 +881,19 @@ export function BusinessDashboard() {
       }
       // Change password if both fields filled
       if (settingsForm.currentPassword && settingsForm.newPassword) {
+        if (settingsForm.newPassword !== settingsForm.confirmPassword) {
+          setSettingsMsg('Les mots de passe ne correspondent pas.'); setSettingsSaving(false); return;
+        }
+        if (settingsForm.newPassword.length < 8) {
+          setSettingsMsg('Le mot de passe doit contenir au moins 8 caractères.'); setSettingsSaving(false); return;
+        }
         await authApi.changePassword(settingsForm.currentPassword, settingsForm.newPassword);
       }
       // Clean up avatar preview
       if (settingsAvatarPreview) URL.revokeObjectURL(settingsAvatarPreview);
       setSettingsAvatarFile(null);
       setSettingsAvatarPreview(null);
-      setSettingsForm(f => ({ ...f, avatar: avatarUrl, currentPassword: '', newPassword: '' }));
+      setSettingsForm(f => ({ ...f, avatar: avatarUrl, currentPassword: '', newPassword: '', confirmPassword: '' }));
       await refreshUser();
       setSettingsMsg(t('biz.settingsSaved'));
     } catch {
@@ -3130,10 +3137,44 @@ export function BusinessDashboard() {
                     <span>🔑 Mot de passe actuel</span>
                     <input type="password" value={settingsForm.currentPassword} onChange={e => setSettingsForm(f => ({ ...f, currentPassword: e.target.value }))} placeholder="••••••••" autoComplete="current-password" />
                   </label>
-                  <label className="bz-setup-field">
+                  <div className="bz-setup-field">
                     <span>🔑 Nouveau mot de passe</span>
-                    <input type="password" value={settingsForm.newPassword} onChange={e => setSettingsForm(f => ({ ...f, newPassword: e.target.value }))} placeholder="Min. 8 caractères" autoComplete="new-password" minLength={8} />
-                  </label>
+                    <input type="password" value={settingsForm.newPassword} onChange={e => setSettingsForm(f => ({ ...f, newPassword: e.target.value }))} placeholder="Min. 8 caractères" autoComplete="new-password" />
+                    {settingsForm.newPassword && (() => {
+                      const pw = settingsForm.newPassword;
+                      const hasUpper = /[A-Z]/.test(pw);
+                      const hasLower = /[a-z]/.test(pw);
+                      const hasDigit = /\d/.test(pw);
+                      const hasSymbol = /[^A-Za-z0-9]/.test(pw);
+                      const rulesOk = [hasUpper, hasLower, hasDigit, hasSymbol].filter(Boolean).length;
+                      const strength = pw.length < 8 ? 0 : pw.length >= 10 && rulesOk === 4 ? 3 : rulesOk >= 3 ? 2 : 1;
+                      const labels = ['Faible', 'Faible', 'Fort', 'Parfait'] as const;
+                      const colors = ['var(--color-error, #ff6b6b)', 'var(--color-error, #ff6b6b)', '#ff9800', '#4caf50'] as const;
+                      return (
+                        <div className="bz-pw-strength">
+                          <div className="bz-pw-strength-bar">
+                            <div className="bz-pw-strength-fill" style={{ width: `${(strength / 3) * 100}%`, background: colors[strength] }} />
+                          </div>
+                          <span className="bz-pw-strength-label" style={{ color: colors[strength] }}>{labels[strength]}</span>
+                          <div className="bz-pw-rules">
+                            <span className={hasUpper ? 'bz-pw-rule--ok' : 'bz-pw-rule--no'}>ABC majuscule</span>
+                            <span className={hasLower ? 'bz-pw-rule--ok' : 'bz-pw-rule--no'}>abc minuscule</span>
+                            <span className={hasDigit ? 'bz-pw-rule--ok' : 'bz-pw-rule--no'}>123 chiffre</span>
+                            <span className={hasSymbol ? 'bz-pw-rule--ok' : 'bz-pw-rule--no'}>@#$ symbole</span>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                  <div className="bz-setup-field">
+                    <span>🔑 Confirmer le nouveau mot de passe</span>
+                    <input type="password" value={settingsForm.confirmPassword} onChange={e => setSettingsForm(f => ({ ...f, confirmPassword: e.target.value }))} placeholder="••••••••" autoComplete="new-password" />
+                    {settingsForm.confirmPassword && (
+                      <span className={`bz-pw-match ${settingsForm.confirmPassword === settingsForm.newPassword ? 'bz-pw-match--ok' : 'bz-pw-match--no'}`}>
+                        {settingsForm.confirmPassword === settingsForm.newPassword ? '✓ OK' : '✗ Ne correspond pas'}
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <p style={{ fontSize: '0.82rem', color: 'var(--color-text-secondary, #aaa)', margin: '8px 0 0' }}>
                   Laissez les champs mot de passe vides si vous ne souhaitez pas le changer.
