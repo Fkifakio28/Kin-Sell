@@ -37,6 +37,9 @@ import { SK_BIZ_AI_ADVICE, SK_BIZ_AI_AUTO_NEGO, SK_BIZ_AI_COMMANDE } from '../..
 import { DashboardSecurityBlock, DashboardVerificationSection } from './sections';
 import { AdsBoostPopup } from '../../components/AdsBoostPopup';
 import { PromoCreator } from '../../components/PromoCreator';
+import { PromoBulkBar } from '../../components/PromoBulkBar';
+import { PromoPriceLabel } from '../../components/PromoPriceLabel';
+import { useListingSelection } from '../../hooks/useListingSelection';
 const USD_TO_CDF = USD_TO_CDF_RATE;
 const CURRENCY_SYMBOLS: Record<string, string> = { CDF: 'FC', USD: '$', EUR: '€', XAF: 'XAF', AOA: 'Kz', XOF: 'XOF', GNF: 'GNF', MAD: 'MAD' };
 const getCurrencyRate = (c: string) => c === 'USD' ? 1 : (DEFAULT_CURRENCY_RATES[c] ?? DEFAULT_CURRENCY_RATES.CDF);
@@ -212,14 +215,10 @@ export function BusinessDashboard() {
   const BZ_PAGE_LIMIT = 12;
 
   // ─── Sélection produits + promotions ──────────────────────
-  const [selectedProdIds, setSelectedProdIds] = useState<Set<string>>(new Set());
-  const toggleProdSelection = (id: string) => setSelectedProdIds((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
-  const [promoProduits, setPromoProduits] = useState<MyListing[] | null>(null);
+  const { selectedIds: selectedProdIds, toggle: toggleProdSelection, selectAll: selectAllProd, deselectAll: deselectAllProd, promoItems: promoProduits, openPromo: openProdPromo, closePromo: closeProdPromo } = useListingSelection();
 
   // ─── Sélection services + promotions ─────────────────────
-  const [selectedSvcIds, setSelectedSvcIds] = useState<Set<string>>(new Set());
-  const toggleSvcSelection = (id: string) => setSelectedSvcIds((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
-  const [promoServices, setPromoServices] = useState<MyListing[] | null>(null);
+  const { selectedIds: selectedSvcIds, toggle: toggleSvcSelection, selectAll: selectAllSvc, deselectAll: deselectAllSvc, promoItems: promoServices, openPromo: openSvcPromo, closePromo: closeSvcPromo } = useListingSelection();
 
   // ─── Contacts ────────────────────────────────────────────
   const [contactFilter, setContactFilter] = useState<'all' | 'online' | 'favorites'>('all');
@@ -1929,10 +1928,10 @@ export function BusinessDashboard() {
             {/* ── Filtres ── */}
             <div className="bz-art-filters">
               <label className="ud-art-select-all" title="Tout sélectionner">
-                <input type="checkbox" checked={pagedProduits.length > 0 && selectedProdIds.size === pagedProduits.length} onChange={(e) => { if (e.target.checked) setSelectedProdIds(new Set(pagedProduits.map((a) => a.id))); else setSelectedProdIds(new Set()); }} />
+                <input type="checkbox" checked={pagedProduits.length > 0 && selectedProdIds.size === pagedProduits.length} onChange={(e) => { if (e.target.checked) selectAllProd(pagedProduits); else deselectAllProd(); }} />
               </label>
               {(['', 'ACTIVE', 'INACTIVE', 'ARCHIVED'] as const).map((f) => (
-                <button key={f} type="button" className={`bz-art-filter-btn${prodFilter === f ? ' active' : ''}`} onClick={() => { setProdFilter(f as ListingStatus | ''); setProdPage(1); setSelectedProdIds(new Set()); }}>
+                <button key={f} type="button" className={`bz-art-filter-btn${prodFilter === f ? ' active' : ''}`} onClick={() => { setProdFilter(f as ListingStatus | ''); setProdPage(1); deselectAllProd(); }}>
                   {f === '' ? '🗂 Tous' : f === 'ACTIVE' ? '🟢 Actifs' : f === 'INACTIVE' ? '⏸ Inactifs' : '📦 Archivés'}
                 </button>
               ))}
@@ -1964,11 +1963,7 @@ export function BusinessDashboard() {
                     <div className="bz-art-card-body">
                       <h4 className="bz-art-card-title">{p.title}</h4>
                       <p className="bz-art-card-meta">{p.category} · {p.city}</p>
-                      {p.promoActive && p.promoPriceUsdCents != null ? (
-                        <p className="bz-art-card-price"><s style={{opacity:0.5,fontSize:'0.85em',marginRight:4}}>{formatPriceLabelFromUsdCents(p.priceUsdCents)}</s> {formatPriceLabelFromUsdCents(p.promoPriceUsdCents)} <span style={{fontSize:'0.7em',color:'#ff4444',fontWeight:700}}>PROMO</span></p>
-                      ) : (
-                        <p className="bz-art-card-price">{formatPriceLabelFromUsdCents(p.priceUsdCents)}</p>
-                      )}
+                      <PromoPriceLabel priceUsdCents={p.priceUsdCents} promoActive={p.promoActive} promoPriceUsdCents={p.promoPriceUsdCents} formatPrice={formatPriceLabelFromUsdCents} className="bz-art-card-price" />
                       <p className="bz-art-card-stock">Stock: {p.stockQuantity !== null ? p.stockQuantity : '∞'}</p>
                     </div>
                     <div className="bz-art-card-actions">
@@ -1992,24 +1987,7 @@ export function BusinessDashboard() {
             )}
 
             {/* ── Barre d'actions groupées produits ── */}
-            {selectedProdIds.size > 0 && (
-              <div className="ud-art-bulk-bar">
-                <div className="ud-art-bulk-left">
-                  <span className="ud-art-bulk-count">{selectedProdIds.size} produit{selectedProdIds.size > 1 ? 's' : ''} sélectionné{selectedProdIds.size > 1 ? 's' : ''}</span>
-                  <button type="button" className="ud-art-bulk-deselect" onClick={() => setSelectedProdIds(new Set())}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                    Tout désélectionner
-                  </button>
-                </div>
-                <button type="button" className="ud-art-bulk-cta" onClick={() => {
-                  const selected = allProduits.filter((a) => selectedProdIds.has(a.id));
-                  if (selected.length > 0) setPromoProduits(selected);
-                }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-                  Faire une promotion
-                </button>
-              </div>
-            )}
+            <PromoBulkBar count={selectedProdIds.size} label="produit" onDeselect={deselectAllProd} onPromo={() => openProdPromo(allProduits)} />
 
             {/* ── Pagination ── */}
             {prodTotalPages > 1 && (
@@ -2189,10 +2167,10 @@ export function BusinessDashboard() {
             {/* ── Filtres ── */}
             <div className="bz-art-filters">
               <label className="ud-art-select-all" title="Tout sélectionner">
-                <input type="checkbox" checked={pagedServices.length > 0 && selectedSvcIds.size === pagedServices.length} onChange={(e) => { if (e.target.checked) setSelectedSvcIds(new Set(pagedServices.map((a) => a.id))); else setSelectedSvcIds(new Set()); }} />
+                <input type="checkbox" checked={pagedServices.length > 0 && selectedSvcIds.size === pagedServices.length} onChange={(e) => { if (e.target.checked) selectAllSvc(pagedServices); else deselectAllSvc(); }} />
               </label>
               {(['', 'ACTIVE', 'INACTIVE', 'ARCHIVED'] as const).map((f) => (
-                <button key={f} type="button" className={`bz-art-filter-btn${svcFilter === f ? ' active' : ''}`} onClick={() => { setSvcFilter(f as ListingStatus | ''); setSvcPage(1); setSelectedSvcIds(new Set()); }}>
+                <button key={f} type="button" className={`bz-art-filter-btn${svcFilter === f ? ' active' : ''}`} onClick={() => { setSvcFilter(f as ListingStatus | ''); setSvcPage(1); deselectAllSvc(); }}>
                   {f === '' ? '🗂 Tous' : f === 'ACTIVE' ? '🟢 Actifs' : f === 'INACTIVE' ? '⏸ Inactifs' : '📦 Archivés'}
                 </button>
               ))}
@@ -2224,15 +2202,7 @@ export function BusinessDashboard() {
                     <div className="bz-art-card-body">
                       <h4 className="bz-art-card-title">{s.title}</h4>
                       <p className="bz-art-card-meta">{s.category} · {s.city}</p>
-                      {s.promoActive && s.promoPriceUsdCents != null ? (
-                        <p className="bz-art-card-price">
-                          <s style={{ opacity: 0.5, marginRight: 6 }}>{formatPriceLabelFromUsdCents(s.priceUsdCents)}</s>
-                          {formatPriceLabelFromUsdCents(s.promoPriceUsdCents)}
-                          <span style={{ marginLeft: 6, fontSize: '0.7rem', color: '#ff9800', fontWeight: 700 }}>PROMO</span>
-                        </p>
-                      ) : (
-                        <p className="bz-art-card-price">{formatPriceLabelFromUsdCents(s.priceUsdCents)}</p>
-                      )}
+                      <PromoPriceLabel priceUsdCents={s.priceUsdCents} promoActive={s.promoActive} promoPriceUsdCents={s.promoPriceUsdCents} formatPrice={formatPriceLabelFromUsdCents} className="bz-art-card-price" />
                     </div>
                     <div className="bz-art-card-actions">
                       <button type="button" className="bz-art-action bz-art-action--edit" title="Modifier" disabled={bzArticleBusy !== null} onClick={() => handleBzEdit(s)}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
@@ -2255,24 +2225,7 @@ export function BusinessDashboard() {
             )}
 
             {/* ── Barre d'actions groupées services ── */}
-            {selectedSvcIds.size > 0 && (
-              <div className="ud-art-bulk-bar">
-                <div className="ud-art-bulk-left">
-                  <span className="ud-art-bulk-count">{selectedSvcIds.size} service{selectedSvcIds.size > 1 ? 's' : ''} sélectionné{selectedSvcIds.size > 1 ? 's' : ''}</span>
-                  <button type="button" className="ud-art-bulk-deselect" onClick={() => setSelectedSvcIds(new Set())}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                    Tout désélectionner
-                  </button>
-                </div>
-                <button type="button" className="ud-art-bulk-cta" onClick={() => {
-                  const selected = allServices.filter((a) => selectedSvcIds.has(a.id));
-                  if (selected.length > 0) setPromoServices(selected);
-                }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-                  Faire une promotion
-                </button>
-              </div>
-            )}
+            <PromoBulkBar count={selectedSvcIds.size} label="service" onDeselect={deselectAllSvc} onPromo={() => openSvcPromo(allServices)} />
 
             {/* ── Pagination ── */}
             {svcTotalPages > 1 && (
@@ -3567,17 +3520,15 @@ export function BusinessDashboard() {
         <PromoCreator
           articles={promoServices}
           resolveMediaUrl={resolveMediaUrl}
-          onClose={() => { setPromoServices(null); setSelectedSvcIds(new Set()); }}
+          onClose={closeSvcPromo}
           onPublished={() => {
-            setPromoServices(null);
-            setSelectedSvcIds(new Set());
+            closeSvcPromo();
             invalidateCache('/listings/mine');
             listings.mine({ limit: 50 }).then(r => setMyListings(r.listings)).catch(() => {});
           }}
           onBoost={() => {
             setBoostPopupBulkCount(promoServices.length);
-            setPromoServices(null);
-            setSelectedSvcIds(new Set());
+            closeSvcPromo();
           }}
         />
       )}
@@ -3587,17 +3538,15 @@ export function BusinessDashboard() {
         <PromoCreator
           articles={promoProduits}
           resolveMediaUrl={resolveMediaUrl}
-          onClose={() => { setPromoProduits(null); setSelectedProdIds(new Set()); }}
+          onClose={closeProdPromo}
           onPublished={() => {
-            setPromoProduits(null);
-            setSelectedProdIds(new Set());
+            closeProdPromo();
             invalidateCache('/listings/mine');
             listings.mine({ limit: 50 }).then(r => setMyListings(r.listings)).catch(() => {});
           }}
           onBoost={() => {
             setBoostPopupBulkCount(promoProduits.length);
-            setPromoProduits(null);
-            setSelectedProdIds(new Set());
+            closeProdPromo();
           }}
         />
       )}

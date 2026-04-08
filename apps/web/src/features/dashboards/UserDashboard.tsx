@@ -46,6 +46,8 @@ import VisibilitySelector from '../../components/VisibilitySelector';
 import type { StructuredLocation, LocationVisibility } from '../../lib/api-client';
 import { extractValidationCodeFromQrPayload } from '../../utils/order-validation';
 import { useSocket } from '../../hooks/useSocket';
+import { useListingSelection } from '../../hooks/useListingSelection';
+import { PromoBulkBar } from '../../components/PromoBulkBar';
 import { useMarketPreference } from '../../app/providers/MarketPreferenceProvider';
 import { LISTING_PRODUCT_CATEGORIES, LISTING_SERVICE_CATEGORIES } from '../../shared/constants/categories';
 import { USD_TO_CDF_RATE, DEFAULT_CURRENCY_RATES } from '../../shared/constants/currencies';
@@ -385,9 +387,7 @@ export function UserDashboard() {
   const [articlesFilter, setArticlesFilter] = useState<ListingStatus | ''>('');
   const [loadingArticles, setLoadingArticles] = useState(false);
   const [artViewMode, setArtViewMode] = useState<'grid' | 'list'>(() => (localStorage.getItem('ks-art-view') as 'grid' | 'list') || 'grid');
-  const [selectedArticleIds, setSelectedArticleIds] = useState<Set<string>>(new Set());
-  const toggleArticleSelection = (id: string) => setSelectedArticleIds((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
-  const [promoArticles, setPromoArticles] = useState<MyListing[] | null>(null);
+  const { selectedIds: selectedArticleIds, setSelectedIds: setSelectedArticleIds, toggle: toggleArticleSelection, selectAll: selectAllArticles, deselectAll: deselectAllArticles, promoItems: promoArticles, openPromo: openArticlePromo, closePromo: closeArticlePromo } = useListingSelection();
   const [articleBusy, setArticleBusy] = useState<string | null>(null);
   const [editingArticle, setEditingArticle] = useState<MyListing | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -2453,7 +2453,7 @@ export function UserDashboard() {
             {/* ── Filtres articles ── */}
             <div className="ud-art-filters-bar">
               <label className="ud-art-select-all" title="Tout sélectionner">
-                <input type="checkbox" checked={myArticles.length > 0 && selectedArticleIds.size === myArticles.length} onChange={(e) => { if (e.target.checked) setSelectedArticleIds(new Set(myArticles.map((a) => a.id))); else setSelectedArticleIds(new Set()); }} />
+                <input type="checkbox" checked={myArticles.length > 0 && selectedArticleIds.size === myArticles.length} onChange={(e) => { if (e.target.checked) selectAllArticles(myArticles); else deselectAllArticles(); }} />
                 <span className="ud-art-select-all-check" />
               </label>
               <div className="ud-art-filters">
@@ -2602,24 +2602,7 @@ export function UserDashboard() {
             )}
 
             {/* ── Barre d'actions groupées ── */}
-            {selectedArticleIds.size > 0 && (
-              <div className="ud-art-bulk-bar">
-                <div className="ud-art-bulk-left">
-                  <span className="ud-art-bulk-count">{selectedArticleIds.size} article{selectedArticleIds.size > 1 ? 's' : ''} sélectionné{selectedArticleIds.size > 1 ? 's' : ''}</span>
-                  <button type="button" className="ud-art-bulk-deselect" onClick={() => setSelectedArticleIds(new Set())}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                    Tout désélectionner
-                  </button>
-                </div>
-                <button type="button" className="ud-art-bulk-cta" onClick={() => {
-                  const selected = myArticles.filter((a) => selectedArticleIds.has(a.id));
-                  if (selected.length > 0) setPromoArticles(selected);
-                }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-                  Faire une promotion
-                </button>
-              </div>
-            )}
+            <PromoBulkBar count={selectedArticleIds.size} label="article" onDeselect={deselectAllArticles} onPromo={() => openArticlePromo(myArticles)} />
 
             {/* ── Pagination ── */}
             {articlesTotalPages > 1 && (
@@ -4920,12 +4903,11 @@ export function UserDashboard() {
         <PromoCreator
           articles={promoArticles}
           resolveMediaUrl={resolveMediaUrl}
-          onClose={() => { setPromoArticles(null); setSelectedArticleIds(new Set()); }}
+          onClose={closeArticlePromo}
           onPublished={() => { void refreshArticles(1, articlesFilter); }}
           onBoost={() => {
             setBoostPopupBulkCount(promoArticles.length);
-            setPromoArticles(null);
-            setSelectedArticleIds(new Set());
+            closeArticlePromo();
           }}
         />
       )}
