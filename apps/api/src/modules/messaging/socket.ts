@@ -94,12 +94,15 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
     /* ── Join user-specific room (for targeted order/negotiation/notification events) ── */
     void socket.join(`user:${userId}`);
 
-    /* ── Join conversation rooms ── */
-    void messagingService.getUserConversations(userId).then((conversations: { id: string }[]) => {
-      for (const conv of conversations) {
-        void socket.join(`conv:${conv.id}`);
-      }
-    });
+    /* ── Join conversation rooms (await to ensure rooms are ready before receiving messages) ── */
+    void (async () => {
+      try {
+        const conversations: { id: string }[] = await messagingService.getUserConversations(userId);
+        for (const conv of conversations) {
+          await socket.join(`conv:${conv.id}`);
+        }
+      } catch { /* ignore join errors */ }
+    })();
 
     /* ── Typing indicators (rate-limited) ── */
     socket.on("typing:start", (data: { conversationId: string }) => {
@@ -157,7 +160,7 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
           if (sockets) {
             for (const sid of sockets) {
               const s = io.sockets.sockets.get(sid);
-              if (s) void s.join(`conv:${data.conversationId}`);
+              if (s) await s.join(`conv:${data.conversationId}`);
             }
           }
         }

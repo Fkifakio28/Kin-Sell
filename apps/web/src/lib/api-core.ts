@@ -263,6 +263,7 @@ export async function request<T>(path: string, opts: RequestOptions = {}, allowR
         method,
         headers: reqHeaders,
         body: body ? JSON.stringify(body) : undefined,
+        cache: "no-store",
       });
     } catch (err) {
       throw err;

@@ -741,6 +741,52 @@ export function MessagingPage() {
     };
   }, [on, off, activeConv?.id, myId, emit]);
 
+  /* ── Refetch messages on socket reconnection or page visibility ── */
+  useEffect(() => {
+    const activeConvId = activeConv?.id;
+
+    const refetchMessages = () => {
+      if (!activeConvId) return;
+      messaging.messages(activeConvId).then((data) => {
+        setMessages(data.messages);
+      }).catch(() => {});
+    };
+
+    const refetchConversations = () => {
+      messaging.conversations().then((data) => {
+        setConversations(data.conversations);
+      }).catch(() => {});
+    };
+
+    // Refetch on socket reconnection (missed messages while disconnected)
+    const handleReconnect = () => {
+      refetchMessages();
+      refetchConversations();
+    };
+    window.addEventListener("ks:socket-reconnected", handleReconnect);
+
+    // Refetch when page becomes visible again (tab switch, screen lock)
+    let lastVisibleAt = Date.now();
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        const elapsed = Date.now() - lastVisibleAt;
+        // Only refetch if tab was hidden for more than 5 seconds
+        if (elapsed > 5_000) {
+          refetchMessages();
+          refetchConversations();
+        }
+      } else {
+        lastVisibleAt = Date.now();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    return () => {
+      window.removeEventListener("ks:socket-reconnected", handleReconnect);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [activeConv?.id]);
+
   /* ════════════════════════════════════════
      WebRTC call socket events
      ════════════════════════════════════════ */
@@ -1112,6 +1158,10 @@ export function MessagingPage() {
     emit("message:send", { conversationId: activeConv.id, content: text, type: "TEXT", replyToId: replyTo?.id }, (res: any) => {
       if (res && !res.ok) { showGuardAlert("block", res.error || "🔒 Message bloqué par le système de sécurité."); setDraft(text); return; }
       if (res?.guardWarning) showGuardAlert("warn", res.guardWarning);
+      // Add message from callback to ensure it persists even if socket event was missed
+      if (res?.ok && res.message) {
+        setMessages((prev) => prev.some((m) => m.id === res.message.id) ? prev : [...prev, res.message]);
+      }
     });
     setDraft(""); setReplyTo(null);
     emit("typing:stop", { conversationId: activeConv.id });
@@ -1127,6 +1177,9 @@ export function MessagingPage() {
       emit("message:send", { conversationId: activeConv.id, type: isImage ? "IMAGE" : isAudio ? "AUDIO" : isVideo ? "VIDEO" : "FILE", mediaUrl, fileName: file.name, replyToId: replyTo?.id }, (res: any) => {
         if (res && !res.ok) { showGuardAlert("block", res.error || "🔒 Fichier bloqué."); return; }
         if (res?.guardWarning) showGuardAlert("warn", res.guardWarning);
+        if (res?.ok && res.message) {
+          setMessages((prev) => prev.some((m) => m.id === res.message.id) ? prev : [...prev, res.message]);
+        }
       });
     }
     setReplyTo(null);
@@ -1180,6 +1233,9 @@ export function MessagingPage() {
           emit("message:send", { conversationId: activeConv.id, type: "AUDIO", mediaUrl, fileName: "audio-message.webm" }, (res: any) => {
             if (res && !res.ok) { showGuardAlert("block", res.error || "🔒 Audio bloqué."); return; }
             if (res?.guardWarning) showGuardAlert("warn", res.guardWarning);
+            if (res?.ok && res.message) {
+              setMessages((prev) => prev.some((m) => m.id === res.message.id) ? prev : [...prev, res.message]);
+            }
           });
         })();
         stream.getTracks().forEach((t) => t.stop());
@@ -1219,6 +1275,9 @@ export function MessagingPage() {
     const content = forwardMsg.content ? `↪ Transféré:\n${forwardMsg.content}` : null;
     emit("message:send", { conversationId: targetConvId, content: content ?? `↪ Transféré: [${forwardMsg.type}]`, type: "TEXT", ...(forwardMsg.mediaUrl ? { mediaUrl: forwardMsg.mediaUrl, type: forwardMsg.type, fileName: forwardMsg.fileName } : {}) }, (res: any) => {
       if (res && !res.ok) { showGuardAlert("block", res.error || "Transfert impossible."); return; }
+      if (res?.ok && res.message) {
+        setMessages((prev) => prev.some((m) => m.id === res.message.id) ? prev : [...prev, res.message]);
+      }
       showGuardAlert("warn", "Message transféré."); setForwardMsg(null);
     });
   }, [forwardMsg, emit, showGuardAlert]);
