@@ -24,3 +24,19 @@ export type {
   KsUpgradeCardProps,
   KsTipProps,
 } from "./KsReco";
+
+// Moteur anti-spam
+export {
+  useRecoEngine,
+  adviceToCandidates,
+  nudgeToCandidates,
+  clearRecoMemory,
+} from "../../hooks/useRecoEngine";
+
+export type {
+  RecoType,
+  RecoSlot,
+  RecoCandidate,
+  RecoResult,
+  RecoEngineConfig,
+} from "../../hooks/useRecoEngine";
