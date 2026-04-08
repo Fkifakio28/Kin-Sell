@@ -121,6 +121,8 @@ type SettingsForm = {
   placeId: string;
   locationVisibility: LocationVisibility;
   onlineStatusVisible: boolean;
+  currentPassword: string;
+  newPassword: string;
 };
 
 const SECTION_DEFS: Array<{ key: HubSection; labelKey: string; icon: string }> = [
@@ -360,6 +362,8 @@ export function UserDashboard() {
     placeId: '',
     locationVisibility: 'CITY_PUBLIC',
     onlineStatusVisible: true,
+    currentPassword: '',
+    newPassword: '',
   });
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
@@ -1615,9 +1619,14 @@ export function UserDashboard() {
         locationVisibility: settingsForm.locationVisibility,
         onlineStatusVisible: settingsForm.onlineStatusVisible,
       });
+      // Change password if both fields filled
+      if (settingsForm.currentPassword && settingsForm.newPassword) {
+        await authApi.changePassword(settingsForm.currentPassword, settingsForm.newPassword);
+      }
       await refreshUser();
       setAvatarFile(null);
       if (avatarPreview) { URL.revokeObjectURL(avatarPreview); setAvatarPreview(null); }
+      setSettingsForm((prev) => ({ ...prev, currentPassword: '', newPassword: '' }));
       setSuccessMessage(t('user.settingsSaved'));
     } catch (error) {
       if (error instanceof ApiError && error.data && typeof error.data === 'object' && 'error' in error.data) {
@@ -3871,6 +3880,27 @@ export function UserDashboard() {
                     <input className="ud-input" type="date" value={settingsForm.birthDate} onChange={(e) => setSettingsForm((prev) => ({ ...prev, birthDate: e.target.value }))} />
                   </label>
                 </div>
+              </section>
+
+              {/* ── Section: Mot de passe ── */}
+              <section className="ud-glass-panel ud-settings-section">
+                <div className="ud-settings-section-head">
+                  <span className="ud-settings-section-icon">🔑</span>
+                  <h3 className="ud-settings-section-title">Mot de passe</h3>
+                </div>
+                <div className="ud-settings-fields">
+                  <label className="ud-settings-field">
+                    <span className="ud-settings-field-label">Mot de passe actuel</span>
+                    <input className="ud-input" type="password" value={settingsForm.currentPassword} onChange={(e) => setSettingsForm((prev) => ({ ...prev, currentPassword: e.target.value }))} placeholder="••••••••" autoComplete="current-password" />
+                  </label>
+                  <label className="ud-settings-field">
+                    <span className="ud-settings-field-label">Nouveau mot de passe</span>
+                    <input className="ud-input" type="password" value={settingsForm.newPassword} onChange={(e) => setSettingsForm((prev) => ({ ...prev, newPassword: e.target.value }))} placeholder="Min. 8 caractères" autoComplete="new-password" minLength={8} />
+                  </label>
+                </div>
+                <p className="ud-placeholder-text" style={{ marginTop: 8, fontSize: '0.82rem' }}>
+                  Laissez ces champs vides si vous ne souhaitez pas changer votre mot de passe.
+                </p>
               </section>
 
               {/* ── Section: Localisation & Adresse ── */}

@@ -145,7 +145,7 @@ export function BusinessDashboard() {
     country: '', countryCode: '', region: '', district: '', postalCode: '', formattedAddress: '',
     latitude: null as number | null, longitude: null as number | null, placeId: '',
     locationVisibility: 'DISTRICT_PUBLIC' as LocationVisibility, serviceRadiusKm: '', deliveryZones: '',
-    email: '', phone: '', newPassword: '',
+    email: '', phone: '', currentPassword: '', newPassword: '',
   });
   const [settingsAvatarFile, setSettingsAvatarFile] = useState<File | null>(null);
   const [settingsAvatarPreview, setSettingsAvatarPreview] = useState<string | null>(null);
@@ -486,6 +486,7 @@ export function BusinessDashboard() {
       deliveryZones: (business.shop as any)?.deliveryZones?.join(', ') ?? '',
       email: user?.email ?? '',
       phone: user?.phone ?? '',
+      currentPassword: '',
       newPassword: '',
     });
     setPageForm({
@@ -846,11 +847,15 @@ export function BusinessDashboard() {
       if (Object.keys(profilePayload).length > 0) {
         await authApi.completeProfile(profilePayload as any);
       }
+      // Change password if both fields filled
+      if (settingsForm.currentPassword && settingsForm.newPassword) {
+        await authApi.changePassword(settingsForm.currentPassword, settingsForm.newPassword);
+      }
       // Clean up avatar preview
       if (settingsAvatarPreview) URL.revokeObjectURL(settingsAvatarPreview);
       setSettingsAvatarFile(null);
       setSettingsAvatarPreview(null);
-      setSettingsForm(f => ({ ...f, avatar: avatarUrl, newPassword: '' }));
+      setSettingsForm(f => ({ ...f, avatar: avatarUrl, currentPassword: '', newPassword: '' }));
       await refreshUser();
       setSettingsMsg(t('biz.settingsSaved'));
     } catch {
@@ -2936,11 +2941,18 @@ export function BusinessDashboard() {
                     <span>📱 Téléphone</span>
                     <input type="tel" value={settingsForm.phone} onChange={e => setSettingsForm(f => ({ ...f, phone: e.target.value }))} placeholder="+243 ..." />
                   </label>
-                  <label className="bz-setup-field bz-setup-field--full">
+                  <label className="bz-setup-field">
+                    <span>🔑 Mot de passe actuel</span>
+                    <input type="password" value={settingsForm.currentPassword} onChange={e => setSettingsForm(f => ({ ...f, currentPassword: e.target.value }))} placeholder="••••••••" autoComplete="current-password" />
+                  </label>
+                  <label className="bz-setup-field">
                     <span>🔑 Nouveau mot de passe</span>
-                    <input type="password" value={settingsForm.newPassword} onChange={e => setSettingsForm(f => ({ ...f, newPassword: e.target.value }))} placeholder="Laisser vide pour ne pas changer" autoComplete="new-password" minLength={6} />
+                    <input type="password" value={settingsForm.newPassword} onChange={e => setSettingsForm(f => ({ ...f, newPassword: e.target.value }))} placeholder="Min. 8 caractères" autoComplete="new-password" minLength={8} />
                   </label>
                 </div>
+                <p style={{ fontSize: '0.82rem', color: 'var(--color-text-secondary, #aaa)', margin: '8px 0 0' }}>
+                  Laissez les champs mot de passe vides si vous ne souhaitez pas le changer.
+                </p>
 
                 {settingsMsg && <p className={`bz-setup-${settingsMsg.startsWith('✓') ? 'note' : 'error'}`}>{settingsMsg}</p>}
                 <div className="bz-setup-actions" style={{ display: 'flex', justifyContent: 'center', gap: 12 }}>

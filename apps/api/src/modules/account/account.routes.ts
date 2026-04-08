@@ -370,4 +370,25 @@ router.post(
   })
 );
 
+/* ── Change password (logged-in) ── */
+const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1).max(120),
+  newPassword: z.string().min(8).max(120),
+});
+
+router.post(
+  "/change-password",
+  requireAuth,
+  rateLimit(RateLimits.LOGIN),
+  asyncHandler(async (request, response) => {
+    const { currentPassword, newPassword } = changePasswordSchema.parse(request.body);
+    const result = await accountService.changePassword(
+      (request as AuthenticatedRequest).userId,
+      currentPassword,
+      newPassword
+    );
+    response.json(result);
+  })
+);
+
 export default router;

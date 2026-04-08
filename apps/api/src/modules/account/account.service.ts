@@ -714,6 +714,21 @@ export const completeProfile = async (userId: string, payload: {
     }
 
     if (normalizedEmail) {
+      // Delete old email identity if email is changing
+      if (user.email && normalizedEmail !== normalizeEmail(user.email)) {
+        await tx.userIdentity.deleteMany({
+          where: {
+            userId,
+            provider: AuthProvider.EMAIL,
+            providerSubject: { not: normalizedEmail },
+          },
+        });
+        // Reset email verification since email changed
+        await tx.user.update({
+          where: { id: userId },
+          data: { emailVerified: false },
+        });
+      }
       await tx.userIdentity.upsert({
         where: {
           provider_providerSubject: {
@@ -726,7 +741,7 @@ export const completeProfile = async (userId: string, payload: {
           provider: AuthProvider.EMAIL,
           providerSubject: normalizedEmail,
           providerEmail: normalizedEmail,
-          isVerified: user.emailVerified
+          isVerified: false
         },
         update: {
           userId,
@@ -1178,6 +1193,39 @@ export const confirmPasswordReset = async (
       data: {
         actorUserId: userId,
         action: "AUTH_PASSWORD_RESET",
+        entityType: "USER",
+        entityId: userId,
+      },
+    });
+  });
+
+  return { ok: true };
+};
+
+/* ── Change password (logged-in user) ── */
+export const changePassword = async (
+  userId: string,
+  currentPassword: string,
+  newPassword: string
+) => {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) throw new HttpError(404, "Utilisateur introuvable");
+  if (!user.passwordHash) throw new HttpError(400, "Ce compte n'a pas de mot de passe (connexion via réseau social)");
+
+  const valid = await verifyPassword(currentPassword, user.passwordHash);
+  if (!valid) throw new HttpError(401, "Mot de passe actuel incorrect");
+
+  const newHash = await hashPassword(newPassword);
+
+  await prisma.$transaction(async (tx) => {
+    await tx.user.update({
+      where: { id: userId },
+      data: { passwordHash: newHash },
+    });
+    await tx.auditLog.create({
+      data: {
+        actorUserId: userId,
+        action: "AUTH_PASSWORD_CHANGE",
         entityType: "USER",
         entityId: userId,
       },

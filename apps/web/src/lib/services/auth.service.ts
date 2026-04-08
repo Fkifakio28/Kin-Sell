@@ -147,6 +147,10 @@ export const auth = {
   confirmPasswordReset: (body: { verificationId: string; code: string; newPassword: string }) =>
     request<{ ok: boolean }>("/account/password-reset/confirm", { method: "POST", body }),
 
+  // ── Change Password (logged-in) ──
+  changePassword: (currentPassword: string, newPassword: string) =>
+    request<{ ok: boolean }>("/account/change-password", { method: "POST", body: { currentPassword, newPassword } }),
+
   // ── Email Verification ──
   requestEmailVerification: (email: string) =>
     request<{ verificationId: string; expiresAt: string; previewCode?: string }>("/account/verifications/email/request", { method: "POST", body: { email } }),
