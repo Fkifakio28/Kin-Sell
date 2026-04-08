@@ -2687,13 +2687,13 @@ export function SoKinPage() {
       ) : (
         <div className="sk-desktop-shell">
           <header className="sk-desktop-topbar" aria-label="Barre supérieure So-Kin">
-            <div className="sk-desktop-logo-bubbles" aria-label="So-Kin">
-              {['S', 'O', '-', 'K', 'I', 'N'].map((letter, idx) => (
-                <span key={letter + idx} className="sk-desktop-logo-bubble" style={{ animationDelay: `${idx * 0.08}s` }}>{letter}</span>
-              ))}
-            </div>
+            <button type="button" className="sk-desktop-brand glass-container" onClick={() => navigate('/')} aria-label="Retour à l'accueil Kin-Sell">
+              <span>KIN</span>
+              <span>-</span>
+              <span>SELL</span>
+            </button>
 
-            <div className="sk-desktop-global-search">
+            <div className="sk-desktop-global-search glass-container">
               <input
                 type="search"
                 value={desktopSearch}
@@ -2706,7 +2706,7 @@ export function SoKinPage() {
               />
             </div>
 
-            <div className="sk-desktop-topbar-actions">
+            <div className="sk-desktop-topbar-actions glass-container">
               <button type="button" className="sk-desktop-head-icon" onClick={() => setDesktopHelpOpen(true)} aria-label="Aide">?</button>
               <button type="button" className="sk-desktop-head-icon sk-desktop-head-icon--notif" onClick={() => setDesktopNotifOpen((prev) => !prev)} aria-label="Notifications">
                 🔔
