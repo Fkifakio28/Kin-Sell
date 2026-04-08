@@ -943,6 +943,111 @@
   color: var(--color-error, #ff6b6b);
 }
 
+/* ── Vitrines management ── */
+.ud-vitrine-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.ud-vitrine-form-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.ud-vitrine-form-row .ud-input {
+  flex: 1;
+  min-width: 150px;
+}
+.ud-vitrine-file-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.06);
+  border: 1px dashed rgba(255,255,255,0.2);
+  color: var(--color-text-secondary, #aaa);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+  max-width: 250px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ud-vitrine-file-label:hover {
+  border-color: var(--color-primary, #6f58ff);
+  background: rgba(111,88,255,0.08);
+}
+.ud-vitrine-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+@media (max-width: 768px) {
+  .ud-vitrine-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 480px) {
+  .ud-vitrine-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.ud-vitrine-card {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.ud-vitrine-card-img {
+  width: 100%;
+  aspect-ratio: 4/3;
+  overflow: hidden;
+  background: rgba(0,0,0,0.2);
+}
+.ud-vitrine-card-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.ud-vitrine-card-info {
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ud-vitrine-card-info strong {
+  font-size: 0.88rem;
+  color: var(--color-text-primary, #fff);
+}
+.ud-vitrine-card-info span {
+  font-size: 0.78rem;
+  color: var(--color-text-secondary, #aaa);
+}
+.ud-vitrine-card-actions {
+  display: flex;
+  gap: 6px;
+  padding: 0 10px 8px;
+  justify-content: flex-end;
+}
+.ud-vitrine-card-actions button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1rem;
+  padding: 4px;
+  opacity: 0.6;
+  transition: opacity 0.2s;
+}
+.ud-vitrine-card-actions button:hover {
+  opacity: 1;
+}
+
 .bz-setup-actions {
   display: flex;
   gap: 12px;

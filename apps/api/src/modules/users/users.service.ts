@@ -136,6 +136,9 @@ export const getPublicProfileByUsername = async (username: string) => {
             include: { profile: { select: { displayName: true, avatarUrl: true } } }
           }
         }
+      },
+      vitrines: {
+        orderBy: { displayOrder: "asc" },
       }
     }
   });
@@ -186,6 +189,13 @@ export const getPublicProfileByUsername = async (username: string) => {
       promoActive: listing.promoActive,
       promoPriceUsdCents: listing.promoPriceUsdCents,
       createdAt: listing.createdAt
+    })),
+    vitrines: user.vitrines.map((v) => ({
+      id: v.id,
+      title: v.title,
+      description: v.description,
+      mediaUrl: v.mediaUrl,
+      displayOrder: v.displayOrder,
     }))
   };
 };

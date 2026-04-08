@@ -228,19 +228,20 @@ model User {
   hostedLives              SoKinLive[]               @relation("SoKinLiveHost")
   liveParticipations       SoKinLiveParticipant[]    @relation("SoKinLiveParticipants")
   liveChatMessages         SoKinLiveChat[]           @relation("SoKinLiveChatMessages")
-  reviewsGiven             UserReview[]               @relation("ReviewsGiven")
-  reviewsReceived          UserReview[]               @relation("ReviewsReceived")
+  reviewsGiven             UserReview[]              @relation("ReviewsGiven")
+  reviewsReceived          UserReview[]              @relation("ReviewsReceived")
   soKinReactions           SoKinReaction[]
   soKinStories             SoKinStory[]              @relation("SoKinStories")
   soKinStoryViews          SoKinStoryView[]
-  businessFollows          BusinessFollow[]           @relation("BusinessFollows")
-  aiRecommendations        AiRecommendation[]         @relation("AiRecommendations")
-  aiTrials                 AiTrial[]                  @relation("AiTrials")
-  adCreatives              AiAdCreative[]             @relation("AiAdCreativeUser")
-  adCampaigns              AiAdCampaign[]             @relation("AiAdCampaignUser")
-  verificationRequests      VerificationRequest[]      @relation("VerificationRequests")
-  verificationResolved      VerificationRequest[]      @relation("VerificationResolver")
-  promotions                Promotion[]                @relation("UserPromotions")
+  businessFollows          BusinessFollow[]          @relation("BusinessFollows")
+  aiRecommendations        AiRecommendation[]        @relation("AiRecommendations")
+  aiTrials                 AiTrial[]                 @relation("AiTrials")
+  adCreatives              AiAdCreative[]            @relation("AiAdCreativeUser")
+  adCampaigns              AiAdCampaign[]            @relation("AiAdCampaignUser")
+  verificationRequests     VerificationRequest[]     @relation("VerificationRequests")
+  verificationResolved     VerificationRequest[]     @relation("VerificationResolver")
+  promotions               Promotion[]               @relation("UserPromotions")
+  vitrines                 Vitrine[]                 @relation("UserVitrines")
 
   @@index([role])
   @@index([accountStatus])
@@ -293,20 +294,20 @@ model BusinessAccount {
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
 
-  owner          User            @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
-  shop           BusinessShop?
-  listings       Listing[]
-  subscriptions  Subscription[]
-  paymentOrders  PaymentOrder[]
-  sellerOrders   Order[]
-  advertisements Advertisement[] @relation("BusinessAds")
-  followers      BusinessFollow[] @relation("BusinessFollowers")
-  aiRecommendations AiRecommendation[] @relation("AiRecommendationsBusiness")
-  aiTrials          AiTrial[]          @relation("AiTrialsBusiness")
-  adCreatives       AiAdCreative[]     @relation("AiAdCreativeBusiness")
-  adCampaigns       AiAdCampaign[]     @relation("AiAdCampaignBusiness")
+  owner                User                  @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  shop                 BusinessShop?
+  listings             Listing[]
+  subscriptions        Subscription[]
+  paymentOrders        PaymentOrder[]
+  sellerOrders         Order[]
+  advertisements       Advertisement[]       @relation("BusinessAds")
+  followers            BusinessFollow[]      @relation("BusinessFollowers")
+  aiRecommendations    AiRecommendation[]    @relation("AiRecommendationsBusiness")
+  aiTrials             AiTrial[]             @relation("AiTrialsBusiness")
+  adCreatives          AiAdCreative[]        @relation("AiAdCreativeBusiness")
+  adCampaigns          AiAdCampaign[]        @relation("AiAdCampaignBusiness")
   verificationRequests VerificationRequest[] @relation("BusinessVerificationRequests")
-  promotions           Promotion[]            @relation("BusinessPromotions")
+  promotions           Promotion[]           @relation("BusinessPromotions")
 
   @@index([ownerUserId])
 }
@@ -369,22 +370,22 @@ model VerificationCode {
 }
 
 model UserPreference {
-  id                String       @id @default(cuid())
-  userId            String       @unique
-  locale            String       @default("fr")
-  currency          String       @default("CDF")
-  countryCode       CountryCode? // Pays préféré de l'utilisateur
-  discoveryMode     String       @default("local_first") // local_first | local_only | all
-  theme             String       @default("dark")
-  onlineStatusVisible Boolean    @default(true)
-  marketingEmails   Boolean  @default(false)
-  marketingSms      Boolean  @default(false)
-  pushEnabled       Boolean  @default(true)
-  aiAdviceEnabled   Boolean  @default(true)
-  aiAutoNegoEnabled Boolean  @default(false)
-  aiCommandeEnabled Boolean  @default(true)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id                  String       @id @default(cuid())
+  userId              String       @unique
+  locale              String       @default("fr")
+  currency            String       @default("CDF")
+  countryCode         CountryCode? // Pays préféré de l'utilisateur
+  discoveryMode       String       @default("local_first") // local_first | local_only | all
+  theme               String       @default("dark")
+  onlineStatusVisible Boolean      @default(true)
+  marketingEmails     Boolean      @default(false)
+  marketingSms        Boolean      @default(false)
+  pushEnabled         Boolean      @default(true)
+  aiAdviceEnabled     Boolean      @default(true)
+  aiAutoNegoEnabled   Boolean      @default(false)
+  aiCommandeEnabled   Boolean      @default(true)
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
@@ -498,31 +499,31 @@ model MobileMoneyPayment {
 }
 
 enum ListingScope {
-  LOCAL         // Ville seule
-  NATIONAL      // Pays entier
-  REGIONAL      // Région (Afrique centrale, ouest, nord)
+  LOCAL // Ville seule
+  NATIONAL // Pays entier
+  REGIONAL // Région (Afrique centrale, ouest, nord)
   INTERNATIONAL // Tous pays
 }
 
 enum LocationVisibility {
-  EXACT_PUBLIC     // Adresse exacte visible (opt-in business)
-  DISTRICT_PUBLIC  // Commune/quartier visible
-  CITY_PUBLIC      // Ville seule (défaut user)
-  REGION_PUBLIC    // Région/province seule
-  COUNTRY_PUBLIC   // Pays seul
-  EXACT_PRIVATE    // Rien affiché publiquement
+  EXACT_PUBLIC // Adresse exacte visible (opt-in business)
+  DISTRICT_PUBLIC // Commune/quartier visible
+  CITY_PUBLIC // Ville seule (défaut user)
+  REGION_PUBLIC // Région/province seule
+  COUNTRY_PUBLIC // Pays seul
+  EXACT_PRIVATE // Rien affiché publiquement
 }
 
 model Listing {
-  id                 String        @id @default(cuid())
+  id                 String             @id @default(cuid())
   type               ListingType
-  status             ListingStatus @default(ACTIVE)
+  status             ListingStatus      @default(ACTIVE)
   title              String
   description        String?
   category           String
   city               String
-  country            String?            // Nom du pays (ex: "Maroc", "Sénégal")
-  countryCode        CountryCode?       // Code pays formel
+  country            String? // Nom du pays (ex: "Maroc", "Sénégal")
+  countryCode        CountryCode? // Code pays formel
   region             String?
   district           String?
   formattedAddress   String?
@@ -530,7 +531,7 @@ model Listing {
   longitude          Float
   placeId            String?
   locationVisibility LocationVisibility @default(CITY_PUBLIC)
-  serviceRadiusKm    Int?               // Rayon d'intervention pour services
+  serviceRadiusKm    Int? // Rayon d'intervention pour services
   imageUrl           String?
   mediaUrls          String[]           @default([])
   priceUsdCents      Int                @default(0)
@@ -540,18 +541,18 @@ model Listing {
   stockQuantity      Int?
   serviceDurationMin Int?
   serviceLocation    String?
-  isPublished        Boolean       @default(true)
-  isNegotiable       Boolean       @default(true)
-  isBoosted          Boolean       @default(false)
+  isPublished        Boolean            @default(true)
+  isNegotiable       Boolean            @default(true)
+  isBoosted          Boolean            @default(false)
   boostExpiresAt     DateTime?
-  promoActive        Boolean       @default(false)
+  promoActive        Boolean            @default(false)
   promoPriceUsdCents Int?
   promoExpiresAt     DateTime?
-  promotionId        String?       // Lien vers la Promotion groupée
+  promotionId        String? // Lien vers la Promotion groupée
   ownerUserId        String
   businessId         String?
-  createdAt          DateTime      @default(now())
-  updatedAt          DateTime      @updatedAt
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
 
   ownerUser      User                    @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
   business       BusinessAccount?        @relation(fields: [businessId], references: [id], onDelete: SetNull)
@@ -632,11 +633,11 @@ model Order {
   deliveryPlaceId          String?
   deliveryFormattedAddress String?
   validationCode           String?
-  confirmedAt      DateTime?
-  deliveredAt      DateTime?
-  canceledAt       DateTime?
-  createdAt        DateTime    @default(now())
-  updatedAt        DateTime    @updatedAt
+  confirmedAt              DateTime?
+  deliveredAt              DateTime?
+  canceledAt               DateTime?
+  createdAt                DateTime    @default(now())
+  updatedAt                DateTime    @updatedAt
 
   buyer          User             @relation("BuyerOrders", fields: [buyerUserId], references: [id], onDelete: Cascade)
   seller         User             @relation("SellerOrders", fields: [sellerUserId], references: [id], onDelete: Cascade)
@@ -673,32 +674,32 @@ model OrderItem {
 }
 
 model BusinessShop {
-  id                  String             @id @default(cuid())
-  businessId          String             @unique
-  coverImage          String?
-  logo                String?
-  publicDescription   String?
-  city                String?
-  country             String?
-  countryCode         CountryCode?
-  region              String?
-  district            String?
-  postalCode          String?
-  address             String?
-  formattedAddress    String?
-  latitude            Float?
-  longitude           Float?
-  placeId             String?
-  locationVisibility  LocationVisibility @default(DISTRICT_PUBLIC)
-  serviceRadiusKm     Int?
-  deliveryZones       String[]           @default([])
-  highlights          Json?              @default("[]")
-  shopPhotos          String[]           @default([])
-  contactPhone        String?
-  contactEmail        String?
-  active              Boolean            @default(true)
-  createdAt           DateTime           @default(now())
-  updatedAt           DateTime           @updatedAt
+  id                 String             @id @default(cuid())
+  businessId         String             @unique
+  coverImage         String?
+  logo               String?
+  publicDescription  String?
+  city               String?
+  country            String?
+  countryCode        CountryCode?
+  region             String?
+  district           String?
+  postalCode         String?
+  address            String?
+  formattedAddress   String?
+  latitude           Float?
+  longitude          Float?
+  placeId            String?
+  locationVisibility LocationVisibility @default(DISTRICT_PUBLIC)
+  serviceRadiusKm    Int?
+  deliveryZones      String[]           @default([])
+  highlights         Json?              @default("[]")
+  shopPhotos         String[]           @default([])
+  contactPhone       String?
+  contactEmail       String?
+  active             Boolean            @default(true)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
 
   business BusinessAccount @relation(fields: [businessId], references: [id], onDelete: Cascade)
 }
@@ -1106,7 +1107,7 @@ model AiAgent {
   status       String     @default("ACTIVE") // ACTIVE, INACTIVE, PAUSED, MAINTENANCE, ERROR
   level        AdminLevel @default(LEVEL_1)
   enabled      Boolean    @default(true)
-  config       Json?      // rich metadata: mission, zones, targets, uiEntryPoints, interventionType, requiredPlan, premiumOptions, dataUsed, outputs, subFunctions
+  config       Json? // rich metadata: mission, zones, targets, uiEntryPoints, interventionType, requiredPlan, premiumOptions, dataUsed, outputs, subFunctions
   lastActiveAt DateTime?
   lastError    String?
   createdAt    DateTime   @default(now())
@@ -1336,8 +1337,8 @@ model SoKinPost {
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 
-  author User @relation("SoKinPosts", fields: [authorId], references: [id], onDelete: Cascade)
-  reactions SoKinReaction[]
+  author       User            @relation("SoKinPosts", fields: [authorId], references: [id], onDelete: Cascade)
+  reactions    SoKinReaction[]
   commentsList SoKinComment[]
 
   @@index([authorId])
@@ -1355,9 +1356,9 @@ model SoKinComment {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  post    SoKinPost     @relation(fields: [postId], references: [id], onDelete: Cascade)
-  author  User          @relation("SoKinComments", fields: [authorId], references: [id], onDelete: Cascade)
-  parent  SoKinComment? @relation("SoKinCommentReplies", fields: [parentCommentId], references: [id], onDelete: SetNull)
+  post    SoKinPost      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author  User           @relation("SoKinComments", fields: [authorId], references: [id], onDelete: Cascade)
+  parent  SoKinComment?  @relation("SoKinCommentReplies", fields: [parentCommentId], references: [id], onDelete: SetNull)
   replies SoKinComment[] @relation("SoKinCommentReplies")
 
   @@index([postId, createdAt])
@@ -1370,39 +1371,39 @@ model SoKinComment {
 // ══════════════════════════════════════════
 
 enum SoKinLiveStatus {
-  WAITING    // Salle d'attente avant démarrage
-  LIVE       // En cours de diffusion
-  ENDED      // Terminé
-  CANCELED   // Annulé
+  WAITING // Salle d'attente avant démarrage
+  LIVE // En cours de diffusion
+  ENDED // Terminé
+  CANCELED // Annulé
 }
 
 enum SoKinLiveAspect {
-  LANDSCAPE  // 16:9
-  PORTRAIT   // 9:16
+  LANDSCAPE // 16:9
+  PORTRAIT // 9:16
 }
 
 model SoKinLive {
-  id            String            @id @default(cuid())
-  hostId        String
-  title         String
-  description   String?
-  thumbnailUrl  String?
-  aspect        SoKinLiveAspect   @default(PORTRAIT)
-  status        SoKinLiveStatus   @default(WAITING)
-  viewerCount   Int               @default(0)
-  peakViewers   Int               @default(0)
-  likesCount    Int               @default(0)
-  giftsCount    Int               @default(0)
+  id                String          @id @default(cuid())
+  hostId            String
+  title             String
+  description       String?
+  thumbnailUrl      String?
+  aspect            SoKinLiveAspect @default(PORTRAIT)
+  status            SoKinLiveStatus @default(WAITING)
+  viewerCount       Int             @default(0)
+  peakViewers       Int             @default(0)
+  likesCount        Int             @default(0)
+  giftsCount        Int             @default(0)
   featuredListingId String?
-  replayUrl     String?
-  startedAt     DateTime?
-  endedAt       DateTime?
-  tags          String[]          @default([])
-  city          String?
-  createdAt     DateTime          @default(now())
-  updatedAt     DateTime          @updatedAt
+  replayUrl         String?
+  startedAt         DateTime?
+  endedAt           DateTime?
+  tags              String[]        @default([])
+  city              String?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
 
-  host         User              @relation("SoKinLiveHost", fields: [hostId], references: [id], onDelete: Cascade)
+  host         User                   @relation("SoKinLiveHost", fields: [hostId], references: [id], onDelete: Cascade)
   participants SoKinLiveParticipant[]
   chatMessages SoKinLiveChat[]
 
@@ -1413,12 +1414,12 @@ model SoKinLive {
 }
 
 model SoKinLiveParticipant {
-  id        String   @id @default(cuid())
-  liveId    String
-  userId    String
-  role      String   @default("VIEWER") // VIEWER, GUEST (invité sur le live), MODERATOR
-  joinedAt  DateTime @default(now())
-  leftAt    DateTime?
+  id       String    @id @default(cuid())
+  liveId   String
+  userId   String
+  role     String    @default("VIEWER") // VIEWER, GUEST (invité sur le live), MODERATOR
+  joinedAt DateTime  @default(now())
+  leftAt   DateTime?
 
   live SoKinLive @relation(fields: [liveId], references: [id], onDelete: Cascade)
   user User      @relation("SoKinLiveParticipants", fields: [userId], references: [id], onDelete: Cascade)
@@ -1545,18 +1546,18 @@ model Advertisement {
 // ══════════════════════════════════════════════
 
 model UserReview {
-  id         String   @id @default(cuid())
-  authorId   String
-  targetId   String
-  orderId    String?  // lié à une commande réelle (avis vérifié)
-  rating     Int      // 1–5
-  text       String?
-  verified   Boolean  @default(false) // true si lié à une transaction réelle
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id        String   @id @default(cuid())
+  authorId  String
+  targetId  String
+  orderId   String? // lié à une commande réelle (avis vérifié)
+  rating    Int // 1–5
+  text      String?
+  verified  Boolean  @default(false) // true si lié à une transaction réelle
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  author User  @relation("ReviewsGiven", fields: [authorId], references: [id], onDelete: Cascade)
-  target User  @relation("ReviewsReceived", fields: [targetId], references: [id], onDelete: Cascade)
+  author User   @relation("ReviewsGiven", fields: [authorId], references: [id], onDelete: Cascade)
+  target User   @relation("ReviewsReceived", fields: [targetId], references: [id], onDelete: Cascade)
   order  Order? @relation(fields: [orderId], references: [id], onDelete: SetNull)
 
   @@unique([authorId, targetId, orderId]) // un avis par personne par transaction
@@ -1644,28 +1645,28 @@ enum Language {
 }
 
 model MarketCountry {
-  id              String        @id @default(cuid())
-  code            CountryCode   @unique
-  nameEnglish     String
-  nameFrench      String
-  nameLocal       String?
-  currency        String        // EUR, USD, etc.
-  currencyCode    String        @default("CDF") // ISO 4217
-  currencySymbol  String        @default("FC")
-  timezone        String
-  dialCode        String        // +243, +241, etc.
-  nativeLanguage  Language      @default(FR)
+  id                 String      @id @default(cuid())
+  code               CountryCode @unique
+  nameEnglish        String
+  nameFrench         String
+  nameLocal          String?
+  currency           String // EUR, USD, etc.
+  currencyCode       String      @default("CDF") // ISO 4217
+  currencySymbol     String      @default("FC")
+  timezone           String
+  dialCode           String // +243, +241, etc.
+  nativeLanguage     Language    @default(FR)
   supportedLanguages Language[]  @default([FR, EN])
-  taxRate         Float         @default(0.0) // TVA/VAT percentage
-  region          String        // Exemple: "Central Africa", "West Africa"
-  isActive        Boolean       @default(true)
-  population      Int?
-  gdpPerCapita    Float?
-  metadata        Json? // Config additionnelle pays
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  taxRate            Float       @default(0.0) // TVA/VAT percentage
+  region             String // Exemple: "Central Africa", "West Africa"
+  isActive           Boolean     @default(true)
+  population         Int?
+  gdpPerCapita       Float?
+  metadata           Json? // Config additionnelle pays
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
 
-  cities      MarketCity[]
+  cities MarketCity[]
 
   @@index([code])
   @@index([isActive])
@@ -1676,20 +1677,20 @@ model MarketCountry {
 // ══════════════════════════════════════════════
 
 model MarketCity {
-  id             String         @id @default(cuid())
+  id              String      @id @default(cuid())
   marketCountryId String
-  city           String
-  country        String
-  countryCode    CountryCode    @default(CD)
-  currency       String         @default("CDF")
-  timezone       String         @default("Africa/Kinshasa")
-  isActive       Boolean        @default(true)
-  metadata       Json? // Population, infos économiques, etc.
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
+  city            String
+  country         String
+  countryCode     CountryCode @default(CD)
+  currency        String      @default("CDF")
+  timezone        String      @default("Africa/Kinshasa")
+  isActive        Boolean     @default(true)
+  metadata        Json? // Population, infos économiques, etc.
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
 
   marketCountry MarketCountry @relation(fields: [marketCountryId], references: [id], onDelete: Cascade)
-  stats          MarketStats[]
+  stats         MarketStats[]
 
   @@unique([city, countryCode])
   @@index([marketCountryId])
@@ -1848,33 +1849,33 @@ model SoKinConnection {
 // ══════════════════════════════════════════════
 
 enum VerificationRequestSource {
-  USER_REQUEST    // Demande manuelle depuis le dashboard
-  AI_AUTO         // Recommandation/attribution automatique IA
-  ADMIN_MANUAL    // Action directe d'un admin
+  USER_REQUEST // Demande manuelle depuis le dashboard
+  AI_AUTO // Recommandation/attribution automatique IA
+  ADMIN_MANUAL // Action directe d'un admin
 }
 
 model VerificationRequest {
-  id              String                    @id @default(cuid())
-  userId          String?                   // Null si c'est une entreprise
-  businessId      String?                   // Null si c'est un utilisateur
-  source          VerificationRequestSource @default(USER_REQUEST)
-  status          VerificationStatus        @default(PENDING)
-  adminLocked     Boolean                   @default(false)  // true = l'IA ne peut plus modifier
-  aiScore         Float?                    // Score de crédibilité IA (0-100)
-  aiRecommendation String?                  // Texte de recommandation IA
-  aiEvaluatedAt   DateTime?
-  adminNote       String?                   // Note de l'admin
-  resolvedBy      String?                   // ID de l'admin qui a pris la décision
-  resolvedAt      DateTime?
-  createdAt       DateTime                  @default(now())
-  updatedAt       DateTime                  @updatedAt
+  id               String                    @id @default(cuid())
+  userId           String? // Null si c'est une entreprise
+  businessId       String? // Null si c'est un utilisateur
+  source           VerificationRequestSource @default(USER_REQUEST)
+  status           VerificationStatus        @default(PENDING)
+  adminLocked      Boolean                   @default(false) // true = l'IA ne peut plus modifier
+  aiScore          Float? // Score de crédibilité IA (0-100)
+  aiRecommendation String? // Texte de recommandation IA
+  aiEvaluatedAt    DateTime?
+  adminNote        String? // Note de l'admin
+  resolvedBy       String? // ID de l'admin qui a pris la décision
+  resolvedAt       DateTime?
+  createdAt        DateTime                  @default(now())
+  updatedAt        DateTime                  @updatedAt
 
   // Métriques figées au moment de la demande / évaluation
-  metricsSnapshot Json?                     // { completedOrders, avgRating, reviewCount, avgResponseTime, avgTransactionTime, disputeCount, reportCount, accountAge }
+  metricsSnapshot Json? // { completedOrders, avgRating, reviewCount, avgResponseTime, avgTransactionTime, disputeCount, reportCount, accountAge }
 
-  user     User?            @relation("VerificationRequests", fields: [userId], references: [id], onDelete: Cascade)
-  business BusinessAccount? @relation("BusinessVerificationRequests", fields: [businessId], references: [id], onDelete: Cascade)
-  resolver User?            @relation("VerificationResolver", fields: [resolvedBy], references: [id], onDelete: SetNull)
+  user     User?                 @relation("VerificationRequests", fields: [userId], references: [id], onDelete: Cascade)
+  business BusinessAccount?      @relation("BusinessVerificationRequests", fields: [businessId], references: [id], onDelete: Cascade)
+  resolver User?                 @relation("VerificationResolver", fields: [resolvedBy], references: [id], onDelete: SetNull)
   history  VerificationHistory[]
 
   @@index([userId, status])
@@ -1884,16 +1885,16 @@ model VerificationRequest {
 }
 
 model VerificationHistory {
-  id            String                    @id @default(cuid())
-  requestId     String
-  action        String                    // REQUESTED, APPROVED, REJECTED, REVOKED, AI_ELIGIBLE, AI_PARTIAL, ADMIN_LOCKED, REACTIVATED
-  fromStatus    VerificationStatus
-  toStatus      VerificationStatus
-  source        VerificationRequestSource
-  performedBy   String?                   // ID admin ou "SYSTEM" pour IA
-  reason        String?
-  metadata      Json?
-  createdAt     DateTime                  @default(now())
+  id          String                    @id @default(cuid())
+  requestId   String
+  action      String // REQUESTED, APPROVED, REJECTED, REVOKED, AI_ELIGIBLE, AI_PARTIAL, ADMIN_LOCKED, REACTIVATED
+  fromStatus  VerificationStatus
+  toStatus    VerificationStatus
+  source      VerificationRequestSource
+  performedBy String? // ID admin ou "SYSTEM" pour IA
+  reason      String?
+  metadata    Json?
+  createdAt   DateTime                  @default(now())
 
   request VerificationRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
 
@@ -1944,10 +1945,10 @@ model SoKinStory {
   mediaUrl    String?
   mediaType   SoKinStoryMediaType @default(IMAGE)
   caption     String?
-  bgColor     String?             // Pour les stories texte
+  bgColor     String? // Pour les stories texte
   scheduledAt DateTime?
   viewCount   Int                 @default(0)
-  expiresAt   DateTime            // Auto-expiration 24h après création
+  expiresAt   DateTime // Auto-expiration 24h après création
   createdAt   DateTime            @default(now())
 
   author  User             @relation("SoKinStories", fields: [authorId], references: [id], onDelete: Cascade)
@@ -1994,24 +1995,24 @@ model BusinessFollow {
 // ══════════════════════════════════════════════
 
 model AiRecommendation {
-  id            String    @id @default(cuid())
-  engineKey     String    // ads, analytics, negotiation, order, orchestrator
-  userId        String
-  businessId    String?
-  accountType   String    @default("USER") // USER | BUSINESS
-  triggerType   String    // LISTING_PUBLISHED, MULTI_LISTINGS, SALES_GROWTH, SHOP_CREATED, STAGNATION, TRIAL_SUGGEST, UPSELL
-  title         String
-  message       String    @db.Text
-  actionType    String    // BOOST_ARTICLE, BOOST_SHOP, UPGRADE_PLAN, ACTIVATE_TRIAL, VIEW_ANALYTICS, ENABLE_AUTO_SALES, PRICE_ADVICE
-  actionTarget  String?   // URL or plan code or listing ID
-  actionData    Json?     // extra context (listingId, suggestedPlan, etc.)
-  priority      Int       @default(5) // 1=low, 10=critical
-  dismissed     Boolean   @default(false)
-  clicked       Boolean   @default(false)
-  accepted      Boolean   @default(false)
-  displayedAt   DateTime?
-  expiresAt     DateTime?
-  createdAt     DateTime  @default(now())
+  id           String    @id @default(cuid())
+  engineKey    String // ads, analytics, negotiation, order, orchestrator
+  userId       String
+  businessId   String?
+  accountType  String    @default("USER") // USER | BUSINESS
+  triggerType  String // LISTING_PUBLISHED, MULTI_LISTINGS, SALES_GROWTH, SHOP_CREATED, STAGNATION, TRIAL_SUGGEST, UPSELL
+  title        String
+  message      String    @db.Text
+  actionType   String // BOOST_ARTICLE, BOOST_SHOP, UPGRADE_PLAN, ACTIVATE_TRIAL, VIEW_ANALYTICS, ENABLE_AUTO_SALES, PRICE_ADVICE
+  actionTarget String? // URL or plan code or listing ID
+  actionData   Json? // extra context (listingId, suggestedPlan, etc.)
+  priority     Int       @default(5) // 1=low, 10=critical
+  dismissed    Boolean   @default(false)
+  clicked      Boolean   @default(false)
+  accepted     Boolean   @default(false)
+  displayedAt  DateTime?
+  expiresAt    DateTime?
+  createdAt    DateTime  @default(now())
 
   user     User             @relation("AiRecommendations", fields: [userId], references: [id], onDelete: Cascade)
   business BusinessAccount? @relation("AiRecommendationsBusiness", fields: [businessId], references: [id], onDelete: SetNull)
@@ -2028,21 +2029,21 @@ model AiRecommendation {
 // ══════════════════════════════════════════════
 
 model AiTrial {
-  id            String   @id @default(cuid())
-  userId        String
-  businessId    String?
-  accountType   String   @default("USER") // USER | BUSINESS
-  planCode      String   // plan proposé (BUSINESS, SCALE, PRO_VENDOR, etc.)
-  sourceEngine  String   // quelle IA a proposé (analytics, ads, orchestrator)
-  reason        String   // why this trial was proposed
-  status        String   @default("PROPOSED") // PROPOSED, ACTIVE, EXPIRED, DECLINED, CONVERTED
-  startsAt      DateTime?
-  endsAt        DateTime?
-  activatedAt   DateTime?
-  activatedBy   String?  // userId who activated (or SYSTEM)
-  convertedAt   DateTime?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id           String    @id @default(cuid())
+  userId       String
+  businessId   String?
+  accountType  String    @default("USER") // USER | BUSINESS
+  planCode     String // plan proposé (BUSINESS, SCALE, PRO_VENDOR, etc.)
+  sourceEngine String // quelle IA a proposé (analytics, ads, orchestrator)
+  reason       String // why this trial was proposed
+  status       String    @default("PROPOSED") // PROPOSED, ACTIVE, EXPIRED, DECLINED, CONVERTED
+  startsAt     DateTime?
+  endsAt       DateTime?
+  activatedAt  DateTime?
+  activatedBy  String? // userId who activated (or SYSTEM)
+  convertedAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   user     User             @relation("AiTrials", fields: [userId], references: [id], onDelete: Cascade)
   business BusinessAccount? @relation("AiTrialsBusiness", fields: [businessId], references: [id], onDelete: SetNull)
@@ -2060,34 +2061,34 @@ model AiTrial {
 model AiAdCreative {
   id              String   @id @default(cuid())
   title           String
-  adType          String   // BOOST_ARTICLE, BOOST_SHOP, FORFAIT, IA_PROMO, ESSAI, AUTO_VENTE, UPGRADE, CUSTOM
-  audienceType    String   // USER, BUSINESS, ALL
+  adType          String // BOOST_ARTICLE, BOOST_SHOP, FORFAIT, IA_PROMO, ESSAI, AUTO_VENTE, UPGRADE, CUSTOM
+  audienceType    String // USER, BUSINESS, ALL
   sourceEngine    String   @default("studio-ads") // studio-ads, auto-gen
-  generatedBy     String   @default("SYSTEM")     // SYSTEM or adminUserId
-  contentText     String   // texte publicitaire principal
-  subtitle        String?  // sous-titre optionnel
-  mediaType       String   @default("TEXT")        // TEXT, IMAGE, GIF, VIDEO, BANNER, CARD
-  mediaUrl        String?  // URL du média généré
+  generatedBy     String   @default("SYSTEM") // SYSTEM or adminUserId
+  contentText     String // texte publicitaire principal
+  subtitle        String? // sous-titre optionnel
+  mediaType       String   @default("TEXT") // TEXT, IMAGE, GIF, VIDEO, BANNER, CARD
+  mediaUrl        String? // URL du média généré
   ctaLabel        String   @default("Découvrir")
-  ctaTarget       String   @default("/pricing")    // lien cible du CTA
-  tone            String   @default("premium")     // premium, agressif, doux, vendeur, informatif
+  ctaTarget       String   @default("/pricing") // lien cible du CTA
+  tone            String   @default("premium") // premium, agressif, doux, vendeur, informatif
   tags            String[] // tags pour le ciblage (gaming, mode, electronique, etc.)
-  status          String   @default("DRAFT")       // DRAFT, READY, PUBLISHED, ARCHIVED
+  status          String   @default("DRAFT") // DRAFT, READY, PUBLISHED, ARCHIVED
   // Ciblage optionnel
   targetPlanCodes String[] // forfaits ciblés (FREE, BOOST, etc.)
-  targetCategory  String?  // catégorie article ciblée
+  targetCategory  String? // catégorie article ciblée
   // Variantes A/B
-  variantGroup    String?  // groupe de test A/B
-  variantLabel    String?  // A, B, C...
+  variantGroup    String? // groupe de test A/B
+  variantLabel    String? // A, B, C...
   // Relations
   userId          String?
   businessId      String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  user       User?             @relation("AiAdCreativeUser", fields: [userId], references: [id], onDelete: SetNull)
-  business   BusinessAccount?  @relation("AiAdCreativeBusiness", fields: [businessId], references: [id], onDelete: SetNull)
-  campaigns  AiAdCampaign[]    @relation("CampaignCreative")
+  user      User?            @relation("AiAdCreativeUser", fields: [userId], references: [id], onDelete: SetNull)
+  business  BusinessAccount? @relation("AiAdCreativeBusiness", fields: [businessId], references: [id], onDelete: SetNull)
+  campaigns AiAdCampaign[]   @relation("CampaignCreative")
 
   @@index([status])
   @@index([adType])
@@ -2102,28 +2103,28 @@ model AiAdCreative {
 // ═══════════════════════════════════════════════════════
 
 model AiAdCampaign {
-  id                  String    @id @default(cuid())
-  creativeId          String
-  campaignName        String
-  objective           String    // CONVERSION, UPSELL, AWARENESS, TRIAL, RETENTION
-  audienceRole        String    @default("ALL")    // USER, BUSINESS, ALL
-  audienceConditions  Json?     // conditions de ciblage JSON { minListings, planCodes, categories, cities }
-  active              Boolean   @default(false)
-  startsAt            DateTime?
-  endsAt              DateTime?
-  frequencyCap        Int       @default(3)    // max affichages par user par jour
-  priority            Int       @default(0)    // 0=normal, 10=urgent
-  budgetType          String    @default("INTERNAL") // INTERNAL (gratuit Kin-Sell), PAID
+  id                 String    @id @default(cuid())
+  creativeId         String
+  campaignName       String
+  objective          String // CONVERSION, UPSELL, AWARENESS, TRIAL, RETENTION
+  audienceRole       String    @default("ALL") // USER, BUSINESS, ALL
+  audienceConditions Json? // conditions de ciblage JSON { minListings, planCodes, categories, cities }
+  active             Boolean   @default(false)
+  startsAt           DateTime?
+  endsAt             DateTime?
+  frequencyCap       Int       @default(3) // max affichages par user par jour
+  priority           Int       @default(0) // 0=normal, 10=urgent
+  budgetType         String    @default("INTERNAL") // INTERNAL (gratuit Kin-Sell), PAID
   // Relations
-  userId              String?   // créateur de la campagne (admin)
-  businessId          String?
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  userId             String? // créateur de la campagne (admin)
+  businessId         String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
-  creative   AiAdCreative     @relation("CampaignCreative", fields: [creativeId], references: [id], onDelete: Cascade)
-  user       User?            @relation("AiAdCampaignUser", fields: [userId], references: [id], onDelete: SetNull)
-  business   BusinessAccount? @relation("AiAdCampaignBusiness", fields: [businessId], references: [id], onDelete: SetNull)
-  placements AiAdPlacement[]  @relation("CampaignPlacements")
+  creative   AiAdCreative      @relation("CampaignCreative", fields: [creativeId], references: [id], onDelete: Cascade)
+  user       User?             @relation("AiAdCampaignUser", fields: [userId], references: [id], onDelete: SetNull)
+  business   BusinessAccount?  @relation("AiAdCampaignBusiness", fields: [businessId], references: [id], onDelete: SetNull)
+  placements AiAdPlacement[]   @relation("CampaignPlacements")
   metrics    AiAdPerformance[] @relation("CampaignPerformance")
 
   @@index([active, startsAt, endsAt])
@@ -2138,13 +2139,13 @@ model AiAdCampaign {
 // ═══════════════════════════════════════════════════════
 
 model AiAdPlacement {
-  id            String   @id @default(cuid())
-  campaignId    String
-  pageKey       String   // home, explorer, sokin, dashboard_user, dashboard_business, article, shop, pricing, kinsell
-  componentKey  String   // banner_top, banner_bottom, sidebar, inline_card, popup, drawer, contextual, smart_popup
-  priority      Int      @default(0)
-  active        Boolean  @default(true)
-  createdAt     DateTime @default(now())
+  id           String   @id @default(cuid())
+  campaignId   String
+  pageKey      String // home, explorer, sokin, dashboard_user, dashboard_business, article, shop, pricing, kinsell
+  componentKey String // banner_top, banner_bottom, sidebar, inline_card, popup, drawer, contextual, smart_popup
+  priority     Int      @default(0)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
 
   campaign AiAdCampaign @relation("CampaignPlacements", fields: [campaignId], references: [id], onDelete: Cascade)
 
@@ -2158,17 +2159,17 @@ model AiAdPlacement {
 // ═══════════════════════════════════════════════════════
 
 model AiAdPerformance {
-  id                      String   @id @default(cuid())
-  campaignId              String
-  date                    DateTime @default(now()) @db.Date
-  impressions             Int      @default(0)
-  clicks                  Int      @default(0)
-  dismissals              Int      @default(0)
-  conversions             Int      @default(0)
-  subscriptionsGenerated  Int      @default(0)
-  trialsActivated         Int      @default(0)
-  revenue                 Int      @default(0) // en cents USD
-  createdAt               DateTime @default(now())
+  id                     String   @id @default(cuid())
+  campaignId             String
+  date                   DateTime @default(now()) @db.Date
+  impressions            Int      @default(0)
+  clicks                 Int      @default(0)
+  dismissals             Int      @default(0)
+  conversions            Int      @default(0)
+  subscriptionsGenerated Int      @default(0)
+  trialsActivated        Int      @default(0)
+  revenue                Int      @default(0) // en cents USD
+  createdAt              DateTime @default(now())
 
   campaign AiAdCampaign @relation("CampaignPerformance", fields: [campaignId], references: [id], onDelete: Cascade)
 
@@ -2181,29 +2182,29 @@ model AiAdPerformance {
 // ═══════════════════════════════════════════════════════
 
 enum PromotionStatus {
-  DRAFT     // Brouillon, pas encore publié
-  ACTIVE    // En cours
-  PAUSED    // Mise en pause manuellement
-  EXPIRED   // Expirée automatiquement
+  DRAFT // Brouillon, pas encore publié
+  ACTIVE // En cours
+  PAUSED // Mise en pause manuellement
+  EXPIRED // Expirée automatiquement
   CANCELLED // Annulée par le vendeur
 }
 
 enum PromotionDiffusion {
-  SIMPLE  // Publication normale
+  SIMPLE // Publication normale
   BOOSTED // Avec boost payant (IA Ads)
 }
 
 model Promotion {
-  id             String             @id @default(cuid())
-  ownerUserId    String
-  businessId     String?
-  title          String?            // Nom optionnel de la promo ("Soldes avril", etc.)
-  status         PromotionStatus    @default(ACTIVE)
-  diffusion      PromotionDiffusion @default(SIMPLE)
-  startsAt       DateTime           @default(now())
-  expiresAt      DateTime?          // Null = pas d'expiration auto
-  createdAt      DateTime           @default(now())
-  updatedAt      DateTime           @updatedAt
+  id          String             @id @default(cuid())
+  ownerUserId String
+  businessId  String?
+  title       String? // Nom optionnel de la promo ("Soldes avril", etc.)
+  status      PromotionStatus    @default(ACTIVE)
+  diffusion   PromotionDiffusion @default(SIMPLE)
+  startsAt    DateTime           @default(now())
+  expiresAt   DateTime? // Null = pas d'expiration auto
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
 
   ownerUser User             @relation("UserPromotions", fields: [ownerUserId], references: [id], onDelete: Cascade)
   business  BusinessAccount? @relation("BusinessPromotions", fields: [businessId], references: [id], onDelete: SetNull)
@@ -2216,11 +2217,11 @@ model Promotion {
 }
 
 model PromotionItem {
-  id                    String @id @default(cuid())
+  id                    String   @id @default(cuid())
   promotionId           String
   listingId             String
-  originalPriceUsdCents Int    // Snapshot du prix au moment de la création
-  promoPriceUsdCents    Int    // Prix promo appliqué
+  originalPriceUsdCents Int // Snapshot du prix au moment de la création
+  promoPriceUsdCents    Int // Prix promo appliqué
   createdAt             DateTime @default(now())
 
   promotion Promotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
@@ -2229,4 +2230,24 @@ model PromotionItem {
   @@unique([promotionId, listingId])
   @@index([promotionId])
   @@index([listingId])
+}
+
+// ══════════════════════════════════════════════
+// VITRINES — Documents utilisateur (diplômes, certificats, etc.)
+// ══════════════════════════════════════════════
+
+model Vitrine {
+  id           String   @id @default(cuid())
+  userId       String
+  title        String
+  description  String?
+  mediaUrl     String
+  displayOrder Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User @relation("UserVitrines", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, displayOrder])
 }

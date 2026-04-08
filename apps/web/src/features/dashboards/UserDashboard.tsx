@@ -31,9 +31,11 @@ import {
   type OrderStatus,
   users as usersApi,
   reviews as reviewsApi,
+  vitrines as vitrinesApi,
   resolveMediaUrl
 } from '../../lib/api-client';
 import type { BulkImportItemInput, BulkImportResult, DbPreviewConfig } from '../../lib/services/listings.service';
+import type { VitrineItem } from '../../lib/services/vitrines.service';
 import { NegotiationRespondPopup } from '../negotiations/NegotiationRespondPopup';
 import { compressAndEncodeMedia } from '../../utils/media-compress';
 import { prepareMediaUrls } from '../../utils/media-upload';
@@ -469,6 +471,13 @@ export function UserDashboard() {
   const [ppSaveMsg, setPpSaveMsg] = useState<string | null>(null);
   const [ppLoaded, setPpLoaded] = useState(false);
 
+  /* ── Vitrines state ── */
+  const [myVitrines, setMyVitrines] = useState<VitrineItem[]>([]);
+  const [vitrineLoading, setVitrineLoading] = useState(false);
+  const [vitrineForm, setVitrineForm] = useState<{ title: string; description: string; file: File | null; editId: string | null }>({ title: '', description: '', file: null, editId: null });
+  const [vitrineSaving, setVitrineSaving] = useState(false);
+  const [vitrineMsg, setVitrineMsg] = useState<string | null>(null);
+
   useEffect(() => {
     if (!isLoggedIn || !user) {
       return;
@@ -706,6 +715,22 @@ export function UserDashboard() {
       cancelled = true;
     };
   }, [isLoggedIn, user?.profile.username, user?.profile.displayName, user?.profile.city, user?.profile.country]);
+
+  /* ── Load vitrines ── */
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    let cancelled = false;
+    const load = async () => {
+      setVitrineLoading(true);
+      try {
+        const data = await vitrinesApi.mine();
+        if (!cancelled) setMyVitrines(data);
+      } catch { /* silent */ }
+      finally { if (!cancelled) setVitrineLoading(false); }
+    };
+    void load();
+    return () => { cancelled = true; };
+  }, [isLoggedIn]);
 
   const loadCommerce = async (_sellerPage: number, _buyerPage: number) => {
     setLoadingCommerce(true);
@@ -3835,6 +3860,133 @@ export function UserDashboard() {
                       </label>
                     </label>
                   </div>
+                </section>
+
+                {/* ── Vitrines (diplômes, certificats…) ── */}
+                <section className="ud-glass-panel ud-pp-section">
+                  <div className="ud-pp-section-head">
+                    <span className="ud-pp-section-icon">🏅</span>
+                    <h3 className="ud-pp-section-title">Vitrines</h3>
+                  </div>
+                  <p className="ud-placeholder-text" style={{ margin: '0 0 12px', fontSize: '0.82rem' }}>
+                    Ajoutez vos diplômes, certificats, réalisations… Ils seront visibles sur votre profil public.
+                  </p>
+
+                  {vitrineMsg && <p style={{ fontSize: '0.82rem', color: vitrineMsg.startsWith('✅') ? 'var(--color-success, #4caf50)' : 'var(--color-error, #f44)', margin: '0 0 8px' }}>{vitrineMsg}</p>}
+
+                  {/* Formulaire ajout / édition */}
+                  <div className="ud-vitrine-form">
+                    <div className="ud-vitrine-form-row">
+                      <input
+                        type="text"
+                        className="ud-input"
+                        placeholder="Titre (ex: Diplôme Marketing)"
+                        value={vitrineForm.title}
+                        onChange={(e) => setVitrineForm(f => ({ ...f, title: e.target.value }))}
+                        maxLength={100}
+                      />
+                      <input
+                        type="text"
+                        className="ud-input"
+                        placeholder="Description courte (optionnel)"
+                        value={vitrineForm.description}
+                        onChange={(e) => setVitrineForm(f => ({ ...f, description: e.target.value }))}
+                        maxLength={300}
+                      />
+                    </div>
+                    <div className="ud-vitrine-form-row">
+                      <label className="ud-vitrine-file-label">
+                        📎 {vitrineForm.file ? vitrineForm.file.name : 'Choisir une image…'}
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp,application/pdf"
+                          style={{ display: 'none' }}
+                          onChange={(e) => {
+                            const file = e.target.files?.[0] ?? null;
+                            setVitrineForm(f => ({ ...f, file }));
+                          }}
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        className="ud-quick-btn ud-quick-btn--primary"
+                        disabled={vitrineSaving || !vitrineForm.title.trim() || (!vitrineForm.file && !vitrineForm.editId)}
+                        onClick={async () => {
+                          setVitrineSaving(true);
+                          setVitrineMsg(null);
+                          try {
+                            let mediaUrl: string | undefined;
+                            if (vitrineForm.file) {
+                              const urls = await prepareMediaUrls([vitrineForm.file]);
+                              mediaUrl = urls[0];
+                            }
+                            if (vitrineForm.editId) {
+                              await vitrinesApi.update(vitrineForm.editId, {
+                                title: vitrineForm.title,
+                                description: vitrineForm.description || undefined,
+                                ...(mediaUrl && { mediaUrl }),
+                              });
+                            } else {
+                              if (!mediaUrl) throw new Error('Image requise');
+                              await vitrinesApi.create({
+                                title: vitrineForm.title,
+                                description: vitrineForm.description || undefined,
+                                mediaUrl,
+                              });
+                            }
+                            const fresh = await vitrinesApi.mine();
+                            setMyVitrines(fresh);
+                            setVitrineForm({ title: '', description: '', file: null, editId: null });
+                            setVitrineMsg(vitrineForm.editId ? '✅ Vitrine modifiée' : '✅ Vitrine ajoutée');
+                            setTimeout(() => setVitrineMsg(null), 3000);
+                          } catch (err) {
+                            setVitrineMsg(`❌ ${err instanceof Error ? err.message : 'Erreur'}`);
+                            setTimeout(() => setVitrineMsg(null), 4000);
+                          } finally {
+                            setVitrineSaving(false);
+                          }
+                        }}
+                      >
+                        {vitrineSaving ? '⏳' : vitrineForm.editId ? '💾 Modifier' : '➕ Ajouter'}
+                      </button>
+                      {vitrineForm.editId && (
+                        <button type="button" className="ud-quick-btn" onClick={() => setVitrineForm({ title: '', description: '', file: null, editId: null })}>
+                          ✕ Annuler
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Liste des vitrines existantes */}
+                  {vitrineLoading ? (
+                    <p className="ud-placeholder-text" style={{ textAlign: 'center', padding: 16 }}>⏳ Chargement…</p>
+                  ) : myVitrines.length === 0 ? (
+                    <p className="ud-placeholder-text" style={{ textAlign: 'center', padding: 16 }}>Aucune vitrine pour le moment.</p>
+                  ) : (
+                    <div className="ud-vitrine-grid">
+                      {myVitrines.map((v) => (
+                        <div key={v.id} className="ud-vitrine-card">
+                          <div className="ud-vitrine-card-img">
+                            <img src={resolveMediaUrl(v.mediaUrl)} alt={v.title} />
+                          </div>
+                          <div className="ud-vitrine-card-info">
+                            <strong>{v.title}</strong>
+                            {v.description && <span>{v.description}</span>}
+                          </div>
+                          <div className="ud-vitrine-card-actions">
+                            <button type="button" title="Modifier" onClick={() => setVitrineForm({ title: v.title, description: v.description || '', file: null, editId: v.id })}>✏️</button>
+                            <button type="button" title="Supprimer" onClick={async () => {
+                              if (!confirm('Supprimer cette vitrine ?')) return;
+                              try {
+                                await vitrinesApi.remove(v.id);
+                                setMyVitrines(prev => prev.filter(x => x.id !== v.id));
+                              } catch { setVitrineMsg('❌ Erreur lors de la suppression'); setTimeout(() => setVitrineMsg(null), 3000); }
+                            }}>🗑️</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </section>
               </div>
 

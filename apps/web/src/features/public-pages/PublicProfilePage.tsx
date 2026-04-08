@@ -7,6 +7,7 @@ import {
   orders,
   listings as listingsApi,
   reviews as reviewsApi,
+  vitrines as vitrinesApi,
   resolveMediaUrl,
   type ReviewItem,
 } from '../../lib/api-client';
@@ -63,6 +64,7 @@ type ApiPublicProfile = {
   reviewCount?: number;
   reviews?: ApiReview[];
   listings: ApiListing[];
+  vitrines?: { id: string; title: string; description: string | null; mediaUrl: string; displayOrder: number }[];
 };
 
 type CatalogItem = {
@@ -171,6 +173,9 @@ export function PublicProfilePage({ username }: { username: string }) {
   const [reportDraft, setReportDraft] = useState({ reason: REPORT_REASONS[0], detail: '' });
   const [reportMsg, setReportMsg] = useState('');
 
+  /* ── Vitrines ── */
+  const [profileVitrines, setProfileVitrines] = useState<{ id: string; title: string; description: string | null; mediaUrl: string }[]>([]);
+
   const isOwnProfile = Boolean(user && profile && user.id === profile.id);
   const isAdmin = user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN';
 
@@ -227,6 +232,10 @@ export function PublicProfilePage({ username }: { username: string }) {
             orderId: r.orderId ?? null,
             createdAt: typeof r.createdAt === 'string' ? r.createdAt : new Date(r.createdAt).toISOString(),
           })));
+        }
+
+        if (payload.vitrines && payload.vitrines.length > 0) {
+          setProfileVitrines(payload.vitrines);
         }
       } catch {
         setNotFound(true);
@@ -609,6 +618,28 @@ export function PublicProfilePage({ username }: { username: string }) {
           </button>
         )}
       </section>
+
+      {/* ══════ BLOC 6 — VITRINES ══════ */}
+      {profileVitrines.length > 0 && (
+        <section className="up-section" aria-label="Vitrines">
+          <div className="up-section-head">
+            <h2>🏅 Vitrines</h2>
+          </div>
+          <div className="up-vitrines-grid">
+            {profileVitrines.map((v) => (
+              <a key={v.id} href={resolveMediaUrl(v.mediaUrl)} target="_blank" rel="noopener noreferrer" className="up-vitrine-card">
+                <div className="up-vitrine-img">
+                  <img src={resolveMediaUrl(v.mediaUrl)} alt={v.title} loading="lazy" />
+                </div>
+                <div className="up-vitrine-info">
+                  <strong>{v.title}</strong>
+                  {v.description && <span>{v.description}</span>}
+                </div>
+              </a>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* ══════ DRAWER — Tous les avis ══════ */}
       {showAllReviews && (

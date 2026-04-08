@@ -35,6 +35,7 @@ import mobileMoneyRoutes from "./modules/mobile-money/mobile-money.routes.js";
 import geoRoutes from "./modules/geo/geo.routes.js";
 import reviewsRoutes from "./modules/reviews/reviews.routes.js";
 import verificationRoutes from "./modules/verification/verification.routes.js";
+import vitrinesRoutes from "./modules/vitrines/vitrines.routes.js";
 import { startVerificationScheduler } from "./modules/verification/verification.service.js";
 import { startAdScheduler } from "./modules/ads/ads.service.js";
 import { setupSocketServer } from "./modules/messaging/socket.js";
@@ -154,6 +155,7 @@ app.use("/mobile-money", mobileMoneyRoutes);
 app.use("/geo", geoRoutes);
 app.use("/reviews", reviewsRoutes);
 app.use("/verification", verificationRoutes);
+app.use("/vitrines", vitrinesRoutes);
 
 // ── Client-side error reporting endpoint ──
 const _errorRateLimit = new Map<string, number>();
