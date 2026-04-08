@@ -2421,21 +2421,30 @@
   animation-delay: 0.2s;
 }
 
-.sk-desktop-left:hover,
-.sk-desktop-right:hover {
+.sk-desktop-left:hover {
   border-color: rgba(185, 166, 255, 0.36);
   background: var(--glass-bg-hover, rgba(111, 88, 255, 0.16));
   box-shadow: 0 6px 18px rgba(111, 88, 255, 0.1);
 }
 
-.sk-desktop-center {
+.sk-desktop-center,
+.sk-desktop-right {
   padding: 0;
-  min-height: calc(100vh - 120px);
   border: 0;
   background: transparent;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
   box-shadow: none;
+}
+
+.sk-desktop-center {
+  min-height: calc(100vh - 120px);
+}
+
+.sk-desktop-right {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 .sk-desktop-center .sk-feed--immersive {
