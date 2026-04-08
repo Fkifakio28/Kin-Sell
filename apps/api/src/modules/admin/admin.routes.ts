@@ -760,6 +760,7 @@ const adminActivateSchema = z.object({
 });
 
 router.post("/subscriptions/activate", asyncHandler(async (req: AuthenticatedRequest, res) => {
+  await checkPermission(req, "BILLING");
   const payload = adminActivateSchema.parse(req.body);
   const result = await aiTrigger.adminActivatePlan({
     ...payload,
@@ -839,6 +840,25 @@ router.get("/ai-trials", asyncHandler(async (req: AuthenticatedRequest, res) => 
   ]);
 
   res.json({ items, total, page, limit });
+}));
+
+// ── Admin activate trial (validate PENDING_ADMIN → ACTIVE) ──
+router.post("/ai-trials/:id/activate", asyncHandler(async (req: AuthenticatedRequest, res) => {
+  await checkPermission(req, "BILLING");
+  const result = await aiTrigger.adminActivateTrial(req.auth!.userId, req.params.id);
+  if (!result) throw new HttpError(404, "Essai introuvable ou statut invalide.");
+
+  await prisma.auditLog.create({
+    data: {
+      actorUserId: req.auth!.userId,
+      action: "BILLING_ADMIN_TRIAL_ACTIVATE",
+      entityType: "AiTrial",
+      entityId: req.params.id,
+      metadata: { trialId: req.params.id },
+    },
+  });
+
+  res.json(result);
 }));
 
 // ════════════════════════════════════════════

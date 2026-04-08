@@ -204,13 +204,13 @@ router.get(
 
 /**
  * POST /analytics/ai/trials/:id/activate
- * Activer un essai proposé
+ * Demander l'activation d'un essai (passe en PENDING, nécessite validation admin)
  */
 router.post(
   "/ai/trials/:id/activate",
   requireAuth,
   asyncHandler(async (req: AuthenticatedRequest, res) => {
-    const result = await aiTrigger.activateTrial(req.auth!.userId, req.params.id);
+    const result = await aiTrigger.requestTrialActivation(req.auth!.userId, req.params.id);
     if (!result) throw new HttpError(404, "Essai introuvable ou déjà activé.");
     res.json(result);
   })

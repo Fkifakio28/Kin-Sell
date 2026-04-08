@@ -589,40 +589,53 @@ export async function acceptRecommendation(userId: string, recommendationId: str
 // TRIAL management
 // ─────────────────────────────────────────────
 
-export async function activateTrial(userId: string, trialId: string) {
+/**
+ * Demande d'activation d'un essai par l'utilisateur.
+ * Ne crée PAS de souscription — passe le trial en PENDING_ADMIN.
+ * L'admin utilise adminActivateTrial() pour valider.
+ */
+export async function requestTrialActivation(userId: string, trialId: string) {
   const trial = await prisma.aiTrial.findFirst({
     where: { id: trialId, userId, status: "PROPOSED" },
   });
   if (!trial) return null;
 
-  // Déduplication : empêcher l'empilement de plusieurs essais/abonnements actifs pour le même planCode
+  // Déduplication
   const existingActive = await prisma.subscription.findFirst({
-    where: {
-      userId,
-      planCode: trial.planCode,
-      status: "ACTIVE",
-    },
+    where: { userId, planCode: trial.planCode, status: "ACTIVE" },
   });
   if (existingActive) {
     throw new HttpError(409, 'Vous avez déjà un abonnement actif pour ce forfait.');
   }
 
   const alreadyTrialed = await prisma.aiTrial.findFirst({
-    where: {
-      userId,
-      planCode: trial.planCode,
-      status: "ACTIVE",
-      id: { not: trialId },
-    },
+    where: { userId, planCode: trial.planCode, status: { in: ["ACTIVE", "PENDING_ADMIN"] }, id: { not: trialId } },
   });
   if (alreadyTrialed) {
-    throw new HttpError(409, 'Vous avez déjà utilisé un essai gratuit pour ce forfait.');
+    throw new HttpError(409, 'Vous avez déjà un essai en cours pour ce forfait.');
   }
+
+  const updated = await prisma.aiTrial.update({
+    where: { id: trialId },
+    data: { status: "PENDING_ADMIN" },
+  });
+
+  return updated;
+}
+
+/**
+ * Activation effective d'un essai — appelée UNIQUEMENT par l'admin.
+ * Crée la souscription ACTIVE avec période de 15 jours.
+ */
+export async function adminActivateTrial(adminUserId: string, trialId: string) {
+  const trial = await prisma.aiTrial.findFirst({
+    where: { id: trialId, status: "PENDING_ADMIN" },
+  });
+  if (!trial) return null;
 
   const startsAt = new Date();
   const endsAt = new Date(Date.now() + 15 * 24 * 60 * 60 * 1000);
 
-  // Activate trial
   const updated = await prisma.aiTrial.update({
     where: { id: trialId },
     data: {
@@ -630,18 +643,17 @@ export async function activateTrial(userId: string, trialId: string) {
       startsAt,
       endsAt,
       activatedAt: startsAt,
-      activatedBy: userId,
+      activatedBy: adminUserId,
     },
   });
 
-  // Create or update subscription for trial period
-  const ctx = await getUserContext(userId);
+  const ctx = await getUserContext(trial.userId);
   const scope = ctx?.isBusiness ? "BUSINESS" : "USER";
 
   await prisma.subscription.create({
     data: {
       scope: scope as any,
-      userId: scope === "USER" ? userId : null,
+      userId: scope === "USER" ? trial.userId : null,
       businessId: scope === "BUSINESS" && ctx?.business ? ctx.business.id : null,
       planCode: trial.planCode,
       status: "ACTIVE",
@@ -658,13 +670,8 @@ export async function activateTrial(userId: string, trialId: string) {
     },
   });
 
-  // Mark the recommendation as accepted
   await prisma.aiRecommendation.updateMany({
-    where: {
-      userId,
-      triggerType: "TRIAL_SUGGEST",
-      dismissed: false,
-    },
+    where: { userId: trial.userId, triggerType: "TRIAL_SUGGEST", dismissed: false },
     data: { accepted: true },
   });
 

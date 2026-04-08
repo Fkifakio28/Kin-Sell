@@ -59,12 +59,15 @@ router.post('/boost', requireAuth, asyncHandler(async (req: AuthenticatedRequest
 
   // Super admins peuvent toujours activer un boost
   if (req.auth!.role !== Role.SUPER_ADMIN) {
+    const now = new Date();
     const hasBoostAddon = await prisma.subscriptionAddon.findFirst({
       where: {
         addonCode: AddonCode.BOOST_VISIBILITY,
         status: AddonStatus.ACTIVE,
+        endsAt: { gt: now },
         subscription: {
           status: 'ACTIVE',
+          endsAt: { gt: now },
           userId: req.auth!.userId
         }
       }
@@ -110,12 +113,15 @@ router.post('/highlight', requireAuth, asyncHandler(async (req: AuthenticatedReq
 
   // Super admins peuvent toujours activer une mise en avant
   if (req.auth!.role !== Role.SUPER_ADMIN) {
+    const now = new Date();
     const hasBoostAddon = await prisma.subscriptionAddon.findFirst({
       where: {
         addonCode: AddonCode.BOOST_VISIBILITY,
         status: AddonStatus.ACTIVE,
+        endsAt: { gt: now },
         subscription: {
           status: 'ACTIVE',
+          endsAt: { gt: now },
           userId: req.auth!.userId
         }
       }
