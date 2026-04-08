@@ -85,14 +85,6 @@ const DESKTOP_INFO_ITEMS = [
   { title: 'Contact', href: '/contact' },
 ] as const;
 
-const DESKTOP_PRODUCT_CATEGORIES = [
-  { code: '🍔', label: 'Nourriture' },
-  { code: '📱', label: 'Téléphones' },
-  { code: '💻', label: 'Informatique' },
-  { code: '🎮', label: 'Jeux vidéo' },
-  { code: '💊', label: 'Pharmacie' },
-] as const;
-
 const CREATE_DRAFT_STORAGE_KEY = 'ks-sokin-create-draft-v1';
 const OVERLAY_VISIBILITY_LOCK_MS = 180;
 
@@ -2775,19 +2767,6 @@ export function SoKinPage() {
                 <button type="button" className="sk-desktop-nav-item" onClick={() => navigate('/explorer/shops-online')}>🏪 Marché public</button>
                 <button type="button" className="sk-desktop-nav-item" onClick={() => navigate('/explorer')}>🔍 Explorer</button>
               </nav>
-
-              <section className="sk-desktop-left-categories glass-container" aria-label="Catégories produits">
-                <h3>Catégories Produits</h3>
-                <div className="sk-desktop-left-categories-list">
-                  {DESKTOP_PRODUCT_CATEGORIES.map((category) => (
-                    <p key={category.label} className="sk-desktop-left-category-item">
-                      <span className="sk-desktop-left-category-code">{category.code}</span>
-                      <span>{category.label}</span>
-                    </p>
-                  ))}
-                </div>
-                <p>...</p>
-              </section>
             </aside>
 
             {/* ── CENTER ── */}
@@ -2803,22 +2782,20 @@ export function SoKinPage() {
                 onPublish={handlePublish}
               />
 
-              <div className="sk-desktop-feed-zone glass-container">
-                <AnnouncesFeed
-                  posts={posts}
-                  hasMore={hasMore}
-                  loading={loadingFeed}
-                  sentinelRef={sentinelRef}
-                  t={t}
-                  isLoggedIn={isLoggedIn}
-                  openCommentsPostId={openCommentsPostId}
-                  onOpenComments={handleOpenComments}
-                  onMediaClick={(item) => setViewerItem(item)}
-                  onContact={handleContact}
-                  contactingPostId={contactingPostId}
-                  immersiveDesktop
-                />
-              </div>
+              <AnnouncesFeed
+                posts={posts}
+                hasMore={hasMore}
+                loading={loadingFeed}
+                sentinelRef={sentinelRef}
+                t={t}
+                isLoggedIn={isLoggedIn}
+                openCommentsPostId={openCommentsPostId}
+                onOpenComments={handleOpenComments}
+                onMediaClick={(item) => setViewerItem(item)}
+                onContact={handleContact}
+                contactingPostId={contactingPostId}
+                immersiveDesktop
+              />
             </main>
 
             {/* ── RIGHT SIDEBAR ── */}

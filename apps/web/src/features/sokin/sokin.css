@@ -1958,80 +1958,6 @@
   background: rgba(111, 88, 255, 0.14);
 }
 
-/* ── Categories ── */
-.sk-desktop-left-categories {
-  padding: 0.55rem 0.6rem;
-}
-
-.sk-desktop-left-categories h3 {
-  margin: 0 0 0.4rem;
-  font-size: 0.7rem;
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-  color: var(--color-primary-hover, #b9a6ff);
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-
-.sk-desktop-left-categories h3::after {
-  content: '';
-  flex: 1;
-  height: 1px;
-  background: linear-gradient(90deg, rgba(111, 88, 255, 0.25), transparent);
-}
-
-.sk-desktop-left-categories-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-  max-height: 180px;
-  overflow-y: auto;
-  scrollbar-width: none;
-}
-
-.sk-desktop-left-categories-list::-webkit-scrollbar {
-  display: none;
-}
-
-.sk-desktop-left-category-item {
-  margin: 0;
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
-  padding: 0.3rem 0.35rem;
-  border: 1px solid transparent;
-  background: transparent;
-  border-radius: var(--radius-sm, 8px);
-  color: var(--color-text-secondary, rgba(255, 255, 255, 0.82));
-  font-size: 0.76rem;
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
-}
-
-.sk-desktop-left-category-item:hover {
-  background: rgba(111, 88, 255, 0.12);
-  border-color: rgba(111, 88, 255, 0.24);
-  color: var(--color-text-primary, #fff);
-}
-
-.sk-desktop-left-category-code {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 6px;
-  background: linear-gradient(145deg, rgba(111, 88, 255, 0.3), rgba(73, 12, 128, 0.2));
-  font-size: 0.85rem;
-  flex-shrink: 0;
-}
-
-.sk-desktop-left-categories > p {
-  margin: 6px 0 0;
-  font-size: 0.72rem;
-  color: var(--color-text-tertiary, rgba(255, 255, 255, 0.45));
-}
-
 /* ── CENTER COLUMN ── */
 .sk-desktop-center {
   display: flex;
@@ -2113,40 +2039,48 @@
 }
 
 /* ── Feed zone ── */
-.sk-desktop-feed-zone {
-  flex: 1;
-}
-
 .sk-feed--immersive {
-  min-height: 560px;
-  overflow-y: auto;
-  overflow-x: hidden;
-  scroll-snap-type: y mandatory;
+  display: flex;
+  flex-direction: row;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
   scroll-behavior: smooth;
   padding: 0;
   gap: 0;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.sk-feed--immersive::-webkit-scrollbar {
+  display: none;
 }
 
 .sk-feed--immersive .sk-feed-end,
 .sk-feed--immersive .sk-sentinel {
-  margin: 0 14px 14px;
+  min-width: 1px;
+  flex-shrink: 0;
 }
 
 .sk-feed-slide {
-  min-height: 100%;
-  scroll-snap-align: start;
+  min-width: 100%;
+  max-width: 100%;
+  flex-shrink: 0;
+  scroll-snap-align: center;
   scroll-snap-stop: always;
   display: flex;
   align-items: stretch;
-  padding: 8px;
+  padding: 4px;
 }
 
 .sk-feed--immersive .sk-card {
   width: 100%;
-  min-height: 100%;
   margin: 0;
   border-radius: var(--radius-lg, 16px);
   border: 1px solid rgba(180, 160, 255, 0.14);
+  background: var(--glass-bg, rgba(35, 24, 72, 0.48));
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), border-color 0.25s, box-shadow 0.25s;
   animation: skCardAppear 0.4s ease both;
 }
