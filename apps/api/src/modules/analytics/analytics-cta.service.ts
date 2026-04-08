@@ -36,6 +36,7 @@ import {
   computeSellerProfile,
   type SellerProfile,
 } from "../ads/ai-ads-engine.service.js";
+import { OFFER_MAP } from "../ads/ads-knowledge-base.js";
 
 // ═══════════════════════════════════════════════════════
 // Types
@@ -224,12 +225,15 @@ async function buildAnalyticsContext(
 
 function suggestPlan(ctx: AnalyticsContext, tier: AnalyticsTier): { name: string; price: string; target: string } {
   if (tier === "PREMIUM") {
-    return { name: "SCALE", price: "50$/mois", target: "/forfaits?highlight=SCALE" };
+    const o = OFFER_MAP.get("SCALE")!;
+    return { name: "SCALE", price: o.pricingLabel, target: o.ctaPath };
   }
   if (ctx.isBusiness) {
-    return { name: "BUSINESS", price: "30$/mois", target: "/forfaits?highlight=BUSINESS" };
+    const o = OFFER_MAP.get("BUSINESS")!;
+    return { name: "BUSINESS", price: o.pricingLabel, target: o.ctaPath };
   }
-  return { name: "PRO VENDEUR", price: "20$/mois", target: "/forfaits?highlight=PRO_VENDOR" };
+  const o = OFFER_MAP.get("PRO_VENDOR")!;
+  return { name: "PRO VENDEUR", price: o.pricingLabel, target: o.ctaPath };
 }
 
 // ═══════════════════════════════════════════════════════

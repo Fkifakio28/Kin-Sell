@@ -22,6 +22,7 @@ import {
   type SellerProfile,
 } from "./ai-ads-engine.service.js";
 import { PLAN_CATALOG } from "../billing/billing.catalog.js";
+import { OFFER_MAP, type OfferCode } from "./ads-knowledge-base.js";
 
 // ═══════════════════════════════════════════════════════
 // Types
@@ -289,7 +290,7 @@ function buildBoostAdvice(
       message: `Vous venez de publier ${ctx.promoCount} articles d'un coup ! Une mise en avant de votre ${profile.isBusiness ? "boutique" : "profil"} les rendra tous plus visibles.`,
       rationale: `Avec ${totalListings} articles actifs, la mise en avant multiplie la visibilité globale par 3 à 5×.`,
       ctaLabel: hasBoostAddon ? "Activer la mise en avant" : "Souscrire au Boost",
-      ctaTarget: hasBoostAddon ? "/dashboard" : "/forfaits",
+      ctaTarget: hasBoostAddon ? "/dashboard" : OFFER_MAP.get("BOOST_VISIBILITY")!.ctaPath,
       ctaAction: hasBoostAddon ? "BOOST" : "NAVIGATE",
       metric: { articles: ctx.promoCount ?? 0, totalListings },
     };
@@ -310,7 +311,7 @@ function buildBoostAdvice(
         ? `${stagnantCount} de vos articles stagnent — un boost aide à redémarrer la visibilité.`
         : "Les articles boostés obtiennent 2 à 5× plus de vues dans les résultats de recherche.",
       ctaLabel: hasBoostAddon ? "Booster maintenant" : "Souscrire au Boost",
-      ctaTarget: hasBoostAddon ? "/dashboard" : "/forfaits",
+      ctaTarget: hasBoostAddon ? "/dashboard" : OFFER_MAP.get("BOOST_VISIBILITY")!.ctaPath,
       ctaAction: hasBoostAddon ? "BOOST" : "NAVIGATE",
       metric: { stagnant: stagnantCount },
     };
@@ -325,7 +326,7 @@ function buildBoostAdvice(
       message: "Votre promotion vient d'être publiée ! Un boost la fera apparaître en priorité aux acheteurs qui recherchent des promos.",
       rationale: "Les promotions boostées convertissent 2× mieux car elles combinent prix réduit et visibilité accrue.",
       ctaLabel: hasBoostAddon ? "Booster la promo" : "Souscrire au Boost",
-      ctaTarget: hasBoostAddon ? "/dashboard" : "/forfaits",
+      ctaTarget: hasBoostAddon ? "/dashboard" : OFFER_MAP.get("BOOST_VISIBILITY")!.ctaPath,
       ctaAction: hasBoostAddon ? "BOOST" : "NAVIGATE",
     };
   }
@@ -357,7 +358,7 @@ function buildAdsPackAdvice(
       message: `Diffusez votre annonce${categoryInfo} sur toute la marketplace. Le pack pub affiche vos articles comme annonces sponsorisées auprès d'acheteurs ciblés.`,
       rationale: `Avec ${completedSales} vente${completedSales > 1 ? "s" : ""} récente${completedSales > 1 ? "s" : ""}, une campagne pub peut accélérer vos résultats. C'est différent du boost : la pub atteint de nouveaux acheteurs au-delà de la recherche.`,
       ctaLabel: "Voir les packs pub",
-      ctaTarget: "/forfaits",
+      ctaTarget: OFFER_MAP.get("ADS_PACK")!.ctaPath,
       ctaAction: "NAVIGATE",
       pricing: "À partir de 5$ pour 3 pubs",
       metric: { sales: completedSales },
@@ -373,7 +374,7 @@ function buildAdsPackAdvice(
       message: `${isBusiness ? "Faites connaître votre boutique" : "Faites connaître vos articles"} avec une campagne pub ciblée. Vos annonces apparaîtront comme contenu sponsorisé sur Explorer, So-Kin et l'accueil.`,
       rationale: "La publicité est un investissement différent du boost : elle s'affiche comme une annonce dédiée, visible même par ceux qui ne cherchent pas activement.",
       ctaLabel: "Créer une campagne",
-      ctaTarget: "/forfaits",
+      ctaTarget: OFFER_MAP.get("ADS_PACK")!.ctaPath,
       ctaAction: "NAVIGATE",
     };
   }
@@ -401,7 +402,7 @@ function buildAdsPremiumAdvice(
     message: "Réservez une position premium sur la page d'accueil et en tête des résultats. Votre annonce est la seule visible dans cet emplacement pendant toute la durée.",
     rationale: `Votre revenu de ${(revenueLastThirtyDays / 100).toFixed(0)}$/mois et vos ${completedSales} ventes justifient un investissement premium pour maximiser la croissance.`,
     ctaLabel: "Découvrir Ads Premium",
-    ctaTarget: "/forfaits",
+    ctaTarget: OFFER_MAP.get("ADS_PREMIUM")!.ctaPath,
     ctaAction: "NAVIGATE",
     metric: { revenue: `${(revenueLastThirtyDays / 100).toFixed(0)}$` },
   };
@@ -441,7 +442,7 @@ function buildPlanAdvice(profile: SellerProfile): PostPublishAdvice | null {
       message: `${reason} Paiement sécurisé via PayPal (${(plan.monthlyPriceUsdCents / 100).toFixed(0)}$/mois).`,
       rationale: "Un forfait est un engagement mensuel qui débloque des fonctionnalités permanentes — c'est différent d'un boost ou d'une pub ponctuelle.",
       ctaLabel: "Voir les forfaits",
-      ctaTarget: "/forfaits",
+      ctaTarget: OFFER_MAP.get(suggestedCode as OfferCode)?.ctaPath ?? "/forfaits",
       ctaAction: "NAVIGATE",
       metric: { price: `${(plan.monthlyPriceUsdCents / 100).toFixed(0)}$/mois` },
     };
@@ -469,7 +470,7 @@ function buildPlanAdvice(profile: SellerProfile): PostPublishAdvice | null {
       message: `Votre revenu mensuel (${(revenueLastThirtyDays / 100).toFixed(0)}$) montre que votre activité est prête pour le niveau supérieur. ${nextPlan.name} débloque plus d'outils.`,
       rationale: "L'upgrade vous donne accès à des fonctionnalités avancées qui accompagnent votre croissance — c'est un investissement à long terme.",
       ctaLabel: "Comparer les forfaits",
-      ctaTarget: "/forfaits",
+      ctaTarget: OFFER_MAP.get(nextCode as OfferCode)?.ctaPath ?? "/forfaits",
       ctaAction: "NAVIGATE",
       metric: { currentRevenue: `${(revenueLastThirtyDays / 100).toFixed(0)}$`, nextPrice: `${(nextPlan.monthlyPriceUsdCents / 100).toFixed(0)}$/mois` },
     };
@@ -496,7 +497,7 @@ function buildAnalyticsAdvice(profile: SellerProfile): PostPublishAdvice | null 
     message: `Vous avez ${completedSales} ventes et ${totalListings} articles. Avec Kin-Sell Analytique, suivez vos performances : tendances, diagnostics IA et prédictions personnalisées.`,
     rationale: "L'Analytics est différent du boost et de la pub : c'est un outil d'analyse qui vous aide à prendre de meilleures décisions de vente.",
     ctaLabel: "Découvrir Analytique",
-    ctaTarget: "/forfaits",
+    ctaTarget: OFFER_MAP.get("ANALYTICS_MEDIUM")!.ctaPath,
     ctaAction: "NAVIGATE",
     metric: { sales: completedSales, listings: totalListings },
   };

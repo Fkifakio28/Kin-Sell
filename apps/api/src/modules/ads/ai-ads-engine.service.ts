@@ -16,6 +16,12 @@
 import { prisma } from "../../shared/db/prisma.js";
 import { PLAN_CATALOG, ADDON_CATALOG } from "../billing/billing.catalog.js";
 import { getMarketMedian, computePricePosition } from "../../shared/market/market-shared.js";
+import { OFFER_MAP, type OfferCode } from "./ads-knowledge-base.js";
+
+/** Helper: deep-link vers /forfaits depuis la knowledge base */
+function offerCta(code: OfferCode, fallbackTab = "users"): string {
+  return OFFER_MAP.get(code)?.ctaPath ?? `/forfaits?tab=${fallbackTab}`;
+}
 
 // ═══════════════════════════════════════════════════════
 // Types
@@ -409,7 +415,7 @@ function buildSubscriptionOffer(profile: SellerProfile): SmartOffer | null {
           + "Aucun paiement requis pour l'essai.",
         triggerType: "TRIAL_SUGGEST",
         actionType: "ACTIVATE_TRIAL",
-        actionTarget: "/pricing",
+        actionTarget: offerCta("BOOST"),
         actionData: {
           suggestedPlan: "BOOST",
           reason: "Début d'activité — essai gratuit recommandé",
@@ -445,7 +451,7 @@ function buildSubscriptionOffer(profile: SellerProfile): SmartOffer | null {
       + `Paiement sécurisé via PayPal (${(plan.monthlyPriceUsdCents / 100).toFixed(0)}$/mois).`,
     triggerType: "SUBSCRIPTION_SUGGEST",
     actionType: "SUBSCRIBE",
-    actionTarget: "/pricing",
+    actionTarget: offerCta(suggestedPlanCode as OfferCode, isBusiness ? "business" : "users"),
     actionData: {
       suggestedPlan: suggestedPlanCode,
       priceCents: plan.monthlyPriceUsdCents,
@@ -491,7 +497,7 @@ function buildUpgradeOffer(profile: SellerProfile): SmartOffer | null {
       + `vous donne accès à plus d'outils pour accélérer. Paiement via PayPal.`,
     triggerType: "UPGRADE_SUGGEST",
     actionType: "UPGRADE_PLAN",
-    actionTarget: "/pricing",
+    actionTarget: offerCta(nextPlan.code as OfferCode, isBusiness ? "business" : "users"),
     actionData: {
       currentPlan: currentPlan.code,
       suggestedPlan: nextPlan.code,
@@ -520,7 +526,7 @@ function buildAddonOffers(profile: SellerProfile): SmartOffer[] {
         + "Seulement 3$/mois via PayPal.",
       triggerType: "ADDON_SUGGEST",
       actionType: "ADD_ADDON",
-      actionTarget: "/pricing",
+      actionTarget: offerCta("IA_MERCHANT"),
       actionData: {
         addonCode: "IA_MERCHANT",
         priceCents: 300,
@@ -543,7 +549,7 @@ function buildAddonOffers(profile: SellerProfile): SmartOffer[] {
         + "7$/mois via PayPal.",
       triggerType: "ADDON_SUGGEST",
       actionType: "ADD_ADDON",
-      actionTarget: "/pricing",
+      actionTarget: offerCta("IA_ORDER"),
       actionData: {
         addonCode: "IA_ORDER",
         priceCents: 700,
@@ -566,7 +572,7 @@ function buildAddonOffers(profile: SellerProfile): SmartOffer[] {
         + "À partir de 1$/jour via PayPal.",
       triggerType: "ADDON_SUGGEST",
       actionType: "ADD_ADDON",
-      actionTarget: "/pricing",
+      actionTarget: offerCta("BOOST_VISIBILITY"),
       actionData: {
         addonCode: "BOOST_VISIBILITY",
         priceLabel: "1$/24h · 5$/7j · 15$/30j",
@@ -590,7 +596,7 @@ function buildAddonOffers(profile: SellerProfile): SmartOffer[] {
         + "À partir de 5$ pour 3 pubs via PayPal.",
       triggerType: "ADDON_SUGGEST",
       actionType: "ADD_ADDON",
-      actionTarget: "/pricing",
+      actionTarget: offerCta("ADS_PACK"),
       actionData: {
         addonCode: "ADS_PACK",
         priceLabel: "3 pubs 5$ · 7 pubs 10$ · 10 pubs 15$",
@@ -740,7 +746,7 @@ async function buildAdCampaignOffer(
       + `Meilleur jour pour lancer : ${dayNames[bestDay]}. Paiement via PayPal.`,
     triggerType: "AD_CAMPAIGN_SUGGEST",
     actionType: "CREATE_AD",
-    actionTarget: isBusiness ? "/dashboard/ads" : "/pricing",
+    actionTarget: isBusiness ? "/dashboard/ads" : "/forfaits",
     actionData: {
       campaignType,
       budgetCents: campaignBudgetCents,

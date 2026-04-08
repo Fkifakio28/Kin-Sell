@@ -28,6 +28,7 @@ import {
   type SellerProfile,
 } from "./ai-ads-engine.service.js";
 import { PLAN_CATALOG } from "../billing/billing.catalog.js";
+import { OFFER_MAP, type OfferCode } from "./ads-knowledge-base.js";
 
 // ═══════════════════════════════════════════════════════
 // Types
@@ -370,7 +371,7 @@ function buildBoostSimilarAdvice(
         ? "Le retour sur investissement du boost est prouvé par cette vente. Reproduisez la même stratégie."
         : "Les acheteurs qui cherchent dans cette catégorie trouveront vos articles en priorité grâce au boost.",
       ctaLabel: hasBoost ? "Booster maintenant" : "Découvrir le Boost",
-      ctaTarget: hasBoost ? "/dashboard" : "/forfaits",
+      ctaTarget: hasBoost ? "/dashboard" : OFFER_MAP.get("BOOST_VISIBILITY")!.ctaPath,
       ctaAction: hasBoost ? "BOOST" : "NAVIGATE",
       metric: { similarArticles: ctx.similarActiveListings, categorySales: ctx.categorySales },
     };
@@ -385,7 +386,7 @@ function buildBoostSimilarAdvice(
       message: `Vous avez vendu en ${ctx.categoryName}. ${ctx.similarActiveListings} de vos articles actifs sont dans la même catégorie — un boost les mettrait devant les acheteurs intéressés.`,
       rationale: "Cette vente prouve la demande pour cette catégorie. Augmenter la visibilité de vos articles similaires multiplie vos chances.",
       ctaLabel: hasBoost ? "Booster" : "Découvrir le Boost",
-      ctaTarget: hasBoost ? "/dashboard" : "/forfaits",
+      ctaTarget: hasBoost ? "/dashboard" : OFFER_MAP.get("BOOST_VISIBILITY")!.ctaPath,
       ctaAction: hasBoost ? "BOOST" : "NAVIGATE",
       metric: { similarArticles: ctx.similarActiveListings },
     };
@@ -415,7 +416,7 @@ function buildAdsCampaignAdvice(
       message: `${ctx.salesLast7d} ventes cette semaine ! Le moment est idéal pour une campagne pub. Vos articles apparaîtront comme annonces sponsorisées auprès d'acheteurs ciblés sur toute la marketplace.`,
       rationale: `Votre rythme de ${ctx.salesLast7d} ventes/semaine montre une demande forte. Une campagne pub amplifie cette dynamique en touchant de nouveaux acheteurs.`,
       ctaLabel: "Créer une campagne",
-      ctaTarget: "/forfaits",
+      ctaTarget: OFFER_MAP.get("ADS_PACK")!.ctaPath,
       ctaAction: "NAVIGATE",
       metric: { salesThisWeek: ctx.salesLast7d, revenue7d: `${(ctx.revenueLast30dCents / 100).toFixed(0)}$` },
     };
@@ -430,7 +431,7 @@ function buildAdsCampaignAdvice(
       message: `Cette vente à ${(ctx.orderValueCents / 100).toFixed(2)}$ est ${Math.round(((ctx.orderValueCents - ctx.avgOrderValueCents) / ctx.avgOrderValueCents) * 100)}% au-dessus de votre moyenne. Visez ce segment avec une campagne pub ciblée.`,
       rationale: "Les articles haut de gamme convertissent mieux avec de la pub ciblée — les acheteurs qui ont le budget vous trouvent directement.",
       ctaLabel: "Voir les options pub",
-      ctaTarget: "/forfaits",
+      ctaTarget: OFFER_MAP.get("ADS_PACK")!.ctaPath,
       ctaAction: "NAVIGATE",
       metric: { orderValue: `${(ctx.orderValueCents / 100).toFixed(2)}$`, avg: `${(ctx.avgOrderValueCents / 100).toFixed(2)}$` },
     };
@@ -445,7 +446,7 @@ function buildAdsCampaignAdvice(
       message: `${ctx.salesLast30d} ventes ce mois sans aucune pub ! Imaginez les résultats avec une campagne ciblée. Le pack pub démarre à 5$ pour 3 annonces.`,
       rationale: "Vous vendez bien organiquement. La pub ne remplace pas ça — elle amplifie en touchant des acheteurs que la recherche seule ne peut atteindre.",
       ctaLabel: "Découvrir les packs pub",
-      ctaTarget: "/forfaits",
+      ctaTarget: OFFER_MAP.get("ADS_PACK")!.ctaPath,
       ctaAction: "NAVIGATE",
       metric: { salesNoAds: ctx.salesLast30d },
     };
@@ -479,7 +480,7 @@ function buildPlanUpgradeAdvice(
       message: `Première vente réussie ! Le forfait ${plan.name} (${(plan.monthlyPriceUsdCents / 100).toFixed(0)}$/mois) vous donne les outils pour en faire beaucoup d'autres : visibilité boostée, analyses, et plus.`,
       rationale: "Un forfait est un investissement qui se rentabilise vite : avec les bons outils, les vendeurs Kin-Sell multiplient leurs ventes par 3 en moyenne.",
       ctaLabel: "Voir les forfaits",
-      ctaTarget: "/forfaits",
+      ctaTarget: OFFER_MAP.get(suggested as OfferCode)?.ctaPath ?? "/forfaits",
       ctaAction: "NAVIGATE",
       metric: { price: `${(plan.monthlyPriceUsdCents / 100).toFixed(0)}$/mois` },
     };
@@ -508,7 +509,7 @@ function buildPlanUpgradeAdvice(
       message: `${ctx.salesLast30d} ventes et ${(ctx.revenueLast30dCents / 100).toFixed(0)}$ de revenus ce mois. Votre plan ${currentPlan.name} vous a bien servi — ${nextPlan.name} débloque des outils plus puissants pour cette croissance.`,
       rationale: `Votre revenu mensuel (${(ctx.revenueLast30dCents / 100).toFixed(0)}$) dépasse largement le coût du plan. L'upgrade est un investissement rentable.`,
       ctaLabel: "Comparer les forfaits",
-      ctaTarget: "/forfaits",
+      ctaTarget: OFFER_MAP.get(nextCode as OfferCode)?.ctaPath ?? "/forfaits",
       ctaAction: "NAVIGATE",
       metric: { revenue: `${(ctx.revenueLast30dCents / 100).toFixed(0)}$`, sales: ctx.salesLast30d },
     };
@@ -540,7 +541,7 @@ function buildAnalyticsAdvice(
       message: `${ctx.categorySales} ventes en ${ctx.categoryName} — qu'est-ce qui fonctionne ? Kin-Sell Analytique vous montre les facteurs de succès : meilleur prix, meilleur moment, meilleures photos.`,
       rationale: "Comprendre pourquoi ça marche permet de reproduire le succès. L'Analytics décompose chaque vente en facteurs exploitables.",
       ctaLabel: "Découvrir Analytique",
-      ctaTarget: "/forfaits",
+      ctaTarget: OFFER_MAP.get("ANALYTICS_MEDIUM")!.ctaPath,
       ctaAction: "NAVIGATE",
       metric: { categorySales: ctx.categorySales, category: ctx.categoryName },
     };
@@ -555,7 +556,7 @@ function buildAnalyticsAdvice(
       message: `${ctx.totalSales} ventes au total, ${(ctx.totalRevenueCents / 100).toFixed(0)}$ de revenus. Avec Kin-Sell Analytique, identifiez les tendances, les meilleurs horaires de publication et les prix optimaux pour votre marché.`,
       rationale: "Les vendeurs qui utilisent Analytique optimisent leur prix et contexte de publication — résultat : +40% de conversion en moyenne.",
       ctaLabel: "Voir Analytique",
-      ctaTarget: "/forfaits",
+      ctaTarget: OFFER_MAP.get("ANALYTICS_MEDIUM")!.ctaPath,
       ctaAction: "NAVIGATE",
       metric: { totalSales: ctx.totalSales, revenue: `${(ctx.totalRevenueCents / 100).toFixed(0)}$` },
     };
@@ -596,7 +597,7 @@ function buildStrategyAdvice(
       message: `${roi}. Stratégie recommandée : maintenez le boost actif 7 jours minimum, boostez en début de semaine pour capter le pic de trafic, et combinez avec une légère réduction pour accélérer la conversion.`,
       rationale: "Les articles boostés pendant 7+ jours ont un taux de conversion 3× supérieur aux boosts courts. La régularité paie.",
       ctaLabel: "Renouveler le boost",
-      ctaTarget: profile.hasBoostAddon ? "/dashboard" : "/forfaits",
+      ctaTarget: profile.hasBoostAddon ? "/dashboard" : OFFER_MAP.get("BOOST_VISIBILITY")!.ctaPath,
       ctaAction: profile.hasBoostAddon ? "BOOST" : "NAVIGATE",
     };
   }

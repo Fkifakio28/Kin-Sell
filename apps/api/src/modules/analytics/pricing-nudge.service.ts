@@ -31,6 +31,7 @@
 import { prisma } from "../../shared/db/prisma.js";
 import { computeSellerProfile, type SellerProfile } from "../ads/ai-ads-engine.service.js";
 import { PLAN_CATALOG, ADDON_CATALOG } from "../billing/billing.catalog.js";
+import { OFFER_MAP, type OfferCode } from "../ads/ads-knowledge-base.js";
 
 // ═══════════════════════════════════════════════════════
 // Types
@@ -201,7 +202,7 @@ function detectFreqPublisher(ctx: NudgeContext): PricingNudge | null {
       ? `Votre boutique a publié ${ctx.listingsLast7d} articles en 7 jours. Un forfait adapté assure un référencement prioritaire et une couverture optimale pour chaque produit du catalogue.`
       : `Vous avez publié ${ctx.listingsLast7d} annonces cette semaine ! Avec un forfait adapté, chaque article est vu par plus d'acheteurs automatiquement.`,
     ctaLabel: ctx.isBusiness ? "Optimiser ma boutique" : "Voir les forfaits",
-    ctaTarget: `/forfaits?highlight=${suggestedPlan}`,
+    ctaTarget: OFFER_MAP.get(suggestedPlan as OfferCode)?.ctaPath ?? `/forfaits?highlight=${suggestedPlan}`,
     reason: `${ctx.listingsLast7d} publications en 7j sans boost addon`,
     metric: { listingsLast7d: ctx.listingsLast7d },
   };
@@ -221,7 +222,7 @@ function detectPromoCreator(ctx: NudgeContext): PricingNudge | null {
       ? "Vos promotions méritent une stratégie. Un forfait Business amplifie leur portée et vous permet de mesurer leur performance réelle."
       : "Vos promotions sont en place, mais peu d'acheteurs les voient. Un forfait avec boost intégré multiplie leur portée.",
     ctaLabel: ctx.isBusiness ? "Voir les forfaits Business" : "Découvrir les forfaits",
-    ctaTarget: ctx.isBusiness ? "/forfaits?highlight=BUSINESS" : "/forfaits",
+    ctaTarget: ctx.isBusiness ? OFFER_MAP.get("BUSINESS")!.ctaPath : "/forfaits?tab=users",
     reason: "Promotions actives sur plan gratuit/starter",
   };
 }
@@ -242,7 +243,7 @@ function detectLowPerformance(ctx: NudgeContext): PricingNudge | null {
       ? `${ctx.stagnantListings} articles sur ${ctx.totalListings} stagnent sans interaction depuis 7 jours. Activez la visibilité renforcée pour relancer le trafic sur votre boutique.`
       : `${ctx.stagnantListings} de vos ${ctx.totalListings} annonces n'ont reçu aucune interaction depuis 7 jours. Le boost visibilité les remet en avant auprès des acheteurs actifs.`,
     ctaLabel: ctx.isBusiness ? "Relancer mon catalogue" : "Booster mes annonces",
-    ctaTarget: `/forfaits?highlight=${ctx.isBusiness ? "BUSINESS" : "BOOST"}`,
+    ctaTarget: OFFER_MAP.get((ctx.isBusiness ? "BUSINESS" : "BOOST") as OfferCode)!.ctaPath,
     reason: `${Math.round(stagnantRatio * 100)}% d'annonces stagnantes`,
     metric: { stagnant: ctx.stagnantListings, total: ctx.totalListings },
   };
@@ -262,7 +263,7 @@ function detectHighMessaging(ctx: NudgeContext): PricingNudge | null {
       ? `${ctx.messagesLast7d} messages en 7 jours — votre équipe passe trop de temps en messagerie. L'IA Marchand gère les réponses et négociations automatiquement pour traiter plus de volume.`
       : `${ctx.messagesLast7d} messages cette semaine ! L'IA Marchand répond et négocie à votre place, pour que vous vendiez sans stress.`,
     ctaLabel: ctx.isBusiness ? "Automatiser les échanges" : "Activer IA Marchand",
-    ctaTarget: "/forfaits?addon=IA_MERCHANT",
+    ctaTarget: OFFER_MAP.get("IA_MERCHANT")!.ctaPath,
     reason: `${ctx.messagesLast7d} messages/7j sans IA Marchand`,
     metric: { messagesLast7d: ctx.messagesLast7d },
   };
@@ -301,7 +302,7 @@ function detectSalesMilestone(ctx: NudgeContext): PricingNudge | null {
       ? `Votre boutique a franchi les ${milestone} ventes. Le forfait supérieur apporte analytics marché, automatisation avancée et outils de pilotage pour accélérer votre croissance.`
       : `Félicitations pour vos ${milestone} ventes ! Le forfait supérieur débloque des outils pour vendre plus facilement : visibilité accrue, automatisation et conseils personnalisés.`,
     ctaLabel: ctx.isBusiness ? "Accélérer ma croissance" : "Évoluer maintenant",
-    ctaTarget: `/forfaits?highlight=${suggestedPlan}`,
+    ctaTarget: OFFER_MAP.get(suggestedPlan as OfferCode)?.ctaPath ?? `/forfaits?highlight=${suggestedPlan}`,
     reason: `Milestone ${milestone} ventes, plan actuel ${ctx.currentPlanCode}`,
     metric: { totalSales: sales, milestone },
   };
@@ -321,7 +322,7 @@ function detectCategoryDominance(ctx: NudgeContext): PricingNudge | null {
       ? `${ctx.topCategory.count} ventes en "${ctx.topCategory.category}". L'analytics marché vous donne les insights concurrentiels et les tendances pour piloter votre stratégie dans cette catégorie.`
       : `Vous dominez "${ctx.topCategory.category}" avec ${ctx.topCategory.count} ventes. L'analytics vous montre les prix du marché et les tendances pour garder votre avance.`,
     ctaLabel: ctx.isBusiness ? "Piloter ma stratégie" : "Débloquer l'analytics",
-    ctaTarget: `/forfaits?highlight=${ctx.isBusiness ? "BUSINESS" : "PRO_VENDOR"}`,
+    ctaTarget: OFFER_MAP.get((ctx.isBusiness ? "BUSINESS" : "PRO_VENDOR") as OfferCode)!.ctaPath,
     reason: `${ctx.topCategory.count} ventes dans ${ctx.topCategory.category} sans analytics`,
     metric: { category: ctx.topCategory.category, count: ctx.topCategory.count },
   };
@@ -350,7 +351,7 @@ function detectGrowingActivity(ctx: NudgeContext): PricingNudge | null {
       ? `Votre boutique affiche +${Math.round(growth)}% de ventes. C'est le moment d'investir dans les outils de pilotage pour maintenir et accélérer cette trajectoire.`
       : `+${Math.round(growth)}% de ventes ce mois ! Profitez de cette dynamique avec un forfait qui accompagne votre montée en puissance.`,
     ctaLabel: ctx.isBusiness ? "Piloter ma croissance" : "Accompagner ma croissance",
-    ctaTarget: `/forfaits?highlight=${nextPlan}`,
+    ctaTarget: OFFER_MAP.get(nextPlan as OfferCode)?.ctaPath ?? `/forfaits?highlight=${nextPlan}`,
     reason: `Croissance ${Math.round(growth)}%, plan ${ctx.currentPlanCode} → ${nextPlan}`,
     metric: { growth: Math.round(growth), salesLast30d: ctx.salesLast30d, salesPrev30d: ctx.salesPrev30d },
   };
@@ -376,7 +377,7 @@ function detectCatalogExpansion(ctx: NudgeContext): PricingNudge | null {
     title: `${ctx.totalListings} articles au catalogue`,
     message: `Votre catalogue grandit ! Avec ${ctx.totalListings} articles, le forfait ${suggestedPlan} optimise la gestion et la visibilité de tout votre inventaire.`,
     ctaLabel: "Gérer mon catalogue pro",
-    ctaTarget: `/forfaits?highlight=${suggestedPlan}`,
+    ctaTarget: OFFER_MAP.get(suggestedPlan as OfferCode)?.ctaPath ?? `/forfaits?highlight=${suggestedPlan}`,
     reason: `${ctx.totalListings} articles, business plan ${ctx.currentPlanCode}`,
     metric: { totalListings: ctx.totalListings, threshold: reached },
   };
@@ -398,7 +399,7 @@ function detectAutomationNeed(ctx: NudgeContext): PricingNudge | null {
       ? `${ctx.salesLast7d} ventes et ${ctx.messagesLast7d} messages cette semaine — l'IA Commande automatise confirmations, suivi et relances pour libérer votre équipe.`
       : `${ctx.salesLast7d} ventes et ${ctx.messagesLast7d} messages cette semaine — l'IA Commande suit et confirme automatiquement, vous n'avez qu'à expédier.`,
     ctaLabel: ctx.isBusiness ? "Automatiser les opérations" : "Activer l'automatisation",
-    ctaTarget: `/forfaits?addon=IA_ORDER`,
+    ctaTarget: OFFER_MAP.get("IA_ORDER")!.ctaPath,
     reason: `${ctx.salesLast7d} ventes + ${ctx.messagesLast7d} messages/7j sans IA_ORDER`,
     metric: { salesLast7d: ctx.salesLast7d, messagesLast7d: ctx.messagesLast7d },
   };
@@ -419,7 +420,7 @@ function detectAnalyticsNeed(ctx: NudgeContext): PricingNudge | null {
       ? `Avec ${ctx.profile.completedSales} ventes réalisées, l'Analytique révèle les tendances marché, les opportunités de croissance et les leviers pour optimiser votre stratégie commerciale.`
       : `Avec ${ctx.profile.completedSales} ventes, l'Analytique vous montre les prix du marché, les articles qui performent et les meilleurs créneaux pour publier.`,
     ctaLabel: ctx.isBusiness ? "Activer le pilotage data" : "Activer l'analytics",
-    ctaTarget: `/forfaits?highlight=${ctx.isBusiness ? "BUSINESS" : "PRO_VENDOR"}`,
+    ctaTarget: OFFER_MAP.get((ctx.isBusiness ? "BUSINESS" : "PRO_VENDOR") as OfferCode)!.ctaPath,
     reason: `${ctx.profile.completedSales} ventes, lifecycle ${ctx.profile.lifecycle}, sans analytics`,
     metric: { sales: ctx.profile.completedSales, lifecycle: ctx.profile.lifecycle },
   };
