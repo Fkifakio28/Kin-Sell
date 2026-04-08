@@ -37,6 +37,7 @@ import { SK_BIZ_AI_ADVICE, SK_BIZ_AI_AUTO_NEGO, SK_BIZ_AI_COMMANDE } from '../..
 import { DashboardSecurityBlock, DashboardVerificationSection } from './sections';
 import { AdsBoostPopup } from '../../components/AdsBoostPopup';
 import { PostPublishAdvisor } from '../../components/PostPublishAdvisor';
+import { PostSaleAdvisor } from '../../components/PostSaleAdvisor';
 import { SmartUpsellBanner, SmartUpsellCard, PostActionTip } from '../../components/SmartUpsell';
 import { PromoCreator } from '../../components/PromoCreator';
 import { PromoBulkBar } from '../../components/PromoBulkBar';
@@ -150,6 +151,9 @@ export function BusinessDashboard() {
   const [advisorListingId, setAdvisorListingId] = useState<string | null>(null);
   const [advisorPromo, setAdvisorPromo] = useState(false);
   const [advisorBulkCount, setAdvisorBulkCount] = useState<number | null>(null);
+
+  // ─── Post-Sale Advisor ───────────────────────────────────
+  const [saleAdvisorOrderId, setSaleAdvisorOrderId] = useState<string | null>(null);
 
   // ─── Smart Upsell post-action tips ───────────────────────
   const [showBizPublishTip, setShowBizPublishTip] = useState(false);
@@ -362,6 +366,11 @@ export function BusinessDashboard() {
 
       if (payload.status === 'DELIVERED' && sellerValidationQr?.orderId === payload.orderId) {
         setSellerValidationQr(null);
+      }
+
+      // ── Post-Sale Advisor: déclencher pour le vendeur après livraison confirmée ──
+      if (payload.status === 'DELIVERED' && payload.sellerUserId === user.id) {
+        setSaleAdvisorOrderId(payload.orderId);
       }
 
       invalidateCache('/orders/');
@@ -3771,6 +3780,18 @@ export function BusinessDashboard() {
           promoPublished={advisorPromo || undefined}
           bulkCount={advisorBulkCount ?? undefined}
           onClose={() => { setAdvisorListingId(null); setAdvisorPromo(false); setAdvisorBulkCount(null); setBoostPopupListingId(null); setBoostPopupBulkCount(null); }}
+          onBoost={() => {
+            invalidateCache('/listings/mine');
+            listings.mine({ limit: 50 }).then(r => setMyListings(r.listings)).catch(() => {});
+          }}
+        />
+      )}
+
+      {/* ─── Post-Sale Advisor — Conseiller IA post-vente ─── */}
+      {saleAdvisorOrderId && (
+        <PostSaleAdvisor
+          orderId={saleAdvisorOrderId}
+          onClose={() => setSaleAdvisorOrderId(null)}
           onBoost={() => {
             invalidateCache('/listings/mine');
             listings.mine({ limit: 50 }).then(r => setMyListings(r.listings)).catch(() => {});

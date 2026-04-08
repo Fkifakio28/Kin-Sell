@@ -12,6 +12,7 @@ import * as aiTrigger from "./ai-trigger.service.js";
 import * as pricingNudge from "./pricing-nudge.service.js";
 import * as commercialAdvisor from "./commercial-advisor.service.js";
 import { getPostPublishAdvice, type PublishContext } from "../ads/post-publish-advisor.service.js";
+import { getPostSaleAdvice } from "../ads/post-sale-advisor.service.js";
 import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
 
@@ -288,6 +289,25 @@ router.get(
       promoCount: req.query.promoCount ? Number(req.query.promoCount) : undefined,
     };
     const report = await getPostPublishAdvice(req.auth!.userId, ctx);
+    res.json(report);
+  })
+);
+
+// ─────────────────────────────────────────────
+// POST-SALE ADVISOR — conseiller IA après une vente réussie
+// ─────────────────────────────────────────────
+
+/**
+ * GET /analytics/ai/post-sale-advice?orderId=X
+ * Recommandations contextuelles après vente confirmée
+ */
+router.get(
+  "/ai/post-sale-advice",
+  requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const orderId = req.query.orderId as string;
+    if (!orderId) throw new HttpError(400, "orderId est requis");
+    const report = await getPostSaleAdvice(req.auth!.userId, orderId);
     res.json(report);
   })
 );

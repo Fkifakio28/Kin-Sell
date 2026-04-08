@@ -42,6 +42,7 @@ import { prepareMediaUrls } from '../../utils/media-upload';
 import { AdBanner } from '../../components/AdBanner';
 import { AdsBoostPopup } from '../../components/AdsBoostPopup';
 import { PostPublishAdvisor } from '../../components/PostPublishAdvisor';
+import { PostSaleAdvisor } from '../../components/PostSaleAdvisor';
 import { SmartUpsellBanner, SmartUpsellCard, PostActionTip } from '../../components/SmartUpsell';
 import { PromoCreator } from '../../components/PromoCreator';
 import { OrderValidationQrModal } from '../../components/OrderValidationQrModal';
@@ -342,6 +343,9 @@ export function UserDashboard() {
   const [advisorListingId, setAdvisorListingId] = useState<string | null>(null);
   const [advisorPromo, setAdvisorPromo] = useState(false);
   const [advisorBulkCount, setAdvisorBulkCount] = useState<number | null>(null);
+
+  // ── Post-Sale Advisor state ──
+  const [saleAdvisorOrderId, setSaleAdvisorOrderId] = useState<string | null>(null);
 
   // ── Smart Upsell post-action tips ──
   const [showPublishTip, setShowPublishTip] = useState(false);
@@ -805,6 +809,11 @@ export function UserDashboard() {
 
       if (payload.status === 'DELIVERED' && sellerValidationQr?.orderId === payload.orderId) {
         setSellerValidationQr(null);
+      }
+
+      // ── Post-Sale Advisor: déclencher pour le vendeur après livraison confirmée ──
+      if (payload.status === 'DELIVERED' && payload.sellerUserId === user.id) {
+        setSaleAdvisorOrderId(payload.orderId);
       }
 
       if (payload.status === 'DELIVERED' && buyerConfirmOrderId === payload.orderId) {
@@ -5139,6 +5148,15 @@ export function UserDashboard() {
           promoPublished={advisorPromo || undefined}
           bulkCount={advisorBulkCount ?? undefined}
           onClose={() => { setAdvisorListingId(null); setAdvisorPromo(false); setAdvisorBulkCount(null); setBoostPopupListingId(null); setBoostPopupBulkCount(null); }}
+          onBoost={() => void refreshArticles(1, articlesFilter)}
+        />
+      )}
+
+      {/* ── Post-Sale Advisor — Conseiller IA post-vente ── */}
+      {saleAdvisorOrderId && (
+        <PostSaleAdvisor
+          orderId={saleAdvisorOrderId}
+          onClose={() => setSaleAdvisorOrderId(null)}
           onBoost={() => void refreshArticles(1, articlesFilter)}
         />
       )}

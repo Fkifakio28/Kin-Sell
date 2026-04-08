@@ -244,3 +244,37 @@ export const postPublishAdvisor = {
     return request<PostPublishReport>(`/analytics/ai/post-publish-advice?${query.toString()}`);
   },
 };
+
+// ── Post-Sale Advisor ──
+
+export type SaleAdviceCategory = "BOOST" | "ADS_CAMPAIGN" | "PLAN" | "ANALYTICS" | "STRATEGY" | "REPLICATE";
+
+export type PostSaleAdvice = {
+  category: SaleAdviceCategory;
+  priority: number;
+  icon: string;
+  title: string;
+  message: string;
+  rationale: string;
+  ctaLabel: string;
+  ctaTarget: string;
+  ctaAction?: string;
+  metric?: Record<string, number | string>;
+};
+
+export type PostSaleReport = {
+  scenario: string;
+  orderId: string;
+  orderTotal: string;
+  itemTitle: string;
+  itemCategory: string;
+  saleNumber: number;
+  congratsMessage: string;
+  advice: PostSaleAdvice[];
+  sellerLifecycle: string;
+};
+
+export const postSaleAdvisor = {
+  getAdvice: (orderId: string) =>
+    request<PostSaleReport>(`/analytics/ai/post-sale-advice?orderId=${encodeURIComponent(orderId)}`),
+};
