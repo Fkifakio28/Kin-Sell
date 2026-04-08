@@ -1929,6 +1929,7 @@ export function BusinessDashboard() {
             <div className="bz-art-filters">
               <label className="ud-art-select-all" title="Tout sélectionner">
                 <input type="checkbox" checked={pagedProduits.length > 0 && selectedProdIds.size === pagedProduits.length} onChange={(e) => { if (e.target.checked) selectAllProd(pagedProduits); else deselectAllProd(); }} />
+                <span className="ud-art-select-all-check" />
               </label>
               {(['', 'ACTIVE', 'INACTIVE', 'ARCHIVED'] as const).map((f) => (
                 <button key={f} type="button" className={`bz-art-filter-btn${prodFilter === f ? ' active' : ''}`} onClick={() => { setProdFilter(f as ListingStatus | ''); setProdPage(1); deselectAllProd(); }}>
@@ -1950,7 +1951,10 @@ export function BusinessDashboard() {
                 {pagedProduits.map((p) => (
                   <article key={p.id} className={`bz-art-card${p.status === 'INACTIVE' ? ' bz-art-card--dim' : ''}${selectedProdIds.has(p.id) ? ' ud-art-card--selected' : ''}`}>
                     <div className="bz-art-card-visual">
-                      <input type="checkbox" className="ud-art-chk ud-art-card-chk" checked={selectedProdIds.has(p.id)} onChange={() => toggleProdSelection(p.id)} />
+                      <label className="ud-art-card-chk" onClick={(e) => e.stopPropagation()}>
+                        <input type="checkbox" checked={selectedProdIds.has(p.id)} onChange={() => toggleProdSelection(p.id)} />
+                        <span className="ud-art-chk" />
+                      </label>
                       {p.imageUrl ? (
                         <img src={resolveMediaUrl(p.imageUrl)} alt={p.title} className="bz-art-card-img" loading="lazy" />
                       ) : (
@@ -2168,6 +2172,7 @@ export function BusinessDashboard() {
             <div className="bz-art-filters">
               <label className="ud-art-select-all" title="Tout sélectionner">
                 <input type="checkbox" checked={pagedServices.length > 0 && selectedSvcIds.size === pagedServices.length} onChange={(e) => { if (e.target.checked) selectAllSvc(pagedServices); else deselectAllSvc(); }} />
+                <span className="ud-art-select-all-check" />
               </label>
               {(['', 'ACTIVE', 'INACTIVE', 'ARCHIVED'] as const).map((f) => (
                 <button key={f} type="button" className={`bz-art-filter-btn${svcFilter === f ? ' active' : ''}`} onClick={() => { setSvcFilter(f as ListingStatus | ''); setSvcPage(1); deselectAllSvc(); }}>
@@ -2189,7 +2194,10 @@ export function BusinessDashboard() {
                 {pagedServices.map((s) => (
                   <article key={s.id} className={`bz-art-card${s.status === 'INACTIVE' ? ' bz-art-card--dim' : ''}${selectedSvcIds.has(s.id) ? ' ud-art-card--selected' : ''}`}>
                     <div className="bz-art-card-visual">
-                      <input type="checkbox" className="ud-art-chk ud-art-card-chk" checked={selectedSvcIds.has(s.id)} onChange={() => toggleSvcSelection(s.id)} />
+                      <label className="ud-art-card-chk" onClick={(e) => e.stopPropagation()}>
+                        <input type="checkbox" checked={selectedSvcIds.has(s.id)} onChange={() => toggleSvcSelection(s.id)} />
+                        <span className="ud-art-chk" />
+                      </label>
                       {s.imageUrl ? (
                         <img src={resolveMediaUrl(s.imageUrl)} alt={s.title} className="bz-art-card-img" loading="lazy" />
                       ) : (
