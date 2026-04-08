@@ -40,3 +40,15 @@ export type {
   RecoResult,
   RecoEngineConfig,
 } from "../../hooks/useRecoEngine";
+
+// Deep-link pricing
+export {
+  buildPricingUrl,
+  ctaTargetForProduct,
+  ctaTargetForNudge,
+  tabForCode,
+} from "../../features/pricing/pricingLinks";
+
+export type {
+  PricingLinkOptions,
+} from "../../features/pricing/pricingLinks";

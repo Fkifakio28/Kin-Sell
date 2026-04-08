@@ -1,9 +1,16 @@
-import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { useAuth } from "../../app/providers/AuthProvider";
 import { useLocaleCurrency } from "../../app/providers/LocaleCurrencyProvider";
 import { billing, type BillingPlanSummary, ApiError } from "../../lib/api-client";
 import { SeoMeta } from "../../components/SeoMeta";
+import {
+  parsePricingParams,
+  cleanPricingParams,
+  highlightElement,
+  tabForCode,
+  type PricingTab as PricingTabType,
+} from "./pricingLinks";
 import "./pricing.css";
 
 type PricingTab = "users" | "business" | "addons";
@@ -148,7 +155,7 @@ function PlanCard({
   onChoose: (code: string) => void;
 }) {
   return (
-    <article className="pricing-card glass-card">
+    <article className="pricing-card glass-card" id={`plan-${plan.code}`}>
       <div className="pricing-card-head">
         <h3>{plan.name}</h3>
         {plan.badge ? <span className="pricing-card-badge">{plan.badge}</span> : null}
@@ -196,6 +203,29 @@ export function PricingPage() {
   }, [role]);
 
   const [activeTab, setActiveTab] = useState<PricingTab>(defaultTab);
+
+  // ── Deep-link : parse URL et appliquer tab + highlight ──
+  const deepLinkApplied = useRef(false);
+  useEffect(() => {
+    if (deepLinkApplied.current) return;
+    const dl = parsePricingParams();
+    if (!dl.tab && !dl.highlight && !dl.section) return;
+    deepLinkApplied.current = true;
+
+    // Résoudre le bon tab
+    const targetTab: PricingTab = dl.tab ?? (dl.highlight ? tabForCode(dl.highlight) : defaultTab);
+    setActiveTab(targetTab);
+
+    // Highlight + scroll
+    if (dl.highlight) {
+      highlightElement(`plan-${dl.highlight}`);
+    } else if (dl.section === "analytics") {
+      highlightElement("plan-analytics-lock");
+    }
+
+    // Nettoyer l'URL sans recharger
+    cleanPricingParams();
+  }, [defaultTab]);
 
   useEffect(() => {
     if (!isLoggedIn) {
@@ -395,7 +425,7 @@ export function PricingPage() {
       {activeTab === "addons" ? (
         <section className="pricing-grid pricing-grid--addons">
           {ADDONS.map((addon) => (
-            <article className="pricing-card glass-card" key={addon.name}>
+            <article className="pricing-card glass-card" key={addon.name} id={`plan-${addon.code}`}>
               <div className="pricing-card-head">
                 <h3>{addon.name}</h3>
               </div>
@@ -421,7 +451,7 @@ export function PricingPage() {
             </article>
           ))}
 
-          <article className="pricing-card glass-card pricing-card--analytics-lock">
+          <article className="pricing-card glass-card pricing-card--analytics-lock" id="plan-analytics-lock">
             <div className="pricing-card-head">
               <h3>Analytics</h3>
               <span className="pricing-card-badge">Important</span>

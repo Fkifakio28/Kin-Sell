@@ -14,6 +14,10 @@
  *  - Stockage persistant dans localStorage
  */
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import {
+  ctaTargetForProduct,
+  ctaTargetForNudge,
+} from "../features/pricing/pricingLinks";
 
 /* ═══════════════════════════════════════════ TYPES ═══════ */
 
@@ -416,7 +420,7 @@ export function adviceToCandidates(
       message: a.message,
       rationale: a.rationale,
       ctaLabel: a.ctaLabel,
-      ctaTarget: a.ctaTarget,
+      ctaTarget: ctaTargetForProduct(a.productType, a.productCode),
       pricing: a.pricing,
       signals: a.signals,
       metrics: a.metric,
@@ -452,7 +456,7 @@ export function nudgeToCandidates(
       message: n.message,
       rationale: n.reason,
       ctaLabel: n.ctaLabel,
-      ctaTarget: n.ctaTarget,
+      ctaTarget: ctaTargetForNudge(n.triggerType),
       metrics: n.metric,
     },
   }));
