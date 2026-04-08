@@ -38,6 +38,7 @@ import { DashboardSecurityBlock, DashboardVerificationSection } from './sections
 import { AdsBoostPopup } from '../../components/AdsBoostPopup';
 import { PostPublishAdvisor } from '../../components/PostPublishAdvisor';
 import { PostSaleAdvisor } from '../../components/PostSaleAdvisor';
+import { AnalyticsCTAPanel } from '../../components/AnalyticsCTAPanel';
 import { SmartUpsellBanner, SmartUpsellCard, PostActionTip } from '../../components/SmartUpsell';
 import { PromoCreator } from '../../components/PromoCreator';
 import { PromoBulkBar } from '../../components/PromoBulkBar';
@@ -3069,29 +3070,7 @@ export function BusinessDashboard() {
                 </div>
 
                 {!bizHasAnalytics && (
-                  <div style={{
-                    background: 'linear-gradient(135deg, rgba(111,88,255,0.12), rgba(155,122,255,0.06))',
-                    border: '1px solid rgba(111,88,255,0.25)',
-                    borderRadius: 10, padding: 14,
-                  }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                      <div style={{ flex: 1 }}>
-                        <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--color-text-primary, #fff)' }}>
-                          🏆 Les boutiques avec Analytique vendent 3x plus
-                        </span>
-                        <p style={{ margin: '4px 0 8px', fontSize: 12, color: 'var(--color-text-secondary, #aaa)', lineHeight: 1.5 }}>
-                          Passez à un forfait Business ou Scale pour accéder à toutes les analyses : prédictions IA, audience, vélocité des ventes, risque de churn et recommandations personnalisées en temps réel.
-                        </p>
-                        <button
-                          onClick={() => navigate('/pricing')}
-                          style={{ padding: '6px 14px', fontSize: 11, fontWeight: 700, border: 'none', borderRadius: 6, background: 'linear-gradient(135deg, #6f58ff, #9b7aff)', color: '#fff', cursor: 'pointer', boxShadow: '0 2px 8px rgba(111,88,255,0.3)' }}
-                        >
-                          🚀 Débloquer tout — forfaits Business
-                        </button>
-                      </div>
-                      <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, background: 'rgba(111,88,255,0.15)', color: '#9b7aff', whiteSpace: 'nowrap', marginLeft: 8 }}>💎 Premium</span>
-                    </div>
-                  </div>
+                  <AnalyticsCTAPanel />
                 )}
 
               </div>
@@ -3596,36 +3575,8 @@ export function BusinessDashboard() {
                       </div>
                     </div>
 
-                    {/* Kin-Sell Analytique teaser */}
-                    {!bizHasAnalytics && (
-                      <div style={{
-                        background: 'linear-gradient(135deg, rgba(111,88,255,0.08), rgba(0,200,150,0.06))',
-                        border: '1px solid rgba(0,200,150,0.2)',
-                        borderRadius: 10, padding: 14,
-                      }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                          <div style={{ flex: 1 }}>
-                            <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--color-text-primary, #fff)' }}>
-                              📊 Analysez votre marché avec Kin-Sell Analytique
-                            </span>
-                            <p style={{ margin: '4px 0 8px', fontSize: 12, color: 'var(--color-text-secondary, #aaa)', lineHeight: 1.5 }}>
-                              Accédez aux prix moyens par catégorie, produits tendance à Kinshasa, analyse de vos concurrents et prédictions de ventes. Les boutiques abonnées augmentent leurs ventes de 3x en moyenne.
-                            </p>
-                            <div style={{ display: 'flex', gap: 6 }}>
-                              <button
-                                onClick={() => navigate('/pricing')}
-                                style={{ padding: '6px 12px', fontSize: 11, fontWeight: 600, border: 'none', borderRadius: 6, background: 'linear-gradient(135deg, #00c896, #00e6ac)', color: '#fff', cursor: 'pointer' }}
-                              >
-                                📈 Débloquer Analytique
-                              </button>
-                            </div>
-                          </div>
-                          <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, background: 'rgba(0,200,150,0.15)', color: '#00c896', whiteSpace: 'nowrap', marginLeft: 8 }}>
-                            📊 Analytique
-                          </span>
-                        </div>
-                      </div>
-                    )}
+                    {/* Kin-Sell Analytique CTA intelligent */}
+                    {!bizHasAnalytics && <AnalyticsCTAPanel />}
 
                     {/* Upgrade CTA for Starter plan */}
                     {myPlan && myPlan.planCode === 'STARTER' && (

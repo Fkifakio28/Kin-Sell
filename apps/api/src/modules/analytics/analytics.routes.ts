@@ -13,6 +13,7 @@ import * as pricingNudge from "./pricing-nudge.service.js";
 import * as commercialAdvisor from "./commercial-advisor.service.js";
 import { getPostPublishAdvice, type PublishContext } from "../ads/post-publish-advisor.service.js";
 import { getPostSaleAdvice } from "../ads/post-sale-advisor.service.js";
+import { evaluateAnalyticsCTAs } from "./analytics-cta.service.js";
 import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
 
@@ -308,6 +309,23 @@ router.get(
     const orderId = req.query.orderId as string;
     if (!orderId) throw new HttpError(400, "orderId est requis");
     const report = await getPostSaleAdvice(req.auth!.userId, orderId);
+    res.json(report);
+  })
+);
+
+// ─────────────────────────────────────────────
+// ANALYTICS CTA — incitations intelligentes vers Kin-Sell Analytique
+// ─────────────────────────────────────────────
+
+/**
+ * GET /analytics/ai/analytics-cta
+ * CTA contextuels pour pousser vers Kin-Sell Analytique
+ */
+router.get(
+  "/ai/analytics-cta",
+  requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const report = await evaluateAnalyticsCTAs(req.auth!.userId);
     res.json(report);
   })
 );

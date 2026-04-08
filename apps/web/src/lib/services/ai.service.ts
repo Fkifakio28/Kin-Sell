@@ -278,3 +278,43 @@ export const postSaleAdvisor = {
   getAdvice: (orderId: string) =>
     request<PostSaleReport>(`/analytics/ai/post-sale-advice?orderId=${encodeURIComponent(orderId)}`),
 };
+
+// ── Analytics CTA ──
+
+export type AnalyticsTrigger =
+  | "MULTI_LISTINGS"
+  | "PROMO_ACTIVITY"
+  | "SALES_HISTORY"
+  | "PRICE_HESITATION"
+  | "GROWING_BUSINESS"
+  | "CATALOG_DIVERSITY"
+  | "IRREGULAR_RESULTS"
+  | "OPTIMIZATION_INTENT";
+
+export type AnalyticsCTA = {
+  trigger: AnalyticsTrigger;
+  tier: "MEDIUM" | "PREMIUM";
+  priority: number;
+  icon: string;
+  title: string;
+  subtitle: string;
+  message: string;
+  whyNow: string;
+  valuePills: string[];
+  ctaLabel: string;
+  ctaTarget: string;
+  planName: string;
+  planPrice: string;
+  metric?: Record<string, number | string>;
+};
+
+export type AnalyticsCTAReport = {
+  ctas: AnalyticsCTA[];
+  hasAnalytics: boolean;
+  currentTier: "NONE" | "MEDIUM" | "PREMIUM";
+  suggestedUpgrade: "MEDIUM" | "PREMIUM" | null;
+};
+
+export const analyticsCTA = {
+  evaluate: () => request<AnalyticsCTAReport>("/analytics/ai/analytics-cta"),
+};

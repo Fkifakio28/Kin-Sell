@@ -43,6 +43,7 @@ import { AdBanner } from '../../components/AdBanner';
 import { AdsBoostPopup } from '../../components/AdsBoostPopup';
 import { PostPublishAdvisor } from '../../components/PostPublishAdvisor';
 import { PostSaleAdvisor } from '../../components/PostSaleAdvisor';
+import { AnalyticsCTAPanel } from '../../components/AnalyticsCTAPanel';
 import { SmartUpsellBanner, SmartUpsellCard, PostActionTip } from '../../components/SmartUpsell';
 import { PromoCreator } from '../../components/PromoCreator';
 import { OrderValidationQrModal } from '../../components/OrderValidationQrModal';
@@ -2045,7 +2046,7 @@ export function UserDashboard() {
         </div>
 
         <nav className="ud-nav" aria-label="Menu utilisateur privé">
-          {SECTION_DEFS.filter((s) => s.key !== 'analytics' || hasAnalytics).map((section) => (
+          {SECTION_DEFS.map((section) => (
             section.key === 'my-profile-page' ? (
               <Link
                 key={section.key}
@@ -4390,6 +4391,20 @@ export function UserDashboard() {
             />
           </div>
         )}
+        {activeSection === 'analytics' && !hasAnalytics && (
+          <div className="ud-section animate-fade-in">
+            <section className="ud-glass-panel">
+              <div className="ud-panel-head">
+                <h2 className="ud-panel-title">📊 Kin-Sell Analytique</h2>
+              </div>
+              <p style={{ fontSize: 13, color: 'var(--color-text-secondary, #aaa)', marginBottom: 16, lineHeight: 1.6 }}>
+                Kin-Sell Analytique vous aide à mieux décider, mieux vendre et mieux piloter vos performances.
+                Découvrez les recommandations personnalisées basées sur votre activité.
+              </p>
+              <AnalyticsCTAPanel />
+            </section>
+          </div>
+        )}
 
         {/* ═══════════════  ONGLET KIN-SELL  ═══════════════ */}
         {activeSection === 'kinsell' && (
@@ -4596,36 +4611,8 @@ export function UserDashboard() {
                       </div>
                     </div>
 
-                    {/* ═══ Kin-Sell Analytique teaser recommendation ═══ */}
-                    {!hasAnalytics && (
-                      <div style={{
-                        background: 'linear-gradient(135deg, rgba(111,88,255,0.08), rgba(0,200,150,0.06))',
-                        border: '1px solid rgba(0,200,150,0.2)',
-                        borderRadius: 10, padding: 14,
-                      }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                          <div style={{ flex: 1 }}>
-                            <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--color-text-primary, #fff)' }}>
-                              📊 Découvrez ce que vos concurrents ne savent pas
-                            </span>
-                            <p style={{ margin: '4px 0 8px', fontSize: 12, color: 'var(--color-text-secondary, #aaa)', lineHeight: 1.5 }}>
-                              Kin-Sell Analytique analyse le marché en temps réel : prix moyens par catégorie, produits tendance à Kinshasa, et conseils personnalisés pour maximiser vos ventes. Les vendeurs abonnés vendent en moyenne 3x plus.
-                            </p>
-                            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                              <button
-                                onClick={() => navigate('/pricing')}
-                                style={{ padding: '6px 12px', fontSize: 11, fontWeight: 600, border: 'none', borderRadius: 6, background: 'linear-gradient(135deg, #00c896, #00e6ac)', color: '#fff', cursor: 'pointer' }}
-                              >
-                                📈 Débloquer Analytique
-                              </button>
-                            </div>
-                          </div>
-                          <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, background: 'rgba(0,200,150,0.15)', color: '#00c896', whiteSpace: 'nowrap', marginLeft: 8 }}>
-                            📊 Analytique
-                          </span>
-                        </div>
-                      </div>
-                    )}
+                    {/* ═══ Kin-Sell Analytique CTA intelligent ═══ */}
+                    {!hasAnalytics && <AnalyticsCTAPanel />}
 
                     {/* ═══ Upgrade CTA recommendation ═══ */}
                     {(!activePlan || activePlan.planCode === 'FREE') && (
