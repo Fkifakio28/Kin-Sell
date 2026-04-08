@@ -414,7 +414,8 @@ function ExplorerPageMobile() {
           coverImage: resolveMediaUrl(item.imageUrl) || '/assets/kin-sell/black-man-standing-cafe-with-shopping-bags.jpg',
           media: [], ownerId: item.owner.userId, isNegotiable: item.isNegotiable !== false,
           isBoosted: !!(item as any).isBoosted,
-          promoLabel: item.promoActive && item.promoPriceUsdCents != null ? `Promo -${Math.round((1 - item.promoPriceUsdCents / item.priceUsdCents) * 100)}%` : undefined,
+          promoLabel: item.promoActive && item.promoPriceUsdCents != null ? `-${Math.round((1 - item.promoPriceUsdCents / item.priceUsdCents) * 100)}%` : undefined,
+          originalPriceLabel: item.promoActive && item.promoPriceUsdCents != null ? formatPriceLabelFromUsdCents(item.priceUsdCents) : undefined,
           latitude: item.latitude ?? undefined, longitude: item.longitude ?? undefined,
         });
         if (!cancelled) setLiveArticles([...pRes.results.map(map), ...sRes.results.map(map)]);
@@ -483,11 +484,15 @@ function ExplorerPageMobile() {
                     <div className="ex-article-img">
                       <img src={article.coverImage} alt={article.title} loading="lazy" />
                       {article.isBoosted && <span className="ks-sponsored-badge">⚡ Sponsorisé</span>}
-                      {article.promoLabel && <span className="ex-article-badge">{article.promoLabel}</span>}
+                      {article.promoLabel && <span className="ex-article-badge ks-promo-badge">{article.promoLabel}</span>}
                     </div>
                     <div className="ex-article-body">
                       <h4 className="ex-article-title">{article.title}</h4>
-                      <p className="ex-article-price">{article.priceLabel}</p>
+                      {article.originalPriceLabel ? (
+                        <p className="ex-article-price"><s className="ks-price-old">{article.originalPriceLabel}</s> {article.priceLabel}</p>
+                      ) : (
+                        <p className="ex-article-price">{article.priceLabel}</p>
+                      )}
                       <p className="ex-article-publisher">{article.publisherName}</p>
                       <div className="ex-article-actions">
                         <button type="button" className="ex-article-act" onClick={() => nav(article.targetPath)}>Voir</button>
@@ -575,11 +580,15 @@ function ExplorerPageMobile() {
                 >
                   <div className="ex-article-img">
                     <img src={article.coverImage} alt={article.title} loading="lazy" />
-                    {article.promoLabel && <span className="ex-article-badge">{article.promoLabel}</span>}
+                    {article.promoLabel && <span className="ex-article-badge ks-promo-badge">{article.promoLabel}</span>}
                   </div>
                   <div className="ex-article-body">
                     <h4 className="ex-article-title">{article.title}</h4>
-                    <p className="ex-article-price">{article.priceLabel}</p>
+                    {article.originalPriceLabel ? (
+                      <p className="ex-article-price"><s className="ks-price-old">{article.originalPriceLabel}</s> {article.priceLabel}</p>
+                    ) : (
+                      <p className="ex-article-price">{article.priceLabel}</p>
+                    )}
                     <p className="ex-article-publisher">{article.publisherName}</p>
                     <div className="ex-article-actions">
                       <button type="button" className="ex-article-act" onClick={() => nav(article.targetPath)}>Voir</button>

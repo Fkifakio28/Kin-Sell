@@ -846,16 +846,18 @@
 .h-article-promo-badge {
   position: absolute;
   top: 6px;
-  right: 6px;
-  font-size: 0.62rem;
-  padding: 0.18rem 0.5rem;
-  border-radius: var(--radius-full);
-  background: linear-gradient(135deg, #ff4444, #ff6b6b);
+  left: 6px;
+  font-size: 0.68rem;
+  padding: 3px 8px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #e83e3e, #ff6b3d);
   color: #fff;
-  font-weight: 700;
+  font-weight: 800;
   z-index: 2;
-  letter-spacing: 0.02em;
-  box-shadow: 0 2px 6px rgba(255,68,68,0.35);
+  letter-spacing: 0.03em;
+  box-shadow: 0 2px 8px rgba(232, 62, 62, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  line-height: 1.2;
 }
 
 .h-article-body {

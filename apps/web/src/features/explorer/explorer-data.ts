@@ -53,6 +53,7 @@ export type ExplorerArticlePreview = {
   targetPath: string;
   coverImage: string;
   promoLabel?: string;
+  originalPriceLabel?: string;
   media: ExplorerArticleMedia[];
   ownerId?: string;
   isNegotiable?: boolean;

@@ -352,6 +352,21 @@
   background: var(--color-secondary, #a78bfa);
 }
 
+.hm-badge--promo {
+  top: 6px;
+  left: 6px;
+  font-size: 0.68rem;
+  padding: 3px 8px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #e83e3e, #ff6b3d);
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  box-shadow: 0 2px 8px rgba(232, 62, 62, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  z-index: 3;
+  line-height: 1.2;
+}
+
 .hm-market-card-body {
   padding: 6px 8px 8px;
 }

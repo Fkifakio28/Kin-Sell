@@ -780,12 +780,12 @@ export function HomePage() {
                   >
                     <div className="h-article-thumb" style={p.imageUrl ? { backgroundImage: `url(${resolveMediaUrl(p.imageUrl)})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}>
                       <span className="h-article-cat">{p.category}</span>
-                      {p.promoActive && p.promoPriceUsdCents != null && <span className="h-article-promo-badge">Promo -{Math.round((1 - p.promoPriceUsdCents / p.priceUsdCents) * 100)}%</span>}
+                      {p.promoActive && p.promoPriceUsdCents != null && <span className="h-article-promo-badge">-{Math.round((1 - p.promoPriceUsdCents / p.priceUsdCents) * 100)}%</span>}
                     </div>
                     <div className="h-article-body">
                       <strong className="h-article-title">{p.title}</strong>
                       {p.promoActive && p.promoPriceUsdCents != null ? (
-                        <span className="h-article-price"><s style={{opacity:0.5,fontSize:'0.85em',marginRight:4}}>{formatPriceLabelFromUsdCents(p.priceUsdCents)}</s> {formatPriceLabelFromUsdCents(p.promoPriceUsdCents)}</span>
+                        <span className="h-article-price"><s className="ks-price-old">{formatPriceLabelFromUsdCents(p.priceUsdCents)}</s> {formatPriceLabelFromUsdCents(p.promoPriceUsdCents)}</span>
                       ) : (
                         <span className="h-article-price">{formatPriceLabelFromUsdCents(p.priceUsdCents)}</span>
                       )}
@@ -835,12 +835,12 @@ export function HomePage() {
                   >
                     <div className="h-article-thumb h-article-thumb--svc" style={s.imageUrl ? { backgroundImage: `url(${resolveMediaUrl(s.imageUrl)})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}>
                       <span className="h-article-cat">{s.category}</span>
-                      {s.promoActive && s.promoPriceUsdCents != null && <span className="h-article-promo-badge">Promo -{Math.round((1 - s.promoPriceUsdCents / s.priceUsdCents) * 100)}%</span>}
+                      {s.promoActive && s.promoPriceUsdCents != null && <span className="h-article-promo-badge">-{Math.round((1 - s.promoPriceUsdCents / s.priceUsdCents) * 100)}%</span>}
                     </div>
                     <div className="h-article-body">
                       <strong className="h-article-title">{s.title}</strong>
                       {s.promoActive && s.promoPriceUsdCents != null ? (
-                        <span className="h-article-price"><s style={{opacity:0.5,fontSize:'0.85em',marginRight:4}}>{formatPriceLabelFromUsdCents(s.priceUsdCents)}</s> {formatPriceLabelFromUsdCents(s.promoPriceUsdCents)}</span>
+                        <span className="h-article-price"><s className="ks-price-old">{formatPriceLabelFromUsdCents(s.priceUsdCents)}</s> {formatPriceLabelFromUsdCents(s.promoPriceUsdCents)}</span>
                       ) : (
                         <span className="h-article-price">{formatPriceLabelFromUsdCents(s.priceUsdCents)}</span>
                       )}

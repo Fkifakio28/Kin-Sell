@@ -737,6 +737,9 @@ function MarketCard({
         {listing.isNegotiable && !locked && (
           <span className="hm-badge hm-badge--neg">{t("common.negotiate")}</span>
         )}
+        {listing.promoActive && listing.promoPriceUsdCents != null && (
+          <span className="hm-badge hm-badge--promo">-{Math.round((1 - listing.promoPriceUsdCents / listing.priceUsdCents) * 100)}%</span>
+        )}
         <span
           className={
             "hm-badge hm-badge--type" +
@@ -752,7 +755,7 @@ function MarketCard({
         <p className="hm-market-card-title">{listing.title}</p>
         <p className="hm-market-card-price">
           {listing.promoActive && listing.promoPriceUsdCents != null
-            ? <><s style={{opacity:0.5,fontSize:'0.85em',marginRight:3}}>{formatMoney(listing.priceUsdCents)}</s> {formatMoney(listing.promoPriceUsdCents)}</>
+            ? <><s className="ks-price-old">{formatMoney(listing.priceUsdCents)}</s> {formatMoney(listing.promoPriceUsdCents)}</>
             : listing.priceUsdCents === 0
             ? formatLabel(0)
             : formatMoney(listing.priceUsdCents)}

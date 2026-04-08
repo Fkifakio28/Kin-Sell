@@ -424,7 +424,8 @@ export function ExplorerPageDesktop() {
           ownerId: item.owner.userId,
           isNegotiable: item.isNegotiable !== false,
           isBoosted: !!(item as any).isBoosted,
-          promoLabel: item.promoActive && item.promoPriceUsdCents != null ? `Promo -${Math.round((1 - item.promoPriceUsdCents / item.priceUsdCents) * 100)}%` : undefined,
+          promoLabel: item.promoActive && item.promoPriceUsdCents != null ? `-${Math.round((1 - item.promoPriceUsdCents / item.priceUsdCents) * 100)}%` : undefined,
+          originalPriceLabel: item.promoActive && item.promoPriceUsdCents != null ? formatPriceLabelFromUsdCents(item.priceUsdCents) : undefined,
           latitude: item.latitude ?? undefined,
           longitude: item.longitude ?? undefined,
         });
@@ -610,7 +611,7 @@ export function ExplorerPageDesktop() {
                   <div className="explorer-article-cover-wrap">
                     <img className="explorer-article-cover" src={article.coverImage} alt={article.title} />
                     {article.isBoosted && <span className="ks-sponsored-badge">⚡ Sponsorisé</span>}
-                    {article.promoLabel ? <span className="explorer-article-badge">{article.promoLabel}</span> : null}
+                    {article.promoLabel ? <span className="explorer-article-badge ks-promo-badge">{article.promoLabel}</span> : null}
                     <div className="explorer-hover-details" aria-hidden="true">
                       <strong>{article.title}</strong>
                       <span>{buildArticleDescription(article.title)}</span>
@@ -621,7 +622,11 @@ export function ExplorerPageDesktop() {
 
                   <div className="explorer-article-body">
                     <h4 className="explorer-article-title">{article.title}</h4>
-                    <p className="explorer-article-price">{article.priceLabel}</p>
+                    {article.originalPriceLabel ? (
+                      <p className="explorer-article-price"><s className="ks-price-old">{article.originalPriceLabel}</s> {article.priceLabel}</p>
+                    ) : (
+                      <p className="explorer-article-price">{article.priceLabel}</p>
+                    )}
                     <p className="explorer-article-publisher">{article.publisherName}</p>
                     <div className="explorer-article-actions-row">
                       <button type="button" className="explorer-article-action-btn" onClick={() => nav(article.targetPath)}>Voir plus</button>
@@ -743,7 +748,7 @@ export function ExplorerPageDesktop() {
                 >
                   <div className="explorer-article-cover-wrap">
                     <img className="explorer-article-cover" src={article.coverImage} alt={article.title} loading="lazy" />
-                    {article.promoLabel ? <span className="explorer-article-badge">{article.promoLabel}</span> : null}
+                    {article.promoLabel ? <span className="explorer-article-badge ks-promo-badge">{article.promoLabel}</span> : null}
                     <div className="explorer-hover-details" aria-hidden="true">
                       <strong>{article.title}</strong>
                       <span>{buildArticleDescription(article.title)}</span>
@@ -753,7 +758,11 @@ export function ExplorerPageDesktop() {
                   </div>
                   <div className="explorer-article-body">
                     <h4 className="explorer-article-title">{article.title}</h4>
-                    <p className="explorer-article-price">{article.priceLabel}</p>
+                    {article.originalPriceLabel ? (
+                      <p className="explorer-article-price"><s className="ks-price-old">{article.originalPriceLabel}</s> {article.priceLabel}</p>
+                    ) : (
+                      <p className="explorer-article-price">{article.priceLabel}</p>
+                    )}
                     <p className="explorer-article-publisher">{article.publisherName}</p>
                     <div className="explorer-article-actions-row">
                       <button type="button" className="explorer-article-action-btn" onClick={() => nav(article.targetPath)}>Voir plus</button>

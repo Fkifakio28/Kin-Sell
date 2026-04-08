@@ -541,11 +541,14 @@ export function PublicProfilePage({ username }: { username: string }) {
                       ? <img className="up-card-img" src={resolveMediaUrl(item.imageUrl)} alt={item.title} />
                       : <div className="up-card-noimg">{item.type === 'PRODUIT' ? '📦' : '🛠️'}</div>}
                     <span className="up-card-type-badge">{item.type === 'PRODUIT' ? 'Produit' : 'Service'}</span>
+                    {item.promoActive && item.promoPriceUsdCents != null && (
+                      <span className="up-card-promo-badge">-{Math.round((1 - item.promoPriceUsdCents / item.priceUsdCents) * 100)}%</span>
+                    )}
                   </div>
                   <div className="up-card-body">
                     <h3 className="up-card-title">{item.title}</h3>
                     {item.originalPriceLabel ? (
-                      <p className="up-card-price"><s style={{opacity:0.5,fontSize:'0.85em',marginRight:4}}>{item.originalPriceLabel}</s> {item.priceLabel}</p>
+                      <p className="up-card-price"><s className="ks-price-old">{item.originalPriceLabel}</s> {item.priceLabel}</p>
                     ) : (
                       <p className="up-card-price">{item.priceLabel}</p>
                     )}
