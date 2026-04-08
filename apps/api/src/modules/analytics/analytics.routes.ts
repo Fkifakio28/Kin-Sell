@@ -120,6 +120,20 @@ router.get(
 // ══════════════════════════════════════════════
 
 /**
+ * GET /analytics/ai/seller-profile
+ * Profil IA du vendeur : score, lifecycle, budget, addons, historique
+ */
+router.get(
+  "/ai/seller-profile",
+  requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const profile = await aiTrigger.getSellerProfile(req.auth!.userId);
+    if (!profile) throw new HttpError(404, "Profil introuvable");
+    res.json(profile);
+  })
+);
+
+/**
  * GET /analytics/ai/recommendations
  * Récupère les recommandations actives pour l'utilisateur connecté
  */

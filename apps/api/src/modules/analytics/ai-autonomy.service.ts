@@ -24,6 +24,7 @@ import { runBatchAutoNegotiation } from "../negotiations/negotiation-ai.service.
 import { runBatchCartRecovery, runBatchOrderAutoValidation } from "../orders/order-ai.service.js";
 import { runAutoAdOptimization } from "../ads/ad-advisor.service.js";
 import { batchCreateWeeklySnapshots } from "../analytics/ai-memory.service.js";
+import { runPeriodicSmartCheck } from "../analytics/ai-trigger.service.js";
 
 // ─────────────────────────────────────────────
 // State
@@ -81,10 +82,41 @@ async function runMediumCycle(): Promise<void> {
 }
 
 /**
- * Cycle lent (1h) : Validation commandes
+ * Cycle lent (1h) : Validation commandes + recommandations intelligentes
  */
 async function runSlowCycle(): Promise<void> {
   await safeRun("IA_COMMANDE auto-validation", runBatchOrderAutoValidation);
+  await safeRun("IA_ADS recommandations intelligentes", runBatchSmartRecommendations);
+}
+
+/**
+ * Recommandations intelligentes batch — analyse les vendeurs actifs
+ * et génère des offres personnalisées (abonnement, boost, pub, addon, upgrade).
+ */
+async function runBatchSmartRecommendations(): Promise<{ checked: number; recommended: number }> {
+  // Trouver les vendeurs actifs récents (ont publié ou vendu dans les 30 derniers jours)
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const activeSellerIds = await prisma.listing.findMany({
+    where: { status: "ACTIVE", createdAt: { gte: thirtyDaysAgo } },
+    select: { ownerUserId: true },
+    distinct: ["ownerUserId"],
+    take: 100,
+  });
+
+  let checked = 0;
+  let recommended = 0;
+
+  for (const { ownerUserId } of activeSellerIds) {
+    try {
+      const results = await runPeriodicSmartCheck(ownerUserId);
+      checked++;
+      recommended += results.length;
+    } catch {
+      // Ignorer les erreurs individuelles pour ne pas bloquer le batch
+    }
+  }
+
+  return { checked, recommended };
 }
 
 /**

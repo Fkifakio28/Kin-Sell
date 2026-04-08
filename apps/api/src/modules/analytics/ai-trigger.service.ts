@@ -17,6 +17,7 @@
 import { prisma } from "../../shared/db/prisma.js";
 import { getMarketMedian, computePricePosition } from "../../shared/market/market-shared.js";
 import { HttpError } from "../../shared/errors/http-error.js";
+import { computeSellerProfile, generateSmartOffers, type SellerProfile, type SmartOffer } from "../ads/ai-ads-engine.service.js";
 
 // ─────────────────────────────────────────────
 // Helpers
@@ -142,7 +143,79 @@ export async function onListingPublished(userId: string, listingId: string) {
   });
   if (!listing) return null;
 
-  // Price advice
+  // ── Moteur intelligent : profiler le vendeur et générer des offres adaptées ──
+  const profile = await computeSellerProfile(userId);
+  if (profile) {
+    const smartOffers = await generateSmartOffers(profile, {
+      event: "LISTING_PUBLISHED",
+      listingId,
+      listingTitle: listing.title,
+      listingCategory: listing.category,
+    });
+
+    const results = [];
+    for (const offer of smartOffers) {
+      // Anti-spam par triggerType
+      if (await hasRecentRecommendation(userId, offer.triggerType, 24)) continue;
+      const rec = await createRecommendation({
+        engineKey: offer.engineKey,
+        userId: ctx.user.id,
+        businessId: ctx.business?.id,
+        accountType: ctx.isBusiness ? "BUSINESS" : "USER",
+        triggerType: offer.triggerType,
+        title: offer.title,
+        message: offer.message,
+        actionType: offer.actionType,
+        actionTarget: offer.actionTarget,
+        actionData: offer.actionData,
+        priority: offer.priority,
+        expiresInHours: offer.expiresInHours,
+      });
+      results.push(rec);
+    }
+
+    // Toujours ajouter l'info prix marché sur le premier résultat
+    if (results.length === 0) {
+      // Fallback : proposer au minimum le boost classique
+      let priceAdvice = "";
+      try {
+        const marketData = await getMarketMedian(listing.category, listing.city);
+        if (marketData && marketData.medianPriceCents > 0 && listing.priceUsdCents > 0) {
+          const result = computePricePosition(listing.priceUsdCents, marketData.medianPriceCents);
+          if (result.position === "ABOVE_MARKET") {
+            priceAdvice = `\n\n💰 Prix marché estimé : ${(marketData.medianPriceCents / 100).toFixed(2)}$. Votre prix est au-dessus du marché — un boost aiderait la visibilité.`;
+          } else if (result.position === "ON_MARKET") {
+            priceAdvice = `\n\n✅ Votre prix est bien positionné par rapport au marché.`;
+          }
+        }
+      } catch { /* market data not available */ }
+
+      const rec = await createRecommendation({
+        engineKey: "ads",
+        userId: ctx.user.id,
+        businessId: ctx.business?.id,
+        accountType: ctx.isBusiness ? "BUSINESS" : "USER",
+        triggerType: "LISTING_PUBLISHED",
+        title: "Booster votre article ?",
+        message: `Votre article « ${listing.title} » est maintenant publié ! Voulez-vous booster sa visibilité pour attirer plus d'acheteurs ?${priceAdvice}`,
+        actionType: "BOOST_ARTICLE",
+        actionTarget: listingId,
+        actionData: { listingId, listingTitle: listing.title, category: listing.category },
+        priority: 6,
+        expiresInHours: 72,
+      });
+      results.push(rec);
+    }
+
+    // Check multi-listings trigger
+    if (ctx.listingCount >= 5) {
+      await onMultiListings(userId, ctx);
+    }
+
+    return results[0] ?? null;
+  }
+
+  // Fallback si le profil n'est pas calculable
   let priceAdvice = "";
   try {
     const marketData = await getMarketMedian(listing.category, listing.city);
@@ -171,7 +244,6 @@ export async function onListingPublished(userId: string, listingId: string) {
     expiresInHours: 72,
   });
 
-  // Check multi-listings trigger
   if (ctx.listingCount >= 5) {
     await onMultiListings(userId, ctx);
   }
@@ -239,6 +311,33 @@ export async function onSaleCompleted(userId: string, orderId: string) {
 
   const results: Array<Awaited<ReturnType<typeof createRecommendation>>> = [];
 
+  // ── Moteur intelligent : profiler le vendeur et générer des offres adaptées ──
+  const profile = await computeSellerProfile(userId);
+  if (profile) {
+    const smartOffers = await generateSmartOffers(profile, { event: "SALE_COMPLETED" });
+    for (const offer of smartOffers) {
+      if (await hasRecentRecommendation(userId, offer.triggerType, 168)) continue;
+      const rec = await createRecommendation({
+        engineKey: offer.engineKey,
+        userId: ctx.user.id,
+        businessId: ctx.business?.id,
+        accountType: ctx.isBusiness ? "BUSINESS" : "USER",
+        triggerType: offer.triggerType,
+        title: offer.title,
+        message: offer.message,
+        actionType: offer.actionType,
+        actionTarget: offer.actionTarget,
+        actionData: offer.actionData,
+        priority: offer.priority,
+        expiresInHours: offer.expiresInHours,
+      });
+      results.push(rec);
+    }
+    if (results.length > 0) return results;
+  }
+
+  // ── Fallback : logique originale ──
+
   // après 3+ ventes sans abonnement payant → proposer essai
   if (ctx.completedOrderCount >= 3 && !ctx.hasPaidPlan && !ctx.activeTrial) {
     const suggestedPlan = ctx.isBusiness
@@ -267,10 +366,10 @@ export async function onSaleCompleted(userId: string, orderId: string) {
         accountType: ctx.isBusiness ? "BUSINESS" : "USER",
         triggerType: "TRIAL_SUGGEST",
         title: "🎁 Essai gratuit 15 jours",
-        message: `Félicitations pour vos ${ctx.completedOrderCount} ventes ! Kin-Sell vous offre un essai gratuit du forfait ${suggestedPlan} pendant 15 jours. Analyses marché, recommandations prix et bien plus.`,
+        message: `Félicitations pour vos ${ctx.completedOrderCount} ventes ! Kin-Sell vous offre un essai gratuit du forfait ${suggestedPlan} pendant 15 jours. Analyses marché, recommandations prix et bien plus. Paiement via PayPal après l'essai.`,
         actionType: "ACTIVATE_TRIAL",
         actionTarget: trial.id,
-        actionData: { trialId: trial.id, suggestedPlan, salesCount: ctx.completedOrderCount },
+        actionData: { trialId: trial.id, suggestedPlan, salesCount: ctx.completedOrderCount, paymentMethod: "PayPal uniquement" },
         priority: 9,
         expiresInHours: 168,
       });
@@ -288,10 +387,10 @@ export async function onSaleCompleted(userId: string, orderId: string) {
         accountType: ctx.isBusiness ? "BUSINESS" : "USER",
         triggerType: "UPSELL",
         title: "Passer à la vente automatique ?",
-        message: `Vous avez ${ctx.completedOrderCount} ventes ! Kin-Sell peut publier vos articles et gérer la vente pour vous : marchandage semi-automatique, commandes, suivi livraison et notification finale. On s'occupe de tout !`,
+        message: `Vous avez ${ctx.completedOrderCount} ventes ! Kin-Sell peut publier vos articles et gérer la vente pour vous : marchandage semi-automatique, commandes, suivi livraison et notification finale. Activation via PayPal.`,
         actionType: "ENABLE_AUTO_SALES",
         actionTarget: "/pricing",
-        actionData: { salesCount: ctx.completedOrderCount, suggestedPlan: ctx.isBusiness ? "SCALE" : "AUTO" },
+        actionData: { salesCount: ctx.completedOrderCount, suggestedPlan: ctx.isBusiness ? "SCALE" : "AUTO", paymentMethod: "PayPal uniquement" },
         priority: 8,
         expiresInHours: 336,
       });
@@ -309,10 +408,10 @@ export async function onSaleCompleted(userId: string, orderId: string) {
         accountType: ctx.isBusiness ? "BUSINESS" : "USER",
         triggerType: "SALES_GROWTH",
         title: "Votre activité décolle !",
-        message: `Avec ${ctx.completedOrderCount} ventes, vous performez bien ! Passez au niveau supérieur pour accéder aux analyses avancées et à l'automatisation complète.`,
+        message: `Avec ${ctx.completedOrderCount} ventes, vous performez bien ! Passez au niveau supérieur pour accéder aux analyses avancées et à l'automatisation complète. Paiement via PayPal.`,
         actionType: "UPGRADE_PLAN",
         actionTarget: "/pricing",
-        actionData: { salesCount: ctx.completedOrderCount },
+        actionData: { salesCount: ctx.completedOrderCount, paymentMethod: "PayPal uniquement" },
         priority: 7,
         expiresInHours: 336,
       });
@@ -333,7 +432,33 @@ export async function checkStagnation(userId: string) {
 
   if (await hasRecentRecommendation(userId, "STAGNATION", 168)) return null;
 
-  // Articles actifs depuis +7j avec peu de négociations (proxy pour faibles vues)
+  // ── Moteur intelligent : profiler et proposer l'offre adaptée ──
+  const profile = await computeSellerProfile(userId);
+  if (profile && profile.hasStagnantListings) {
+    const smartOffers = await generateSmartOffers(profile, { event: "STAGNATION_CHECK" });
+    const results = [];
+    for (const offer of smartOffers) {
+      if (await hasRecentRecommendation(userId, offer.triggerType, 168)) continue;
+      const rec = await createRecommendation({
+        engineKey: offer.engineKey,
+        userId: ctx.user.id,
+        businessId: ctx.business?.id,
+        accountType: ctx.isBusiness ? "BUSINESS" : "USER",
+        triggerType: offer.triggerType,
+        title: offer.title,
+        message: offer.message,
+        actionType: offer.actionType,
+        actionTarget: offer.actionTarget,
+        actionData: offer.actionData,
+        priority: offer.priority,
+        expiresInHours: offer.expiresInHours,
+      });
+      results.push(rec);
+    }
+    if (results.length > 0) return results[0];
+  }
+
+  // ── Fallback : logique originale ──
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
   const oldListings = await prisma.listing.findMany({
     where: {
@@ -384,6 +509,55 @@ export async function getActiveRecommendations(userId: string) {
     orderBy: [{ priority: "desc" }, { createdAt: "desc" }],
     take: 10,
   });
+}
+
+// ─────────────────────────────────────────────
+// Seller profile — expose le profil IA du vendeur
+// ─────────────────────────────────────────────
+
+export async function getSellerProfile(userId: string) {
+  return computeSellerProfile(userId);
+}
+
+// ─────────────────────────────────────────────
+// Periodic smart check — déclenché par le scheduler
+// Analyse un utilisateur et génère des recommandations
+// basées sur son profil complet (abonnement, budget, lifecycle)
+// ─────────────────────────────────────────────
+
+export async function runPeriodicSmartCheck(userId: string) {
+  const ctx = await getUserContext(userId);
+  if (!ctx) return [];
+
+  // Anti-spam global : max 1 check périodique / 7 jours
+  if (await hasRecentRecommendation(userId, "PERIODIC_SMART", 168)) return [];
+
+  const profile = await computeSellerProfile(userId);
+  if (!profile) return [];
+
+  const smartOffers = await generateSmartOffers(profile, { event: "PERIODIC" });
+  const results = [];
+
+  for (const offer of smartOffers) {
+    if (await hasRecentRecommendation(userId, offer.triggerType, 168)) continue;
+    const rec = await createRecommendation({
+      engineKey: offer.engineKey,
+      userId: ctx.user.id,
+      businessId: ctx.business?.id,
+      accountType: ctx.isBusiness ? "BUSINESS" : "USER",
+      triggerType: offer.triggerType,
+      title: offer.title,
+      message: offer.message,
+      actionType: offer.actionType,
+      actionTarget: offer.actionTarget,
+      actionData: offer.actionData,
+      priority: offer.priority,
+      expiresInHours: offer.expiresInHours,
+    });
+    results.push(rec);
+  }
+
+  return results;
 }
 
 // ─────────────────────────────────────────────
