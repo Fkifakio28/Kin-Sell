@@ -170,3 +170,20 @@ export const aiTrials = {
   activate: (id: string) => mutate<AiTrial>(`/analytics/ai/trials/${id}/activate`, { method: "POST" }, ["/analytics/ai/trials"]),
   decline: (id: string) => mutate<{ ok: boolean }>(`/analytics/ai/trials/${id}/decline`, { method: "POST" }, ["/analytics/ai/trials"]),
 };
+
+// ── Pricing Nudges ──
+
+export type PricingNudge = {
+  triggerType: string;
+  priority: number;
+  title: string;
+  message: string;
+  ctaLabel: string;
+  ctaTarget: string;
+  reason: string;
+  metric?: Record<string, number | string>;
+};
+
+export const pricingNudges = {
+  evaluate: () => request<PricingNudge[]>("/analytics/ai/pricing-nudges"),
+};

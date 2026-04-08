@@ -9,6 +9,7 @@ import { getBasicInsights, getDeepInsights } from "./analytics-ai.service.js";
 import { runDiagnostic } from "./ai-orchestrator.service.js";
 import * as aiMemory from "./ai-memory.service.js";
 import * as aiTrigger from "./ai-trigger.service.js";
+import * as pricingNudge from "./pricing-nudge.service.js";
 import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
 
@@ -226,6 +227,23 @@ router.post(
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     await aiTrigger.declineTrial(req.auth!.userId, req.params.id);
     res.json({ ok: true });
+  })
+);
+
+// ─────────────────────────────────────────────
+// PRICING NUDGES — CTA intelligents vers /forfaits
+// ─────────────────────────────────────────────
+
+/**
+ * GET /analytics/ai/pricing-nudges
+ * Évalue en temps réel les nudges pertinents pour l'utilisateur connecté
+ */
+router.get(
+  "/ai/pricing-nudges",
+  requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const nudges = await pricingNudge.evaluateNudges(req.auth!.userId);
+    res.json(nudges);
   })
 );
 
