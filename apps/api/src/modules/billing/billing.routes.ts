@@ -5,7 +5,7 @@ import { requireAuth, requireRoles, type AuthenticatedRequest } from "../../shar
 import { asyncHandler } from "../../shared/utils/async-handler.js";
 import { Role } from "../../types/roles.js";
 import * as billingService from "./billing.service.js";
-import * as momoService from "../mobile-money/mobile-money.service.js";
+// Mobile money supprimé — PayPal est le seul moyen de paiement
 import express from "express";
 
 const changeSubscriptionSchema = z.object({
@@ -24,23 +24,7 @@ const checkoutSchema = z.object({
   billingCycle: z.enum(["MONTHLY", "ONE_TIME"]).default("MONTHLY")
 });
 
-const confirmDepositSchema = z.object({
-  orderId: z.string().min(8),
-  depositorNote: z.string().max(240).optional(),
-  proofUrl: z.string().url().optional()
-});
-
-const activateOrderSchema = z.object({
-  orderId: z.string().min(8)
-});
-
-const momoCheckoutSchema = z.object({
-  planCode: z.string().min(2).max(40),
-  billingCycle: z.enum(["MONTHLY", "ONE_TIME"]).default("MONTHLY"),
-  provider: z.enum(["ORANGE_MONEY", "MPESA"]),
-  phoneNumber: z.string().regex(/^243\d{9}$/, "Format: 243XXXXXXXXX"),
-  amountCDF: z.number().int().min(100, "Montant minimum: 100 CDF")
-});
+// Schemas bank/momo/confirm supprimés — PayPal uniquement
 
 const router = Router();
 
@@ -84,43 +68,7 @@ router.post(
   })
 );
 
-router.post(
-  "/checkout/bank-transfer",
-  requireAuth,
-  asyncHandler(async (request: AuthenticatedRequest, response) => {
-    const payload = checkoutSchema.parse(request.body);
-    const data = await billingService.createBankTransferOrder(request.auth!.userId, payload);
-    response.status(201).json(data);
-  })
-);
-
-router.post(
-  "/checkout/mobile-money",
-  requireAuth,
-  asyncHandler(async (request: AuthenticatedRequest, response) => {
-    const payload = momoCheckoutSchema.parse(request.body);
-
-    // Créer d'abord le PaymentOrder dans le billing
-    const order = await billingService.createBankTransferOrder(request.auth!.userId, {
-      planCode: payload.planCode,
-      billingCycle: payload.billingCycle,
-    });
-
-    // Initier le paiement Mobile Money relié à ce PaymentOrder
-    const momoResult = await momoService.initiatePayment(request.auth!.userId, {
-      provider: payload.provider,
-      phoneNumber: payload.phoneNumber,
-      amountCDF: payload.amountCDF,
-      purpose: "SUBSCRIPTION",
-      targetId: order.orderId,
-    });
-
-    response.status(201).json({
-      paymentOrder: order,
-      mobileMoney: momoResult,
-    });
-  })
-);
+// Routes bank-transfer et mobile-money supprimées — PayPal uniquement
 
 router.get(
   "/payment-orders",
@@ -131,15 +79,7 @@ router.get(
   })
 );
 
-router.post(
-  "/payment-orders/confirm-deposit",
-  requireAuth,
-  asyncHandler(async (request: AuthenticatedRequest, response) => {
-    const payload = confirmDepositSchema.parse(request.body);
-    const data = await billingService.confirmDepositSent(request.auth!.userId, payload);
-    response.json(data);
-  })
-);
+// Route confirm-deposit supprimée — plus de virement bancaire
 
 const paypalCheckoutSchema = z.object({
   planCode: z.string().min(2).max(40),

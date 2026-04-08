@@ -49,22 +49,7 @@ export const billing = {
     analyticsRule: string;
   }>("/billing/catalog"),
   myPlan: () => request<BillingPlanSummary>("/billing/my-plan"),
-  createBankTransferCheckout: (body: { planCode: string; billingCycle?: "MONTHLY" | "ONE_TIME" }) =>
-    request<{
-      orderId: string;
-      status: string;
-      planCode: string;
-      amountUsdCents: number;
-      currency: string;
-      transferReference: string;
-      beneficiary: {
-        iban: string;
-        bic: string;
-        rib?: string | null;
-      };
-      expiresAt: string;
-      instructions: string[];
-    }>("/billing/checkout/bank-transfer", { method: "POST", body }),
+  // PayPal est le seul moyen de paiement
   createPaypalCheckout: (body: { planCode: string; billingCycle?: "MONTHLY" | "ONE_TIME" }) =>
     request<{
       orderId: string;
@@ -74,20 +59,10 @@ export const billing = {
       currency: string;
       transferReference: string;
       paymentUrl: string;
+      paypalOrderId: string;
       expiresAt: string;
       instructions: string[];
     }>("/billing/checkout/paypal", { method: "POST", body }),
-  createMobileMoneyCheckout: (body: {
-    planCode: string;
-    billingCycle?: "MONTHLY" | "ONE_TIME";
-    provider: "ORANGE_MONEY" | "MPESA";
-    phoneNumber: string;
-    amountCDF: number;
-  }) =>
-    request<{
-      paymentOrder: { orderId: string; planCode: string; amountUsdCents: number };
-      mobileMoney: { paymentId: string; provider: string; status: string; redirectUrl?: string; message?: string };
-    }>("/billing/checkout/mobile-money", { method: "POST", body }),
   paymentOrders: () => request<{ orders: Array<{
     id: string;
     planCode: string;
@@ -100,8 +75,6 @@ export const billing = {
     depositorNote?: string | null;
     proofUrl?: string | null;
   }> }>("/billing/payment-orders"),
-  confirmDeposit: (body: { orderId: string; depositorNote?: string; proofUrl?: string }) =>
-    request<{ orderId: string; status: string; message: string }>("/billing/payment-orders/confirm-deposit", { method: "POST", body }),
   capturePaypalCheckout: (body: { orderId: string }) =>
     request<{ plan: BillingPlanSummary; message: string }>("/billing/paypal/capture", { method: "POST", body }),
   // activateOrder supprimé : l'activation se fait uniquement via PayPal capture ou validation admin

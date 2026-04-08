@@ -7,7 +7,6 @@ import { SeoMeta } from "../../components/SeoMeta";
 import "./pricing.css";
 
 type PricingTab = "users" | "business" | "addons";
-type PayMethod = "paypal" | "bank" | "orange" | "mpesa";
 
 type Plan = {
   code: string;
@@ -40,8 +39,8 @@ type CheckoutResult = {
   amountUsdCents: number;
   currency: string;
   transferReference: string;
-  paymentUrl?: string;
-  beneficiary?: { iban: string; bic: string; rib?: string | null };
+  paymentUrl: string;
+  paypalOrderId: string;
   expiresAt: string;
   instructions: string[];
 };
@@ -174,28 +173,18 @@ function PlanCard({
   );
 }
 
-const PAY_LABELS: Record<PayMethod, string> = {
-  paypal: "💳 PayPal",
-  bank: "🏦 Virement bancaire (Nickel)",
-  orange: "🟠 Orange Money",
-  mpesa: "📱 M-Pesa",
-};
+
 
 export function PricingPage() {
   const { user, isLoggedIn } = useAuth();
   const { t } = useLocaleCurrency();
   const [currentPlan, setCurrentPlan] = useState<BillingPlanSummary | null>(null);
   const [busyPlanCode, setBusyPlanCode] = useState<string | null>(null);
-  const [busyOrderAction, setBusyOrderAction] = useState<string | null>(null);
   const [paymentOrders, setPaymentOrders] = useState<PaymentOrder[]>([]);
   const [latestCheckout, setLatestCheckout] = useState<CheckoutResult | null>(null);
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Payment method + mobile money fields
-  const [payMethod, setPayMethod] = useState<PayMethod>("paypal");
-  const [momoPhone, setMomoPhone] = useState("");
-  const [momoAmountCDF, setMomoAmountCDF] = useState(0);
   const [pendingPlanCode, setPendingPlanCode] = useState<string | null>(null);
 
   const role = user?.role === "BUSINESS" ? "BUSINESS" : user?.role === "USER" ? "USER" : "VISITOR";
@@ -244,10 +233,18 @@ export function PricingPage() {
     const params = new URLSearchParams(window.location.search);
     const orderId = params.get("orderId");
     const paid = params.get("paid");
-    if (paid !== "1" || !orderId) return;
+    const cancelled2 = params.get("cancelled");
 
     // Clean URL params immediately
     window.history.replaceState({}, "", window.location.pathname);
+
+    // Paiement annulé côté PayPal
+    if (cancelled2 === "1") {
+      setErrorMessage("Paiement annulé. Vous pouvez réessayer quand vous le souhaitez.");
+      return;
+    }
+
+    if (paid !== "1" || !orderId) return;
 
     let cancelled = false;
     const capture = async () => {
@@ -255,7 +252,7 @@ export function PricingPage() {
       try {
         const result = await billing.capturePaypalCheckout({ orderId });
         if (!cancelled) {
-          setInfoMessage(result.message || "Paiement PayPal confirmé ! Votre forfait est activé.");
+          setInfoMessage(result.message || "✅ Paiement PayPal confirmé ! Votre forfait est activé.");
           // Reload billing data
           const [planData, ordersData] = await Promise.all([billing.myPlan(), billing.paymentOrders()]);
           if (!cancelled) {
@@ -291,56 +288,13 @@ export function PricingPage() {
     setBusyPlanCode(pendingPlanCode);
 
     try {
-      if (payMethod === "paypal") {
-        const result = await billing.createPaypalCheckout({ planCode: pendingPlanCode, billingCycle: "MONTHLY" });
-        setLatestCheckout(result);
-        // Redirect to PayPal
-        if (result.paymentUrl) {
-          window.open(result.paymentUrl, "_blank", "noopener,noreferrer");
-        }
-        setInfoMessage(`Ordre créé. Payez sur PayPal puis votre forfait sera activé automatiquement.`);
-      } else if (payMethod === "bank") {
-        const result = await billing.createBankTransferCheckout({ planCode: pendingPlanCode, billingCycle: "MONTHLY" });
-        setLatestCheckout(result);
-        setInfoMessage(`Ordre créé. Effectuez le virement puis confirmez.`);
-      } else if (payMethod === "orange" || payMethod === "mpesa") {
-        if (!momoPhone.match(/^243\d{9}$/)) {
-          setErrorMessage("Numéro invalide. Format: 243XXXXXXXXX");
-          setBusyPlanCode(null);
-          return;
-        }
-        if (momoAmountCDF < 100) {
-          setErrorMessage("Montant CDF minimum: 100");
-          setBusyPlanCode(null);
-          return;
-        }
-        const result = await billing.createMobileMoneyCheckout({
-          planCode: pendingPlanCode,
-          billingCycle: "MONTHLY",
-          provider: payMethod === "orange" ? "ORANGE_MONEY" : "MPESA",
-          phoneNumber: momoPhone,
-          amountCDF: momoAmountCDF,
-        });
-        setLatestCheckout({
-          orderId: result.paymentOrder.orderId,
-          status: "PENDING",
-          planCode: result.paymentOrder.planCode,
-          amountUsdCents: result.paymentOrder.amountUsdCents,
-          currency: "USD",
-          transferReference: "",
-          expiresAt: "",
-          instructions: payMethod === "orange"
-            ? ["Vous allez être redirigé vers Orange Money.", "Validez le paiement sur votre téléphone."]
-            : ["Un push USSD a été envoyé sur votre téléphone.", "Validez le paiement M-Pesa."],
-        });
-        if (result.mobileMoney.redirectUrl) {
-          window.open(result.mobileMoney.redirectUrl, "_blank", "noopener,noreferrer");
-        }
-        setInfoMessage(payMethod === "orange"
-          ? "Paiement Orange Money initié. Validez sur votre téléphone."
-          : "Paiement M-Pesa initié. Validez le push USSD sur votre téléphone."
-        );
+      const result = await billing.createPaypalCheckout({ planCode: pendingPlanCode, billingCycle: "MONTHLY" });
+      setLatestCheckout(result);
+      // Redirection vers PayPal
+      if (result.paymentUrl) {
+        window.open(result.paymentUrl, "_blank", "noopener,noreferrer");
       }
+      setInfoMessage("Redirection vers PayPal en cours\u2026 Votre forfait sera activé automatiquement après paiement.");
 
       const orders = await billing.paymentOrders();
       setPaymentOrders(orders.orders);
@@ -357,26 +311,7 @@ export function PricingPage() {
     }
   };
 
-  const handleConfirmDeposit = async (orderId: string) => {
-    setBusyOrderAction(orderId);
-    setErrorMessage(null);
-    setInfoMessage(null);
-    try {
-      const result = await billing.confirmDeposit({ orderId });
-      const orders = await billing.paymentOrders();
-      setPaymentOrders(orders.orders);
-      setInfoMessage(result.message);
-    } catch (error) {
-      if (error instanceof ApiError && error.data && typeof error.data === "object" && "error" in error.data) {
-        const message = (error.data as { error?: string }).error;
-        setErrorMessage(message ?? "Impossible de confirmer le dépôt.");
-      } else {
-        setErrorMessage("Impossible de confirmer le dépôt.");
-      }
-    } finally {
-      setBusyOrderAction(null);
-    }
-  };
+
 
   // handleActivateOrder supprimé — l'activation ne peut plus se faire côté frontend.
   // Seuls PayPal (capture auto) ou un super admin (validation manuelle) peuvent activer un forfait.
@@ -503,62 +438,10 @@ export function PricingPage() {
 
       {pendingPlanCode ? (
         <section className="pricing-footer-note glass-container">
-          <h2>Choisir votre méthode de paiement — {pendingPlanCode}</h2>
-          <div className="pricing-role-switch" style={{ flexWrap: "wrap", gap: "8px" }}>
-            {(["paypal", "bank", "orange", "mpesa"] as PayMethod[]).map((m) => (
-              <button
-                key={m}
-                type="button"
-                className={`pricing-switch-btn${payMethod === m ? " active" : ""}`}
-                style={payMethod === m ? { background: "rgba(111,88,255,0.35)", borderColor: "rgba(185,166,255,0.8)" } : {}}
-                onClick={() => setPayMethod(m)}
-              >
-                {PAY_LABELS[m]}
-              </button>
-            ))}
-          </div>
-
-          {(payMethod === "orange" || payMethod === "mpesa") ? (
-            <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginTop: "8px" }}>
-              <label style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>
-                Numéro de téléphone (format: 243XXXXXXXXX)
-              </label>
-              <input
-                type="tel"
-                placeholder="243970000000"
-                value={momoPhone}
-                onChange={(e) => setMomoPhone(e.target.value.replace(/\D/g, "").slice(0, 12))}
-                style={{
-                  padding: "10px 12px",
-                  borderRadius: "12px",
-                  border: "1px solid var(--glass-border)",
-                  background: "rgba(111,88,255,0.08)",
-                  color: "var(--color-text-primary)",
-                  fontFamily: "inherit",
-                  fontSize: "14px",
-                }}
-              />
-              <label style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>
-                Montant en CDF (Francs Congolais)
-              </label>
-              <input
-                type="number"
-                placeholder="5000"
-                value={momoAmountCDF || ""}
-                onChange={(e) => setMomoAmountCDF(Number(e.target.value))}
-                style={{
-                  padding: "10px 12px",
-                  borderRadius: "12px",
-                  border: "1px solid var(--glass-border)",
-                  background: "rgba(111,88,255,0.08)",
-                  color: "var(--color-text-primary)",
-                  fontFamily: "inherit",
-                  fontSize: "14px",
-                }}
-              />
-            </div>
-          ) : null}
-
+          <h2>Paiement PayPal — {pendingPlanCode}</h2>
+          <p style={{ color: "var(--color-text-secondary)", fontSize: "14px", marginBottom: "8px" }}>
+            Vous serez redirigé vers PayPal pour effectuer le paiement. Votre forfait sera activé automatiquement après confirmation.
+          </p>
           <button
             type="button"
             className="pricing-cta pricing-cta-btn"
@@ -566,7 +449,7 @@ export function PricingPage() {
             disabled={busyPlanCode !== null}
             onClick={() => void handlePay()}
           >
-            {busyPlanCode ? "Traitement..." : `Payer avec ${PAY_LABELS[payMethod]}`}
+            {busyPlanCode ? "Traitement…" : "💳 Payer avec PayPal"}
           </button>
           <button
             type="button"
@@ -598,14 +481,6 @@ export function PricingPage() {
             </a>
           ) : null}
 
-          {latestCheckout.beneficiary ? (
-            <div style={{ marginTop: "8px" }}>
-              <p>IBAN: <strong>{latestCheckout.beneficiary.iban}</strong></p>
-              <p>BIC: <strong>{latestCheckout.beneficiary.bic}</strong></p>
-              {latestCheckout.beneficiary.rib ? <p>RIB: {latestCheckout.beneficiary.rib}</p> : null}
-            </div>
-          ) : null}
-
           <ul className="pricing-list" style={{ marginTop: 12 }}>
             {latestCheckout.instructions.map((instruction) => (
               <li key={instruction}>{instruction}</li>
@@ -628,23 +503,22 @@ export function PricingPage() {
                   <p>Statut: {order.status}</p>
                   <div className="pricing-role-switch">
                     {order.status === "PENDING" ? (
-                      <button
-                        type="button"
-                        className="pricing-switch-btn"
-                        disabled={busyOrderAction !== null}
-                        onClick={() => void handleConfirmDeposit(order.id)}
-                      >
-                        {busyOrderAction === order.id ? "En cours..." : "J'ai payé"}
-                      </button>
+                      <span className="pricing-current" style={{ color: "var(--color-warning, #f90)" }}>⏳ En attente de paiement PayPal</span>
                     ) : null}
                     {order.status === "USER_CONFIRMED" ? (
-                      <span className="pricing-current">⏳ En attente de validation admin</span>
+                      <span className="pricing-current">⏳ En attente de validation</span>
                     ) : null}
                     {order.status === "PAID" || order.status === "VALIDATED" ? (
                       <span className="pricing-current">✅ Forfait activé</span>
                     ) : null}
                     {order.status === "FAILED" ? (
                       <span className="pricing-current" style={{ color: "var(--color-error, #f44)" }}>❌ Paiement échoué</span>
+                    ) : null}
+                    {order.status === "CANCELED" ? (
+                      <span className="pricing-current" style={{ color: "var(--color-text-secondary, #999)" }}>❌ Annulé</span>
+                    ) : null}
+                    {order.status === "EXPIRED" ? (
+                      <span className="pricing-current" style={{ color: "var(--color-text-secondary, #999)" }}>⏰ Expiré</span>
                     ) : null}
                   </div>
                 </article>
@@ -655,9 +529,9 @@ export function PricingPage() {
       ) : null}
 
       <section className="pricing-footer-note glass-container">
-        <h2>Méthodes de paiement acceptées</h2>
+        <h2>Paiement sécurisé</h2>
         <p>
-          💳 PayPal · 🏦 Virement bancaire (Nickel) · 🟠 Orange Money · 📱 M-Pesa — Paiement sécurisé avec confirmation automatique.
+          💳 PayPal — Paiement sécurisé avec activation automatique de votre forfait.
         </p>
         {!isLoggedIn ? <Link to="/register" className="pricing-cta">Créer un compte Kin-Sell</Link> : null}
       </section>
