@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import '../../styles/design-tokens.css';
 import './explorer-desktop.css';
-import '../../components/ads-boost-popup.css';
 import {
   PRODUCT_CATEGORIES,
   SERVICE_CATEGORIES,

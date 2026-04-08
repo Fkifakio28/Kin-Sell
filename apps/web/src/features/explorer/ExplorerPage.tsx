@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import '../../styles/design-tokens.css';
 import './explorer.css';
-import '../../components/ads-boost-popup.css';
 import { PRODUCT_CATEGORIES, SERVICE_CATEGORIES } from './explorer-data';
 import type { ExplorerArticlePreview } from './explorer-data';
 import { explorer as explorerApi, orders as ordersApi, listings as listingsApi, resolveMediaUrl, type ExplorerShopApi, type ExplorerProfileApi } from '../../lib/api-client';
