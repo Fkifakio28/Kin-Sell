@@ -36,6 +36,7 @@ import { USD_TO_CDF_RATE, DEFAULT_CURRENCY_RATES } from '../../shared/constants/
 import { SK_BIZ_AI_ADVICE, SK_BIZ_AI_AUTO_NEGO, SK_BIZ_AI_COMMANDE } from '../../shared/constants/storage-keys';
 import { DashboardSecurityBlock, DashboardVerificationSection } from './sections';
 import { AdsBoostPopup } from '../../components/AdsBoostPopup';
+import { SmartUpsellBanner, SmartUpsellCard, PostActionTip } from '../../components/SmartUpsell';
 import { PromoCreator } from '../../components/PromoCreator';
 import { PromoBulkBar } from '../../components/PromoBulkBar';
 import { PromoPriceLabel } from '../../components/PromoPriceLabel';
@@ -143,6 +144,10 @@ export function BusinessDashboard() {
   const [boostPopupListingId, setBoostPopupListingId] = useState<string | null>(null);
   const [boostPopupBulkCount, setBoostPopupBulkCount] = useState<number | null>(null);
   const [importProgress, setImportProgress] = useState<{ done: number; total: number } | null>(null);
+
+  // ─── Smart Upsell post-action tips ───────────────────────
+  const [showBizPublishTip, setShowBizPublishTip] = useState(false);
+  const [showBizPromoTip, setShowBizPromoTip] = useState(false);
 
   // ─── Paramètres ──────────────────────────────────────────
   const [settingsSaving, setSettingsSaving] = useState(false);
@@ -710,6 +715,7 @@ export function BusinessDashboard() {
       }
       invalidateCache('/listings/mine');
       setCreateMsg(editingArticleId ? '✓ Article modifié avec succès' : t('biz.listingSuccess'));
+      if (!editingArticleId) setShowBizPublishTip(true);
       setEditingArticleId(null);
       setCreateForm({ title: '', category: '', city: 'Kinshasa', priceCdf: '', stock: '', description: '', isNegotiable: true, latitude: -4.3216965, longitude: 15.3124553, country: 'RDC', countryCode: 'CD', region: '', district: '', formattedAddress: '', placeId: '', locationVisibility: 'CITY_PUBLIC', serviceRadiusKm: '' });
       setCreateMode(null);
@@ -1389,6 +1395,9 @@ export function BusinessDashboard() {
         {activeSection === 'dashboard' && (
           <div className="ud-section animate-fade-in">
 
+            {/* ── Conseil intelligent business ── */}
+            <SmartUpsellBanner accountType="business" />
+
             {/* Cartes KPI */}
             <div className="ud-stats-row">
               <article className="ud-stat-card ud-stat-card--green bz-stat-card">
@@ -1511,6 +1520,9 @@ export function BusinessDashboard() {
                   </ul>
                 )}
               </section>
+
+              {/* Carte conseil IA business */}
+              <SmartUpsellCard accountType="business" max={1} />
 
               {/* Actions rapides */}
               <section className="ud-glass-panel bz-glass-panel ud-panel--actions">
@@ -1766,6 +1778,10 @@ export function BusinessDashboard() {
         {/* ── PRODUITS ── */}
         {activeSection === 'produits' && (
           <div className="ud-section animate-fade-in">
+            {/* ── Bannière upsell produits business ── */}
+            <SmartUpsellBanner scenario="catalog-growth" accountType="business" />
+            <PostActionTip scenario="after-publish" show={showBizPublishTip} accountType="business" onClose={() => setShowBizPublishTip(false)} />
+            <PostActionTip scenario="after-promo" show={showBizPromoTip} accountType="business" onClose={() => setShowBizPromoTip(false)} />
             {/* ── Topbar ── */}
             <div className="bz-art-topbar">
               <div className="bz-art-topbar-left">
@@ -3695,9 +3711,10 @@ export function BusinessDashboard() {
         <PromoCreator
           articles={promoServices}
           resolveMediaUrl={resolveMediaUrl}
-          onClose={closeSvcPromo}
+          onClose={() => { closeSvcPromo(); setShowBizPromoTip(true); }}
           onPublished={() => {
             closeSvcPromo();
+            setShowBizPromoTip(true);
             invalidateCache('/listings/mine');
             listings.mine({ limit: 50 }).then(r => setMyListings(r.listings)).catch(() => {});
           }}
@@ -3713,9 +3730,10 @@ export function BusinessDashboard() {
         <PromoCreator
           articles={promoProduits}
           resolveMediaUrl={resolveMediaUrl}
-          onClose={closeProdPromo}
+          onClose={() => { closeProdPromo(); setShowBizPromoTip(true); }}
           onPublished={() => {
             closeProdPromo();
+            setShowBizPromoTip(true);
             invalidateCache('/listings/mine');
             listings.mine({ limit: 50 }).then(r => setMyListings(r.listings)).catch(() => {});
           }}

@@ -41,6 +41,7 @@ import { compressAndEncodeMedia } from '../../utils/media-compress';
 import { prepareMediaUrls } from '../../utils/media-upload';
 import { AdBanner } from '../../components/AdBanner';
 import { AdsBoostPopup } from '../../components/AdsBoostPopup';
+import { SmartUpsellBanner, SmartUpsellCard, PostActionTip } from '../../components/SmartUpsell';
 import { PromoCreator } from '../../components/PromoCreator';
 import { OrderValidationQrModal } from '../../components/OrderValidationQrModal';
 import LocationPicker from '../../components/LocationPicker';
@@ -335,6 +336,11 @@ export function UserDashboard() {
   // ── IA ADS Boost popup state ──
   const [boostPopupListingId, setBoostPopupListingId] = useState<string | null>(null);
   const [boostPopupBulkCount, setBoostPopupBulkCount] = useState<number | null>(null);
+
+  // ── Smart Upsell post-action tips ──
+  const [showPublishTip, setShowPublishTip] = useState(false);
+  const [showPromoTip, setShowPromoTip] = useState(false);
+  const [showSaleTip, setShowSaleTip] = useState(false);
 
   // ── Review / rating state ──
   const [reviewModalOrder, setReviewModalOrder] = useState<{ orderId: string } | null>(null);
@@ -1234,6 +1240,7 @@ export function UserDashboard() {
       if (createdListing?.id) {
         setBoostPopupListingId(createdListing.id);
       }
+      setShowPublishTip(true);
     } catch (err) {
       let msg = t('error.createListing');
       if (err instanceof ApiError) {
@@ -2123,6 +2130,9 @@ export function UserDashboard() {
             {/* Bannière Kin-Sell */}
             <AdBanner page="account" forceKinSell />
 
+            {/* ── Conseil intelligent contextuel ── */}
+            <SmartUpsellBanner accountType="user" />
+
             {/* ── Main grid: 2 colonnes ── */}
             <div className="ud-ov-grid">
 
@@ -2276,6 +2286,9 @@ export function UserDashboard() {
               {/* ═══ BOTTOM-RIGHT: Actions rapides ═══ */}
               <section className="ud-ov-card ud-ov-card--actions">
                 <h3 className="ud-ov-card-title">{t('user.quickActions')}</h3>
+
+                {/* Carte conseil IA dans actions */}
+                <SmartUpsellCard accountType="user" max={1} />
                 <div className="ud-ov-quick-grid">
                   <button type="button" className="ud-ov-quick-tile" onClick={() => { resetArticleForm(); if (settingsForm.city) setArticleForm(p => ({ ...p, city: settingsForm.city })); setShowCreateForm(true); setActiveSection('articles'); }}>
                     <span className="ud-ov-quick-icon">📝</span>
@@ -2333,6 +2346,10 @@ export function UserDashboard() {
 
         {activeSection === 'articles' && (
           <div className="ud-section animate-fade-in">
+            {/* ── Bannière upsell articles ── */}
+            <SmartUpsellBanner scenario="after-publish" accountType="user" />
+            <PostActionTip scenario="after-publish" show={showPublishTip} accountType="user" onClose={() => setShowPublishTip(false)} />
+            <PostActionTip scenario="after-promo" show={showPromoTip} accountType="user" onClose={() => setShowPromoTip(false)} />
             {/* ── Header: titre + stats compacts + bouton publier ── */}
             <div className="ud-art-topbar">
               <div className="ud-art-topbar-left">
@@ -2676,6 +2693,9 @@ export function UserDashboard() {
 
         {activeSection === 'sales' && (
           <div className="ud-section animate-fade-in">
+            {/* ── Bannière upsell ventes ── */}
+            <SmartUpsellBanner scenario={allSellerOrders.length > 0 ? 'after-sale' : undefined} accountType="user" />
+            <PostActionTip scenario="after-sale" show={showSaleTip} accountType="user" onClose={() => setShowSaleTip(false)} />
             {/* ── Topbar vente ── */}
             <div className="ud-ord-topbar">
               <div className="ud-ord-topbar-left">
@@ -5110,8 +5130,8 @@ export function UserDashboard() {
         <PromoCreator
           articles={promoArticles}
           resolveMediaUrl={resolveMediaUrl}
-          onClose={closeArticlePromo}
-          onPublished={() => { void refreshArticles(1, articlesFilter); }}
+          onClose={() => { closeArticlePromo(); setShowPromoTip(true); }}
+          onPublished={() => { void refreshArticles(1, articlesFilter); setShowPromoTip(true); }}
           onBoost={() => {
             setBoostPopupBulkCount(promoArticles.length);
             closeArticlePromo();
