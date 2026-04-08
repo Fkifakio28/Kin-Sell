@@ -383,7 +383,7 @@ router.post(
   asyncHandler(async (request, response) => {
     const { currentPassword, newPassword } = changePasswordSchema.parse(request.body);
     const result = await accountService.changePassword(
-      (request as AuthenticatedRequest).userId,
+      request.auth!.userId,
       currentPassword,
       newPassword
     );
