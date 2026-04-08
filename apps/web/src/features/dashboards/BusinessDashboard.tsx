@@ -202,6 +202,7 @@ export function BusinessDashboard() {
   const [svcFilter, setSvcFilter] = useState<ListingStatus | ''>('');
   const [svcPage, setSvcPage] = useState(1);
   const [bzArticleBusy, setBzArticleBusy] = useState<string | null>(null);
+  const [bzActionMsg, setBzActionMsg] = useState<string | null>(null);
   const BZ_PAGE_LIMIT = 12;
 
   // ─── Contacts ────────────────────────────────────────────
@@ -573,14 +574,24 @@ export function BusinessDashboard() {
 
   // ── Handlers articles business ──
   const handleBzStatusChange = async (id: string, status: ListingStatus) => {
+    if (status === 'DELETED' && !window.confirm('Êtes-vous sûr de vouloir supprimer cet article ? Cette action est irréversible.')) return;
+    if (status === 'ARCHIVED' && !window.confirm('Archiver cet article ?')) return;
     setBzArticleBusy(id);
+    setBzActionMsg(null);
     try {
       await listings.changeStatus(id, status);
       invalidateCache('/listings/mine');
       const [lRes, sRes] = await Promise.allSettled([listings.mine({ limit: 50 }), listings.mineStats()]);
       if (lRes.status === 'fulfilled') setMyListings(lRes.value.listings);
       if (sRes.status === 'fulfilled') setListingStats(sRes.value);
-    } catch { /* silently fail */ }
+      const label = status === 'ACTIVE' ? 'activé' : status === 'INACTIVE' ? 'désactivé' : status === 'ARCHIVED' ? 'archivé' : 'supprimé';
+      setBzActionMsg(`✓ Article ${label} avec succès`);
+    } catch (err) {
+      const msg = err instanceof ApiError
+        ? `Erreur ${err.status}: ${String((err.data as Record<string, unknown>)?.error ?? 'Échec de la modification')}`
+        : 'Erreur réseau, réessayez';
+      setBzActionMsg(`❌ ${msg}`);
+    }
     finally { setBzArticleBusy(null); }
   };
 
@@ -592,6 +603,7 @@ export function BusinessDashboard() {
     setCreateUploadFiles([]);
     setCreateUploadPreviews(p => { p.forEach(u => URL.revokeObjectURL(u)); return []; });
     setCreateMsg(null);
+    setBzActionMsg(null);
     setCreateForm({
       title: article.title,
       category: article.category,
@@ -612,6 +624,7 @@ export function BusinessDashboard() {
       serviceRadiusKm: (article as any).serviceRadiusKm?.toString() ?? '',
     });
     setActiveSection(type === 'service' ? 'services' : 'produits');
+    setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 100);
   };
 
   // ─── Upload fichiers listing ──────────────────────────────
@@ -1891,6 +1904,11 @@ export function BusinessDashboard() {
               </form>
             )}
 
+            {/* ── Notification actions ── */}
+            {bzActionMsg && (
+              <p className={`bz-setup-${bzActionMsg.startsWith('✓') ? 'note' : 'error'}`} style={{ marginBottom: 'var(--space-md)' }}>{bzActionMsg}</p>
+            )}
+
             {/* ── Filtres ── */}
             <div className="bz-art-filters">
               {(['', 'ACTIVE', 'INACTIVE', 'ARCHIVED'] as const).map((f) => (
@@ -2116,6 +2134,11 @@ export function BusinessDashboard() {
                   </div>
                 )}
               </form>
+            )}
+
+            {/* ── Notification actions ── */}
+            {bzActionMsg && (
+              <p className={`bz-setup-${bzActionMsg.startsWith('✓') ? 'note' : 'error'}`} style={{ marginBottom: 'var(--space-md)' }}>{bzActionMsg}</p>
             )}
 
             {/* ── Filtres ── */}
