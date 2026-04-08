@@ -1864,6 +1864,172 @@
   font-weight: 600;
 }
 
+/* ── Filters bar (filtres + toggle vue) ── */
+.ud-art-filters-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+/* ── Toggle vue grille/liste ── */
+.ud-art-view-toggle {
+  display: flex;
+  gap: 0.25rem;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 0.2rem;
+}
+.ud-art-view-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 28px;
+  border-radius: 7px;
+  border: none;
+  background: transparent;
+  color: var(--ud-text-3);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.ud-art-view-btn:hover {
+  background: rgba(111, 88, 255, 0.1);
+  color: var(--ud-text-1);
+}
+.ud-art-view-btn.active {
+  background: rgba(111, 88, 255, 0.22);
+  color: #c4b5fd;
+  box-shadow: 0 0 8px rgba(111, 88, 255, 0.15);
+}
+
+/* ═══ VUE LISTE ═══ */
+.ud-art-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.ud-art-list-header {
+  display: grid;
+  grid-template-columns: 48px 1.8fr 0.7fr 0.7fr 0.7fr 100px;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.45rem 0.75rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ud-text-3);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.ud-art-list-row {
+  display: grid;
+  grid-template-columns: 48px 1.8fr 0.7fr 0.7fr 0.7fr 100px;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.5rem 0.75rem;
+  background: var(--ud-surface);
+  border: 1px solid var(--ud-border);
+  border-radius: 10px;
+  backdrop-filter: blur(10px);
+  transition: all 0.2s;
+}
+.ud-art-list-row:hover {
+  background: rgba(111, 88, 255, 0.06);
+  border-color: rgba(111, 88, 255, 0.18);
+}
+.ud-art-list-row--dim {
+  opacity: 0.6;
+}
+.ud-art-list-thumb {
+  width: 42px;
+  height: 42px;
+  border-radius: 8px;
+  object-fit: cover;
+}
+.ud-art-list-thumb-placeholder {
+  width: 42px;
+  height: 42px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+}
+.ud-art-list-col--title {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+.ud-art-list-name {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--ud-text-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ud-art-list-meta {
+  font-size: 0.68rem;
+  color: var(--ud-text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ud-art-list-type-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 6px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  background: rgba(96, 165, 250, 0.12);
+  color: #93c5fd;
+  white-space: nowrap;
+}
+.ud-art-list-type-chip--svc {
+  background: rgba(168, 85, 247, 0.12);
+  color: #c4b5fd;
+}
+.ud-art-list-price {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #34d399;
+  white-space: nowrap;
+}
+.ud-art-list-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 6px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.ud-art-list-status--active {
+  background: rgba(52, 211, 153, 0.12);
+  color: #6ee7b7;
+}
+.ud-art-list-status--inactive {
+  background: rgba(251, 191, 36, 0.12);
+  color: #fcd34d;
+}
+.ud-art-list-status--archived {
+  background: rgba(148, 163, 184, 0.12);
+  color: #cbd5e1;
+}
+.ud-art-list-col--actions {
+  display: flex;
+  gap: 0.3rem;
+  justify-content: flex-end;
+}
+
 /* ── Loading / Empty ── */
 .ud-art-loading {
   display: flex;
@@ -2169,6 +2335,29 @@
   }
   .ud-art-promos .ud-art-promo-card:last-child {
     grid-column: 1 / -1;
+  }
+  .ud-art-list-header {
+    display: none;
+  }
+  .ud-art-list-row {
+    grid-template-columns: 42px 1fr auto;
+    grid-template-rows: auto auto;
+    gap: 0.3rem 0.5rem;
+    padding: 0.55rem 0.65rem;
+  }
+  .ud-art-list-col--img { grid-row: 1 / 3; }
+  .ud-art-list-col--title { grid-column: 2; grid-row: 1; }
+  .ud-art-list-col--type { display: none; }
+  .ud-art-list-col--price {
+    grid-column: 3;
+    grid-row: 1;
+    text-align: right;
+  }
+  .ud-art-list-col--status { grid-column: 2; grid-row: 2; }
+  .ud-art-list-col--actions {
+    grid-column: 3;
+    grid-row: 2;
+    justify-content: flex-end;
   }
 }
 
