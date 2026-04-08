@@ -380,7 +380,7 @@ router.post(
   "/change-password",
   requireAuth,
   rateLimit(RateLimits.LOGIN),
-  asyncHandler(async (request, response) => {
+  asyncHandler(async (request: AuthenticatedRequest, response) => {
     const { currentPassword, newPassword } = changePasswordSchema.parse(request.body);
     const result = await accountService.changePassword(
       request.auth!.userId,
