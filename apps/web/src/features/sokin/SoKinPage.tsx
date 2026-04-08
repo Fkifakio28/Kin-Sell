@@ -85,6 +85,14 @@ const DESKTOP_INFO_ITEMS = [
   { title: 'Contact', href: '/contact' },
 ] as const;
 
+const DESKTOP_PRODUCT_CATEGORIES = [
+  '🍔 Nourriture',
+  '📱 Téléphones',
+  '💻 Informatique',
+  '🎮 Jeux vidéo',
+  '💊 Pharmacie',
+] as const;
+
 const CREATE_DRAFT_STORAGE_KEY = 'ks-sokin-create-draft-v1';
 const OVERLAY_VISIBILITY_LOCK_MS = 180;
 
@@ -2687,10 +2695,10 @@ export function SoKinPage() {
       ) : (
         <div className="sk-desktop-shell">
           <header className="sk-desktop-topbar" aria-label="Barre supérieure So-Kin">
-            <button type="button" className="sk-desktop-brand glass-container" onClick={() => navigate('/')} aria-label="Retour à l'accueil Kin-Sell">
-              <span>KIN</span>
-              <span>-</span>
-              <span>SELL</span>
+            <button type="button" className="sk-desktop-logo-bubbles glass-container" onClick={() => navigate('/sokin')} aria-label="Aller à So-Kin">
+              {['S', 'O', '-', 'K', 'I', 'N'].map((letter, idx) => (
+                <span key={letter + idx} className="sk-desktop-logo-bubble" style={{ animationDelay: `${idx * 140}ms` }}>{letter}</span>
+              ))}
             </button>
 
             <div className="sk-desktop-global-search glass-container">
@@ -2752,8 +2760,14 @@ export function SoKinPage() {
                 <button type="button" className="sk-desktop-nav-item" onClick={() => navigate('/explorer/shops-online')}>🏪 Marché public</button>
                 <button type="button" className="sk-desktop-nav-item" onClick={() => navigate('/explorer')}>Accéder à Explorer</button>
               </nav>
-              <AdBanner page="sokin" variant="slim" hideWhenEmpty />
-              <AdBanner page="sokin" variant="slim" hideWhenEmpty />
+
+              <section className="sk-desktop-left-categories" aria-label="Catégories produits">
+                <h3>Catégories Produits</h3>
+                {DESKTOP_PRODUCT_CATEGORIES.map((category) => (
+                  <p key={category}>{category}</p>
+                ))}
+                <p>...</p>
+              </section>
             </aside>
 
             <main className="sk-desktop-center" aria-label="Contenu principal So-Kin desktop">
@@ -2768,27 +2782,20 @@ export function SoKinPage() {
                 onPublish={handlePublish}
               />
 
-              <section className="sk-desktop-announces-block" aria-label="Bloc principal des annonces">
-                <header className="sk-desktop-announces-head">
-                  <h3>Annonces</h3>
-                  <div className="sk-desktop-announces-head-empty" aria-hidden="true" />
-                </header>
-
-                <AnnouncesFeed
-                  posts={posts}
-                  hasMore={hasMore}
-                  loading={loadingFeed}
-                  sentinelRef={sentinelRef}
-                  t={t}
-                  isLoggedIn={isLoggedIn}
-                  openCommentsPostId={openCommentsPostId}
-                  onOpenComments={handleOpenComments}
-                  onMediaClick={(item) => setViewerItem(item)}
-                  onContact={handleContact}
-                  contactingPostId={contactingPostId}
-                  immersiveDesktop
-                />
-              </section>
+              <AnnouncesFeed
+                posts={posts}
+                hasMore={hasMore}
+                loading={loadingFeed}
+                sentinelRef={sentinelRef}
+                t={t}
+                isLoggedIn={isLoggedIn}
+                openCommentsPostId={openCommentsPostId}
+                onOpenComments={handleOpenComments}
+                onMediaClick={(item) => setViewerItem(item)}
+                onContact={handleContact}
+                contactingPostId={contactingPostId}
+                immersiveDesktop
+              />
             </main>
 
             <aside className="sk-desktop-right" aria-label="Actions et contenu utilisateur">
