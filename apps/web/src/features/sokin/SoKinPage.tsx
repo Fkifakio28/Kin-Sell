@@ -1027,7 +1027,7 @@ function DesktopStudioComposer({
   };
 
   return (
-    <section className="sk-desktop-studio" aria-label="Studio So-Kin">
+    <section className="sk-desktop-studio glass-container" aria-label="Studio So-Kin">
       <header className="sk-desktop-studio-head">
         <div>
           <strong>Studio So-Kin</strong>
@@ -2694,14 +2694,21 @@ export function SoKinPage() {
         </>
       ) : (
         <div className="sk-desktop-shell">
+          {/* ═══════ TOPBAR ═══════ */}
           <header className="sk-desktop-topbar" aria-label="Barre supérieure So-Kin">
+            {/* Logo So-Kin — bubbles premium */}
             <button type="button" className="sk-desktop-logo-bubbles glass-container" onClick={() => navigate('/sokin')} aria-label="Aller à So-Kin">
-              {['S', 'O', '-', 'K', 'I', 'N'].map((letter, idx) => (
-                <span key={letter + idx} className="sk-desktop-logo-bubble" style={{ animationDelay: `${idx * 140}ms` }}>{letter}</span>
+              <span className="sk-desktop-logo-shine" aria-hidden="true" />
+              {['S', 'o', '-', 'K', 'i', 'n'].map((letter, idx) => (
+                <span key={letter + idx} className="sk-desktop-logo-bubble glass-card" style={{ animationDelay: `${idx * 140}ms` }}>{letter}</span>
               ))}
             </button>
 
+            {/* Search */}
             <div className="sk-desktop-global-search glass-container">
+              <span className="sk-desktop-search-icon" aria-hidden="true">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              </span>
               <input
                 type="search"
                 value={desktopSearch}
@@ -2709,28 +2716,34 @@ export function SoKinPage() {
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') handleDesktopSearch();
                 }}
-                placeholder="Rechercher sur Kin-Sell: annonces, utilisateurs, boutiques, articles..."
+                placeholder="Rechercher sur Kin-Sell…"
                 aria-label="Recherche globale Kin-Sell"
               />
             </div>
 
+            {/* Actions */}
             <div className="sk-desktop-topbar-actions glass-container">
-              <button type="button" className="sk-desktop-head-icon" onClick={() => setDesktopHelpOpen(true)} aria-label="Aide">?</button>
+              <button type="button" className="sk-desktop-head-icon ks-help-btn" onClick={() => setDesktopHelpOpen(true)} aria-label="Aide">
+                <span>?</span>
+              </button>
               <button type="button" className="sk-desktop-head-icon sk-desktop-head-icon--notif" onClick={() => setDesktopNotifOpen((prev) => !prev)} aria-label="Notifications">
-                🔔
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
                 {desktopNotifications.length > 0 && <span className="sk-desktop-notif-badge">{desktopNotifications.length}</span>}
               </button>
-              <button type="button" className="sk-desktop-head-account" onClick={() => setDesktopAccountOpen(true)} aria-label="Compte">👤</button>
+              <button type="button" className="sk-desktop-head-icon" onClick={() => setDesktopAccountOpen(true)} aria-label="Compte">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              </button>
             </div>
 
+            {/* Notifications dropdown */}
             {desktopNotifOpen && (
-              <div className="sk-desktop-notif-panel" role="menu">
+              <div className="sk-desktop-notif-panel glass-container" role="menu">
                 <header>
                   <strong>Notifications</strong>
                   <span>{desktopNotifications.length}</span>
                 </header>
                 {desktopNotifications.length === 0 ? (
-                  <p className="sk-desktop-user-meta">Aucune notification manquée.</p>
+                  <p className="sk-desktop-user-meta" style={{ padding: '16px', textAlign: 'center' }}>Aucune notification.</p>
                 ) : (
                   <div className="sk-desktop-notif-list">
                     {desktopNotifications.map((item) => (
@@ -2751,17 +2764,19 @@ export function SoKinPage() {
             )}
           </header>
 
+          {/* ═══════ 3-COLUMN GRID ═══════ */}
           <div className="sk-desktop-grid">
-            <aside className="sk-desktop-left" aria-label="Navigation So-Kin desktop">
-              <nav className="sk-desktop-nav">
+            {/* ── LEFT SIDEBAR ── */}
+            <aside className="sk-desktop-left" aria-label="Navigation So-Kin">
+              <nav className="sk-desktop-nav glass-container">
                 <button type="button" className="sk-desktop-nav-item" onClick={() => navigate('/')}>🏠 Accueil</button>
-                <button type="button" className="sk-desktop-nav-item sk-desktop-nav-item--active" onClick={() => navigate('/sokin')}>📱 Accueil So-Kin</button>
-                <button type="button" className="sk-desktop-nav-item" onClick={() => navigate('/explorer/public-profiles')}>👥 Utilisateurs publics</button>
+                <button type="button" className="sk-desktop-nav-item sk-desktop-nav-item--active" onClick={() => navigate('/sokin')}>📱 So-Kin</button>
+                <button type="button" className="sk-desktop-nav-item" onClick={() => navigate('/explorer/public-profiles')}>👥 Profils publics</button>
                 <button type="button" className="sk-desktop-nav-item" onClick={() => navigate('/explorer/shops-online')}>🏪 Marché public</button>
-                <button type="button" className="sk-desktop-nav-item" onClick={() => navigate('/explorer')}>Accéder à Explorer</button>
+                <button type="button" className="sk-desktop-nav-item" onClick={() => navigate('/explorer')}>🔍 Explorer</button>
               </nav>
 
-              <section className="sk-desktop-left-categories" aria-label="Catégories produits">
+              <section className="sk-desktop-left-categories glass-container" aria-label="Catégories produits">
                 <h3>Catégories Produits</h3>
                 <div className="sk-desktop-left-categories-list">
                   {DESKTOP_PRODUCT_CATEGORIES.map((category) => (
@@ -2775,7 +2790,8 @@ export function SoKinPage() {
               </section>
             </aside>
 
-            <main className="sk-desktop-center" aria-label="Contenu principal So-Kin desktop">
+            {/* ── CENTER ── */}
+            <main className="sk-desktop-center" aria-label="Contenu principal So-Kin">
               <DesktopStudioComposer
                 avatarUrl={avatarUrl}
                 displayName={displayName}
@@ -2787,24 +2803,27 @@ export function SoKinPage() {
                 onPublish={handlePublish}
               />
 
-              <AnnouncesFeed
-                posts={posts}
-                hasMore={hasMore}
-                loading={loadingFeed}
-                sentinelRef={sentinelRef}
-                t={t}
-                isLoggedIn={isLoggedIn}
-                openCommentsPostId={openCommentsPostId}
-                onOpenComments={handleOpenComments}
-                onMediaClick={(item) => setViewerItem(item)}
-                onContact={handleContact}
-                contactingPostId={contactingPostId}
-                immersiveDesktop
-              />
+              <div className="sk-desktop-feed-zone glass-container">
+                <AnnouncesFeed
+                  posts={posts}
+                  hasMore={hasMore}
+                  loading={loadingFeed}
+                  sentinelRef={sentinelRef}
+                  t={t}
+                  isLoggedIn={isLoggedIn}
+                  openCommentsPostId={openCommentsPostId}
+                  onOpenComments={handleOpenComments}
+                  onMediaClick={(item) => setViewerItem(item)}
+                  onContact={handleContact}
+                  contactingPostId={contactingPostId}
+                  immersiveDesktop
+                />
+              </div>
             </main>
 
+            {/* ── RIGHT SIDEBAR ── */}
             <aside className="sk-desktop-right" aria-label="Actions et contenu utilisateur">
-              <section className="sk-desktop-panel sk-desktop-commercial" aria-label="Bloc commercial Kin-Sell">
+              <section className="sk-desktop-panel sk-desktop-commercial glass-container" aria-label="Bloc commercial Kin-Sell">
                 <span className="sk-desktop-commercial-icon">📦</span>
                 <p className="sk-desktop-commercial-brand">✦ Kin-Sell</p>
                 <p className="sk-desktop-commercial-line">Publiez vos articles</p>
@@ -2812,7 +2831,7 @@ export function SoKinPage() {
                 <button type="button" className="sk-desktop-primary" onClick={openAccountArticles}>publier maintenant</button>
               </section>
 
-              <section className="sk-desktop-panel" aria-label="Liste des annonces publiées">
+              <section className="sk-desktop-panel glass-container" aria-label="Annonces publiées">
                 <h3>Mes annonces publiées</h3>
 
                 {loadingMyPublishedPosts ? (
