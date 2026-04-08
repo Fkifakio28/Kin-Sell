@@ -27,7 +27,7 @@ type BizSection =
   | 'dashboard' | 'boutique' | 'produits' | 'services'
   | 'commandes' | 'messages' | 'contacts'
   | 'analytics' | 'verification'
-  | 'publicite' | 'kinsell' | 'parametres';
+  | 'kinsell' | 'parametres';
 
 type AbonnementTier = 'based' | 'medium' | 'premium';
 
@@ -254,7 +254,6 @@ export function BusinessDashboard() {
     { key: 'contacts',     labelKey: 'biz.navContacts',    icon: '🤝' },
     { key: 'analytics',    labelKey: 'biz.navAnalytics',   icon: '📊' },
     { key: 'verification', labelKey: 'biz.navVerification', icon: '✅' },
-    { key: 'publicite',    labelKey: 'biz.navPublicite',   icon: '🎯' },
     { key: 'kinsell',      labelKey: 'Kin-Sell',            icon: '🧠' },
     { key: 'parametres',   labelKey: 'biz.navParametres',  icon: '⚙' },
   ];
@@ -1353,7 +1352,7 @@ export function BusinessDashboard() {
             <p className="ud-page-sub">{t('biz.cockpit')} — {businessName} · /business/{businessSlug}</p>
           </div>
           <div className="ud-page-header-actions">
-            <button type="button" className="ud-quick-btn" onClick={() => setActiveSection('publicite')}>
+            <button type="button" className="ud-quick-btn" onClick={() => setActiveSection('kinsell')}>
               {t('biz.launchPromo')}
             </button>
             <button type="button" className="ud-quick-btn ud-quick-btn--primary bz-cta-gold" onClick={() => { setActiveSection('produits'); setCreateMode('produit'); setCreateStep(1); setEditingArticleId(null); }}>
@@ -2671,7 +2670,7 @@ export function BusinessDashboard() {
                         type="button"
                         className="ud-quick-btn ud-quick-btn--primary bz-cta-gold"
                         style={{ whiteSpace: 'nowrap' }}
-                        onClick={() => setActiveSection('publicite')}
+                        onClick={() => setActiveSection('kinsell')}
                       >
                         ⚡ {t('biz.launchCampaign')}
                       </button>
@@ -2826,84 +2825,92 @@ export function BusinessDashboard() {
                 )}
               </section>
             )}
-          </div>
-        )}
 
-        {/* ── PUBLICITE ── */}
-        {activeSection === 'publicite' && (
-          <div className="ud-section animate-fade-in">
+            {/* ─ Recommandations Kin-Sell Analytique ─ */}
+            <section className="ud-glass-panel bz-glass-panel" style={{ marginTop: 16 }}>
+              <h2 className="ud-panel-title">💡 Recommandations Analytique</h2>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
 
-            {/* ─ Kin-Sell Banner stratégique ─ */}
-            <div className="bz-ks-banner">
-              <div className="bz-ks-banner-inner">
-                <span className="bz-ks-banner-tag">✦ {t('biz.adsTag')}</span>
-                <div>
-                  <strong className="bz-ks-banner-title">{t('biz.adsTitle')}</strong>
-                  <p className="bz-ks-banner-desc">{t('biz.adsDesc')}</p>
+                <div style={{
+                  background: 'linear-gradient(135deg, rgba(0,200,150,0.08), rgba(111,88,255,0.04))',
+                  border: '1px solid rgba(0,200,150,0.2)',
+                  borderRadius: 10, padding: 14,
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div style={{ flex: 1 }}>
+                      <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--color-text-primary, #fff)' }}>
+                        📊 {produits.length > 0 ? 'Optimisez vos prix avec l\'intelligence marché' : 'Analysez le marché avant de publier'}
+                      </span>
+                      <p style={{ margin: '4px 0 8px', fontSize: 12, color: 'var(--color-text-secondary, #aaa)', lineHeight: 1.5 }}>
+                        {produits.length > 0
+                          ? `Kin-Sell Analytique compare vos ${produits.length} produit${produits.length > 1 ? 's' : ''} aux prix du marché à Kinshasa. Découvrez si vos prix sont compétitifs et recevez des suggestions d'ajustement pour augmenter vos ventes.`
+                          : 'Kin-Sell Analytique vous montre les tendances du marché, les catégories les plus demandées et les fourchettes de prix idéales avant même de publier.'}
+                      </p>
+                      <button
+                        onClick={() => bizHasAnalytics ? undefined : navigate('/pricing')}
+                        style={{ padding: '6px 12px', fontSize: 11, fontWeight: 600, border: 'none', borderRadius: 6, background: 'linear-gradient(135deg, #00c896, #00e6ac)', color: '#fff', cursor: 'pointer' }}
+                      >
+                        {bizHasAnalytics ? '✅ Inclus dans votre forfait' : '📈 Débloquer Analytique'}
+                      </button>
+                    </div>
+                    <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, background: 'rgba(0,200,150,0.15)', color: '#00c896', whiteSpace: 'nowrap', marginLeft: 8 }}>📊 Analytique</span>
+                  </div>
                 </div>
-                <a href="/forfaits" className="ud-quick-btn ud-quick-btn--primary bz-cta-gold" style={{ whiteSpace: 'nowrap' }}>
-                  ★ {t('biz.seeBoost')}
-                </a>
-              </div>
-            </div>
 
-            {/* ─ Offres Kin-Sell Ads ─ */}
-            <section className="ud-glass-panel bz-glass-panel">
-              <h2 className="ud-panel-title">📢 {t('biz.adsOffers')}</h2>
-              <p className="ud-page-sub" style={{ marginBottom: 'var(--space-lg)' }}>
-                {t('biz.adsOffersDesc')}
-              </p>
-              <div className="bz-ad-packages">
-                <div className="bz-ad-pack bz-ad-pack--starter">
-                  <div className="bz-ad-pack-header">
-                    <span className="bz-ad-pack-icon">🌱</span>
-                    <strong>Starter</strong>
-                    <span className="bz-ad-pack-price">$2 / sem.</span>
+                <div style={{
+                  background: 'linear-gradient(135deg, rgba(255,165,0,0.06), rgba(111,88,255,0.04))',
+                  border: '1px solid rgba(255,165,0,0.2)',
+                  borderRadius: 10, padding: 14,
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div style={{ flex: 1 }}>
+                      <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--color-text-primary, #fff)' }}>
+                        🎯 Identifiez vos produits les plus performants
+                      </span>
+                      <p style={{ margin: '4px 0 8px', fontSize: 12, color: 'var(--color-text-secondary, #aaa)', lineHeight: 1.5 }}>
+                        Quels produits génèrent le plus de vues, de négociations et de ventes ? L'analytique avancée vous révèle votre entonnoir de conversion complet et prédit votre potentiel de croissance.
+                      </p>
+                      <button
+                        onClick={() => bizHasAnalytics ? undefined : navigate('/pricing')}
+                        style={{ padding: '6px 12px', fontSize: 11, fontWeight: 600, border: 'none', borderRadius: 6, background: bizHasAnalytics ? 'rgba(76,175,80,0.15)' : 'linear-gradient(135deg, #ff8c00, #ffa500)', color: bizHasAnalytics ? '#4caf50' : '#fff', cursor: bizHasAnalytics ? 'default' : 'pointer' }}
+                      >
+                        {bizHasAnalytics ? '✅ Données ci-dessus' : '🔓 Voir les forfaits'}
+                      </button>
+                    </div>
+                    <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, background: 'rgba(255,165,0,0.15)', color: '#ffa500', whiteSpace: 'nowrap', marginLeft: 8 }}>🎯 Performance</span>
                   </div>
-                  <ul className="bz-ad-pack-features">
-                    <li>✓ {t('biz.starterFeat1')}</li>
-                    <li>✓ {t('biz.starterFeat2')}</li>
-                    <li>✓ {t('biz.starterFeat3')}</li>
-                  </ul>
-                  <button type="button" className="ud-quick-btn" onClick={() => navigate('/forfaits')}>{t('biz.activateBtn')} →</button>
                 </div>
-                <div className="bz-ad-pack bz-ad-pack--pro">
-                  <div className="bz-ad-pack-tag">⭐ {t('biz.popular')}</div>
-                  <div className="bz-ad-pack-header">
-                    <span className="bz-ad-pack-icon">🚀</span>
-                    <strong>Pro</strong>
-                    <span className="bz-ad-pack-price">$5 / sem.</span>
+
+                {!bizHasAnalytics && (
+                  <div style={{
+                    background: 'linear-gradient(135deg, rgba(111,88,255,0.12), rgba(155,122,255,0.06))',
+                    border: '1px solid rgba(111,88,255,0.25)',
+                    borderRadius: 10, padding: 14,
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div style={{ flex: 1 }}>
+                        <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--color-text-primary, #fff)' }}>
+                          🏆 Les boutiques avec Analytique vendent 3x plus
+                        </span>
+                        <p style={{ margin: '4px 0 8px', fontSize: 12, color: 'var(--color-text-secondary, #aaa)', lineHeight: 1.5 }}>
+                          Passez à un forfait Business ou Scale pour accéder à toutes les analyses : prédictions IA, audience, vélocité des ventes, risque de churn et recommandations personnalisées en temps réel.
+                        </p>
+                        <button
+                          onClick={() => navigate('/pricing')}
+                          style={{ padding: '6px 14px', fontSize: 11, fontWeight: 700, border: 'none', borderRadius: 6, background: 'linear-gradient(135deg, #6f58ff, #9b7aff)', color: '#fff', cursor: 'pointer', boxShadow: '0 2px 8px rgba(111,88,255,0.3)' }}
+                        >
+                          🚀 Débloquer tout — forfaits Business
+                        </button>
+                      </div>
+                      <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, background: 'rgba(111,88,255,0.15)', color: '#9b7aff', whiteSpace: 'nowrap', marginLeft: 8 }}>💎 Premium</span>
+                    </div>
                   </div>
-                  <ul className="bz-ad-pack-features">
-                    <li>✓ {t('biz.proFeat1')}</li>
-                    <li>✓ {t('biz.proFeat2')}</li>
-                    <li>✓ {t('biz.proFeat3')}</li>
-                    <li>✓ {t('biz.proFeat4')}</li>
-                  </ul>
-                  <button type="button" className="ud-quick-btn ud-quick-btn--primary bz-cta-gold" onClick={() => navigate('/forfaits')}>{t('biz.activateBtn')} →</button>
-                </div>
-                <div className="bz-ad-pack bz-ad-pack--gold">
-                  <div className="bz-ad-pack-header">
-                    <span className="bz-ad-pack-icon">👑</span>
-                    <strong>Gold</strong>
-                    <span className="bz-ad-pack-price">$14 / mois</span>
-                  </div>
-                  <ul className="bz-ad-pack-features">
-                    <li>✓ {t('biz.goldFeat1')}</li>
-                    <li>✓ {t('biz.goldFeat2')}</li>
-                    <li>✓ {t('biz.goldFeat3')}</li>
-                    <li>✓ {t('biz.goldFeat4')}</li>
-                    <li>✓ {t('biz.goldFeat5')}</li>
-                  </ul>
-                  <button type="button" className="ud-quick-btn ud-quick-btn--primary bz-cta-gold" onClick={() => navigate('/forfaits')}>{t('biz.contactBtn')} →</button>
-                </div>
+                )}
+
               </div>
             </section>
-
           </div>
         )}
-
-        {/* ── PARAMÈTRES ── */}
         {activeSection === 'parametres' && (
           <div className="ud-section animate-fade-in">
 
@@ -3170,6 +3177,65 @@ export function BusinessDashboard() {
                 </div>
               </div>
 
+              {/* ─ Offres Publicité Kin-Sell Ads ─ */}
+              <div style={{ marginBottom: 16 }}>
+                <h3 style={{ margin: '0 0 10px', fontSize: 15, color: 'var(--color-text-primary, #fff)' }}>📢 Publicité Kin-Sell</h3>
+                <p style={{ margin: '0 0 12px', fontSize: 12, color: 'var(--color-text-secondary, #aaa)' }}>
+                  Boostez la visibilité de votre boutique et vos articles avec les espaces publicitaires Kin-Sell.
+                </p>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 10 }}>
+                  <div style={{ background: 'rgba(111,88,255,0.04)', border: '1px solid rgba(111,88,255,0.12)', borderRadius: 10, padding: 14 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                      <span style={{ fontSize: 18 }}>🌱</span>
+                      <strong style={{ fontSize: 14, color: 'var(--color-text-primary, #fff)' }}>Starter</strong>
+                      <span style={{ fontSize: 11, color: '#6f58ff', marginLeft: 'auto' }}>$2/sem.</span>
+                    </div>
+                    <ul style={{ margin: '0 0 10px', padding: '0 0 0 16px', fontSize: 11, color: 'var(--color-text-secondary, #aaa)', lineHeight: 1.8 }}>
+                      <li>{t('biz.starterFeat1')}</li>
+                      <li>{t('biz.starterFeat2')}</li>
+                      <li>{t('biz.starterFeat3')}</li>
+                    </ul>
+                    <button type="button" onClick={() => navigate('/pricing')} style={{ width: '100%', padding: '6px 0', fontSize: 11, fontWeight: 600, border: '1px solid rgba(111,88,255,0.2)', borderRadius: 6, background: 'transparent', color: '#6f58ff', cursor: 'pointer' }}>
+                      Activer →
+                    </button>
+                  </div>
+                  <div style={{ background: 'linear-gradient(135deg, rgba(111,88,255,0.08), rgba(155,122,255,0.04))', border: '1px solid rgba(111,88,255,0.2)', borderRadius: 10, padding: 14, position: 'relative' }}>
+                    <span style={{ position: 'absolute', top: -8, right: 12, fontSize: 9, padding: '2px 8px', borderRadius: 6, background: 'linear-gradient(135deg, #6f58ff, #9b7aff)', color: '#fff', fontWeight: 600 }}>⭐ Populaire</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                      <span style={{ fontSize: 18 }}>🚀</span>
+                      <strong style={{ fontSize: 14, color: 'var(--color-text-primary, #fff)' }}>Pro</strong>
+                      <span style={{ fontSize: 11, color: '#6f58ff', marginLeft: 'auto' }}>$5/sem.</span>
+                    </div>
+                    <ul style={{ margin: '0 0 10px', padding: '0 0 0 16px', fontSize: 11, color: 'var(--color-text-secondary, #aaa)', lineHeight: 1.8 }}>
+                      <li>{t('biz.proFeat1')}</li>
+                      <li>{t('biz.proFeat2')}</li>
+                      <li>{t('biz.proFeat3')}</li>
+                      <li>{t('biz.proFeat4')}</li>
+                    </ul>
+                    <button type="button" onClick={() => navigate('/pricing')} style={{ width: '100%', padding: '6px 0', fontSize: 11, fontWeight: 600, border: 'none', borderRadius: 6, background: 'linear-gradient(135deg, #6f58ff, #9b7aff)', color: '#fff', cursor: 'pointer' }}>
+                      Activer →
+                    </button>
+                  </div>
+                  <div style={{ background: 'rgba(255,215,0,0.04)', border: '1px solid rgba(255,215,0,0.15)', borderRadius: 10, padding: 14 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                      <span style={{ fontSize: 18 }}>👑</span>
+                      <strong style={{ fontSize: 14, color: 'var(--color-text-primary, #fff)' }}>Gold</strong>
+                      <span style={{ fontSize: 11, color: '#ffd700', marginLeft: 'auto' }}>$14/mois</span>
+                    </div>
+                    <ul style={{ margin: '0 0 10px', padding: '0 0 0 16px', fontSize: 11, color: 'var(--color-text-secondary, #aaa)', lineHeight: 1.8 }}>
+                      <li>{t('biz.goldFeat1')}</li>
+                      <li>{t('biz.goldFeat2')}</li>
+                      <li>{t('biz.goldFeat3')}</li>
+                      <li>{t('biz.goldFeat4')}</li>
+                      <li>{t('biz.goldFeat5')}</li>
+                    </ul>
+                    <button type="button" onClick={() => navigate('/pricing')} style={{ width: '100%', padding: '6px 0', fontSize: 11, fontWeight: 600, border: '1px solid rgba(255,215,0,0.2)', borderRadius: 6, background: 'transparent', color: '#ffd700', cursor: 'pointer' }}>
+                      Contacter →
+                    </button>
+                  </div>
+                </div>
+              </div>
+
               {/* Essais IA */}
               {ksTrials.filter(tr => tr.status === 'PROPOSED' || tr.status === 'ACTIVE').length > 0 && (
                 <div style={{ marginBottom: 16 }}>
@@ -3218,10 +3284,10 @@ export function BusinessDashboard() {
                 <h3 style={{ margin: '0 0 10px', fontSize: 15, color: 'var(--color-text-primary, #fff)' }}>💡 Recommandations</h3>
                 {ksLoading ? (
                   <p style={{ color: 'var(--color-text-secondary, #aaa)', fontSize: 13 }}>Chargement…</p>
-                ) : ksRecommendations.length === 0 ? (
-                  <p style={{ color: 'var(--color-text-secondary, #aaa)', fontSize: 13, fontStyle: 'italic' }}>Aucune recommandation en cours. Vos IA travaillent en arrière-plan.</p>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+
+                    {/* Backend AI recommendations */}
                     {ksRecommendations.map((rec) => (
                       <div key={rec.id} style={{
                         background: 'rgba(111,88,255,0.04)',
@@ -3266,6 +3332,102 @@ export function BusinessDashboard() {
                         </div>
                       </div>
                     ))}
+
+                    {/* Smart IA ADS recommendation */}
+                    <div style={{
+                      background: 'linear-gradient(135deg, rgba(111,88,255,0.08), rgba(255,165,0,0.06))',
+                      border: '1px solid rgba(255,165,0,0.2)',
+                      borderRadius: 10, padding: 14,
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <div style={{ flex: 1 }}>
+                          <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--color-text-primary, #fff)' }}>
+                            {produits.length > 0
+                              ? '⚡ Boostez vos produits dans les espaces publicitaires Kin-Sell'
+                              : '⚡ Ajoutez des produits et boostez votre boutique'}
+                          </span>
+                          <p style={{ margin: '4px 0 8px', fontSize: 12, color: 'var(--color-text-secondary, #aaa)', lineHeight: 1.5 }}>
+                            {produits.length > 0
+                              ? `Vous avez ${produits.length} produit${produits.length > 1 ? 's' : ''}. L'IA ADS peut les placer dans 9 espaces publicitaires sur Kin-Sell (Explorer, So-Kin, bannières) pour multiplier vos vues et attirer plus de clients.`
+                              : 'Ajoutez vos premiers produits et l\'IA ADS les mettra en avant dans l\'Explorer, So-Kin et les bannières Kin-Sell pour un maximum de visibilité.'}
+                          </p>
+                          <div style={{ display: 'flex', gap: 6 }}>
+                            <button
+                              onClick={() => { if (produits.length > 0) { setActiveSection('produits'); } else { setActiveSection('produits'); setCreateMode('produit'); setCreateStep(1); setEditingArticleId(null); } }}
+                              style={{ padding: '6px 12px', fontSize: 11, fontWeight: 600, border: 'none', borderRadius: 6, background: 'linear-gradient(135deg, #ff8c00, #ffa500)', color: '#fff', cursor: 'pointer' }}
+                            >
+                              {produits.length > 0 ? '🚀 Booster mes produits' : '📦 Ajouter un produit'}
+                            </button>
+                          </div>
+                        </div>
+                        <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, background: 'rgba(255,165,0,0.15)', color: '#ffa500', whiteSpace: 'nowrap', marginLeft: 8 }}>
+                          📢 IA ADS
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Kin-Sell Analytique teaser */}
+                    {!bizHasAnalytics && (
+                      <div style={{
+                        background: 'linear-gradient(135deg, rgba(111,88,255,0.08), rgba(0,200,150,0.06))',
+                        border: '1px solid rgba(0,200,150,0.2)',
+                        borderRadius: 10, padding: 14,
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                          <div style={{ flex: 1 }}>
+                            <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--color-text-primary, #fff)' }}>
+                              📊 Analysez votre marché avec Kin-Sell Analytique
+                            </span>
+                            <p style={{ margin: '4px 0 8px', fontSize: 12, color: 'var(--color-text-secondary, #aaa)', lineHeight: 1.5 }}>
+                              Accédez aux prix moyens par catégorie, produits tendance à Kinshasa, analyse de vos concurrents et prédictions de ventes. Les boutiques abonnées augmentent leurs ventes de 3x en moyenne.
+                            </p>
+                            <div style={{ display: 'flex', gap: 6 }}>
+                              <button
+                                onClick={() => navigate('/pricing')}
+                                style={{ padding: '6px 12px', fontSize: 11, fontWeight: 600, border: 'none', borderRadius: 6, background: 'linear-gradient(135deg, #00c896, #00e6ac)', color: '#fff', cursor: 'pointer' }}
+                              >
+                                📈 Débloquer Analytique
+                              </button>
+                            </div>
+                          </div>
+                          <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, background: 'rgba(0,200,150,0.15)', color: '#00c896', whiteSpace: 'nowrap', marginLeft: 8 }}>
+                            📊 Analytique
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Upgrade CTA for Starter plan */}
+                    {myPlan && myPlan.planCode === 'STARTER' && (
+                      <div style={{
+                        background: 'linear-gradient(135deg, rgba(111,88,255,0.12), rgba(155,122,255,0.08))',
+                        border: '1px solid rgba(111,88,255,0.25)',
+                        borderRadius: 10, padding: 14,
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                          <div style={{ flex: 1 }}>
+                            <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--color-text-primary, #fff)' }}>
+                              🏆 Passez au forfait Business ou Scale
+                            </span>
+                            <p style={{ margin: '4px 0 8px', fontSize: 12, color: 'var(--color-text-secondary, #aaa)', lineHeight: 1.5 }}>
+                              Avec le forfait Starter, vous manquez : IA Marchande, IA Commande, Analytique avancée, négociation automatisée et support prioritaire. Passez à Business pour débloquer tout le potentiel de votre boutique !
+                            </p>
+                            <div style={{ display: 'flex', gap: 6 }}>
+                              <button
+                                onClick={() => navigate('/pricing')}
+                                style={{ padding: '6px 14px', fontSize: 11, fontWeight: 700, border: 'none', borderRadius: 6, background: 'linear-gradient(135deg, #6f58ff, #9b7aff)', color: '#fff', cursor: 'pointer', boxShadow: '0 2px 8px rgba(111,88,255,0.3)' }}
+                              >
+                                🚀 Voir les forfaits Business
+                              </button>
+                            </div>
+                          </div>
+                          <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, background: 'rgba(111,88,255,0.15)', color: '#9b7aff', whiteSpace: 'nowrap', marginLeft: 8 }}>
+                            💎 Upgrade
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
                   </div>
                 )}
               </div>
