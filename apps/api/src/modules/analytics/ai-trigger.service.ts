@@ -16,6 +16,7 @@
 
 import { prisma } from "../../shared/db/prisma.js";
 import { getMarketMedian, computePricePosition } from "../../shared/market/market-shared.js";
+import { HttpError } from "../../shared/errors/http-error.js";
 
 // ─────────────────────────────────────────────
 // Helpers
@@ -419,6 +420,30 @@ export async function activateTrial(userId: string, trialId: string) {
     where: { id: trialId, userId, status: "PROPOSED" },
   });
   if (!trial) return null;
+
+  // Déduplication : empêcher l'empilement de plusieurs essais/abonnements actifs pour le même planCode
+  const existingActive = await prisma.subscription.findFirst({
+    where: {
+      userId,
+      planCode: trial.planCode,
+      status: "ACTIVE",
+    },
+  });
+  if (existingActive) {
+    throw new HttpError(409, 'Vous avez déjà un abonnement actif pour ce forfait.');
+  }
+
+  const alreadyTrialed = await prisma.aiTrial.findFirst({
+    where: {
+      userId,
+      planCode: trial.planCode,
+      status: "ACTIVE",
+      id: { not: trialId },
+    },
+  });
+  if (alreadyTrialed) {
+    throw new HttpError(409, 'Vous avez déjà utilisé un essai gratuit pour ce forfait.');
+  }
 
   const startsAt = new Date();
   const endsAt = new Date(Date.now() + 15 * 24 * 60 * 60 * 1000);

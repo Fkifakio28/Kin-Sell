@@ -52,6 +52,7 @@ router.get('/highlight-proposal', requireAuth, asyncHandler(async (req: Authenti
 
 // ── IA ADS: Activate boost on a single listing ──────────────────────────────
 // SÉCURITÉ : exige l'add-on BOOST_VISIBILITY actif ou rôle SUPER_ADMIN
+// RATE LIMIT : max 50 boosts actifs par utilisateur
 router.post('/boost', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
   const { listingId, durationDays } = req.body as { listingId: string; durationDays?: number };
   if (!listingId) { res.status(400).json({ error: 'listingId requis' }); return; }
@@ -71,14 +72,39 @@ router.post('/boost', requireAuth, asyncHandler(async (req: AuthenticatedRequest
     if (!hasBoostAddon) {
       throw new HttpError(403, 'Add-on Boost Visibilité requis. Souscrivez via la page Forfaits.');
     }
+
+    // Rate limit: max 50 boosts actifs par user
+    const activeBoosts = await prisma.listing.count({
+      where: {
+        ownerUserId: req.auth!.userId,
+        isBoosted: true,
+        boostExpiresAt: { gt: new Date() },
+      },
+    });
+    if (activeBoosts >= 50) {
+      throw new HttpError(429, 'Limite atteinte : 50 boosts actifs maximum.');
+    }
   }
 
   const result = await activateBoost(req.auth!.userId, listingId, durationDays || 7);
+
+  // Journaliser
+  await prisma.auditLog.create({
+    data: {
+      actorUserId: req.auth!.userId,
+      action: 'ADS_BOOST_ACTIVATED',
+      entityType: 'Listing',
+      entityId: listingId,
+      metadata: { durationDays: durationDays || 7 },
+    },
+  });
+
   res.json(result);
 }));
 
 // ── IA ADS: Activate highlight (boost all user listings) ─────────────────────
 // SÉCURITÉ : exige l'add-on BOOST_VISIBILITY actif ou rôle SUPER_ADMIN
+// RATE LIMIT : max 5 highlights actifs par utilisateur
 router.post('/highlight', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
   const { durationDays, businessId } = req.body as { durationDays?: number; businessId?: string };
 
@@ -97,9 +123,33 @@ router.post('/highlight', requireAuth, asyncHandler(async (req: AuthenticatedReq
     if (!hasBoostAddon) {
       throw new HttpError(403, 'Add-on Boost Visibilité requis. Souscrivez via la page Forfaits.');
     }
+
+    // Rate limit: max 200 articles boostés par highlight par user
+    const boostedByHighlight = await prisma.listing.count({
+      where: {
+        ownerUserId: req.auth!.userId,
+        isBoosted: true,
+        boostExpiresAt: { gt: new Date() },
+      },
+    });
+    if (boostedByHighlight >= 200) {
+      throw new HttpError(429, 'Limite atteinte : 200 articles en boost maximum.');
+    }
   }
 
   const result = await activateHighlight(req.auth!.userId, durationDays || 7, businessId);
+
+  // Journaliser
+  await prisma.auditLog.create({
+    data: {
+      actorUserId: req.auth!.userId,
+      action: 'ADS_HIGHLIGHT_ACTIVATED',
+      entityType: 'User',
+      entityId: req.auth!.userId,
+      metadata: { durationDays: durationDays || 7, businessId: businessId || null },
+    },
+  });
+
   res.json(result);
 }));
 

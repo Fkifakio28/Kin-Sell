@@ -5,7 +5,7 @@ import { requireAuth, requireRoles, type AuthenticatedRequest } from "../../shar
 import { asyncHandler } from "../../shared/utils/async-handler.js";
 import { Role } from "../../types/roles.js";
 import * as billingService from "./billing.service.js";
-// Mobile money supprimé — PayPal est le seul moyen de paiement
+import { prisma } from "../../shared/db/prisma.js";
 import express from "express";
 
 const changeSubscriptionSchema = z.object({
@@ -52,6 +52,17 @@ router.post(
   asyncHandler(async (request: AuthenticatedRequest, response) => {
     const payload = changeSubscriptionSchema.parse(request.body);
     const data = await billingService.simulateChangeSubscription(request.auth!.userId, payload);
+
+    await prisma.auditLog.create({
+      data: {
+        actorUserId: request.auth!.userId,
+        action: "BILLING_SIMULATE_PLAN_CHANGE",
+        entityType: "Subscription",
+        entityId: request.auth!.userId,
+        metadata: { planCode: payload.planCode, billingCycle: payload.billingCycle },
+      },
+    });
+
     response.json(data);
   })
 );
@@ -64,6 +75,17 @@ router.post(
   asyncHandler(async (request: AuthenticatedRequest, response) => {
     const payload = changeAddonSchema.parse(request.body);
     const data = await billingService.simulateAddonChange(request.auth!.userId, payload);
+
+    await prisma.auditLog.create({
+      data: {
+        actorUserId: request.auth!.userId,
+        action: "BILLING_SIMULATE_ADDON",
+        entityType: "SubscriptionAddon",
+        entityId: request.auth!.userId,
+        metadata: { addonCode: payload.addonCode, actionType: payload.action },
+      },
+    });
+
     response.json(data);
   })
 );

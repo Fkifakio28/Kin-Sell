@@ -78,8 +78,5 @@ export const billing = {
   capturePaypalCheckout: (body: { orderId: string }) =>
     request<{ plan: BillingPlanSummary; message: string }>("/billing/paypal/capture", { method: "POST", body }),
   // activateOrder supprimé : l'activation se fait uniquement via PayPal capture ou validation admin
-  changePlan: (body: { planCode: string; billingCycle?: "MONTHLY" | "ONE_TIME" }) =>
-    request<BillingPlanSummary>("/billing/subscription/simulate-change", { method: "POST", body }),
-  toggleAddon: (body: { addonCode: "IA_MERCHANT" | "IA_ORDER" | "BOOST_VISIBILITY" | "ADS_PACK" | "ADS_PREMIUM"; action: "ENABLE" | "DISABLE"; monthlyPriceUsdCents?: number }) =>
-    request<BillingPlanSummary>("/billing/addons/simulate", { method: "POST", body })
+  // changePlan et toggleAddon supprimés : routes SUPER_ADMIN uniquement, pas d'usage frontend
 };
