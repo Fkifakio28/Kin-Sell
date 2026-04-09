@@ -845,19 +845,20 @@
 
 .h-article-promo-badge {
   position: absolute;
-  top: 6px;
-  left: 6px;
-  font-size: 0.68rem;
-  padding: 3px 8px;
-  border-radius: 8px;
-  background: linear-gradient(135deg, #e83e3e, #ff6b3d);
+  top: 8px;
+  left: 8px;
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: var(--color-primary, #6f58ff);
   color: #fff;
-  font-weight: 800;
+  font-weight: 700;
   z-index: 2;
-  letter-spacing: 0.03em;
-  box-shadow: 0 2px 8px rgba(232, 62, 62, 0.45);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 2px 10px rgba(111, 88, 255, 0.4);
+  border: 1px solid rgba(185, 166, 255, 0.3);
   line-height: 1.2;
+  white-space: nowrap;
+  backdrop-filter: blur(6px);
 }
 
 .h-article-body {

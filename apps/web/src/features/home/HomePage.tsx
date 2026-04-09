@@ -780,7 +780,7 @@ export function HomePage() {
                   >
                     <div className="h-article-thumb" style={p.imageUrl ? { backgroundImage: `url(${resolveMediaUrl(p.imageUrl)})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}>
                       <span className="h-article-cat">{p.category}</span>
-                      {p.promoActive && p.promoPriceUsdCents != null && <span className="h-article-promo-badge">-{Math.round((1 - p.promoPriceUsdCents / p.priceUsdCents) * 100)}%</span>}
+                      {p.promoActive && p.promoPriceUsdCents != null && <span className="h-article-promo-badge ks-promo-badge">{formatPriceLabelFromUsdCents(p.promoPriceUsdCents)}</span>}
                     </div>
                     <div className="h-article-body">
                       <strong className="h-article-title">{p.title}</strong>
@@ -835,7 +835,7 @@ export function HomePage() {
                   >
                     <div className="h-article-thumb h-article-thumb--svc" style={s.imageUrl ? { backgroundImage: `url(${resolveMediaUrl(s.imageUrl)})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}>
                       <span className="h-article-cat">{s.category}</span>
-                      {s.promoActive && s.promoPriceUsdCents != null && <span className="h-article-promo-badge">-{Math.round((1 - s.promoPriceUsdCents / s.priceUsdCents) * 100)}%</span>}
+                      {s.promoActive && s.promoPriceUsdCents != null && <span className="h-article-promo-badge ks-promo-badge">{formatPriceLabelFromUsdCents(s.promoPriceUsdCents)}</span>}
                     </div>
                     <div className="h-article-body">
                       <strong className="h-article-title">{s.title}</strong>

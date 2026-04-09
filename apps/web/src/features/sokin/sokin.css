@@ -2650,5 +2650,37 @@
   }
 }
 
+/* ═══════════════════════════════════════
+   MOBILE DENSITY — max 12px, Facebook-like
+   ═══════════════════════════════════════ */
+@media (max-width: 768px) {
+  .sk-feed { padding: 6px 0 8px; }
+  .sk-feed--loading { padding: 8px 12px; gap: 8px; }
+  .sk-feed-empty { padding: 12px; }
+  .sk-feed-end { padding: 10px; }
+  .sk-card { margin: 0; }
+  .sk-comments-head { padding: 0 12px; }
+  .sk-comments-empty { margin: 10px 0; }
+  .sk-modal-error { padding: 10px 12px; }
+  .sk-btn { padding: 9px 12px; }
+  .sk-create-screen-body { padding: 12px; }
+  .sk-create-screen-foot { padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 0px)); }
+  .sk-mobile-manage-header { padding: 12px 12px 8px; }
+  .sk-mobile-manage-body { padding: 8px 12px; }
+  .sk-mobile-manage-empty { padding: 12px; }
+  .sk-mobile-manage-footer { padding: 8px 12px; }
+  .sk-mobile-editor-actions { margin-top: 10px; }
+  .sk-missing-profile { padding: 12px; }
+  .sk-missing-profile-box { padding: 12px; }
 
+  /* ── So-Kin card compact ── */
+  .sk-card-header { padding: 8px 12px 4px; }
+  .sk-card-avatar-wrap { width: 38px; height: 38px; }
+  .sk-card-avatar, .sk-card-avatar-empty { width: 38px; height: 38px; font-size: 15px; }
+  .sk-card-author { gap: 8px; }
+  .sk-card-author-name { line-height: 1.2; }
+  .sk-card-author-meta { line-height: 1.2; }
+  .sk-card-text { padding: 0 12px 6px; font-size: 14px; line-height: 1.4; }
+  .sk-card-footer { padding: 4px 10px 6px; }
+  .sk-card-contact-btn { height: 38px; min-width: 38px; padding: 0 10px; }
 }

@@ -414,7 +414,7 @@ function ExplorerPageMobile() {
           coverImage: resolveMediaUrl(item.imageUrl) || '/assets/kin-sell/black-man-standing-cafe-with-shopping-bags.jpg',
           media: [], ownerId: item.owner.userId, isNegotiable: item.isNegotiable !== false,
           isBoosted: !!(item as any).isBoosted,
-          promoLabel: item.promoActive && item.promoPriceUsdCents != null ? `-${Math.round((1 - item.promoPriceUsdCents / item.priceUsdCents) * 100)}%` : undefined,
+          promoLabel: item.promoActive && item.promoPriceUsdCents != null ? formatPriceLabelFromUsdCents(item.promoPriceUsdCents) : undefined,
           originalPriceLabel: item.promoActive && item.promoPriceUsdCents != null ? formatPriceLabelFromUsdCents(item.priceUsdCents) : undefined,
           latitude: item.latitude ?? undefined, longitude: item.longitude ?? undefined,
         });

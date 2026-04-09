@@ -426,19 +426,21 @@
 }
 .ex-article-badge {
   position: absolute;
-  top: 6px;
-  left: 6px;
-  padding: 3px 8px;
-  border-radius: 8px;
-  background: linear-gradient(135deg, #e83e3e, #ff6b3d);
+  top: 8px;
+  left: 8px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: var(--color-primary, #6f58ff);
   color: #fff;
-  font-size: 0.68rem;
-  font-weight: 800;
-  letter-spacing: 0.03em;
-  box-shadow: 0 2px 8px rgba(232, 62, 62, 0.45);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  box-shadow: 0 2px 10px rgba(111, 88, 255, 0.4);
+  border: 1px solid rgba(185, 166, 255, 0.3);
   z-index: 3;
   line-height: 1.2;
+  white-space: nowrap;
+  backdrop-filter: blur(6px);
 }
 
 .ex-article-body {
@@ -1152,4 +1154,38 @@
   right: 50%;
   transform: translateX(50%);
   font-size: 0.65rem;
+}
+
+/* ═══════════════════════════════════════
+   MOBILE DENSITY — max 12px, Facebook-like
+   ═══════════════════════════════════════ */
+@media (max-width: 768px) {
+  .ex-section { margin-top: 10px; }
+  .ex-pager { margin-top: 10px; }
+  .ex-show-all { margin: 10px auto 0; padding: 8px 12px; }
+  .ex-feed-empty { padding: 12px; }
+  .ex-empty { padding: 10px 0; }
+  .ex-articles-grid { gap: 8px; }
+  .ex-shops-grid { gap: 8px; }
+  .ex-profiles-grid { gap: 8px; }
+  .ex-modal-panel { padding: 12px; }
+  .ex-drawer-header { padding: 12px; padding-top: calc(12px + env(safe-area-inset-top, 0)); }
+  .ex-drawer-link { padding: 10px 12px; }
+  .ex-drawer-footer { padding: 12px; }
+  .ex-pill-btn { padding: 6px 12px; }
+  .ex-create-handle { margin: 0 auto 10px; }
+  .ex-create-item { padding: 10px 12px; }
+
+  /* ── Article cards compact ── */
+  .ex-article-card { border-radius: 12px; }
+  .ex-article-img { height: 130px; border-radius: 10px 10px 0 0; }
+  .ex-article-body { padding: 8px; gap: 2px; }
+  .ex-article-title { line-height: 1.25; margin-bottom: 4px; }
+  .ex-article-price { margin-bottom: 4px; }
+  .ex-article-publisher { line-height: 1.2; }
+  .ex-article-fb { margin-top: 2px; }
+
+  /* ── Shop cards compact ── */
+  .ex-shop-card { border-radius: 12px; }
+  .ex-shop-body { padding: 8px; gap: 2px; }
 }

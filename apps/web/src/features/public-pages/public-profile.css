@@ -298,7 +298,7 @@
 .up-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
+  gap: 10px;
 }
 .up-card {
   background: rgba(111,88,255,0.06);
@@ -342,21 +342,22 @@
 .up-card-promo-badge {
   position: absolute;
   top: 8px;
-  right: 8px;
-  font-size: 0.68rem;
-  font-weight: 800;
-  padding: 3px 8px;
-  border-radius: 8px;
-  background: linear-gradient(135deg, #e83e3e, #ff6b3d);
+  left: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: var(--color-primary, #6f58ff);
   color: #fff;
-  letter-spacing: 0.03em;
-  box-shadow: 0 2px 8px rgba(232, 62, 62, 0.45);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 2px 10px rgba(111, 88, 255, 0.4);
+  border: 1px solid rgba(185, 166, 255, 0.3);
   z-index: 3;
   line-height: 1.2;
+  white-space: nowrap;
+  backdrop-filter: blur(6px);
 }
 .up-card-body {
-  padding: 10px 12px 12px;
+  padding: 8px 10px 10px;
 }
 .up-card-title {
   font-size: 0.82rem;
@@ -371,7 +372,7 @@
   font-size: 0.85rem;
   font-weight: 700;
   color: var(--color-primary, #6f58ff);
-  margin: 0 0 8px;
+  margin: 0 0 6px;
 }
 .up-card-actions {
   display: flex;

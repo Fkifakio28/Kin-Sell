@@ -555,7 +555,7 @@ function SuggestionsSection({
                 <p className="hm-suggestion-title">{item.title}</p>
                 <p className="hm-suggestion-price">
                   {item.promoActive && item.promoPriceUsdCents != null
-                    ? <><s style={{opacity:0.5,fontSize:'0.85em',marginRight:3}}>{formatMoney(item.priceUsdCents)}</s> {formatMoney(item.promoPriceUsdCents)}</>
+                    ? <><s className="ks-price-old">{formatMoney(item.priceUsdCents)}</s> {formatMoney(item.promoPriceUsdCents)}</>
                     : item.priceUsdCents === 0
                     ? formatLabel(0)
                     : formatMoney(item.priceUsdCents)}
@@ -738,7 +738,7 @@ function MarketCard({
           <span className="hm-badge hm-badge--neg">{t("common.negotiate")}</span>
         )}
         {listing.promoActive && listing.promoPriceUsdCents != null && (
-          <span className="hm-badge hm-badge--promo">-{Math.round((1 - listing.promoPriceUsdCents / listing.priceUsdCents) * 100)}%</span>
+          <span className="hm-badge hm-badge--promo">{formatMoney(listing.promoPriceUsdCents)}</span>
         )}
         <span
           className={

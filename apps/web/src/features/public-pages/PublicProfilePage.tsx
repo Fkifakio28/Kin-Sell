@@ -542,7 +542,7 @@ export function PublicProfilePage({ username }: { username: string }) {
                       : <div className="up-card-noimg">{item.type === 'PRODUIT' ? '📦' : '🛠️'}</div>}
                     <span className="up-card-type-badge">{item.type === 'PRODUIT' ? 'Produit' : 'Service'}</span>
                     {item.promoActive && item.promoPriceUsdCents != null && (
-                      <span className="up-card-promo-badge">-{Math.round((1 - item.promoPriceUsdCents / item.priceUsdCents) * 100)}%</span>
+                      <span className="up-card-promo-badge ks-promo-badge">{item.priceLabel}</span>
                     )}
                   </div>
                   <div className="up-card-body">
