@@ -114,6 +114,58 @@
   /* Skeletons */
   --skeleton-base: rgba(255, 255, 255, 0.04);
   --skeleton-shine: rgba(255, 255, 255, 0.10);
+
+  /* ══════════════════════════════════════════════
+     SO-KIN PREMIUM EVOLUTION — Prompt 4 P1 (9 avril 2026)
+     Direction: réseau social premium vivant
+     Tokens scoped sk-* — existing tokens untouched
+     ══════════════════════════════════════════════ */
+
+  /* Fond premium évolué */
+  --sk-bg-start: #0d1020;
+  --sk-bg-mid: #12162b;
+  --sk-bg-end: #171a33;
+
+  /* Surfaces sociales */
+  --sk-surface-1: rgba(20, 24, 43, 0.72);
+  --sk-surface-2: rgba(28, 33, 58, 0.78);
+  --sk-surface-hover: rgba(34, 40, 68, 0.82);
+  --sk-surface-elevated: rgba(36, 42, 72, 0.88);
+  --sk-border: rgba(255, 255, 255, 0.08);
+  --sk-border-hover: rgba(255, 255, 255, 0.14);
+  --sk-border-accent: rgba(124, 92, 255, 0.22);
+
+  /* Marque évoluée */
+  --sk-brand: #7c5cff;
+  --sk-brand-hover: #9b82ff;
+  --sk-brand-soft: rgba(124, 92, 255, 0.14);
+  --sk-brand-glow: rgba(124, 92, 255, 0.25);
+
+  /* Accents sociaux multi-couleur */
+  --sk-accent-social: #23c4ff;
+  --sk-accent-social-soft: rgba(35, 196, 255, 0.12);
+  --sk-accent-trend: #ff8a3d;
+  --sk-accent-trend-soft: rgba(255, 138, 61, 0.14);
+  --sk-accent-mint: #31d0aa;
+  --sk-accent-mint-soft: rgba(49, 208, 170, 0.10);
+
+  /* Texte premium */
+  --sk-text: #f5f7ff;
+  --sk-text-muted: rgba(245, 247, 255, 0.68);
+  --sk-text-faint: rgba(245, 247, 255, 0.42);
+
+  /* Like / Comment / Repost / Save — fonctionnels */
+  --sk-like: #ff4d6a;
+  --sk-like-soft: rgba(255, 77, 106, 0.12);
+  --sk-comment: #23c4ff;
+  --sk-comment-soft: rgba(35, 196, 255, 0.10);
+  --sk-repost: #31d0aa;
+  --sk-repost-soft: rgba(49, 208, 170, 0.10);
+  --sk-save: #f5b731;
+  --sk-save-soft: rgba(245, 183, 49, 0.10);
+  --sk-trending: #ff8a3d;
+  --sk-trending-soft: rgba(255, 138, 61, 0.12);
+  --sk-verified: #23c4ff;
 }
 
 :root[data-theme="light"] {
@@ -163,4 +215,40 @@
   --glass-border-social: rgba(94, 72, 194, 0.14);
   --skeleton-base: rgba(0, 0, 0, 0.04);
   --skeleton-shine: rgba(0, 0, 0, 0.08);
+
+  /* SO-KIN light-mode overrides */
+  --sk-bg-start: #f0eef8;
+  --sk-bg-mid: #eae6f5;
+  --sk-bg-end: #e5e1f0;
+  --sk-surface-1: rgba(255, 255, 255, 0.78);
+  --sk-surface-2: rgba(245, 242, 255, 0.82);
+  --sk-surface-hover: rgba(238, 234, 252, 0.88);
+  --sk-surface-elevated: rgba(255, 255, 255, 0.92);
+  --sk-border: rgba(0, 0, 0, 0.06);
+  --sk-border-hover: rgba(0, 0, 0, 0.12);
+  --sk-border-accent: rgba(98, 71, 236, 0.18);
+  --sk-brand: #6247ec;
+  --sk-brand-hover: #4b32ce;
+  --sk-brand-soft: rgba(98, 71, 236, 0.10);
+  --sk-brand-glow: rgba(98, 71, 236, 0.18);
+  --sk-accent-social: #1a8ebf;
+  --sk-accent-social-soft: rgba(26, 142, 191, 0.08);
+  --sk-accent-trend: #d4712a;
+  --sk-accent-trend-soft: rgba(212, 113, 42, 0.08);
+  --sk-accent-mint: #22a878;
+  --sk-accent-mint-soft: rgba(34, 168, 120, 0.08);
+  --sk-text: #1a1530;
+  --sk-text-muted: rgba(26, 21, 48, 0.65);
+  --sk-text-faint: rgba(26, 21, 48, 0.40);
+  --sk-like: #e5345a;
+  --sk-like-soft: rgba(229, 52, 90, 0.08);
+  --sk-comment: #1a8ebf;
+  --sk-comment-soft: rgba(26, 142, 191, 0.06);
+  --sk-repost: #22a878;
+  --sk-repost-soft: rgba(34, 168, 120, 0.06);
+  --sk-save: #c99420;
+  --sk-save-soft: rgba(201, 148, 32, 0.06);
+  --sk-trending: #d4712a;
+  --sk-trending-soft: rgba(212, 113, 42, 0.08);
+  --sk-verified: #1a8ebf;
 }

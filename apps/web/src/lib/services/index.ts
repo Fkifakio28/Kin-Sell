@@ -10,6 +10,7 @@ export * from "./billing.service";
 export * from "./messaging.service";
 export * from "./negotiations.service";
 export * from "./sokin.service";
+export * from "./sokin-analytics.service";
 export * from "./geo.service";
 export * from "./ai.service";
 export * from "./ads.service";

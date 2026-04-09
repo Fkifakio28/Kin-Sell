@@ -40,6 +40,7 @@ import { ApiError } from '../../lib/api-core';
 import { AdBanner } from '../../components/AdBanner';
 import { SeoMeta } from '../../components/SeoMeta';
 import { buildSoKinFeedItems } from './ad-cadence';
+import { sokinTrends, sokinAnalytics, type TrendingTopic, type TrendingHashtag, type SuggestedProfile, type PostInsight } from '../../lib/services/sokin-analytics.service';
 import './sokin.css';
 
 /* ─────────────────────────────────────────────────────── */
@@ -151,10 +152,11 @@ function readSoKinCreateDraft(): SoKinCreateDraft {
 /* ─────────────────────────────────────────────────────── */
 
 /** Onglets de feed */
-type FeedTab = 'pour-toi' | 'local' | 'ventes';
+type FeedTab = 'pour-toi' | 'suivis' | 'local' | 'ventes';
 
 const FEED_TABS: { key: FeedTab; label: string; icon: string }[] = [
   { key: 'pour-toi', label: 'Pour toi',  icon: '✨' },
+  { key: 'suivis',   label: 'Suivis',    icon: '👥' },
   { key: 'local',    label: 'Local',     icon: '📍' },
   { key: 'ventes',   label: 'Ventes',    icon: '🏷️' },
 ];
@@ -631,6 +633,9 @@ function AnnounceCard({
   onOpenComments,
   onContact,
   isContacting,
+  postInsight,
+  onLoadInsight,
+  isAuthor,
 }: {
   post: SoKinApiFeedPost;
   t: (k: string) => string;
@@ -640,6 +645,9 @@ function AnnounceCard({
   onOpenComments: () => void;
   onContact: () => void;
   isContacting: boolean;
+  postInsight?: PostInsight | null;
+  onLoadInsight?: () => void;
+  isAuthor?: boolean;
 }) {
   const navigate = useNavigate();
   const [myReaction, setMyReaction] = useState<SoKinReactionType | null>(null);
@@ -647,6 +655,7 @@ function AnnounceCard({
   const [saved, setSaved] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [reacting, setReacting] = useState(false);
+  const [insightExpanded, setInsightExpanded] = useState(false);
 
   const profile = post.author.profile;
   const authorName = profile?.displayName ?? 'Utilisateur';
@@ -697,7 +706,7 @@ function AnnounceCard({
   return (
     <article className={`sk-card${isCommercialType ? ' sk-card--commercial' : ''}`}>
 
-      {/* ═══ 1. HEADER : avatar + nom + handle + temps + menu ═══ */}
+      {/* ═══ L1. HEADER : avatar + nom + handle + temps + badge + menu ═══ */}
       <header className="sk-card-header">
         <button
           type="button"
@@ -717,17 +726,15 @@ function AnnounceCard({
           <div className="sk-card-author-info">
             <div className="sk-card-author-line">
               <strong className="sk-card-author-name">{authorName}</strong>
-              {postType !== 'SHOWCASE' && (
-                <span className="sk-card-type-pill">
-                  <span>{ptMeta.icon}</span>
-                  <span>{ptMeta.label}</span>
-                </span>
-              )}
+              <span className="sk-card-type-pill">
+                <span>{ptMeta.icon}</span>
+                <span>{ptMeta.label}</span>
+              </span>
             </div>
             <span className="sk-card-author-meta">
               <span className="sk-card-author-handle">@{cleanHandle || post.author.id}</span>
-              {postLocation && <span className="sk-card-author-loc"> · 📍 {postLocation}</span>}
               <span className="sk-card-author-time"> · {relTime(post.createdAt, t)}</span>
+              {postLocation && <span className="sk-card-author-loc"> · 📍 {postLocation}</span>}
             </span>
           </div>
         </button>
@@ -744,9 +751,11 @@ function AnnounceCard({
           </button>
           {menuOpen && (
             <div className="sk-card-menu-dropdown" role="menu">
-              <button type="button" role="menuitem" onClick={() => { onContact(); setMenuOpen(false); }}>
-                <IconMessage /> Contacter
-              </button>
+              {isCommercialType && (
+                <button type="button" role="menuitem" onClick={() => { onContact(); setMenuOpen(false); }}>
+                  <IconMessage /> Contacter
+                </button>
+              )}
               <button type="button" role="menuitem" onClick={() => { handleSave(); setMenuOpen(false); }}>
                 <IconBookmark filled={saved} /> {saved ? 'Retiré des favoris' : 'Sauvegarder'}
               </button>
@@ -763,14 +772,13 @@ function AnnounceCard({
         </div>
       </header>
 
-      {/* ═══ 2. SUJET (si défini) ═══ */}
+      {/* ═══ L2. CONTENU : sujet + texte + hashtags + tags ═══ */}
       {postSubject && (
         <div className="sk-card-subject-bar">
           <h3 className="sk-card-subject">{postSubject}</h3>
         </div>
       )}
 
-      {/* ═══ 3. TEXTE ═══ */}
       {post.text ? (
         mediaItems.length > 0
           ? <p className="sk-card-text">{post.text}</p>
@@ -781,12 +789,6 @@ function AnnounceCard({
           )
       ) : null}
 
-      {/* ═══ 4. MÉDIAS ═══ */}
-      {mediaItems.length > 0 && (
-        <MediaCollage items={mediaItems} onItemClick={onMediaClick} />
-      )}
-
-      {/* ═══ 5. HASHTAGS + TAGS ═══ */}
       {((postHashtags && postHashtags.length > 0) || (postTags && postTags.length > 0)) && (
         <div className="sk-card-tags">
           {postHashtags?.map((h) => (
@@ -798,12 +800,17 @@ function AnnounceCard({
         </div>
       )}
 
-      {/* ═══ 6. COMPTEURS SOCIAUX ═══ */}
+      {/* ═══ L3. MÉDIAS ═══ */}
+      {mediaItems.length > 0 && (
+        <MediaCollage items={mediaItems} onItemClick={onMediaClick} />
+      )}
+
+      {/* ═══ L4. COMPTEURS + BARRE SOCIALE ═══ */}
       <div className="sk-card-counters">
         {likeCount > 0 && (
           <span className="sk-card-counter">
             <span className="sk-card-counter-dot sk-card-counter-dot--like" />
-            {likeCount}
+            {likeCount} {likeCount > 1 ? 'j\u2019aime' : 'j\u2019aime'}
           </span>
         )}
         {replyCount > 0 && (
@@ -811,9 +818,60 @@ function AnnounceCard({
             {replyCount} commentaire{replyCount > 1 ? 's' : ''}
           </button>
         )}
+        {(post.shares ?? 0) > 0 && (
+          <span className="sk-card-counter">
+            {post.shares} repost{(post.shares ?? 0) > 1 ? 's' : ''}
+          </span>
+        )}
       </div>
 
-      {/* ═══ 7. BARRE SOCIALE — actions principales ═══ */}
+      {/* ═══ INSIGHTS AUTEUR — discret, visible seulement pour l'auteur ═══ */}
+      {isAuthor && (
+        <div className="sk-card-insights">
+          {postInsight ? (
+            <>
+              <button
+                type="button"
+                className="sk-card-insights-toggle"
+                onClick={() => setInsightExpanded(!insightExpanded)}
+                aria-expanded={insightExpanded}
+              >
+                <span className="sk-insight-score" data-score={postInsight.potentialScore >= 60 ? 'high' : postInsight.potentialScore >= 30 ? 'mid' : 'low'}>
+                  {postInsight.potentialScore}
+                </span>
+                <span className="sk-insight-label">Potentiel</span>
+                <span className="sk-insight-views">{postInsight.views} vues</span>
+                <span className="sk-insight-arrow">{insightExpanded ? '\u25B2' : '\u25BC'}</span>
+              </button>
+              {insightExpanded && (
+                <div className="sk-card-insights-detail">
+                  <div className="sk-insight-row">
+                    <span>Engagement</span>
+                    <span className="sk-insight-value">{postInsight.engagementRate}%</span>
+                  </div>
+                  {postInsight.tip && (
+                    <p className="sk-insight-tip">{postInsight.tip}</p>
+                  )}
+                  {postInsight.boostSuggested && (
+                    <button type="button" className="sk-insight-boost-cta">
+                      Booster ce post
+                    </button>
+                  )}
+                </div>
+              )}
+            </>
+          ) : (
+            <button
+              type="button"
+              className="sk-card-insights-toggle sk-card-insights-toggle--load"
+              onClick={onLoadInsight}
+            >
+              <span className="sk-insight-label">Voir les insights</span>
+            </button>
+          )}
+        </div>
+      )}
+
       <div className="sk-card-social-bar">
         <button
           type="button"
@@ -823,7 +881,7 @@ function AnnounceCard({
           aria-pressed={liked}
         >
           <span className="sk-social-icon"><IconHeart filled={liked} /></span>
-          <span>J'aime</span>
+          <span>J\u2019aime</span>
         </button>
 
         <button
@@ -858,29 +916,27 @@ function AnnounceCard({
         </button>
       </div>
 
-      {/* ═══ 8. BLOC COMMERCE (conditionnel) ═══ */}
+      {/* ═══ L5. BLOC COMMERCE — discret, conditionnel ═══ */}
       {isCommercialType && (
         <div className="sk-card-commerce">
-          <button
-            type="button"
-            className="sk-card-cta-btn"
-            onClick={onContact}
-            disabled={isContacting}
-            aria-busy={isContacting}
-          >
-            {isContacting ? (
-              <span>⏳</span>
-            ) : (
-              <>
-                <IconMessage />
-                <span>
-                  {postType === 'SELLING' ? 'Contacter le vendeur' :
-                   postType === 'PROMO' ? 'Profiter de l\u2019offre' :
-                   'En savoir plus'}
-                </span>
-              </>
-            )}
-          </button>
+          <div className="sk-card-commerce-inner">
+            <button
+              type="button"
+              className="sk-card-commerce-action"
+              onClick={onContact}
+              disabled={isContacting}
+              aria-busy={isContacting}
+            >
+              {isContacting ? '⏳' : postType === 'SELLING' ? '💬 Intéressé(e)' : postType === 'PROMO' ? '🏷️ Voir l\u2019offre' : '📋 En savoir plus'}
+            </button>
+            <button
+              type="button"
+              className="sk-card-commerce-action"
+              onClick={() => navigate(`/user/${cleanHandle}`)}
+            >
+              👤 Profil vendeur
+            </button>
+          </div>
         </div>
       )}
     </article>
@@ -902,7 +958,7 @@ function ComposeZone({
 }) {
   return (
     <section className="sk-compose">
-      <div className="sk-compose-inner">
+      <div className="sk-compose-inner" onClick={onCreatePost} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter') onCreatePost(); }}>
         {avatarUrl ? (
           <img
             src={resolveMediaUrl(avatarUrl)}
@@ -914,13 +970,14 @@ function ComposeZone({
             {(displayName.charAt(0) || '?').toUpperCase()}
           </span>
         )}
-        <button
-          type="button"
-          className="sk-compose-trigger"
-          onClick={onCreatePost}
-        >
-          {`Quoi de neuf, ${displayName} ?`}
-        </button>
+        <span className="sk-compose-trigger">
+          Quoi de neuf ?
+        </span>
+        <div className="sk-compose-quick-actions">
+          <span className="sk-compose-quick-btn" title="Photo/Vidéo">{'\u{1F5BC}\u{FE0F}'}</span>
+          <span className="sk-compose-quick-btn" title="Vente">{'\u{1F6CD}\u{FE0F}'}</span>
+          <span className="sk-compose-quick-btn" title="Question">{'\u{2753}'}</span>
+        </div>
       </div>
     </section>
   );
@@ -966,6 +1023,9 @@ function AnnouncesFeed({
   onContact,
   contactingPostId,
   immersiveDesktop = false,
+  currentUserId,
+  postInsightsCache,
+  onLoadInsight,
 }: {
   posts: SoKinApiFeedPost[];
   hasMore: boolean;
@@ -979,6 +1039,9 @@ function AnnouncesFeed({
   onContact: (post: SoKinApiFeedPost) => void;
   contactingPostId: string | null;
   immersiveDesktop?: boolean;
+  currentUserId?: string;
+  postInsightsCache?: Record<string, PostInsight>;
+  onLoadInsight?: (postId: string) => void;
 }) {
   const feedItems = useMemo(() => buildSoKinFeedItems(posts, 4), [posts]);
   const [resolvedAdsBySlot, setResolvedAdsBySlot] = useState<Record<string, string | null>>({});
@@ -1010,6 +1073,7 @@ function AnnouncesFeed({
   feedItems.forEach((entry) => {
     if (entry.type === 'post') {
       const post = entry.post;
+      const isAuthor = currentUserId ? post.authorId === currentUserId : false;
       const card = (
         <AnnounceCard
           key={post.id}
@@ -1021,6 +1085,9 @@ function AnnouncesFeed({
           onOpenComments={() => onOpenComments(post.id)}
           onContact={() => onContact(post)}
           isContacting={contactingPostId === post.id}
+          isAuthor={isAuthor}
+          postInsight={postInsightsCache?.[post.id] ?? null}
+          onLoadInsight={onLoadInsight ? () => onLoadInsight(post.id) : undefined}
         />
       );
 
@@ -2479,6 +2546,12 @@ export function SoKinPage() {
   const [desktopAccountOpen, setDesktopAccountOpen] = useState(false);
   const [desktopNotifications, setDesktopNotifications] = useState<HeaderNotification[]>([]);
 
+  // ── State Intelligence — Tendances & Insights ──
+  const [trendingTopics, setTrendingTopics] = useState<TrendingTopic[]>([]);
+  const [trendingHashtags, setTrendingHashtags] = useState<TrendingHashtag[]>([]);
+  const [suggestedProfiles, setSuggestedProfiles] = useState<SuggestedProfile[]>([]);
+  const [postInsightsCache, setPostInsightsCache] = useState<Record<string, PostInsight>>({});
+
   const city = user?.profile?.city ?? getCountryConfig(effectiveCountry).defaultCity;
   const country = effectiveCountry;
   const avatarUrl = user?.profile?.avatarUrl ?? '';
@@ -2497,6 +2570,7 @@ export function SoKinPage() {
         const currentOffset = reset ? 0 : offsetRef.current;
         const feedParams: { limit: number; offset: number; city?: string; types?: string[] } = { limit, offset: currentOffset };
         if (feedTab === 'local') feedParams.city = city;
+        if (feedTab === 'suivis') feedParams.city = city; // TODO: filtrer par utilisateurs suivis quand le système Follow sera connecté
         if (feedTab === 'ventes') feedParams.types = VENTES_TYPES;
         const data = await sokinApi.publicFeed(feedParams);
         const incoming = data.posts;
@@ -2619,6 +2693,38 @@ export function SoKinPage() {
       cancelled = true;
     };
   }, [isLoggedIn, user?.role]);
+
+  // ── Chargement des tendances & profils suggérés ──
+  useEffect(() => {
+    let cancelled = false;
+    const loadTrends = async () => {
+      try {
+        const [trendsData, profilesData] = await Promise.all([
+          sokinTrends.trending({ city, limit: 8 }).catch(() => ({ topics: [], hashtags: [] })),
+          sokinTrends.suggestedProfiles({ city, limit: 5 }).catch(() => ({ profiles: [] })),
+        ]);
+        if (cancelled) return;
+        setTrendingTopics(trendsData.topics ?? []);
+        setTrendingHashtags(trendsData.hashtags ?? []);
+        setSuggestedProfiles(profilesData.profiles ?? []);
+      } catch {
+        // silencieux
+      }
+    };
+    void loadTrends();
+    return () => { cancelled = true; };
+  }, [city]);
+
+  // ── Post insight pour l'auteur (chargement à la demande) ──
+  const loadPostInsight = useCallback(async (postId: string) => {
+    if (postInsightsCache[postId] || !isLoggedIn) return;
+    try {
+      const insight = await sokinTrends.postInsight(postId);
+      setPostInsightsCache((prev) => ({ ...prev, [postId]: insight }));
+    } catch {
+      // silencieux — pas d'insights si erreur
+    }
+  }, [postInsightsCache, isLoggedIn]);
 
   useEffect(() => {
     const onEsc = (event: KeyboardEvent) => {
@@ -3057,7 +3163,7 @@ export function SoKinPage() {
       {isMobile ? (
         <>
           <div className={`sk-page${barsVisible ? '' : ' sk-page--expanded'}`}>
-            {/* ── Barre supérieure ── */}
+            {/* ── Topbar sticky sociale ── */}
             <header className={`sk-topbar${barsVisible ? '' : ' sk-topbar--hidden'}`}>
               <button
                 type="button"
@@ -3069,12 +3175,22 @@ export function SoKinPage() {
               </button>
               <div className="sk-topbar-center">
                 <span className="sk-topbar-title">So-Kin</span>
-                <span className="sk-topbar-sub">{FEED_TABS.find((ft) => ft.key === feedTab)?.label ?? 'Feed'}</span>
               </div>
-              <div className="sk-topbar-end" aria-hidden="true" />
+              <div className="sk-topbar-end">
+                {isLoggedIn && (
+                  <>
+                    <button type="button" className="sk-topbar-action" onClick={() => navigate('/messaging')} aria-label="Messages">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                    </button>
+                    <button type="button" className="sk-topbar-action" onClick={() => navigate('/notifications')} aria-label="Notifications">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                    </button>
+                  </>
+                )}
+              </div>
             </header>
 
-            {/* ── Onglets de feed ── */}
+            {/* ── Onglets de feed (4 tabs) ── */}
             <nav className="sk-feed-tabs" aria-label="Onglets du fil">
               {FEED_TABS.map((tab) => (
                 <button
@@ -3089,12 +3205,14 @@ export function SoKinPage() {
               ))}
             </nav>
 
+            {/* ── Composer capsule sociale ── */}
             <ComposeZone
               avatarUrl={avatarUrl}
               displayName={displayName}
               onCreatePost={handleOpenCreate}
             />
 
+            {/* ── Feed social pleine largeur ── */}
             <AnnouncesFeed
               posts={posts}
               hasMore={hasMore}
@@ -3107,17 +3225,31 @@ export function SoKinPage() {
               onMediaClick={(item) => setViewerItem(item)}
               onContact={handleContact}
               contactingPostId={contactingPostId}
+              currentUserId={user?.id}
+              postInsightsCache={postInsightsCache}
+              onLoadInsight={loadPostInsight}
             />
           </div>
 
-          <button
-            type="button"
-            className={`sk-floating-create${fabVisible ? '' : ' sk-floating-create--hidden'}`}
-            aria-label="Mon contenu"
-            onClick={async () => { if (!isLoggedIn) { navigate('/login'); return; } setShowMobileManage(true); await loadMyPublishedPosts(); }}
-          >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-          </button>
+          {/* ── FAB social — Publier + Mon contenu ── */}
+          <div className={`sk-fab-group${fabVisible ? '' : ' sk-fab-group--hidden'}`}>
+            <button
+              type="button"
+              className="sk-fab sk-fab--publish"
+              aria-label="Nouvelle publication"
+              onClick={() => { if (!isLoggedIn) { navigate('/login'); return; } handleOpenCreate(); }}
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            </button>
+            <button
+              type="button"
+              className="sk-fab sk-fab--manage"
+              aria-label="Mon contenu"
+              onClick={async () => { if (!isLoggedIn) { navigate('/login'); return; } setShowMobileManage(true); await loadMyPublishedPosts(); }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            </button>
+          </div>
 
           {/* ── Mobile: Mon contenu Drawer ── */}
           {showMobileManage && (
@@ -3227,8 +3359,8 @@ export function SoKinPage() {
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') handleDesktopSearch();
                 }}
-                placeholder="Rechercher sur Kin-Sell…"
-                aria-label="Recherche globale Kin-Sell"
+                placeholder="Rechercher sur So-Kin…"
+                aria-label="Recherche So-Kin"
               />
             </div>
 
@@ -3277,26 +3409,59 @@ export function SoKinPage() {
 
           {/* ═══════ 3-COLUMN GRID ═══════ */}
           <div className="sk-desktop-grid">
-            {/* ── LEFT SIDEBAR ── */}
+            {/* ── LEFT SIDEBAR — Navigation sociale ── */}
             <aside className="sk-desktop-left" aria-label="Navigation So-Kin">
               <nav className="sk-desktop-nav glass-container">
-                <button type="button" className="sk-desktop-nav-item" onClick={() => navigate('/')}>🏠 Accueil</button>
-                <button type="button" className="sk-desktop-nav-item sk-desktop-nav-item--active" onClick={() => navigate('/sokin')}>📱 So-Kin</button>
-                <button type="button" className="sk-desktop-nav-item" onClick={() => navigate('/explorer')}>🔍 Explorer</button>
-                <button type="button" className="sk-desktop-nav-item" onClick={() => navigate('/explorer/public-profiles')}>👥 Profils</button>
-                <button type="button" className="sk-desktop-nav-item" onClick={() => navigate('/explorer/shops-online')}>🏪 Marché</button>
+                <button type="button" className="sk-desktop-nav-item" onClick={() => navigate('/')}>
+                  <span className="sk-desktop-nav-icon">🏠</span><span className="sk-desktop-nav-label">Accueil</span>
+                </button>
+                <button type="button" className="sk-desktop-nav-item sk-desktop-nav-item--active" onClick={() => navigate('/sokin')}>
+                  <span className="sk-desktop-nav-icon">📱</span><span className="sk-desktop-nav-label">So-Kin</span>
+                </button>
+                <button type="button" className="sk-desktop-nav-item" onClick={() => setFeedTab('pour-toi')}>
+                  <span className="sk-desktop-nav-icon">✨</span><span className="sk-desktop-nav-label">Pour toi</span>
+                </button>
+                <button type="button" className="sk-desktop-nav-item" onClick={() => setFeedTab('suivis')}>
+                  <span className="sk-desktop-nav-icon">👥</span><span className="sk-desktop-nav-label">Suivis</span>
+                </button>
+                <button type="button" className="sk-desktop-nav-item" onClick={() => navigate('/explorer')}>
+                  <span className="sk-desktop-nav-icon">🔍</span><span className="sk-desktop-nav-label">Explorer</span>
+                </button>
+
+                <hr className="sk-desktop-nav-sep" />
+
+                <button type="button" className="sk-desktop-nav-item" onClick={() => navigate('/explorer/shops-online')}>
+                  <span className="sk-desktop-nav-icon">🔥</span><span className="sk-desktop-nav-label">Tendances</span>
+                </button>
                 {isLoggedIn && (
                   <>
-                    <hr className="sk-desktop-nav-sep" />
-                    <button type="button" className="sk-desktop-nav-item" onClick={() => navigate('/messaging')}>💬 Messages</button>
-                    <button type="button" className="sk-desktop-nav-item" onClick={() => navigate('/notifications')}>🔔 Notifications</button>
-                    <button type="button" className="sk-desktop-nav-item" onClick={() => navigate(dashboardPath)}>👤 Mon profil</button>
+                    <button type="button" className="sk-desktop-nav-item" onClick={async () => { setShowMobileManage(true); await loadMyPublishedPosts(); }}>
+                      <span className="sk-desktop-nav-icon">🔖</span><span className="sk-desktop-nav-label">Signets</span>
+                    </button>
+                    <button type="button" className="sk-desktop-nav-item" onClick={() => navigate('/messaging')}>
+                      <span className="sk-desktop-nav-icon">💬</span><span className="sk-desktop-nav-label">Messages</span>
+                    </button>
+                    <button type="button" className="sk-desktop-nav-item" onClick={() => navigate(dashboardPath)}>
+                      <span className="sk-desktop-nav-icon">👤</span><span className="sk-desktop-nav-label">Profil</span>
+                    </button>
                   </>
                 )}
               </nav>
+
+              {/* Bouton CTA Publier */}
+              {isLoggedIn && (
+                <button
+                  type="button"
+                  className="sk-desktop-publish-btn"
+                  onClick={handleOpenCreate}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  <span>Publier</span>
+                </button>
+              )}
             </aside>
 
-            {/* ── CENTER ── */}
+            {/* ── CENTER — Feed principal ── */}
             <main className="sk-desktop-center" aria-label="Contenu principal So-Kin">
               {/* Onglets de feed desktop */}
               <nav className="sk-feed-tabs sk-feed-tabs--desktop" aria-label="Onglets du fil">
@@ -3337,56 +3502,102 @@ export function SoKinPage() {
                 onContact={handleContact}
                 contactingPostId={contactingPostId}
                 immersiveDesktop
+                currentUserId={user?.id}
+                postInsightsCache={postInsightsCache}
+                onLoadInsight={loadPostInsight}
               />
             </main>
 
-            {/* ── RIGHT SIDEBAR ── */}
-            <aside className="sk-desktop-right" aria-label="Actions et contenu utilisateur">
-              {/* ── Tendances ── */}
+            {/* ── RIGHT SIDEBAR — Social-first ── */}
+            <aside className="sk-desktop-right" aria-label="Découvrir et informations">
+
+              {/* ── Recherche rapide ── */}
+              <section className="sk-desktop-panel sk-desktop-search-panel glass-container" aria-label="Recherche">
+                <div className="sk-desktop-search-inline">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                  <input
+                    type="search"
+                    value={desktopSearch}
+                    onChange={(e) => setDesktopSearch(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleDesktopSearch(); }}
+                    placeholder="Rechercher…"
+                    className="sk-desktop-search-input-sm"
+                  />
+                </div>
+              </section>
+
+              {/* ── Tendances locales (dynamiques) ── */}
               <section className="sk-desktop-panel sk-desktop-trends glass-container" aria-label="Tendances locales">
                 <h3>🔥 Tendances à {city}</h3>
                 <ul className="sk-desktop-trend-list">
-                  <li className="sk-desktop-trend-item"><span className="sk-desktop-trend-tag">#Kinshasa</span><span className="sk-desktop-trend-meta">Populaire</span></li>
-                  <li className="sk-desktop-trend-item"><span className="sk-desktop-trend-tag">#Ventes</span><span className="sk-desktop-trend-meta">Commerce</span></li>
-                  <li className="sk-desktop-trend-item"><span className="sk-desktop-trend-tag">#SoKin</span><span className="sk-desktop-trend-meta">Réseau</span></li>
+                  {trendingTopics.length > 0 ? trendingTopics.map((topic) => (
+                    <li key={topic.tag} className="sk-desktop-trend-item">
+                      <span className="sk-desktop-trend-tag">{topic.label}</span>
+                      <span className="sk-desktop-trend-meta">
+                        {topic.trend === 'up' ? '📈' : topic.trend === 'new' ? '✨' : ''} {topic.count} post{topic.count > 1 ? 's' : ''}
+                      </span>
+                    </li>
+                  )) : (
+                    <>
+                      <li className="sk-desktop-trend-item"><span className="sk-desktop-trend-tag">#Kinshasa</span><span className="sk-desktop-trend-meta">Populaire</span></li>
+                      <li className="sk-desktop-trend-item"><span className="sk-desktop-trend-tag">#SoKin</span><span className="sk-desktop-trend-meta">Réseau local</span></li>
+                    </>
+                  )}
                 </ul>
               </section>
 
-              {/* ── Bloc commercial (discret) ── */}
-              <section className="sk-desktop-panel sk-desktop-commercial sk-desktop-commercial--discreet glass-container" aria-label="Bloc commercial Kin-Sell">
-                <p className="sk-desktop-commercial-line">📦 Publiez vos articles en 3 étapes simples.</p>
-                <button type="button" className="sk-desktop-outline" onClick={openAccountArticles}>Publier maintenant</button>
+              {/* ── Suggestions de profils (dynamiques) ── */}
+              <section className="sk-desktop-panel sk-desktop-suggestions glass-container" aria-label="Suggestions">
+                <h3>🌟 Profils à découvrir</h3>
+                <div className="sk-desktop-suggestion-list">
+                  {suggestedProfiles.length > 0 ? suggestedProfiles.map((profile) => (
+                    <div key={profile.userId} className="sk-desktop-suggestion-item">
+                      <span className="sk-desktop-suggestion-avatar">
+                        {profile.avatarUrl ? (
+                          <img src={profile.avatarUrl} alt="" className="sk-desktop-suggestion-avatar-img" />
+                        ) : (
+                          profile.displayName.charAt(0).toUpperCase()
+                        )}
+                      </span>
+                      <div className="sk-desktop-suggestion-info">
+                        <strong>{profile.displayName}</strong>
+                        <span>{profile.username ? `@${profile.username}` : `${profile.postCount} post${profile.postCount > 1 ? 's' : ''}`}</span>
+                      </div>
+                      <button type="button" className="sk-desktop-suggestion-follow" onClick={() => navigate(`/user/${profile.username ?? profile.userId}`)}>Voir</button>
+                    </div>
+                  )) : (
+                    <p className="sk-desktop-empty-hint">Aucune suggestion pour le moment</p>
+                  )}
+                </div>
               </section>
 
-              <section className="sk-desktop-panel glass-container" aria-label="Mon contenu">
-                <h3>Mon contenu</h3>
+              {/* ── Hashtags chauds (dynamiques) ── */}
+              <section className="sk-desktop-panel sk-desktop-hashtags glass-container" aria-label="Hashtags populaires">
+                <h3>🏷️ Hashtags du moment</h3>
+                <div className="sk-desktop-hashtag-cloud">
+                  {trendingHashtags.length > 0 ? trendingHashtags.slice(0, 8).map((h) => (
+                    <span key={h.hashtag} className="sk-desktop-hashtag-chip">{h.hashtag}</span>
+                  )) : (
+                    <>
+                      <span className="sk-desktop-hashtag-chip">#Kinshasa</span>
+                      <span className="sk-desktop-hashtag-chip">#SoKin</span>
+                      <span className="sk-desktop-hashtag-chip">#Commerce</span>
+                    </>
+                  )}
+                </div>
+              </section>
 
-                {/* Onglets desktop */}
-                <nav className="sk-content-tabs sk-content-tabs--desktop" aria-label="Filtrer par statut">
-                  {([
-                    ['all', 'Tout', postCounts.ACTIVE + postCounts.HIDDEN + postCounts.ARCHIVED],
-                    ['ACTIVE', 'Publiés', postCounts.ACTIVE],
-                    ['HIDDEN', 'Masqués', postCounts.HIDDEN],
-                    ['ARCHIVED', 'Archivés', postCounts.ARCHIVED],
-                  ] as [SoKinContentTab, string, number][]).map(([key, label, count]) => (
-                    <button
-                      key={key}
-                      type="button"
-                      className={`sk-content-tab${contentTab === key ? ' sk-content-tab--active' : ''}`}
-                      onClick={() => handleContentTabChange(key)}
-                    >
-                      {label} <span className="sk-content-tab-count">{count}</span>
-                    </button>
-                  ))}
-                </nav>
-
-                {loadingMyPublishedPosts ? (
-                  <p className="sk-desktop-user-meta">Chargement…</p>
-                ) : myPublishedPosts.length === 0 ? (
-                  <p className="sk-desktop-user-meta">Aucune publication dans cette catégorie.</p>
-                ) : (
+              {/* ── Bloc business discret ── */}
+              <section className="sk-desktop-panel sk-desktop-commercial sk-desktop-commercial--discreet glass-container" aria-label="Kin-Sell Business">
+                <p className="sk-desktop-commercial-line">📦 Boostez votre visibilité sur So-Kin</p>
+                <button type="button" className="sk-desktop-outline" onClick={openAccountArticles}>Créer un post</button>
+              </section>
+              {/* ── Mon contenu (collapsed) ── */}
+              {isLoggedIn && myPublishedPosts.length > 0 && (
+                <section className="sk-desktop-panel sk-desktop-my-content glass-container" aria-label="Mon contenu">
+                  <h3>📋 Mon contenu</h3>
                   <div className="sk-desktop-published-list">
-                    {myPublishedPosts.slice(0, 8).map((post) => {
+                    {myPublishedPosts.slice(0, 3).map((post) => {
                       const statusConfig: Record<string, { icon: string; label: string }> = {
                         ACTIVE: { icon: '🟢', label: 'Publié' },
                         HIDDEN: { icon: '🟡', label: 'Masqué' },
@@ -3406,37 +3617,14 @@ export function SoKinPage() {
                             <span className="sk-desktop-published-meta">
                               {sc.icon} {sc.label} · {new Date(post.createdAt).toLocaleDateString('fr-FR')}
                             </span>
-                            <span className="sk-desktop-published-stats">❤️ {post.likes ?? 0} · 💬 {post.comments ?? 0} · 🔄 {post.shares ?? 0}</span>
                           </button>
-                          {post.status !== 'DELETED' && (
-                            <div className="sk-desktop-published-actions">
-                              {post.status !== 'ARCHIVED' && (
-                                <button type="button" className="sk-desktop-outline" onClick={() => void handleTogglePublishedPost(post.id)} disabled={togglingPostId === post.id}>
-                                  {togglingPostId === post.id ? '…' : post.status === 'ACTIVE' ? 'Masquer' : 'Publier'}
-                                </button>
-                              )}
-                              <button type="button" className="sk-desktop-outline" onClick={() => void handleArchivePublishedPost(post.id)} disabled={archivingPostId === post.id}>
-                                {archivingPostId === post.id ? '…' : post.status === 'ARCHIVED' ? 'Désarchiver' : 'Archiver'}
-                              </button>
-                              <button type="button" className="sk-desktop-outline" onClick={() => handleEditPublishedPost(post.id)}>Modifier</button>
-                              <button
-                                type="button"
-                                className="sk-desktop-outline sk-desktop-outline--danger"
-                                onClick={() => void handleDeletePublishedPost(post.id)}
-                                disabled={deletingPostId === post.id}
-                              >
-                                {deletingPostId === post.id ? '…' : 'Supprimer'}
-                              </button>
-                            </div>
-                          )}
                         </article>
                       );
                     })}
                   </div>
-                )}
-
-                <button type="button" className="sk-desktop-outline" onClick={openAccountArticles}>Gérer dans Articles</button>
-              </section>
+                  <button type="button" className="sk-desktop-outline" onClick={openAccountArticles}>Gérer tout</button>
+                </section>
+              )}
             </aside>
           </div>
 
