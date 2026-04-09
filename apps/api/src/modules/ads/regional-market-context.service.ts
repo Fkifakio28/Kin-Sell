@@ -84,6 +84,10 @@ interface GeminiResponse {
 }
 
 async function callGemini(prompt: string): Promise<{ text: string; sources: string[]; success: boolean }> {
+  if (!env.ENABLE_GEMINI) {
+    return { text: "", sources: [], success: false };
+  }
+
   const apiKey = env.GEMINI_API_KEY;
   if (!apiKey) {
     return { text: "", sources: [], success: false };

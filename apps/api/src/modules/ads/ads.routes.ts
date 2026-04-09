@@ -17,6 +17,14 @@ import {
 import { rateLimit, RateLimits } from '../../shared/middleware/rate-limit.middleware.js';
 import { runOrchestration } from './kinsell-internal-ads-orchestrator.js';
 import { getRegionalMarketContext } from './regional-market-context.service.js';
+import {
+  generateAdCopyFromPrompt,
+  acquireGenLock,
+  releaseGenLock,
+  getDailyAiGenCount,
+  isAiQuotaAvailable,
+} from './internal-ad-copy-generator.service.js';
+import { env } from '../../config/env.js';
 
 const router = Router();
 
@@ -205,8 +213,10 @@ router.post('/highlight', requireAuth, asyncHandler(async (req: AuthenticatedReq
 
 // ── Admin: Force orchestrator run ────────────────────────────────────────────
 router.post('/orchestrator/run', requireAuth, requireRoles(Role.SUPER_ADMIN), asyncHandler(async (_req, res) => {
+  // Orchestrator itself handles mutex + quota internally
   const result = await runOrchestration();
-  res.json(result);
+  const dailyCount = await getDailyAiGenCount();
+  res.json({ ...result, quota: { used: dailyCount, max: env.MAX_AI_ADS_PER_DAY } });
 }));
 
 // ── Public: Regional market context for a category ──────────────────────────
@@ -226,6 +236,99 @@ router.get('/pricing', asyncHandler(async (_req, res) => {
       { scope: 'NATIONAL', label: 'Pays entier', multiplier: SCOPE_PRICING_MULTIPLIER.NATIONAL },
       { scope: 'CROSS_BORDER', label: 'Inter-pays (ciblé)', multiplier: SCOPE_PRICING_MULTIPLIER.CROSS_BORDER },
     ],
+  });
+}));
+
+// ── Admin: Generate ad from free-text prompt ──────────────────────────────────
+router.post('/generate-admin', requireAuth, requireRoles(Role.SUPER_ADMIN), asyncHandler(async (req, res) => {
+  const { prompt } = req.body;
+  if (!prompt || typeof prompt !== 'string' || prompt.length < 10 || prompt.length > 500) {
+    res.status(400).json({ error: 'prompt requis (10-500 caractères)' });
+    return;
+  }
+
+  // Check quota
+  const quotaOk = await isAiQuotaAvailable();
+  const dailyCount = await getDailyAiGenCount();
+  if (!quotaOk) {
+    res.status(429).json({
+      error: 'Limite journalière IA atteinte',
+      dailyCount,
+      maxDaily: env.MAX_AI_ADS_PER_DAY,
+    });
+    return;
+  }
+
+  // Acquire mutex
+  const locked = await acquireGenLock();
+  if (!locked) {
+    res.status(409).json({ error: 'Une génération est déjà en cours, réessayez dans quelques secondes' });
+    return;
+  }
+
+  try {
+    const result = await generateAdCopyFromPrompt(prompt);
+
+    // Store as advertisement in DB
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const db = prisma as any;
+    const now = new Date();
+    const endDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); // 7 days for admin ads
+
+    const ad = await db.advertisement.create({
+      data: {
+        title: result.copy.title,
+        description: result.copy.description,
+        ctaText: result.copy.ctaText,
+        linkUrl: `/explorer?category=${encodeURIComponent(result.copy.category)}`,
+        type: 'KIN_SELL',
+        status: 'ACTIVE',
+        targetPages: [result.copy.targetPage, 'home'],
+        priority: 8,
+        startDate: now,
+        endDate,
+        advertiserName: 'Kin-Sell Admin',
+        advertiserEmail: (req as AuthenticatedRequest).auth!.userId ?? 'admin@kin-sell.com',
+        amountPaidCents: 0,
+        paymentRef: 'ADMIN_GENERATED',
+        promotionScope: 'LOCAL',
+        baseCity: 'Kinshasa',
+        baseCountry: 'République démocratique du Congo',
+        pricingMultiplier: 1.0,
+      },
+    });
+
+    const newCount = await getDailyAiGenCount();
+
+    res.json({
+      ad: {
+        id: ad.id,
+        title: result.copy.title,
+        description: result.copy.description,
+        ctaText: result.copy.ctaText,
+        targetPage: result.copy.targetPage,
+        category: result.copy.category,
+        tone: result.copy.tone,
+      },
+      score: result.score,
+      generatedAt: result.generatedAt,
+      quota: { used: newCount, max: env.MAX_AI_ADS_PER_DAY },
+    });
+  } finally {
+    await releaseGenLock();
+  }
+}));
+
+// ── Admin: AI quota status ───────────────────────────────────────────────────
+router.get('/ai-quota', requireAuth, requireRoles(Role.SUPER_ADMIN), asyncHandler(async (_req, res) => {
+  const dailyCount = await getDailyAiGenCount();
+  res.json({
+    used: dailyCount,
+    max: env.MAX_AI_ADS_PER_DAY,
+    remaining: Math.max(0, env.MAX_AI_ADS_PER_DAY - dailyCount),
+    mode: env.AI_MODE,
+    openaiEnabled: env.ENABLE_OPENAI,
+    geminiEnabled: env.ENABLE_GEMINI,
   });
 }));
 

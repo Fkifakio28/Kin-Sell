@@ -3,27 +3,43 @@
  *
  * Autonomous system that generates, scores, rotates, and manages
  * internal Kin-Sell promotional banners using:
- *   - Gemini (web grounding) → regional market context
- *   - ChatGPT (creative) → ad copy generation
+ *   - Gemini → regional market context + ad copy generation
  *   - Internal data → trending categories, listing counts, prices
  *
- * Pipeline:
- *   1. Analyze internal data (trending categories, gaps, boosted listings)
- *   2. Enrich with Gemini regional context
- *   3. Generate ad copy via ChatGPT
- *   4. Score and rank ads
- *   5. Store as KIN_SELL advertisements with auto-rotation
+ * Constraints:
+ *   - MAX_AI_ADS_PER_DAY quota (default 2) — shared with admin generation
+ *   - Mutex lock — only 1 generation at a time globally
+ *   - 24h cache per category+city — no redundant API calls
+ *   - Fallback templates if API fails or quota reached
  *
- * All generated ads are tagged type="KIN_SELL" + paymentRef="INTERNAL_AUTO".
- * The orchestrator runs on a configurable interval (default: every 12 hours).
+ * Pipeline:
+ *   1. Acquire mutex lock
+ *   2. Expire old internal ads
+ *   3. Check quota
+ *   4. Analyze internal data
+ *   5. Enrich with Gemini regional context (cached 6h)
+ *   6. Generate ad copy via Gemini (cached 24h)
+ *   7. Store as KIN_SELL advertisements
+ *   8. Release mutex lock
+ *
+ * All generated ads tagged type="KIN_SELL" + paymentRef="INTERNAL_AUTO".
+ * Runs on configurable interval (default: every 12 hours).
  */
 
 import { prisma } from "../../shared/db/prisma.js";
 import { logger } from "../../shared/logger.js";
 import { getRedis } from "../../shared/db/redis.js";
 import { getRegionalMarketContext } from "./regional-market-context.service.js";
-import { generateAdCopy, type GeneratedAdResult } from "./internal-ad-copy-generator.service.js";
+import {
+  generateAdCopy,
+  acquireGenLock,
+  releaseGenLock,
+  isAiQuotaAvailable,
+  getDailyAiGenCount,
+  type GeneratedAdResult,
+} from "./internal-ad-copy-generator.service.js";
 import { scoreInternal, scoreHybrid, type ConfidenceScore } from "../analytics/confidence-score.service.js";
+import { env } from "../../config/env.js";
 
 // ── Types ──────────────────────────────────────────────────
 
@@ -139,9 +155,17 @@ async function generateInternalAds(
 ): Promise<InternalAd[]> {
   const ads: InternalAd[] = [];
 
+  // Generate ONE ad at a time, respecting daily quota
   for (const cat of categories.slice(0, 5)) {
+    // Check quota before each generation
+    const quotaOk = await isAiQuotaAvailable();
+    if (!quotaOk) {
+      const count = await getDailyAiGenCount();
+      logger.info({ count, max: env.MAX_AI_ADS_PER_DAY }, "[AdOrchestrator] Daily AI limit reached — remaining use fallback");
+    }
+
     try {
-      // Step 1: Get regional context from Gemini
+      // Step 1: Get regional context from Gemini (cached 6h, doesn't count against quota)
       let regionContext;
       try {
         regionContext = await getRegionalMarketContext(cat.category, topCity);
@@ -149,7 +173,7 @@ async function generateInternalAds(
 
       const signal = regionContext?.signals[0]?.data;
 
-      // Step 2: Generate ad copy via ChatGPT
+      // Step 2: Generate ad copy via Gemini (cached 24h, counts against quota only if API called)
       const adResult: GeneratedAdResult = await generateAdCopy({
         category: cat.category,
         city: topCity,
@@ -176,6 +200,8 @@ async function generateInternalAds(
         baseCity: topCity,
         baseCountry: topCountry,
       });
+
+      logger.info({ category: cat.category }, "[AdOrchestrator] Ad generated for category");
     } catch (err) {
       logger.warn({ err, category: cat.category }, "[AdOrchestrator] Failed to generate ad");
     }
@@ -281,12 +307,14 @@ async function countActiveInternalAds(): Promise<number> {
 
 /**
  * Run the full orchestration pipeline:
- * 1. Expire old internal ads
- * 2. Check if we need new ads
- * 3. Analyze internal data
- * 4. Enrich with regional context (Gemini)
- * 5. Generate ad copies (ChatGPT)
- * 6. Store and activate
+ * 1. Acquire mutex lock
+ * 2. Expire old internal ads
+ * 3. Check if we need new ads
+ * 4. Analyze internal data
+ * 5. Enrich with regional context (Gemini, cached)
+ * 6. Generate ad copies (Gemini, cached, quota-limited)
+ * 7. Store and activate
+ * 8. Release mutex lock
  */
 export async function runOrchestration(): Promise<OrchestrationResult> {
   const result: OrchestrationResult = {
@@ -296,6 +324,14 @@ export async function runOrchestration(): Promise<OrchestrationResult> {
     errors: [],
     timestamp: new Date().toISOString(),
   };
+
+  // Step 0: Acquire mutex — only 1 generation at a time
+  const lockAcquired = await acquireGenLock();
+  if (!lockAcquired) {
+    logger.warn("[AdOrchestrator] Another generation in progress — skipping");
+    result.errors.push("Generation locked — another run in progress");
+    return result;
+  }
 
   try {
     // Step 1: Expire old ads
@@ -319,9 +355,17 @@ export async function runOrchestration(): Promise<OrchestrationResult> {
     const needed = Math.min(MAX_INTERNAL_ADS - result.active, categories.length);
     const topCategories = categories.slice(0, needed);
 
-    logger.info(`[AdOrchestrator] Generating ${needed} ads for ${topCategories.map(c => c.category).join(", ")} (${totalListings} total listings)`);
+    // Log quota status
+    const dailyCount = await getDailyAiGenCount();
+    logger.info({
+      needed,
+      categories: topCategories.map(c => c.category),
+      totalListings,
+      dailyAiCount: dailyCount,
+      maxDaily: env.MAX_AI_ADS_PER_DAY,
+    }, "[AdOrchestrator] Starting generation");
 
-    // Step 4+5: Generate ads (Gemini context + ChatGPT copy)
+    // Step 4+5: Generate ads (Gemini context + Gemini copy, sequentially)
     const ads = await generateInternalAds(topCategories, topCity, topCountry);
 
     // Step 6: Store
@@ -343,6 +387,8 @@ export async function runOrchestration(): Promise<OrchestrationResult> {
     const msg = err instanceof Error ? err.message : "Unknown error";
     result.errors.push(msg);
     logger.error({ err }, "[AdOrchestrator] Orchestration failed");
+  } finally {
+    await releaseGenLock();
   }
 
   return result;

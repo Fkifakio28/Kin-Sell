@@ -76,6 +76,10 @@ const schema = z.object({
   // ── AI Services ──
   OPENAI_API_KEY: z.string().optional(),
   GEMINI_API_KEY: z.string().optional(),
+  ENABLE_OPENAI: z.enum(["true", "false"]).default("false").transform(v => v === "true"),
+  ENABLE_GEMINI: z.enum(["true", "false"]).default("true").transform(v => v === "true"),
+  MAX_AI_ADS_PER_DAY: z.coerce.number().min(0).max(20).default(2),
+  AI_MODE: z.enum(["ECONOMY", "STANDARD", "FULL"]).default("ECONOMY"),
 });
 
 export const env = schema.parse(process.env);
