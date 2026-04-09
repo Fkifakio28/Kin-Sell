@@ -39,6 +39,7 @@ import { emitToAll } from "../messaging/socket.js";
 import { rateLimit, RateLimits } from "../../shared/middleware/rate-limit.middleware.js";
 import { trackEvents, VALID_EVENTS, getAuthorTrackingStats, type SoKinEventType } from "./sokin-tracking.service.js";
 import { scorePost, scoreAndPersist, batchRecalculate, getTopBoostCandidates, getTopSocialPosts, getTopBusinessPosts } from "./sokin-scoring.service.js";
+import { analyzePost, getAuthorTips, getAdminOpportunities, dismissTip, acceptTip, batchAnalyze } from "../ads/sokin-ads-advisor.service.js";
 
 const isVideoMediaUrl = (value: string) => /\.(mp4|webm|mov|ogg)(\?.*)?$/i.test(value);
 
@@ -504,6 +505,92 @@ router.post(
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     const limit = Math.min(parseInt(req.query.limit as string) || 100, 200);
     const result = await batchRecalculate(limit);
+    res.json({ result });
+  })
+);
+
+// ═══════ IA Ads Advisor So-Kin ═══════
+
+/**
+ * GET /advisor/post/:id
+ * Analyse un post et retourne les tips IA Ads (sans persister).
+ */
+router.get(
+  "/advisor/post/:id",
+  requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const tips = await analyzePost(req.params.id);
+    res.json({ tips });
+  })
+);
+
+/**
+ * GET /advisor/tips
+ * Recommandations IA Ads pour l'auteur connecté.
+ */
+router.get(
+  "/advisor/tips",
+  requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const limit = Math.min(parseInt(req.query.limit as string) || 10, 30);
+    const tips = await getAuthorTips(req.auth!.userId, limit);
+    res.json({ tips });
+  })
+);
+
+/**
+ * GET /advisor/opportunities
+ * Opportunités admin : posts à fort potentiel détectés.
+ */
+router.get(
+  "/advisor/opportunities",
+  requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const limit = Math.min(parseInt(req.query.limit as string) || 20, 50);
+    const opportunities = await getAdminOpportunities(limit);
+    res.json({ opportunities });
+  })
+);
+
+/**
+ * POST /advisor/tips/:id/dismiss
+ * L'utilisateur masque un tip.
+ */
+router.post(
+  "/advisor/tips/:id/dismiss",
+  requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const ok = await dismissTip(req.params.id, req.auth!.userId);
+    if (!ok) { res.status(404).json({ error: "Tip non trouvé" }); return; }
+    res.json({ ok: true });
+  })
+);
+
+/**
+ * POST /advisor/tips/:id/accept
+ * L'utilisateur a agi sur un tip.
+ */
+router.post(
+  "/advisor/tips/:id/accept",
+  requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const ok = await acceptTip(req.params.id, req.auth!.userId);
+    if (!ok) { res.status(404).json({ error: "Tip non trouvé" }); return; }
+    res.json({ ok: true });
+  })
+);
+
+/**
+ * POST /advisor/batch
+ * Déclenche un batch d'analyse IA Ads sur les top posts.
+ */
+router.post(
+  "/advisor/batch",
+  requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const limit = Math.min(parseInt(req.query.limit as string) || 30, 50);
+    const city = (req.query.city as string)?.slice(0, 100);
+    const result = await batchAnalyze(limit, city);
     res.json({ result });
   })
 );

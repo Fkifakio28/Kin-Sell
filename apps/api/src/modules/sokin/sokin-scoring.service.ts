@@ -14,6 +14,16 @@
 import { prisma } from "../../shared/db/prisma.js";
 import { logger } from "../../shared/logger.js";
 
+// Lazy import to avoid circular dependency at module load
+let _batchAnalyze: ((limit?: number) => Promise<unknown>) | null = null;
+async function runAdvisorBatch() {
+  if (!_batchAnalyze) {
+    const mod = await import("../ads/sokin-ads-advisor.service.js");
+    _batchAnalyze = mod.batchAnalyze;
+  }
+  return _batchAnalyze(30);
+}
+
 // ── Types ──
 
 export interface SoKinScores {
@@ -583,10 +593,14 @@ let batchInterval: ReturnType<typeof setInterval> | null = null;
 export function startScoringScheduler(): void {
   if (batchInterval) return;
   const INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
-  batchInterval = setInterval(() => {
-    batchRecalculate().catch((err) =>
-      logger.error(`[sokin-scoring] scheduler error: ${err}`)
-    );
+  batchInterval = setInterval(async () => {
+    try {
+      await batchRecalculate();
+      // Chaîner l'advisor IA Ads après le scoring
+      await runAdvisorBatch();
+    } catch (err) {
+      logger.error(`[sokin-scoring] scheduler error: ${err}`);
+    }
   }, INTERVAL_MS);
   logger.info("[sokin-scoring] scheduler started (every 30 min)");
 }
