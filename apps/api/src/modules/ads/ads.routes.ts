@@ -86,11 +86,13 @@ router.post('/boost', requireAuth, asyncHandler(async (req: AuthenticatedRequest
       where: {
         addonCode: AddonCode.BOOST_VISIBILITY,
         status: AddonStatus.ACTIVE,
-        endsAt: { gt: now },
+        OR: [{ endsAt: null }, { endsAt: { gt: now } }],
         subscription: {
           status: 'ACTIVE',
-          endsAt: { gt: now },
-          userId: req.auth!.userId
+          AND: [
+            { OR: [{ endsAt: null }, { endsAt: { gt: now } }] },
+            { OR: [{ userId: req.auth!.userId }, { business: { ownerUserId: req.auth!.userId } }] },
+          ],
         }
       }
     });
@@ -158,11 +160,13 @@ router.post('/highlight', requireAuth, asyncHandler(async (req: AuthenticatedReq
       where: {
         addonCode: AddonCode.BOOST_VISIBILITY,
         status: AddonStatus.ACTIVE,
-        endsAt: { gt: now },
+        OR: [{ endsAt: null }, { endsAt: { gt: now } }],
         subscription: {
           status: 'ACTIVE',
-          endsAt: { gt: now },
-          userId: req.auth!.userId
+          AND: [
+            { OR: [{ endsAt: null }, { endsAt: { gt: now } }] },
+            { OR: [{ userId: req.auth!.userId }, { business: { ownerUserId: req.auth!.userId } }] },
+          ],
         }
       }
     });

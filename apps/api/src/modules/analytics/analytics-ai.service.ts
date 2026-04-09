@@ -14,7 +14,7 @@
  * Tout rule-based. Données Prisma temps réel.
  */
 
-import { CartStatus } from "@prisma/client";
+import { CartStatus, SubscriptionStatus } from "@prisma/client";
 import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
 import { getMarketMedian, computePricePosition, getTrendingCategories, PRICE_THRESHOLD_PERCENT } from "../../shared/market/market-shared.js";
@@ -26,17 +26,26 @@ import { getMarketMedian, computePricePosition, getTrendingCategories, PRICE_THR
 const PREMIUM_PLAN_CODES = new Set(["PRO_VENDOR", "BUSINESS", "SCALE"]);
 
 async function hasPremiumAccess(userId: string): Promise<boolean> {
+  // Résoudre le scope user/business pour trouver le bon abonnement
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { role: true, businesses: { select: { id: true }, take: 1 } },
+  });
+  if (!user) return false;
+
+  const isBusinessScope = user.role === "BUSINESS";
+  const businessId = isBusinessScope ? user.businesses[0]?.id : null;
+
   const subscription = await prisma.subscription.findFirst({
     where: {
-      userId,
-      status: "ACTIVE",
-      endsAt: { gt: new Date() },
+      status: SubscriptionStatus.ACTIVE,
+      ...(isBusinessScope && businessId ? { businessId } : { userId }),
+      OR: [{ endsAt: null }, { endsAt: { gt: new Date() } }],
     },
     select: { planCode: true },
   });
   if (!subscription) return false;
-  const code = subscription.planCode.toUpperCase();
-  return PREMIUM_PLAN_CODES.has(code);
+  return PREMIUM_PLAN_CODES.has(subscription.planCode.toUpperCase());
 }
 
 function hourBucket(date: Date): number {

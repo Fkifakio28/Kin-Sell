@@ -16,6 +16,7 @@
  */
 
 import { prisma } from "../../shared/db/prisma.js";
+import { userHasIaAccess } from "../../shared/billing/subscription-guard.js";
 
 // ─────────────────────────────────────────────
 // Types
@@ -424,6 +425,10 @@ export async function batchCreateWeeklySnapshots(): Promise<number> {
   let created = 0;
   for (const seller of activeSellers) {
     try {
+      // F17 fix: only create snapshots for users with analytics access
+      const hasAccess = await userHasIaAccess(seller.id, "IA_MERCHANT");
+      if (!hasAccess) continue;
+
       await createWeeklySnapshot(seller.id);
       created++;
     } catch {

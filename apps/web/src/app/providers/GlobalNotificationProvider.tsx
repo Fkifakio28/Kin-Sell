@@ -300,7 +300,7 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
           ? `Nouvelle commande de ${data.itemsCount ?? 1} article(s)`
           : data.fromNegotiation ? "Commande créée suite au marchandage accepté" : "Votre commande a été créée",
         icon: "📦",
-        targetUrl: "/account?tab=commandes",
+        targetUrl: "/account?section=purchases",
         timestamp: Date.now(),
       };
       setToasts((p) => [toast, ...p].slice(0, 4));
@@ -318,7 +318,7 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
         title: `📦 Commande ${label}`,
         content: `Commande #${data.orderId.slice(-6)} — ${label}`,
         icon: "📦",
-        targetUrl: "/account?tab=commandes",
+        targetUrl: "/account?section=purchases",
         timestamp: Date.now(),
       };
       setToasts((p) => [toast, ...p].slice(0, 4));

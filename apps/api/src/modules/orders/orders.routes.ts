@@ -3,11 +3,13 @@ import { Router } from "express";
 import { z } from "zod";
 import { requireAuth, requireRoles, type AuthenticatedRequest } from "../../shared/auth/auth-middleware.js";
 import { asyncHandler } from "../../shared/utils/async-handler.js";
+import { prisma } from "../../shared/db/prisma.js";
 import { Role } from "../../types/roles.js";
 import * as ordersService from "./orders.service.js";
 import { sendPushToUser } from "../notifications/push.service.js";
 import { emitToUsers, emitToUser, isUserOnline } from "../messaging/socket.js";
 import * as momoService from "../mobile-money/mobile-money.service.js";
+import { requireIa } from "../../shared/billing/subscription-guard.js";
 
 const pagingSchema = z.object({
   page: z.coerce.number().min(1).default(1),
@@ -317,6 +319,7 @@ router.post(
 router.get(
   "/ai/checkout-advice/:cartId",
   requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res, next) => { await requireIa("IA_ORDER")(req, res, next); }),
   asyncHandler(async (request: AuthenticatedRequest, response) => {
     const { getCheckoutAdvice } = await import("./order-ai.service.js");
     const advice = await getCheckoutAdvice(request.params.cartId, request.auth!.userId);
@@ -328,6 +331,7 @@ router.get(
 router.get(
   "/ai/abandonment-risk",
   requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res, next) => { await requireIa("IA_ORDER")(req, res, next); }),
   asyncHandler(async (request: AuthenticatedRequest, response) => {
     const { detectAbandonmentRisk } = await import("./order-ai.service.js");
     const report = await detectAbandonmentRisk(request.auth!.userId);
@@ -340,10 +344,43 @@ router.get(
   "/:orderId/ai/auto-validation",
   requireAuth,
   requireRoles(Role.USER, Role.BUSINESS),
+  asyncHandler(async (req: AuthenticatedRequest, res, next) => { await requireIa("IA_ORDER")(req, res, next); }),
   asyncHandler(async (request: AuthenticatedRequest, response) => {
     const { getOrderAutoValidationDecision } = await import("./order-ai.service.js");
     const decision = await getOrderAutoValidationDecision(request.params.orderId);
     response.json(decision);
+  })
+);
+
+// ── Détection anomalies IA d'une commande ──
+router.get(
+  "/:orderId/ai/anomalies",
+  requireAuth,
+  requireRoles(Role.USER, Role.BUSINESS, Role.ADMIN, Role.SUPER_ADMIN),
+  asyncHandler(async (req: AuthenticatedRequest, res, next) => { await requireIa("IA_ORDER")(req, res, next); }),
+  asyncHandler(async (request: AuthenticatedRequest, response) => {
+    const userId = request.auth!.userId;
+    const role = request.auth!.role;
+
+    // Vérifier ownership : seul le vendeur, l'acheteur ou un admin peut voir les anomalies
+    const order = await prisma.order.findUnique({
+      where: { id: request.params.orderId },
+      select: { buyerUserId: true, sellerUserId: true },
+    });
+    if (!order) {
+      response.status(404).json({ error: "Commande introuvable" });
+      return;
+    }
+    const isOwner = order.buyerUserId === userId || order.sellerUserId === userId;
+    const isAdmin = role === Role.ADMIN || role === Role.SUPER_ADMIN;
+    if (!isOwner && !isAdmin) {
+      response.status(403).json({ error: "Accès refusé — vous n'êtes pas concerné par cette commande" });
+      return;
+    }
+
+    const { detectOrderAnomalies } = await import("./order-ai.service.js");
+    const anomalyReport = await detectOrderAnomalies(request.params.orderId);
+    response.json(anomalyReport);
   })
 );
 

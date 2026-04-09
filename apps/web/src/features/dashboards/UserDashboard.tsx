@@ -58,6 +58,7 @@ import { useMarketPreference } from '../../app/providers/MarketPreferenceProvide
 import { LISTING_PRODUCT_CATEGORIES, LISTING_SERVICE_CATEGORIES } from '../../shared/constants/categories';
 import { USD_TO_CDF_RATE, DEFAULT_CURRENCY_RATES } from '../../shared/constants/currencies';
 import { SK_AI_ADVICE, SK_AI_AUTO_NEGO, SK_AI_COMMANDE } from '../../shared/constants/storage-keys';
+import { useFeatureGate } from '../../shared/hooks/useFeatureGate';
 import {
   DashboardSecurityBlock,
   DashboardAccountDeletion,
@@ -312,7 +313,7 @@ export function UserDashboard() {
   });
   const [orderStatusBusyId, setOrderStatusBusyId] = useState<string | null>(null);
   const [validationCodeBusyId, setValidationCodeBusyId] = useState<string | null>(null);
-  const [sellerValidationQr, setSellerValidationQr] = useState<{ orderId: string; code: string } | null>(null);
+  const [sellerValidationQr, setSellerValidationQr] = useState<{ orderId: string; code: string; expiresAt?: string } | null>(null);
   const [buyerConfirmOrderId, setBuyerConfirmOrderId] = useState<string | null>(null);
   const [buyerConfirmCode, setBuyerConfirmCode] = useState('');
   const [buyerConfirmBusy, setBuyerConfirmBusy] = useState(false);
@@ -577,29 +578,29 @@ export function UserDashboard() {
   }, [isLoggedIn, user]);
 
   /* ── Kin-Sell Analytique: fetch insights when analytics tab is opened ── */
-  const hasAnalytics = useMemo(() => {
-    if (!activePlan) return false;
-    return activePlan.analyticsTier !== 'NONE';
-  }, [activePlan]);
+  const { hasAnalytics, hasPremiumAnalytics, hasIaMarchand: hasIaMarchandPlan, hasIaOrder: hasIaOrderPlan } = useFeatureGate(activePlan);
 
-  const hasPremiumAnalytics = useMemo(() => {
-    return activePlan?.analyticsTier === 'PREMIUM';
-  }, [activePlan]);
+  // F19+F24: When plan changes, clean up localStorage toggles if access lost
+  useEffect(() => {
+    if (activePlan === undefined) return; // still loading
+    if (!hasIaMarchandPlan) {
+      localStorage.setItem(SK_AI_AUTO_NEGO, 'off');
+      setAiAutoNegoEnabled(false);
+    }
+    if (!hasIaOrderPlan) {
+      localStorage.setItem(SK_AI_COMMANDE, 'off');
+      setAiCommandeEnabled(false);
+    }
+  }, [activePlan, hasIaMarchandPlan, hasIaOrderPlan]);
 
-  /* ── AI plan gating ── */
-  const hasIaMarchandPlan = useMemo(() => {
-    if (!activePlan) return false;
-    const planIncludes = ['AUTO', 'PRO_VENDOR', 'SCALE', 'BUSINESS'].includes(activePlan.planCode);
-    const addonActive = activePlan.addOns?.some((a) => a.code === 'IA_MERCHANT' && a.status === 'ACTIVE');
-    return planIncludes || addonActive;
-  }, [activePlan]);
-
-  const hasIaOrderPlan = useMemo(() => {
-    if (!activePlan) return false;
-    const planIncludes = ['AUTO', 'PRO_VENDOR', 'SCALE'].includes(activePlan.planCode);
-    const addonActive = activePlan.addOns?.some((a) => a.code === 'IA_ORDER' && a.status === 'ACTIVE');
-    return planIncludes || addonActive;
-  }, [activePlan]);
+  // F24: Refetch plan every 5 min to detect subscription changes
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    const interval = setInterval(() => {
+      billing.myPlan().then((p) => setActivePlan(p)).catch(() => {});
+    }, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [isLoggedIn]);
 
   /* showAi for NegotiationRespondPopup: free hints always, paid advice when toggled on */
   const showNegAi = aiAdviceEnabled;
@@ -1820,8 +1821,8 @@ export function UserDashboard() {
     if (!buyerCart || buyerCart.items.length === 0) {
       return;
     }
-    const hasNegotiatingItems = buyerCart.items.some((item) => item.itemState === 'MARCHANDAGE');
-    if (hasNegotiatingItems) {
+    const readyItems = buyerCart.items.filter((item) => item.itemState !== 'MARCHANDAGE');
+    if (readyItems.length === 0) {
       setErrorMessage(t('user.negValidationError'));
       return;
     }
@@ -1894,6 +1895,10 @@ export function UserDashboard() {
   };
 
   const handleSellerStatus = async (orderId: string, status: OrderStatus) => {
+    if (status === 'CANCELED') {
+      const confirmed = window.confirm(t('user.confirmCancelOrder'));
+      if (!confirmed) return;
+    }
     setOrderStatusBusyId(orderId);
     setErrorMessage(null);
     setSuccessMessage(null);
@@ -1922,7 +1927,7 @@ export function UserDashboard() {
     setErrorMessage(null);
     try {
       const data = await orders.getValidationCode(orderId);
-      setSellerValidationQr({ orderId, code: data.validationCode });
+      setSellerValidationQr({ orderId, code: data.validationCode, expiresAt: data.expiresAt });
     } catch {
       setErrorMessage(t('user.validationCodeError'));
     } finally {
@@ -1982,6 +1987,8 @@ export function UserDashboard() {
     canceled: allBuyerOrders.filter((o) => o.status === 'CANCELED').length,
   };
   const hasNegotiatingItems = buyerCart?.items.some((item) => item.itemState === 'MARCHANDAGE') ?? false;
+  const readyItemsCount = buyerCart?.items.filter((item) => item.itemState !== 'MARCHANDAGE').length ?? 0;
+  const allNegotiating = hasNegotiatingItems && readyItemsCount === 0;
   const hasProductItems = buyerCart?.items.some((item) => item.listing.type === 'PRODUIT') ?? false;
   const hasServiceItems = buyerCart?.items.some((item) => item.listing.type === 'SERVICE') ?? false;
 
@@ -3233,8 +3240,8 @@ export function UserDashboard() {
                   )}
                   <div className="ud-ord-cart-footer">
                     <span className="ud-ord-cart-total">Total: {money(buyerCart.subtotalUsdCents)}</span>
-                    <button type="button" className="ud-art-publish-btn" disabled={checkoutBusy || cartBusy || hasNegotiatingItems} onClick={handleOpenCheckoutModal}>
-                      {checkoutBusy ? t('user.validating') : hasNegotiatingItems ? t('negotiation.inProgress') : t('user.validateOrder')}
+                    <button type="button" className="ud-art-publish-btn" disabled={checkoutBusy || cartBusy || allNegotiating} onClick={handleOpenCheckoutModal}>
+                      {checkoutBusy ? t('user.validating') : allNegotiating ? t('negotiation.inProgress') : t('user.validateOrder')}
                     </button>
                   </div>
                 </>
@@ -3386,6 +3393,7 @@ export function UserDashboard() {
           <OrderValidationQrModal
             orderId={sellerValidationQr.orderId}
             code={sellerValidationQr.code}
+            expiresAt={sellerValidationQr.expiresAt}
             title={t('user.validationQrTitle')}
             helpText={t('user.validationQrHelp')}
             closeLabel={t('common.close')}

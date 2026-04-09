@@ -33,6 +33,7 @@ import {
 } from "../ads/ai-ads-engine.service.js";
 import { PLAN_CATALOG, ADDON_CATALOG } from "../billing/billing.catalog.js";
 import { OFFER_MAP, type OfferCode } from "../ads/ads-knowledge-base.js";
+import { clearSubscriptionCache, userHasIaAccess } from "../../shared/billing/subscription-guard.js";
 
 // ═══════════════════════════════════════════════════════
 // Types publics
@@ -820,6 +821,8 @@ export async function persistCommercialAdvice(userId: string): Promise<number> {
  * Appelé par le scheduler slow cycle (1h).
  */
 export async function runBatchCommercialAdvice(): Promise<{ processed: number; created: number }> {
+  clearSubscriptionCache();
+
   const recentSellers = await prisma.listing.groupBy({
     by: ["ownerUserId"],
     where: { createdAt: { gte: new Date(Date.now() - 30 * 86400000) } },
@@ -831,6 +834,8 @@ export async function runBatchCommercialAdvice(): Promise<{ processed: number; c
   let totalCreated = 0;
   for (const seller of recentSellers) {
     try {
+      const hasAccess = await userHasIaAccess(seller.ownerUserId, "IA_MERCHANT");
+      if (!hasAccess) continue;
       totalCreated += await persistCommercialAdvice(seller.ownerUserId);
     } catch {
       // skip individual failures

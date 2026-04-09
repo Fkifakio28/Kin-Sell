@@ -114,7 +114,7 @@ export const orders = {
   updateSellerOrderStatus: (orderId: string, body: { status: OrderStatus }) =>
     mutate<OrderSummary>(`/orders/${encodeURIComponent(orderId)}/status`, { method: "PATCH", body }, ["/orders/"]),
   getValidationCode: (orderId: string) =>
-    request<{ validationCode: string }>(`/orders/${encodeURIComponent(orderId)}/validation-code`),
+    request<{ validationCode: string; expiresAt: string }>(`/orders/${encodeURIComponent(orderId)}/validation-code`),
   buyerConfirmDelivery: (orderId: string, body: { code: string }) =>
     mutate<OrderSummary>(`/orders/${encodeURIComponent(orderId)}/buyer-confirm`, { method: "POST", body }, ["/orders/"]),
 };

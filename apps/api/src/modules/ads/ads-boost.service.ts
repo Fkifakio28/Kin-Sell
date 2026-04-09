@@ -12,6 +12,8 @@ import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
 import { logger } from "../../shared/logger.js";
 import { promoteListingBoost, promoteHighlight as promoHighlight } from "./ia-messenger-promo.service.js";
+import { assertAddonAccess } from "../../shared/billing/subscription-guard.js";
+import { AddonCode } from "@prisma/client";
 
 // ─────────────────────────────────────────────
 // Promotion Scope & Pricing
@@ -228,6 +230,9 @@ export async function activateBoost(
   scope: PromotionScope = "LOCAL",
   targetCountries: string[] = [],
 ): Promise<AdsBoostStatus> {
+  // Garde-fou dur : vérifier l'addon BOOST_VISIBILITY avant toute mutation
+  await assertAddonAccess(userId, AddonCode.BOOST_VISIBILITY);
+
   const listing = await prisma.listing.findUnique({
     where: { id: listingId },
     select: { id: true, ownerUserId: true },
@@ -283,6 +288,9 @@ export async function activateHighlight(
   scope: PromotionScope = "LOCAL",
   targetCountries: string[] = [],
 ): Promise<{ boostedCount: number; expiresAt: string; boostScope: PromotionScope; pricingMultiplier: number }> {
+  // Garde-fou dur : vérifier l'addon BOOST_VISIBILITY avant toute mutation
+  await assertAddonAccess(userId, AddonCode.BOOST_VISIBILITY);
+
   if (scope === "CROSS_BORDER" && targetCountries.length === 0) {
     throw new HttpError(400, "La mise en avant inter-pays nécessite au moins un pays cible.");
   }

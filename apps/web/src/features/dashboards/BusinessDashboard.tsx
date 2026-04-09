@@ -34,6 +34,7 @@ type AbonnementTier = 'based' | 'medium' | 'premium';
 /* ─── Helpers devise ───────────────────────────────────────── */
 import { USD_TO_CDF_RATE, DEFAULT_CURRENCY_RATES } from '../../shared/constants/currencies';
 import { SK_BIZ_AI_ADVICE, SK_BIZ_AI_AUTO_NEGO, SK_BIZ_AI_COMMANDE } from '../../shared/constants/storage-keys';
+import { useFeatureGate } from '../../shared/hooks/useFeatureGate';
 import { DashboardSecurityBlock, DashboardVerificationSection } from './sections';
 import { AdsBoostPopup } from '../../components/AdsBoostPopup';
 import { PostPublishAdvisor } from '../../components/PostPublishAdvisor';
@@ -429,15 +430,34 @@ export function BusinessDashboard() {
     };
   }, [isLoggedIn, user, on, off]);
 
-  /* ── Kin-Sell Analytique: fetch AI insights for business ── */
-  const bizHasAnalytics = useMemo(() => {
-    if (!myPlan) return false;
-    return myPlan.analyticsTier !== 'NONE';
-  }, [myPlan]);
+  /* ── AI plan gating for business ── */
+  const { hasAnalytics: bizHasAnalytics, hasPremiumAnalytics: bizHasPremiumAnalytics, hasIaMarchand: bizHasIaMarchandPlan, hasIaOrder: bizHasIaOrderPlan } = useFeatureGate(myPlan);
 
-  const bizHasPremium = useMemo(() => {
-    return myPlan?.analyticsTier === 'PREMIUM';
-  }, [myPlan]);
+  // F19+F24: Clean up localStorage toggles if access lost
+  useEffect(() => {
+    if (myPlan === undefined) return;
+    if (!bizHasIaMarchandPlan) {
+      localStorage.setItem(SK_BIZ_AI_AUTO_NEGO, 'off');
+      setBizAiAutoNegoEnabled(false);
+    }
+    if (!bizHasIaOrderPlan) {
+      localStorage.setItem(SK_BIZ_AI_COMMANDE, 'off');
+      setBizAiCommandeEnabled(false);
+    }
+  }, [myPlan, bizHasIaMarchandPlan, bizHasIaOrderPlan]);
+
+  // F24: Refetch plan every 5 min
+  useEffect(() => {
+    if (!business) return;
+    const interval = setInterval(() => {
+      billing.myPlan().then((p) => setMyPlan(p)).catch(() => {});
+    }, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [business]);
+
+  const bizAutoNegoActive = bizHasIaMarchandPlan && bizAiAutoNegoEnabled;
+
+  /* ── Kin-Sell Analytique: fetch AI insights for business ── */
 
   useEffect(() => {
     if (activeSection !== 'analytics' || !bizHasAnalytics || bizBasicInsights) return;
@@ -448,7 +468,7 @@ export function BusinessDashboard() {
       try {
         const basic = await analyticsAi.basic();
         if (!cancelled) setBizBasicInsights(basic);
-        if (bizHasPremium) {
+        if (bizHasPremiumAnalytics) {
           const deep = await analyticsAi.deep();
           if (!cancelled) setBizDeepInsights(deep);
         }
@@ -458,7 +478,7 @@ export function BusinessDashboard() {
 
     void load();
     return () => { cancelled = true; };
-  }, [activeSection, bizHasAnalytics, bizHasPremium, bizBasicInsights]);
+  }, [activeSection, bizHasAnalytics, bizHasPremiumAnalytics, bizBasicInsights]);
 
   // ── Kin-Sell tab data ──
   useEffect(() => {
@@ -473,23 +493,6 @@ export function BusinessDashboard() {
       .finally(() => { if (!cancelled) setKsLoading(false); });
     return () => { cancelled = true; };
   }, [activeSection]);
-
-  /* ── AI plan gating for business ── */
-  const bizHasIaMarchandPlan = useMemo(() => {
-    if (!myPlan) return false;
-    const planIncludes = ['BUSINESS', 'SCALE'].includes(myPlan.planCode);
-    const addonActive = myPlan.addOns?.some((a) => a.code === 'IA_MERCHANT' && a.status === 'ACTIVE');
-    return planIncludes || addonActive;
-  }, [myPlan]);
-
-  const bizHasIaOrderPlan = useMemo(() => {
-    if (!myPlan) return false;
-    const planIncludes = ['SCALE'].includes(myPlan.planCode);
-    const addonActive = myPlan.addOns?.some((a) => a.code === 'IA_ORDER' && a.status === 'ACTIVE');
-    return planIncludes || addonActive;
-  }, [myPlan]);
-
-  const bizAutoNegoActive = bizHasIaMarchandPlan && bizAiAutoNegoEnabled;
 
   // ─── Pré-remplir formulaires quand business change ───────
   useEffect(() => {
@@ -3015,7 +3018,7 @@ export function BusinessDashboard() {
               </section>
             )}
 
-            <DashboardAdvancedAnalytics hasPremiumAnalytics={bizHasPremium} />
+            <DashboardAdvancedAnalytics hasPremiumAnalytics={bizHasPremiumAnalytics} />
 
             {/* ─ Recommandations Kin-Sell Analytique ─ */}
             <section className="ud-glass-panel bz-glass-panel" style={{ marginTop: 16 }}>

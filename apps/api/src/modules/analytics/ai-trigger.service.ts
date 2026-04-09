@@ -47,6 +47,9 @@ async function getUserContext(userId: string) {
         { userId, status: "ACTIVE" },
         ...(business ? [{ businessId: business.id, status: "ACTIVE" as const }] : []),
       ],
+      AND: [
+        { OR: [{ endsAt: null }, { endsAt: { gt: new Date() } }] },
+      ],
     },
     select: { planCode: true, status: true, endsAt: true },
   });
@@ -602,14 +605,28 @@ export async function requestTrialActivation(userId: string, trialId: string) {
 
   // Déduplication
   const existingActive = await prisma.subscription.findFirst({
-    where: { userId, planCode: trial.planCode, status: "ACTIVE" },
+    where: {
+      AND: [
+        { OR: [{ userId }, ...(trial.businessId ? [{ businessId: trial.businessId }] : [])] },
+        { OR: [{ endsAt: null }, { endsAt: { gt: new Date() } }] },
+      ],
+      planCode: trial.planCode,
+      status: "ACTIVE",
+    },
   });
   if (existingActive) {
     throw new HttpError(409, 'Vous avez déjà un abonnement actif pour ce forfait.');
   }
 
   const alreadyTrialed = await prisma.aiTrial.findFirst({
-    where: { userId, planCode: trial.planCode, status: { in: ["ACTIVE", "PENDING_ADMIN"] }, id: { not: trialId } },
+    where: {
+      AND: [
+        { OR: [{ userId }, ...(trial.businessId ? [{ businessId: trial.businessId }] : [])] },
+      ],
+      planCode: trial.planCode,
+      status: { in: ["ACTIVE", "PENDING_ADMIN"] },
+      id: { not: trialId },
+    },
   });
   if (alreadyTrialed) {
     throw new HttpError(409, 'Vous avez déjà un essai en cours pour ce forfait.');

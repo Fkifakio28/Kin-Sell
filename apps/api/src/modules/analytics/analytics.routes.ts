@@ -17,26 +17,12 @@ import { evaluateAnalyticsCTAs } from "./analytics-cta.service.js";
 import { getEnrichedAnalytics, getCategoryDemandAnalysis } from "./analytics-external-intelligence.service.js";
 import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
+import { requireIa, requirePremiumSubscription } from "../../shared/billing/subscription-guard.js";
 
 const router = Router();
 
-// Plans considérés « premium » pour l'accès Analytics Tier 2
-const PREMIUM_PLAN_CODES = new Set(["PRO_VENDOR", "BUSINESS", "SCALE"]);
-
-// Middleware PREMIUM — vérifie l'abonnement actif avec accès analytics avancé
-async function requirePremium(req: AuthenticatedRequest, _res: any, next: any) {
-  const userId = req.auth!.userId;
-  const subscription = await prisma.subscription.findFirst({
-    where: { userId, status: "ACTIVE", endsAt: { gt: new Date() } },
-    select: { planCode: true },
-  });
-  if (!subscription) throw new HttpError(403, "Abonnement Premium requis pour accéder à cette fonctionnalité.");
-  const code = subscription.planCode.toUpperCase();
-  if (!PREMIUM_PLAN_CODES.has(code)) {
-    throw new HttpError(403, "Abonnement Premium requis pour accéder à cette fonctionnalité.");
-  }
-  next();
-}
+// Middleware PREMIUM — délègue au guard centralisé (gère user + business scope)
+const requirePremium = requirePremiumSubscription;
 
 /**
  * GET /analytics/ai/basic
@@ -58,6 +44,7 @@ router.get(
 router.get(
   "/ai/deep",
   requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res, next) => { await requirePremium(req, res, next); }),
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     const insights = await getDeepInsights(req.auth!.userId);
     res.json(insights);
@@ -131,10 +118,12 @@ router.get(
 /**
  * GET /analytics/ai/seller-profile
  * Profil IA du vendeur : score, lifecycle, budget, addons, historique
+ * 🔐 Requiert IA_MERCHANT
  */
 router.get(
   "/ai/seller-profile",
   requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res, next) => { await requireIa("IA_MERCHANT")(req, res, next); }),
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     const profile = await aiTrigger.getSellerProfile(req.auth!.userId);
     if (!profile) throw new HttpError(404, "Profil introuvable");
@@ -145,10 +134,12 @@ router.get(
 /**
  * GET /analytics/ai/recommendations
  * Récupère les recommandations actives pour l'utilisateur connecté
+ * 🔐 Requiert IA_MERCHANT
  */
 router.get(
   "/ai/recommendations",
   requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res, next) => { await requireIa("IA_MERCHANT")(req, res, next); }),
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     const recs = await aiTrigger.getActiveRecommendations(req.auth!.userId);
     res.json(recs);
@@ -245,10 +236,12 @@ router.post(
 /**
  * GET /analytics/ai/pricing-nudges
  * Évalue en temps réel les nudges pertinents pour l'utilisateur connecté
+ * 🔐 Requiert IA_MERCHANT
  */
 router.get(
   "/ai/pricing-nudges",
   requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res, next) => { await requireIa("IA_MERCHANT")(req, res, next); }),
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     const nudges = await pricingNudge.evaluateNudges(req.auth!.userId);
     res.json(nudges);
@@ -262,10 +255,12 @@ router.get(
 /**
  * GET /analytics/ai/commercial-advice
  * Recommandations commerciales contextuelles (plan, addon, boost, pub, analytics)
+ * 🔐 Requiert IA_MERCHANT
  */
 router.get(
   "/ai/commercial-advice",
   requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res, next) => { await requireIa("IA_MERCHANT")(req, res, next); }),
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     const advice = await commercialAdvisor.getCommercialAdvice(req.auth!.userId);
     res.json(advice);
@@ -279,10 +274,12 @@ router.get(
 /**
  * GET /analytics/ai/post-publish-advice?type=SINGLE|PROMO|BULK&listingId=X&promoCount=N
  * Analyse post-publication : qualité, boost, pub, forfait, analytics, tips contenu
+ * 🔐 Requiert IA_MERCHANT
  */
 router.get(
   "/ai/post-publish-advice",
   requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res, next) => { await requireIa("IA_MERCHANT")(req, res, next); }),
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     const type = (req.query.type as string) || "SINGLE";
     if (!["SINGLE", "PROMO", "BULK"].includes(type)) {
@@ -305,10 +302,12 @@ router.get(
 /**
  * GET /analytics/ai/post-sale-advice?orderId=X
  * Recommandations contextuelles après vente confirmée
+ * 🔐 Requiert IA_ORDER
  */
 router.get(
   "/ai/post-sale-advice",
   requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res, next) => { await requireIa("IA_ORDER")(req, res, next); }),
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     const orderId = req.query.orderId as string;
     if (!orderId) throw new HttpError(400, "orderId est requis");
@@ -324,10 +323,12 @@ router.get(
 /**
  * GET /analytics/ai/analytics-cta
  * CTA contextuels pour pousser vers Kin-Sell Analytique
+ * 🔐 Requiert IA_MERCHANT
  */
 router.get(
   "/ai/analytics-cta",
   requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res, next) => { await requireIa("IA_MERCHANT")(req, res, next); }),
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     const report = await evaluateAnalyticsCTAs(req.auth!.userId);
     res.json(report);
@@ -357,10 +358,12 @@ router.get(
 /**
  * GET /analytics/ai/category-demand
  * 📊 Demand analysis for a specific category (internal + external)
+ * 🔴 Palier 2 PREMIUM requis
  */
 router.get(
   "/ai/category-demand",
   requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res, next) => { await requirePremium(req, res, next); }),
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     const category = req.query.category as string;
     const city = (req.query.city as string) || "Kinshasa";

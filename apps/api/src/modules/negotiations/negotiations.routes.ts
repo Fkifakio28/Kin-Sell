@@ -9,6 +9,7 @@ import { Role } from "../../types/roles.js";
 import * as negotiationsService from "./negotiations.service.js";
 import { sendPushToUser } from "../notifications/push.service.js";
 import { emitToUsers, isUserOnline } from "../messaging/socket.js";
+import { requireIa } from "../../shared/billing/subscription-guard.js";
 
 const emitNegotiationUpdated = (
   data: { id: string; buyerUserId: string; sellerUserId: string; updatedAt: string },
@@ -239,6 +240,7 @@ router.get(
   "/ai/hint/:listingId",
   requireAuth,
   requireRoles(Role.USER, Role.BUSINESS),
+  asyncHandler(async (req: AuthenticatedRequest, res, next) => { await requireIa("IA_MERCHANT")(req, res, next); }),
   asyncHandler(async (request: AuthenticatedRequest, response) => {
     const { proposedPrice } = z.object({
       proposedPrice: z.coerce.number().int().min(1).optional(),
@@ -257,6 +259,7 @@ router.get(
   "/:negotiationId/ai-advice/seller",
   requireAuth,
   requireRoles(Role.USER, Role.BUSINESS),
+  asyncHandler(async (req: AuthenticatedRequest, res, next) => { await requireIa("IA_MERCHANT")(req, res, next); }),
   asyncHandler(async (request: AuthenticatedRequest, response) => {
     const { getSellerNegotiationAdvice } = await import("./negotiation-ai.service.js");
     const advice = await getSellerNegotiationAdvice(
@@ -272,6 +275,7 @@ router.post(
   "/:negotiationId/ai-auto-respond",
   requireAuth,
   requireRoles(Role.USER, Role.BUSINESS),
+  asyncHandler(async (req: AuthenticatedRequest, res, next) => { await requireIa("IA_MERCHANT")(req, res, next); }),
   asyncHandler(async (request: AuthenticatedRequest, response) => {
     const rulesSchema = z.object({
       enabled: z.boolean().default(true),

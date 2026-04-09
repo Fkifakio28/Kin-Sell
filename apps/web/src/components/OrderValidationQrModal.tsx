@@ -4,6 +4,7 @@ import { buildOrderValidationQrPayload } from "../utils/order-validation";
 type OrderValidationQrModalProps = {
   orderId: string;
   code: string;
+  expiresAt?: string;
   title: string;
   helpText: string;
   closeLabel: string;
@@ -13,6 +14,7 @@ type OrderValidationQrModalProps = {
 export function OrderValidationQrModal({
   orderId,
   code,
+  expiresAt,
   title,
   helpText,
   closeLabel,
@@ -20,7 +22,6 @@ export function OrderValidationQrModal({
 }: OrderValidationQrModalProps) {
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [shieldVisible, setShieldVisible] = useState(false);
-  const [expiresIn, setExpiresIn] = useState(45);
 
   useEffect(() => {
     let cancelled = false;
@@ -52,24 +53,9 @@ export function OrderValidationQrModal({
     };
   }, [code, orderId]);
 
-  useEffect(() => {
-    setExpiresIn(45);
-  }, [code, orderId]);
-
-  useEffect(() => {
-    if (expiresIn <= 0) {
-      setShieldVisible(true);
-      return;
-    }
-
-    const timer = window.setInterval(() => {
-      setExpiresIn((prev) => Math.max(0, prev - 1));
-    }, 1000);
-
-    return () => {
-      window.clearInterval(timer);
-    };
-  }, [expiresIn]);
+  const expiryLabel = expiresAt
+    ? new Date(expiresAt).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })
+    : null;
 
   useEffect(() => {
     const blockEvent = (event: Event) => {
@@ -127,9 +113,9 @@ export function OrderValidationQrModal({
         <h3>{title}</h3>
         <p className="ud-checkout-modal-help">{helpText}</p>
         <p className="ud-validation-expiry">
-          {expiresIn > 0
-            ? `Visibilite sensible: ${expiresIn}s`
-            : "Code expire visuellement. Fermez puis rouvrez pour regenirer un nouveau code."}
+          {expiryLabel
+            ? `Expire le ${expiryLabel}`
+            : "Code à usage unique"}
         </p>
         <div className="ud-validation-qr-card ud-validation-sensitive" data-sensitive="true">
           {qrDataUrl ? (

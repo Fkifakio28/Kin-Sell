@@ -14,6 +14,14 @@ import { CartStatus } from "@prisma/client";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
+import {
+  getMarketEnrichment,
+  computeAdaptiveThresholds,
+} from "../../shared/market/market-enrichment.service.js";
+import {
+  checkIaAccessOrLog,
+  clearSubscriptionCache,
+} from "../../shared/billing/subscription-guard.js";
 
 // ─────────────────────────────────────────────
 // Checkout Advisor
@@ -271,6 +279,12 @@ export interface AutoValidationDecision {
   validationCode: string | null;
   reasoning: string[];
   blockers: string[];
+  /** Seuils adaptatifs utilisés (si enrichissement disponible) */
+  adaptiveThresholds: {
+    trustThreshold: number;
+    amountThresholdCents: number;
+    source: "ADAPTIVE" | "DEFAULT";
+  } | null;
 }
 
 export async function getOrderAutoValidationDecision(
@@ -310,10 +324,27 @@ export async function getOrderAutoValidationDecision(
   const reasoning: string[] = [];
   const blockers: string[] = [];
 
-  // ── Trust check ──
+  // ── Enrichissement marché pour seuils adaptatifs ──
+  let trustThreshold = 70;
+  let amountThresholdCents = 20000;
+  let thresholdSource: "ADAPTIVE" | "DEFAULT" = "DEFAULT";
+  try {
+    const categories = order.items
+      .map((i) => i.listing?.type ?? "")
+      .filter(Boolean);
+    if (categories.length > 0) {
+      const enrichment = await getMarketEnrichment(categories[0]);
+      const adaptive = computeAdaptiveThresholds(enrichment);
+      trustThreshold = adaptive.adaptiveTrustThreshold;
+      amountThresholdCents = adaptive.adaptiveAmountThresholdCents;
+      thresholdSource = "ADAPTIVE";
+    }
+  } catch { /* seuils par défaut */ }
+
+  // ── Trust check (seuil adaptatif) ──
   const buyerTrust = order.buyer.trustScore ?? 50;
-  if (buyerTrust >= 70) {
-    reasoning.push(`Acheteur fiable (score ${buyerTrust}/100)`);
+  if (buyerTrust >= trustThreshold) {
+    reasoning.push(`Acheteur fiable (score ${buyerTrust}/100, seuil ${trustThreshold})`);
   } else if (buyerTrust < 40) {
     blockers.push(`Score de confiance faible (${buyerTrust}/100)`);
   }
@@ -336,10 +367,10 @@ export async function getOrderAutoValidationDecision(
     reasoning.push(`Compte établi (${accountAgeDays} jours d'ancienneté)`);
   }
 
-  // ── Order amount ──
+  // ── Order amount (seuil adaptatif) ──
   const totalAmount = order.totalUsdCents;
-  if (totalAmount > 20000) {
-    blockers.push(`Montant élevé (${(totalAmount / 100).toFixed(2)}$) — validation humaine requise`);
+  if (totalAmount > amountThresholdCents) {
+    blockers.push(`Montant élevé (${(totalAmount / 100).toFixed(2)}$, seuil ${(amountThresholdCents / 100).toFixed(2)}$) — validation humaine requise`);
   } else {
     reasoning.push(`Montant modéré (${(totalAmount / 100).toFixed(2)}$)`);
   }
@@ -371,6 +402,11 @@ export async function getOrderAutoValidationDecision(
     validationCode: canAutoValidate ? order.validationCode : null,
     reasoning,
     blockers,
+    adaptiveThresholds: {
+      trustThreshold,
+      amountThresholdCents,
+      source: thresholdSource,
+    },
   };
 }
 
@@ -403,6 +439,9 @@ export async function runBatchCartRecovery(): Promise<CartRecoveryResult> {
   const config = (agentConfig.config ?? {}) as Record<string, unknown>;
   if (config.autoRecoveryEnabled === false) return result;
 
+  // Réinitialiser le cache abonnements pour ce cycle batch
+  clearSubscriptionCache();
+
   // Paniers ouverts depuis plus de 6h avec des articles
   const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000);
   const seventyTwoHoursAgo = new Date(Date.now() - 72 * 60 * 60 * 1000);
@@ -426,6 +465,14 @@ export async function runBatchCartRecovery(): Promise<CartRecoveryResult> {
 
   for (const cart of abandonedCarts) {
     try {
+      // ── Vérifier qu'au moins un vendeur dans le panier a IA_ORDER ──
+      const sellerIds = [...new Set(cart.items.map((i) => i.listing?.ownerUserId).filter(Boolean))] as string[];
+      let anySellerHasAccess = false;
+      for (const sid of sellerIds) {
+        if (await checkIaAccessOrLog(sid, "IA_ORDER", "runBatchCartRecovery")) { anySellerHasAccess = true; break; }
+      }
+      if (!anySellerHasAccess) continue;
+
       const inactiveSinceMs = Date.now() - new Date(cart.updatedAt).getTime();
       const inactiveSinceHours = Math.floor(inactiveSinceMs / (1000 * 60 * 60));
       const cartTotal = cart.items.reduce((s, i) => s + i.unitPriceUsdCents * i.quantity, 0);
@@ -523,6 +570,9 @@ export async function runBatchOrderAutoValidation(): Promise<AutoValidationResul
   const config = (agentConfig.config ?? {}) as Record<string, unknown>;
   if (config.autoValidationEnabled === false) return result;
 
+  // Réinitialiser le cache abonnements pour ce cycle batch
+  clearSubscriptionCache();
+
   // Commandes PENDING de plus de 30 minutes
   const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
   const pendingOrders = await prisma.order.findMany({
@@ -530,12 +580,15 @@ export async function runBatchOrderAutoValidation(): Promise<AutoValidationResul
       status: "PENDING",
       createdAt: { lt: thirtyMinutesAgo },
     },
-    select: { id: true },
+    select: { id: true, sellerUserId: true },
     take: 50,
   });
 
   for (const order of pendingOrders) {
     try {
+      // ── Vérifier que le vendeur a accès IA_ORDER ──
+      if (!(await checkIaAccessOrLog(order.sellerUserId, "IA_ORDER", "runBatchOrderAutoValidation"))) continue;
+
       const decision = await getOrderAutoValidationDecision(order.id);
       result.processed++;
 
@@ -574,6 +627,535 @@ export async function runBatchOrderAutoValidation(): Promise<AutoValidationResul
       result.errors++;
     }
   }
+
+  return result;
+}
+
+// ─────────────────────────────────────────────
+// Order Anomaly Detection — Moteur réel
+// ─────────────────────────────────────────────
+
+export interface OrderAnomaly {
+  orderId: string;
+  anomalies: Array<{
+    type: "PRICE_SPIKE" | "QUANTITY_UNUSUAL" | "BUYER_PATTERN" | "VELOCITY" | "ADDRESS_MISMATCH";
+    severity: "LOW" | "MEDIUM" | "HIGH";
+    description: string;
+    /** Score de risque de cette anomalie individuelle */
+    riskContribution: number;
+  }>;
+  riskScore: number; // 0-100
+  recommendation: "ALLOW" | "REVIEW" | "BLOCK";
+  /** Raisons détaillées pour le niveau de recommandation */
+  reasoning: string[];
+}
+
+/**
+ * Détecte les anomalies dans une commande.
+ * Analyse prix, quantités, pattern acheteur, vélocité.
+ *
+ * Calibration prudente :
+ * - BLOCK réservé aux cas forts (riskScore ≥ 75)
+ * - REVIEW pour cas ambigus (riskScore ≥ 30)
+ * - ALLOW par défaut — ne pas bloquer les transactions légitimes
+ */
+export async function detectOrderAnomalies(orderId: string): Promise<OrderAnomaly> {
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: {
+      buyer: {
+        select: {
+          id: true,
+          trustScore: true,
+          createdAt: true,
+          _count: { select: { buyerOrders: true } },
+        },
+      },
+      items: {
+        select: {
+          quantity: true,
+          unitPriceUsdCents: true,
+          listing: {
+            select: {
+              id: true,
+              priceUsdCents: true,
+              category: true,
+              stockQuantity: true,
+              city: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  if (!order) throw new HttpError(404, "Commande introuvable");
+
+  const anomalies: OrderAnomaly["anomalies"] = [];
+  const reasoning: string[] = [];
+  let riskScore = 0;
+
+  // ── 1. Price spike — prix item vs prix annonce ──
+  for (const item of order.items) {
+    if (!item.listing) continue;
+    const priceDiff = Math.abs(item.unitPriceUsdCents - item.listing.priceUsdCents);
+    const diffPercent = (priceDiff / item.listing.priceUsdCents) * 100;
+    if (diffPercent > 50) {
+      const contribution = 25;
+      anomalies.push({
+        type: "PRICE_SPIKE",
+        severity: "HIGH",
+        description: `Prix unitaire (${(item.unitPriceUsdCents / 100).toFixed(2)}$) diffère de ${Math.round(diffPercent)}% du prix annonce (${(item.listing.priceUsdCents / 100).toFixed(2)}$)`,
+        riskContribution: contribution,
+      });
+      riskScore += contribution;
+      reasoning.push(`Écart de prix majeur (${Math.round(diffPercent)}%) détecté`);
+    } else if (diffPercent > 30) {
+      const contribution = 10;
+      anomalies.push({
+        type: "PRICE_SPIKE",
+        severity: "MEDIUM",
+        description: `Prix unitaire (${(item.unitPriceUsdCents / 100).toFixed(2)}$) diffère de ${Math.round(diffPercent)}% du prix annonce (${(item.listing.priceUsdCents / 100).toFixed(2)}$)`,
+        riskContribution: contribution,
+      });
+      riskScore += contribution;
+      reasoning.push(`Écart de prix modéré (${Math.round(diffPercent)}%)`);
+    }
+  }
+
+  // ── 2. Quantity unusual — quantité anormalement élevée ──
+  for (const item of order.items) {
+    if (item.quantity > 50) {
+      const contribution = 20;
+      anomalies.push({
+        type: "QUANTITY_UNUSUAL",
+        severity: "HIGH",
+        description: `Quantité très inhabituelle (${item.quantity} unités)`,
+        riskContribution: contribution,
+      });
+      riskScore += contribution;
+      reasoning.push(`Quantité massive (${item.quantity})`);
+    } else if (item.quantity > 20) {
+      const contribution = 8;
+      anomalies.push({
+        type: "QUANTITY_UNUSUAL",
+        severity: "MEDIUM",
+        description: `Quantité inhabituelle (${item.quantity} unités)`,
+        riskContribution: contribution,
+      });
+      riskScore += contribution;
+      reasoning.push(`Quantité élevée (${item.quantity})`);
+    }
+    // Stock dépassé → toujours signaler
+    if (item.listing?.stockQuantity !== null && item.listing?.stockQuantity !== undefined && item.quantity > item.listing.stockQuantity) {
+      const contribution = 20;
+      anomalies.push({
+        type: "QUANTITY_UNUSUAL",
+        severity: "HIGH",
+        description: `Quantité (${item.quantity}) dépasse le stock disponible (${item.listing.stockQuantity})`,
+        riskContribution: contribution,
+      });
+      riskScore += contribution;
+      reasoning.push(`Quantité > stock disponible`);
+    }
+  }
+
+  // ── 3. Buyer pattern — nouveau compte + grosse commande ──
+  const accountAgeDays = Math.floor(
+    (Date.now() - new Date(order.buyer.createdAt).getTime()) / (1000 * 60 * 60 * 24),
+  );
+  const totalOrders = order.buyer._count.buyerOrders;
+  const buyerTrustScore = order.buyer.trustScore ?? 50;
+
+  if (accountAgeDays < 2 && order.totalUsdCents > 15000) {
+    const contribution = 25;
+    anomalies.push({
+      type: "BUYER_PATTERN",
+      severity: "HIGH",
+      description: `Compte de ${accountAgeDays} jour(s) avec commande de ${(order.totalUsdCents / 100).toFixed(2)}$`,
+      riskContribution: contribution,
+    });
+    riskScore += contribution;
+    reasoning.push(`Compte très récent (${accountAgeDays}j) + gros montant`);
+  } else if (totalOrders === 0 && order.totalUsdCents > 10000) {
+    const contribution = 12;
+    anomalies.push({
+      type: "BUYER_PATTERN",
+      severity: "MEDIUM",
+      description: `Premier achat — montant élevé (${(order.totalUsdCents / 100).toFixed(2)}$)`,
+      riskContribution: contribution,
+    });
+    riskScore += contribution;
+    reasoning.push(`Premier achat avec montant > 100$`);
+  }
+
+  if (buyerTrustScore < 20) {
+    const contribution = 12;
+    anomalies.push({
+      type: "BUYER_PATTERN",
+      severity: "MEDIUM",
+      description: `Score de confiance très bas (${buyerTrustScore}/100)`,
+      riskContribution: contribution,
+    });
+    riskScore += contribution;
+    reasoning.push(`Trust score critique (${buyerTrustScore})`);
+  }
+
+  // ── 4. Velocity — commandes trop rapprochées ──
+  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+  const recentOrderCount = await prisma.order.count({
+    where: {
+      buyerUserId: order.buyerUserId,
+      createdAt: { gte: oneHourAgo },
+    },
+  });
+  if (recentOrderCount > 5) {
+    const contribution = 20;
+    anomalies.push({
+      type: "VELOCITY",
+      severity: "HIGH",
+      description: `${recentOrderCount} commandes dans la dernière heure`,
+      riskContribution: contribution,
+    });
+    riskScore += contribution;
+    reasoning.push(`Vélocité anormale (${recentOrderCount} commandes/h)`);
+  } else if (recentOrderCount > 3) {
+    const contribution = 8;
+    anomalies.push({
+      type: "VELOCITY",
+      severity: "MEDIUM",
+      description: `${recentOrderCount} commandes dans la dernière heure`,
+      riskContribution: contribution,
+    });
+    riskScore += contribution;
+    reasoning.push(`Vélocité élevée (${recentOrderCount} commandes/h)`);
+  }
+
+  riskScore = Math.min(100, riskScore);
+
+  // ── Recommandation calibrée — prudence : privilégier REVIEW sur BLOCK ──
+  let recommendation: OrderAnomaly["recommendation"];
+  if (riskScore >= 75) {
+    recommendation = "BLOCK";
+    reasoning.push(`Score de risque critique (${riskScore}/100) → blocage recommandé`);
+  } else if (riskScore >= 30) {
+    recommendation = "REVIEW";
+    reasoning.push(`Score de risque modéré (${riskScore}/100) → vérification manuelle`);
+  } else {
+    recommendation = "ALLOW";
+    if (anomalies.length > 0) {
+      reasoning.push(`Anomalies mineures détectées mais risque acceptable (${riskScore}/100)`);
+    } else {
+      reasoning.push(`Aucune anomalie détectée`);
+    }
+  }
+
+  return { orderId, anomalies, riskScore, recommendation, reasoning };
+}
+
+// ─────────────────────────────────────────────
+// Post-Order Tracking — Suivi post-commande
+// ─────────────────────────────────────────────
+
+export interface PostOrderTrackingResult {
+  processed: number;
+  confirmationReminders: number;
+  deliveryChecks: number;
+  reviewRequests: number;
+  complementarySuggestions: number;
+  errors: number;
+}
+
+/**
+ * Suivi post-commande automatique. Génère des actions de suivi :
+ * - Rappel de confirmation (vendeur) si commande CONFIRMED > 24h sans expédition
+ * - Check livraison (acheteur) si commande SHIPPED > 48h
+ * - Demande d'avis (acheteur) si commande DELIVERED > 3 jours sans review
+ * - Suggestion complémentaire (acheteur) si commande DELIVERED > 7 jours
+ *
+ * Anti-spam : cooldown strict, max actions par commande, arrêt si litige/annulation.
+ */
+export async function runBatchPostOrderTracking(): Promise<PostOrderTrackingResult> {
+  const result: PostOrderTrackingResult = {
+    processed: 0,
+    confirmationReminders: 0,
+    deliveryChecks: 0,
+    reviewRequests: 0,
+    complementarySuggestions: 0,
+    errors: 0,
+  };
+
+  const agentConfig = await prisma.aiAgent.findFirst({
+    where: { name: "IA_COMMANDE", enabled: true },
+  });
+  if (!agentConfig) return result;
+
+  const config = (agentConfig.config ?? {}) as Record<string, unknown>;
+  if (config.postOrderTrackingEnabled === false) return result;
+
+  // ── Anti-spam config ──
+  const MAX_ACTIONS_PER_ORDER = 6;      // max 6 actions IA total par commande
+  const COOLDOWN_REMINDER_H = 48;       // 48h entre rappels de confirmation
+  const COOLDOWN_DELIVERY_H = 72;       // 72h entre checks livraison
+  const COOLDOWN_REVIEW_DAYS = 7;       // 7j entre demandes d'avis
+  const MAX_REVIEW_REQUESTS = 2;        // max 2 demandes d'avis
+  const MAX_COMPLEMENTARY = 1;          // max 1 suggestion complémentaire
+
+  // Réinitialiser le cache abonnements pour ce cycle batch
+  clearSubscriptionCache();
+
+  const now = Date.now();
+  const twentyFourHoursAgo = new Date(now - 24 * 60 * 60 * 1000);
+  const fortyEightHoursAgo = new Date(now - 48 * 60 * 60 * 1000);
+  const threeDaysAgo = new Date(now - 3 * 24 * 60 * 60 * 1000);
+  const sevenDaysAgo = new Date(now - 7 * 24 * 60 * 60 * 1000);
+  const thirtyDaysAgo = new Date(now - 30 * 24 * 60 * 60 * 1000);
+  const cooldownReminderAgo = new Date(now - COOLDOWN_REMINDER_H * 60 * 60 * 1000);
+  const cooldownDeliveryAgo = new Date(now - COOLDOWN_DELIVERY_H * 60 * 60 * 1000);
+  const cooldownReviewAgo = new Date(now - COOLDOWN_REVIEW_DAYS * 24 * 60 * 60 * 1000);
+
+  /** Vérifie le nombre total d'actions IA sur une commande — anti-spam global */
+  async function hasReachedMaxActions(orderId: string): Promise<boolean> {
+    const total = await prisma.aiAutonomyLog.count({
+      where: {
+        agentName: "IA_COMMANDE",
+        targetId: orderId,
+        actionType: { startsWith: "POST_ORDER_" },
+      },
+    });
+    return total >= MAX_ACTIONS_PER_ORDER;
+  }
+
+  // ── 1. Rappel confirmation vendeur (CONFIRMED > 24h) ──
+  try {
+    const staleConfirmed = await prisma.order.findMany({
+      where: {
+        status: "CONFIRMED",
+        confirmedAt: { lt: twentyFourHoursAgo },
+      },
+      select: { id: true, sellerUserId: true, totalUsdCents: true },
+      take: 50,
+    });
+
+    for (const order of staleConfirmed) {
+      // Vérifier que le vendeur a IA_ORDER
+      if (!(await checkIaAccessOrLog(order.sellerUserId, "IA_ORDER", "postOrderConfirmationReminder"))) continue;
+
+      // Anti-spam : max actions globales
+      if (await hasReachedMaxActions(order.id)) continue;
+
+      const recentLog = await prisma.aiAutonomyLog.findFirst({
+        where: {
+          agentName: "IA_COMMANDE",
+          actionType: "POST_ORDER_CONFIRMATION_REMINDER",
+          targetId: order.id,
+          createdAt: { gt: cooldownReminderAgo }, // cooldown 48h au lieu de 24h
+        },
+      });
+      if (recentLog) continue;
+
+      await prisma.aiAutonomyLog.create({
+        data: {
+          agentName: "IA_COMMANDE",
+          actionType: "POST_ORDER_CONFIRMATION_REMINDER",
+          targetId: order.id,
+          targetUserId: order.sellerUserId,
+          decision: "REMIND",
+          reasoning: `Commande de ${(order.totalUsdCents / 100).toFixed(2)}$ confirmée > 24h sans expédition`,
+          success: true,
+        },
+      });
+      result.confirmationReminders++;
+      result.processed++;
+    }
+  } catch { result.errors++; }
+
+  // ── 2. Check livraison (SHIPPED > 48h) ──
+  try {
+    const staleShipped = await prisma.order.findMany({
+      where: {
+        status: "SHIPPED",
+        updatedAt: { lt: fortyEightHoursAgo },
+      },
+      select: { id: true, buyerUserId: true, sellerUserId: true },
+      take: 50,
+    });
+
+    for (const order of staleShipped) {
+      // Vérifier que le vendeur a IA_ORDER
+      if (!(await checkIaAccessOrLog(order.sellerUserId, "IA_ORDER", "postOrderDeliveryCheck"))) continue;
+
+      // Anti-spam : max actions globales
+      if (await hasReachedMaxActions(order.id)) continue;
+
+      const recentLog = await prisma.aiAutonomyLog.findFirst({
+        where: {
+          agentName: "IA_COMMANDE",
+          actionType: "POST_ORDER_DELIVERY_CHECK",
+          targetId: order.id,
+          createdAt: { gt: cooldownDeliveryAgo }, // cooldown 72h
+        },
+      });
+      if (recentLog) continue;
+
+      await prisma.aiAutonomyLog.create({
+        data: {
+          agentName: "IA_COMMANDE",
+          actionType: "POST_ORDER_DELIVERY_CHECK",
+          targetId: order.id,
+          targetUserId: order.buyerUserId,
+          decision: "CHECK_DELIVERY",
+          reasoning: "Commande expédiée > 48h — vérification livraison",
+          success: true,
+        },
+      });
+      result.deliveryChecks++;
+      result.processed++;
+    }
+  } catch { result.errors++; }
+
+  // ── 3. Demande d'avis (DELIVERED > 3 jours sans review) ──
+  try {
+    const deliveredNoReview = await prisma.order.findMany({
+      where: {
+        status: "DELIVERED",
+        updatedAt: { lt: threeDaysAgo, gt: thirtyDaysAgo },
+      },
+      select: {
+        id: true,
+        buyerUserId: true,
+        sellerUserId: true,
+      },
+      take: 50,
+    });
+
+    for (const order of deliveredNoReview) {
+      // Vérifier que le vendeur a IA_ORDER
+      if (!(await checkIaAccessOrLog(order.sellerUserId, "IA_ORDER", "postOrderReviewRequest"))) continue;
+
+      // Anti-spam : max actions globales
+      if (await hasReachedMaxActions(order.id)) continue;
+
+      // Vérifier si un avis existe déjà pour cette commande
+      const existingReview = await prisma.userReview.findFirst({
+        where: {
+          authorId: order.buyerUserId,
+          targetId: order.sellerUserId,
+          orderId: order.id,
+        },
+      });
+      if (existingReview) continue;
+
+      // Anti-spam : max 2 demandes d'avis par commande
+      const reviewRequestCount = await prisma.aiAutonomyLog.count({
+        where: {
+          agentName: "IA_COMMANDE",
+          actionType: "POST_ORDER_REVIEW_REQUEST",
+          targetId: order.id,
+        },
+      });
+      if (reviewRequestCount >= MAX_REVIEW_REQUESTS) continue;
+
+      // Cooldown 7 jours entre demandes
+      const recentLog = await prisma.aiAutonomyLog.findFirst({
+        where: {
+          agentName: "IA_COMMANDE",
+          actionType: "POST_ORDER_REVIEW_REQUEST",
+          targetId: order.id,
+          createdAt: { gt: cooldownReviewAgo },
+        },
+      });
+      if (recentLog) continue;
+
+      await prisma.aiAutonomyLog.create({
+        data: {
+          agentName: "IA_COMMANDE",
+          actionType: "POST_ORDER_REVIEW_REQUEST",
+          targetId: order.id,
+          targetUserId: order.buyerUserId,
+          decision: "REQUEST_REVIEW",
+          reasoning: `Commande livrée > 3 jours — demande d'avis (${reviewRequestCount + 1}/${MAX_REVIEW_REQUESTS})`,
+          success: true,
+        },
+      });
+      result.reviewRequests++;
+      result.processed++;
+    }
+  } catch { result.errors++; }
+
+  // ── 4. Suggestion complémentaire (DELIVERED > 7 jours) ──
+  try {
+    const deliveredOld = await prisma.order.findMany({
+      where: {
+        status: "DELIVERED",
+        updatedAt: { lt: sevenDaysAgo, gt: thirtyDaysAgo },
+      },
+      select: {
+        id: true,
+        buyerUserId: true,
+        sellerUserId: true,
+        items: {
+          select: { listing: { select: { category: true, city: true } } },
+          take: 3,
+        },
+      },
+      take: 30,
+    });
+
+    for (const order of deliveredOld) {
+      // Vérifier que le vendeur a IA_ORDER
+      if (!(await checkIaAccessOrLog(order.sellerUserId, "IA_ORDER", "postOrderComplementary"))) continue;
+
+      // Anti-spam : max actions globales
+      if (await hasReachedMaxActions(order.id)) continue;
+
+      // Anti-spam : max 1 suggestion complémentaire par commande
+      const compCount = await prisma.aiAutonomyLog.count({
+        where: {
+          agentName: "IA_COMMANDE",
+          actionType: "POST_ORDER_COMPLEMENTARY",
+          targetId: order.id,
+        },
+      });
+      if (compCount >= MAX_COMPLEMENTARY) continue;
+
+      const recentLog = await prisma.aiAutonomyLog.findFirst({
+        where: {
+          agentName: "IA_COMMANDE",
+          actionType: "POST_ORDER_COMPLEMENTARY",
+          targetId: order.id,
+          createdAt: { gt: sevenDaysAgo },
+        },
+      });
+      if (recentLog) continue;
+
+      const categories = [...new Set(order.items.map((i) => i.listing?.category).filter(Boolean))] as string[];
+      if (categories.length === 0) continue;
+
+      const hasRelated = await prisma.listing.count({
+        where: {
+          category: { in: categories },
+          status: "ACTIVE",
+        },
+      });
+      if (hasRelated < 2) continue;
+
+      await prisma.aiAutonomyLog.create({
+        data: {
+          agentName: "IA_COMMANDE",
+          actionType: "POST_ORDER_COMPLEMENTARY",
+          targetId: order.id,
+          targetUserId: order.buyerUserId,
+          decision: "SUGGEST_COMPLEMENTARY",
+          reasoning: `Commande livrée > 7 jours — ${hasRelated} articles similaires dans ${categories.join(", ")}`,
+          success: true,
+          metadata: { categories: categories as string[], relatedCount: hasRelated },
+        },
+      });
+      result.complementarySuggestions++;
+      result.processed++;
+    }
+  } catch { result.errors++; }
 
   return result;
 }

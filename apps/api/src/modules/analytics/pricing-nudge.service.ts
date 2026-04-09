@@ -32,6 +32,7 @@ import { prisma } from "../../shared/db/prisma.js";
 import { computeSellerProfile, type SellerProfile } from "../ads/ai-ads-engine.service.js";
 import { PLAN_CATALOG, ADDON_CATALOG } from "../billing/billing.catalog.js";
 import { OFFER_MAP, type OfferCode } from "../ads/ads-knowledge-base.js";
+import { clearSubscriptionCache, userHasIaAccess } from "../../shared/billing/subscription-guard.js";
 
 // ═══════════════════════════════════════════════════════
 // Types
@@ -523,6 +524,8 @@ export async function persistNudges(userId: string): Promise<number> {
  * Appelé par le scheduler slow cycle (1h).
  */
 export async function runBatchPricingNudges(): Promise<{ processed: number; nudgesCreated: number }> {
+  clearSubscriptionCache();
+
   const recentSellers = await prisma.listing.groupBy({
     by: ["ownerUserId"],
     where: { createdAt: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } },
@@ -534,6 +537,8 @@ export async function runBatchPricingNudges(): Promise<{ processed: number; nudg
   let totalCreated = 0;
   for (const seller of recentSellers) {
     try {
+      const hasAccess = await userHasIaAccess(seller.ownerUserId, "IA_MERCHANT");
+      if (!hasAccess) continue;
       const n = await persistNudges(seller.ownerUserId);
       totalCreated += n;
     } catch {

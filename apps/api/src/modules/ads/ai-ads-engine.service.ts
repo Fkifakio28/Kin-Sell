@@ -138,8 +138,11 @@ export async function computeSellerProfile(userId: string): Promise<SellerProfil
         { userId },
         ...(business ? [{ businessId: business.id }] : []),
       ],
+      AND: [
+        { OR: [{ endsAt: null }, { endsAt: { gt: new Date() } }] },
+      ],
     },
-    select: { planCode: true, priceUsdCents: true, addons: { where: { status: "ACTIVE" }, select: { addonCode: true } } },
+    select: { planCode: true, priceUsdCents: true, addons: { where: { status: "ACTIVE", OR: [{ endsAt: null }, { endsAt: { gt: new Date() } }] }, select: { addonCode: true } } },
   });
 
   const currentPlan: SellerProfile["currentPlan"] = subscription

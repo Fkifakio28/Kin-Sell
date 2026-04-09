@@ -10,6 +10,9 @@ import { BundleNegotiatePopup, type BundleListingItem } from "../negotiations/Bu
 import { useLockedCategories, isCategoryLocked } from "../../hooks/useLockedCategories";
 import LocationPicker from "../../components/LocationPicker";
 import type { StructuredLocation } from "../../lib/api-client";
+import { extractValidationCodeFromQrPayload } from "../../utils/order-validation";
+import { SK_AI_ADVICE, SK_AI_COMMANDE } from "../../shared/constants/storage-keys";
+import { useFeatureGate } from "../../shared/hooks/useFeatureGate";
 import "./cart.css";
 
 export function CartPage() {
@@ -56,6 +59,13 @@ export function CartPage() {
   const [buyerOrdersFilter, setBuyerOrdersFilter] = useState<OrderStatus | "">("");
   const [buyerOrdersLoading, setBuyerOrdersLoading] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<OrderSummary | null>(null);
+
+  /* ── Buyer delivery confirmation state ── */
+  const [buyerConfirmOrderId, setBuyerConfirmOrderId] = useState<string | null>(null);
+  const [buyerConfirmCode, setBuyerConfirmCode] = useState("");
+  const [buyerConfirmBusy, setBuyerConfirmBusy] = useState(false);
+  const [buyerConfirmMode, setBuyerConfirmMode] = useState<"manual" | "scan">("manual");
+  const [buyerConfirmScanError, setBuyerConfirmScanError] = useState<string | null>(null);
 
   const reloadCart = useCallback(async () => {
     try {
@@ -124,13 +134,30 @@ export function CartPage() {
     return buyerOrders.filter((o) => o.status === buyerOrdersFilter);
   }, [buyerOrders, buyerOrdersFilter]);
 
-  const statusLabel = (status: string) => {
-    const map: Record<string, string> = {
-      PENDING: '⏳ Attente', CONFIRMED: '✅ Confirmée', PROCESSING: '⚙️ Préparation',
-      SHIPPED: '🚚 Expédiée', DELIVERED: '📬 Livrée', CANCELED: '❌ Annulée',
-    };
-    return map[status] ?? status;
+  /* ── Séparer commandes actives (dans le panier) vs historique (terminées) ── */
+  const ACTIVE_STATUSES: OrderStatus[] = ["PENDING", "CONFIRMED", "PROCESSING", "SHIPPED"];
+  const HISTORY_STATUSES: OrderStatus[] = ["DELIVERED", "CANCELED"];
+
+  const activeOrders = useMemo(
+    () => buyerOrders.filter((o) => ACTIVE_STATUSES.includes(o.status)),
+    [buyerOrders]
+  );
+  const historyOrders = useMemo(() => {
+    const base = buyerOrders.filter((o) => HISTORY_STATUSES.includes(o.status));
+    if (!buyerOrdersFilter) return base;
+    return base.filter((o) => o.status === buyerOrdersFilter);
+  }, [buyerOrders, buyerOrdersFilter]);
+
+  const STATUS_LABEL_KEY: Record<string, string> = {
+    PENDING: 'order.status.pending',
+    CONFIRMED: 'order.status.confirmed',
+    PROCESSING: 'order.status.processing',
+    SHIPPED: 'order.status.shipped',
+    DELIVERED: 'order.status.delivered',
+    CANCELED: 'order.status.canceled',
   };
+
+  const statusLabel = (status: string) => t(STATUS_LABEL_KEY[status] ?? status);
 
   const statusBadgeClass = (status: string) => {
     switch (status) {
@@ -175,16 +202,12 @@ export function CartPage() {
   }, [isLoggedIn, authLoading]);
 
   /* ── IA Commande: fetch checkout advice when plan allows ── */
-  const aiCommandeOn = useMemo(() => localStorage.getItem('ks-ai-commande') !== 'off', []);
-  const hasIaOrder = useMemo(() => {
-    if (!aiCommandeOn || !activePlan) return false;
-    const planIncludes = ["AUTO", "PRO_VENDOR", "SCALE"].includes(activePlan.planCode);
-    const addonActive = activePlan.addOns?.some((a) => a.code === "IA_ORDER" && a.status === "ACTIVE");
-    return planIncludes || addonActive;
-  }, [activePlan, aiCommandeOn]);
+  const aiCommandeOn = useMemo(() => localStorage.getItem(SK_AI_COMMANDE) !== 'off', []);
+  const { hasIaOrder } = useFeatureGate(activePlan);
+  const iaOrderActive = aiCommandeOn && hasIaOrder;
 
   useEffect(() => {
-    if (!hasIaOrder || !cart?.id) return;
+    if (!iaOrderActive || !cart?.id) return;
     let cancelled = false;
     setAdviceLoading(true);
     orderAi.checkoutAdvice(cart.id)
@@ -192,7 +215,7 @@ export function CartPage() {
       .catch(() => {})
       .finally(() => { if (!cancelled) setAdviceLoading(false); });
     return () => { cancelled = true; };
-  }, [hasIaOrder, cart?.id]);
+  }, [iaOrderActive, cart?.id]);
 
   /* ── Handlers ── */
   const handleQuantity = useCallback(async (itemId: string, next: number) => {
@@ -283,7 +306,7 @@ export function CartPage() {
         deliveryFormattedAddress: "",
       });
       // Redirect to purchases tab after 2s
-      setTimeout(() => navigate("/account?tab=purchases"), 2000);
+      setTimeout(() => navigate("/account?section=purchases"), 2000);
     } catch (err) {
       setError(err instanceof ApiError ? ((err.data as { error?: string })?.error ?? t('cart.checkoutError')) : t('cart.checkoutError'));
     } finally {
@@ -363,10 +386,15 @@ export function CartPage() {
     }
   }, [cancellingNeg]);
 
-  const handleNegotiationUpdated = useCallback(async (_updated: NegotiationSummary) => {
+  const handleNegotiationUpdated = useCallback(async (updated: NegotiationSummary) => {
     setRespondNeg(null);
     await reloadCart();
-  }, [reloadCart]);
+    // Si la négo a été acceptée, recharger aussi les commandes
+    if (updated.status === 'ACCEPTED') {
+      void loadBuyerOrders();
+      setSuccess(t('cart.negoAcceptedOrderCreated'));
+    }
+  }, [reloadCart, loadBuyerOrders, t]);
 
   const handleBundleSuccess = useCallback(async () => {
     setBundleTarget(null);
@@ -379,6 +407,36 @@ export function CartPage() {
     await reloadCart();
     setNegotiatePopup(true);
   }, [reloadCart]);
+
+  /* ── Buyer confirm delivery ── */
+  const handleBuyerConfirm = useCallback(async () => {
+    if (!buyerConfirmOrderId || !buyerConfirmCode.trim()) return;
+    setBuyerConfirmBusy(true);
+    setError(null);
+    try {
+      await orders.buyerConfirmDelivery(buyerConfirmOrderId, { code: buyerConfirmCode.trim() });
+      setSuccess(t('cart.deliveryConfirmed'));
+      setBuyerConfirmOrderId(null);
+      setBuyerConfirmCode("");
+      setBuyerConfirmMode("manual");
+      setBuyerConfirmScanError(null);
+      void loadBuyerOrders();
+    } catch (err) {
+      const msg = err instanceof ApiError
+        ? ((err.data as { error?: string })?.error ?? t('cart.invalidCode'))
+        : t('cart.invalidCode');
+      setError(msg);
+    } finally {
+      setBuyerConfirmBusy(false);
+    }
+  }, [buyerConfirmOrderId, buyerConfirmCode, loadBuyerOrders, t]);
+
+  const closeBuyerConfirmModal = useCallback(() => {
+    setBuyerConfirmOrderId(null);
+    setBuyerConfirmCode("");
+    setBuyerConfirmMode("manual");
+    setBuyerConfirmScanError(null);
+  }, []);
 
   // Check items breakdown: COMMANDE vs MARCHANDAGE
   const hasNegotiatingItems = cart?.items.some((item) => item.itemState === "MARCHANDAGE") ?? false;
@@ -702,7 +760,7 @@ export function CartPage() {
             )}
 
             {/* ── IA Commande – Conseil checkout ── */}
-            {hasIaOrder && (adviceLoading || checkoutAdviceData) && (
+            {iaOrderActive && (adviceLoading || checkoutAdviceData) && (
               <div className="cart-ai-panel glass-container">
                 <div className="cart-ai-header">
                   <span className="cart-ai-icon">🤖</span>
@@ -772,24 +830,87 @@ export function CartPage() {
         </div>
       )}
 
-      {/* ── Buyer order history (last 30 days) ── */}
+      {/* ── Active buyer orders (PENDING → SHIPPED stay in cart) ── */}
+      {isLoggedIn && activeOrders.length > 0 && (
+        <div className="cart-history glass-container">
+          <div className="cart-history-head">
+            <h3 className="cart-history-title">📦 {t('cart.activeOrdersTitle')}</h3>
+            <span className="cart-history-hint">{activeOrders.length} {t('cart.inProgress')}</span>
+          </div>
+          <div className="cart-history-list">
+            {activeOrders.map((order) => (
+              <div
+                key={order.id}
+                className="cart-history-card glass-card"
+                onClick={() => setSelectedOrder(selectedOrder?.id === order.id ? null : order)}
+                style={{ cursor: 'pointer' }}
+              >
+                <div className="cart-history-card-head">
+                  <span className="cart-history-card-id">#{order.id.slice(0, 8).toUpperCase()}</span>
+                  <span className={statusBadgeClass(order.status)}>{statusLabel(order.status)}</span>
+                </div>
+                <div className="cart-history-card-body">
+                  <span className="cart-history-card-amount">{formatMoneyFromUsdCents(order.totalUsdCents)}</span>
+                  <span className="cart-history-card-meta">
+                    {order.itemsCount} article{order.itemsCount > 1 ? 's' : ''} · {new Date(order.createdAt).toLocaleDateString('fr-FR')}
+                  </span>
+                </div>
+                <div className="cart-history-card-actions" onClick={(e) => e.stopPropagation()}>
+                  {(order.status === 'PROCESSING' || order.status === 'SHIPPED') && (
+                    <button
+                      type="button"
+                      className="cart-btn cart-btn--primary"
+                      style={{ fontSize: '.8rem', padding: '6px 12px' }}
+                      onClick={() => {
+                        setBuyerConfirmOrderId(order.id);
+                        setBuyerConfirmCode("");
+                        setBuyerConfirmMode("manual");
+                        setBuyerConfirmScanError(null);
+                      }}
+                    >
+                      📬 {t('cart.confirmReception')}
+                    </button>
+                  )}
+                </div>
+
+                {selectedOrder?.id === order.id && (
+                  <div className="cart-history-card-detail">
+                    {order.items.map((item) => (
+                      <div key={item.id} className="cart-history-item">
+                        {item.imageUrl ? (
+                          <img src={resolveMediaUrl(item.imageUrl)} alt={item.title} className="cart-history-item-img" />
+                        ) : (
+                          <span className="cart-history-item-ph">{item.listingType === 'SERVICE' ? '🛠' : '📦'}</span>
+                        )}
+                        <div className="cart-history-item-info">
+                          <strong>{item.title}</strong>
+                          <span>{item.category} · x{item.quantity}</span>
+                        </div>
+                        <span className="cart-history-item-price">{formatMoneyFromUsdCents(item.lineTotalUsdCents)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Buyer order history (DELIVERED + CANCELED only) ── */}
       {isLoggedIn && (
         <div className="cart-history glass-container">
           <div className="cart-history-head">
-            <h3 className="cart-history-title">📦 Historique des commandes</h3>
-            <span className="cart-history-hint">30 derniers jours</span>
+            <h3 className="cart-history-title">📋 {t('cart.orderHistoryTitle')}</h3>
+            <span className="cart-history-hint">30 {t('cart.lastDays')}</span>
             <select
               className="cart-history-filter"
               value={buyerOrdersFilter}
               onChange={(e) => setBuyerOrdersFilter(e.target.value as OrderStatus | "")}
             >
-              <option value="">Tous les statuts</option>
-              <option value="PENDING">⏳ Attente</option>
-              <option value="CONFIRMED">✅ Confirmée</option>
-              <option value="PROCESSING">⚙️ Préparation</option>
-              <option value="SHIPPED">🚚 Expédiée</option>
-              <option value="DELIVERED">📬 Livrée</option>
-              <option value="CANCELED">❌ Annulée</option>
+              <option value="">{t('cart.allStatuses')}</option>
+              <option value="DELIVERED">📬 {t('order.status.delivered')}</option>
+              <option value="CANCELED">❌ {t('order.status.canceled')}</option>
             </select>
           </div>
 
@@ -798,14 +919,14 @@ export function CartPage() {
               <span className="cart-spinner" />
               <span>Chargement…</span>
             </div>
-          ) : filteredBuyerOrders.length === 0 ? (
+          ) : historyOrders.length === 0 ? (
             <div className="cart-history-empty">
               <span style={{ fontSize: '1.8rem' }}>📭</span>
-              <p>Aucune commande{buyerOrdersFilter ? ` "${statusLabel(buyerOrdersFilter)}"` : ''} ces 30 derniers jours.</p>
+              <p>{t('cart.noHistoryOrders')}</p>
             </div>
           ) : (
             <div className="cart-history-list">
-              {filteredBuyerOrders.map((order) => (
+              {historyOrders.map((order) => (
                 <div
                   key={order.id}
                   className="cart-history-card glass-card"
@@ -866,7 +987,7 @@ export function CartPage() {
           negotiation={respondNeg}
           onClose={() => setRespondNeg(null)}
           onUpdated={handleNegotiationUpdated}
-          showAi={localStorage.getItem('ks-ai-advice') !== 'off'}
+          showAi={localStorage.getItem(SK_AI_ADVICE) !== 'off'}
         />
       )}
 
@@ -956,6 +1077,50 @@ export function CartPage() {
               <button type="button" className="cart-btn cart-btn--secondary" onClick={() => setCheckoutModalOpen(false)} disabled={checkoutBusy}>Annuler</button>
               <button type="button" className="cart-btn cart-btn--primary" onClick={() => void handleSubmitCheckoutModal()} disabled={checkoutBusy}>
                 {checkoutBusy ? "Validation..." : "✅ Confirmer"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Buyer delivery confirmation modal ── */}
+      {buyerConfirmOrderId && (
+        <div className="cart-checkout-modal-overlay" onClick={closeBuyerConfirmModal}>
+          <div className="cart-checkout-modal glass-container" onClick={(e) => e.stopPropagation()}>
+            <h3>📬 {t('cart.confirmDeliveryTitle')}</h3>
+            <p style={{ opacity: 0.7, fontSize: '.9rem' }}>{t('cart.confirmDeliveryHelp')}</p>
+            <p style={{ fontSize: '.85rem', textAlign: 'center', opacity: 0.5 }}>
+              {t('cart.orderRef')}: <strong>#{buyerConfirmOrderId.slice(0, 8).toUpperCase()}</strong>
+            </p>
+
+            <label className="cart-checkout-modal-field">
+              <span>{t('cart.validationCodeLabel')}</span>
+              <input
+                type="text"
+                value={buyerConfirmCode}
+                onChange={(e) => setBuyerConfirmCode(e.target.value.toUpperCase())}
+                placeholder="Ex: A1B2C3"
+                maxLength={12}
+                autoFocus
+                style={{ fontFamily: 'monospace', fontSize: '1.2rem', letterSpacing: '0.15em', textAlign: 'center' }}
+              />
+            </label>
+
+            {buyerConfirmScanError && (
+              <div className="cart-feedback cart-feedback--error">{buyerConfirmScanError}</div>
+            )}
+
+            <div className="cart-checkout-modal-actions">
+              <button type="button" className="cart-btn cart-btn--secondary" onClick={closeBuyerConfirmModal}>
+                {t('common.cancel')}
+              </button>
+              <button
+                type="button"
+                className="cart-btn cart-btn--primary"
+                disabled={buyerConfirmBusy || !buyerConfirmCode.trim()}
+                onClick={() => void handleBuyerConfirm()}
+              >
+                {buyerConfirmBusy ? "..." : `✅ ${t('cart.confirmReception')}`}
               </button>
             </div>
           </div>

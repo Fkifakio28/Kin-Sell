@@ -684,9 +684,10 @@ export const getValidationCode = async (userId: string, orderId: string) => {
 
   // Rotate code at each seller reveal to reduce reuse/exfiltration risk.
   const rotatedCode = randomBytes(3).toString("hex").toUpperCase();
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
   await prisma.order.update({
     where: { id: order.id },
-    data: { validationCode: rotatedCode }
+    data: { validationCode: rotatedCode, validationCodeExpiresAt: expiresAt }
   });
 
   // Audit trail: who revealed/regenerated a validation code and for which order.
@@ -705,13 +706,13 @@ export const getValidationCode = async (userId: string, orderId: string) => {
     }
   });
 
-  return { validationCode: rotatedCode };
+  return { validationCode: rotatedCode, expiresAt: expiresAt.toISOString() };
 };
 
 export const buyerConfirmDelivery = async (userId: string, orderId: string, code: string) => {
   const order = await prisma.order.findFirst({
     where: { id: orderId, buyerUserId: userId },
-    select: { id: true, status: true, validationCode: true }
+    select: { id: true, status: true, validationCode: true, validationCodeExpiresAt: true }
   });
 
   if (!order) {
@@ -726,9 +727,18 @@ export const buyerConfirmDelivery = async (userId: string, orderId: string, code
     throw new HttpError(400, "Code de validation incorrect");
   }
 
+  if (order.validationCodeExpiresAt && order.validationCodeExpiresAt < new Date()) {
+    throw new HttpError(410, "Ce code de validation a expiré. Demandez un nouveau code au vendeur.");
+  }
+
   const updated = await prisma.order.update({
     where: { id: order.id },
-    data: { status: OrderStatus.DELIVERED, deliveredAt: new Date() },
+    data: {
+      status: OrderStatus.DELIVERED,
+      deliveredAt: new Date(),
+      validationCode: null,
+      validationCodeExpiresAt: null,
+    },
     include: {
       buyer: { include: { profile: true } },
       seller: { include: { profile: true } },

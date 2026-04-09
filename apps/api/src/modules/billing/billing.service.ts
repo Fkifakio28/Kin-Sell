@@ -4,6 +4,7 @@ import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
 import { ADDON_CATALOG, getPlanOrThrow, PLAN_CATALOG } from "./billing.catalog.js";
 import * as paypal from "../../shared/payment/paypal.provider.js";
+import { clearSubscriptionCache } from "../../shared/billing/subscription-guard.js";
 
 type RoleScope = "USER" | "BUSINESS";
 
@@ -74,7 +75,9 @@ const serializePlan = (
     startsAt: subscription?.startsAt?.toISOString() ?? null,
     endsAt: subscription?.endsAt?.toISOString() ?? null,
     features: plan.features,
-    addOns: (subscription?.addons ?? []).map((addon) => ({
+    addOns: (subscription?.addons ?? [])
+      .filter((addon) => addon.status === "ACTIVE" && (addon.endsAt === null || addon.endsAt > new Date()))
+      .map((addon) => ({
       code: addon.addonCode,
       status: addon.status,
       priceUsdCents: addon.priceUsdCents,
@@ -118,7 +121,11 @@ async function findActiveSubscription(userId: string, scope: RoleScope, business
       scope: scope as SubscriptionScope,
       status: SubscriptionStatus.ACTIVE,
       userId: scope === "USER" ? userId : null,
-      businessId: scope === "BUSINESS" ? businessId : null
+      businessId: scope === "BUSINESS" ? businessId : null,
+      OR: [
+        { endsAt: null },
+        { endsAt: { gt: new Date() } },
+      ],
     },
     orderBy: { createdAt: "desc" },
     include: {
@@ -448,6 +455,9 @@ async function activateSubscriptionFromOrder(
       });
     }
   });
+
+  // Invalidate subscription guard cache after activation
+  clearSubscriptionCache();
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

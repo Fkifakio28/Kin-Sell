@@ -15,6 +15,15 @@
 import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
 import { getMarketDemand } from "../../shared/market/market-shared.js";
+import {
+  getMarketEnrichment,
+  computeAdaptiveThresholds,
+  type MarketEnrichment,
+} from "../../shared/market/market-enrichment.service.js";
+import {
+  checkIaAccessOrLog,
+  clearSubscriptionCache,
+} from "../../shared/billing/subscription-guard.js";
 
 // ─────────────────────────────────────────────
 // Types
@@ -31,6 +40,16 @@ export interface BuyerNegotiationHint {
   messageSuggestion: string;
   insight: string;
   sampleSize: number;
+  /** Enrichissement marché (si disponible) */
+  enrichment: {
+    marketHeatScore: number;
+    priceFlexibilityScore: number;
+    regionalDemandScore: number;
+    competitionPressureScore: number;
+    confidenceScore: number;
+    sourceType: string;
+    externalInsight: string | null;
+  } | null;
 }
 
 export interface SellerNegotiationAdvice {
@@ -50,6 +69,17 @@ export interface SellerNegotiationAdvice {
   };
   insight: string;
   urgency: "LOW" | "MEDIUM" | "HIGH";
+  /** Posture de négociation calculée */
+  posture: NegotiationPosture | null;
+  /** Enrichissement marché (si disponible) */
+  enrichment: {
+    marketHeatScore: number;
+    competitionPressureScore: number;
+    adaptiveCounterPercent: number;
+    confidenceScore: number;
+    sourceType: string;
+    externalInsight: string | null;
+  } | null;
 }
 
 export interface AutoNegotiationRules {
@@ -59,6 +89,320 @@ export interface AutoNegotiationRules {
   preferredCounterPercent: number; // Default counter proposal % of original (ex: 90)
   prioritizeSpeed: boolean;  // If true: accepts faster even at lower margin
   stockUrgencyBoost: boolean; // Auto-lower floor if stock > 10
+}
+
+// ─────────────────────────────────────────────
+// Negotiation Posture Engine
+// ─────────────────────────────────────────────
+
+export type NegotiationPosture = "FIRM" | "BALANCED" | "FLEXIBLE" | "LIQUIDATION";
+
+export interface PostureAnalysis {
+  posture: NegotiationPosture;
+  reasoning: string;
+  factors: {
+    demandLevel: "LOW" | "MEDIUM" | "HIGH";
+    stockPressure: "NONE" | "LOW" | "MEDIUM" | "HIGH";
+    sellerAcceptanceRate: number; // 0-100
+    competitionLevel: "LOW" | "MEDIUM" | "HIGH";
+    avgDaysOnMarket: number;
+    sellerFlexibility: number; // 0-100
+  };
+}
+
+/**
+ * Calcule la posture de négociation pour un listing/vendeur/contexte.
+ * FIRM → article rare + forte demande
+ * BALANCED → conditions normales
+ * FLEXIBLE → compétition forte, vendeur ouvert
+ * LIQUIDATION → stock qui traîne, besoin de vendre
+ */
+export async function computeNegotiationPosture(
+  listingId: string,
+  sellerUserId: string,
+  category: string,
+  city: string,
+  stockQuantity: number | null,
+  enrichment: MarketEnrichment | null,
+): Promise<PostureAnalysis> {
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+  // ── Mémoire vendeur ──
+  const [sellerAccepted, sellerTotal, listing] = await Promise.all([
+    prisma.negotiation.count({
+      where: { sellerUserId, status: "ACCEPTED", createdAt: { gte: thirtyDaysAgo } },
+    }),
+    prisma.negotiation.count({
+      where: { sellerUserId, createdAt: { gte: thirtyDaysAgo } },
+    }),
+    prisma.listing.findUnique({
+      where: { id: listingId },
+      select: { createdAt: true },
+    }),
+  ]);
+
+  const sellerAcceptanceRate = sellerTotal > 0 ? Math.round((sellerAccepted / sellerTotal) * 100) : 50;
+
+  // Ancienneté de l'annonce (jours sur le marché)
+  const avgDaysOnMarket = listing
+    ? Math.floor((Date.now() - new Date(listing.createdAt).getTime()) / (1000 * 60 * 60 * 24))
+    : 0;
+
+  // ── Facteurs d'enrichissement ──
+  const heat = enrichment?.marketHeatScore ?? 40;
+  const competition = enrichment?.competitionPressureScore ?? 30;
+  const demand = enrichment?.regionalDemandScore ?? 40;
+
+  const demandLevel: "LOW" | "MEDIUM" | "HIGH" =
+    demand >= 65 ? "HIGH" : demand >= 35 ? "MEDIUM" : "LOW";
+  const competitionLevel: "LOW" | "MEDIUM" | "HIGH" =
+    competition >= 65 ? "HIGH" : competition >= 35 ? "MEDIUM" : "LOW";
+
+  // Pression stock
+  let stockPressure: "NONE" | "LOW" | "MEDIUM" | "HIGH" = "NONE";
+  if (stockQuantity !== null) {
+    if (stockQuantity <= 1) stockPressure = "NONE"; // pas de pression car très rare
+    else if (stockQuantity <= 3) stockPressure = "LOW";
+    else if (stockQuantity <= 10) stockPressure = "MEDIUM";
+    else stockPressure = "HIGH";
+  }
+
+  // Flexibilité vendeur (basée sur acceptance rate + enrichissement)
+  const sellerFlexibility = Math.min(100, Math.round(
+    sellerAcceptanceRate * 0.6 + (enrichment?.priceFlexibilityScore ?? 40) * 0.4,
+  ));
+
+  // ── Calcul de la posture ──
+  let score = 50; // base neutre
+
+  // Demande forte → FIRM
+  if (demandLevel === "HIGH") score += 20;
+  else if (demandLevel === "LOW") score -= 15;
+
+  // Stock élevé qui traîne → FLEXIBLE/LIQUIDATION
+  if (stockPressure === "HIGH" && avgDaysOnMarket > 14) score -= 25;
+  else if (stockPressure === "HIGH") score -= 10;
+  else if (stockPressure === "NONE" && stockQuantity !== null && stockQuantity <= 1) score += 15;
+
+  // Vieux listing → plus flexible
+  if (avgDaysOnMarket > 30) score -= 15;
+  else if (avgDaysOnMarket > 14) score -= 5;
+
+  // Compétition forte → plus flexible
+  if (competitionLevel === "HIGH") score -= 10;
+  else if (competitionLevel === "LOW") score += 10;
+
+  // Vendeur ferme ou flexible
+  if (sellerAcceptanceRate < 30) score += 10;
+  else if (sellerAcceptanceRate > 70) score -= 10;
+
+  // Marché chaud → FIRM
+  if (heat > 70) score += 10;
+  else if (heat < 30) score -= 10;
+
+  let posture: NegotiationPosture;
+  let reasoning: string;
+
+  if (score >= 70) {
+    posture = "FIRM";
+    reasoning = "Article en forte demande avec peu de concurrence — position ferme justifiée.";
+  } else if (score >= 45) {
+    posture = "BALANCED";
+    reasoning = "Conditions de marché normales — négociation équilibrée recommandée.";
+  } else if (score >= 20) {
+    posture = "FLEXIBLE";
+    reasoning = "Compétition élevée ou article lent — flexibilité accrue pour convertir.";
+  } else {
+    posture = "LIQUIDATION";
+    reasoning = "Stock dormant ou marché saturé — accepter les offres raisonnables pour écouler.";
+  }
+
+  return {
+    posture,
+    reasoning,
+    factors: {
+      demandLevel,
+      stockPressure,
+      sellerAcceptanceRate,
+      competitionLevel,
+      avgDaysOnMarket,
+      sellerFlexibility,
+    },
+  };
+}
+
+// ─────────────────────────────────────────────
+// Mémoire comportementale vendeur
+// ─────────────────────────────────────────────
+
+export interface SellerMemory {
+  acceptanceRate: number;          // 0-100 — taux d'acceptation 30j
+  avgResponseTimeHours: number;    // temps moyen de réponse
+  preferredDiscountRange: { min: number; max: number }; // plage de remise acceptée habituellement
+  totalNegotiations30d: number;
+  totalAccepted30d: number;
+  conversionSpeed: "FAST" | "MEDIUM" | "SLOW";
+  flexibleCategories: string[];    // catégories où il est le plus flexible
+}
+
+export async function getSellerMemory(sellerUserId: string): Promise<SellerMemory> {
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+  const [accepted, total, allNegos] = await Promise.all([
+    prisma.negotiation.findMany({
+      where: { sellerUserId, status: "ACCEPTED", createdAt: { gte: thirtyDaysAgo } },
+      select: {
+        originalPriceUsdCents: true,
+        finalPriceUsdCents: true,
+        createdAt: true,
+        resolvedAt: true,
+        listing: { select: { category: true } },
+      },
+      take: 200,
+    }),
+    prisma.negotiation.count({
+      where: { sellerUserId, createdAt: { gte: thirtyDaysAgo } },
+    }),
+    prisma.negotiation.findMany({
+      where: {
+        sellerUserId,
+        status: { in: ["ACCEPTED", "REFUSED", "COUNTERED"] },
+        resolvedAt: { not: null },
+        createdAt: { gte: thirtyDaysAgo },
+      },
+      select: { createdAt: true, resolvedAt: true },
+      take: 200,
+    }),
+  ]);
+
+  const acceptanceRate = total > 0 ? Math.round((accepted.length / total) * 100) : 50;
+
+  // Temps de réponse moyen
+  const responseTimes = allNegos
+    .filter((n) => n.resolvedAt)
+    .map((n) => (new Date(n.resolvedAt!).getTime() - new Date(n.createdAt).getTime()) / (1000 * 60 * 60));
+  const avgResponseTimeHours = responseTimes.length > 0
+    ? Math.round(responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length * 10) / 10
+    : 24;
+
+  // Plage de remise acceptée
+  const discounts = accepted
+    .filter((n) => n.finalPriceUsdCents && n.finalPriceUsdCents > 0)
+    .map((n) => Math.round(((n.originalPriceUsdCents - n.finalPriceUsdCents!) / n.originalPriceUsdCents) * 100));
+  const sortedDiscounts = discounts.sort((a, b) => a - b);
+  const minDiscount = sortedDiscounts[0] ?? 5;
+  const maxDiscount = sortedDiscounts[sortedDiscounts.length - 1] ?? 20;
+
+  // Vitesse de conversion
+  const conversionSpeed: SellerMemory["conversionSpeed"] =
+    avgResponseTimeHours < 4 ? "FAST" : avgResponseTimeHours < 24 ? "MEDIUM" : "SLOW";
+
+  // Catégories les plus flexibles
+  const categoryDiscounts = new Map<string, number[]>();
+  for (const a of accepted) {
+    if (!a.listing?.category || !a.finalPriceUsdCents) continue;
+    const d = Math.round(((a.originalPriceUsdCents - a.finalPriceUsdCents) / a.originalPriceUsdCents) * 100);
+    const arr = categoryDiscounts.get(a.listing.category) ?? [];
+    arr.push(d);
+    categoryDiscounts.set(a.listing.category, arr);
+  }
+  const flexibleCategories = [...categoryDiscounts.entries()]
+    .map(([cat, ds]) => ({ cat, avgD: ds.reduce((a, b) => a + b, 0) / ds.length }))
+    .sort((a, b) => b.avgD - a.avgD)
+    .slice(0, 3)
+    .map((c) => c.cat);
+
+  return {
+    acceptanceRate,
+    avgResponseTimeHours,
+    preferredDiscountRange: { min: minDiscount, max: maxDiscount },
+    totalNegotiations30d: total,
+    totalAccepted30d: accepted.length,
+    conversionSpeed,
+    flexibleCategories,
+  };
+}
+
+// ─────────────────────────────────────────────
+// Mémoire comportementale acheteur
+// ─────────────────────────────────────────────
+
+export interface BuyerMemory {
+  seriousnessScore: number;        // 0-100
+  totalPurchases: number;
+  abandonmentRate: number;         // 0-100
+  avgCounterBehavior: "ACCEPTS_FIRST" | "NEGOTIATES_HARD" | "BALANCED";
+  priceSensitivity: "LOW" | "MEDIUM" | "HIGH";
+  repeatBuyerRate: number;         // 0-100
+}
+
+export async function getBuyerMemory(buyerUserId: string): Promise<BuyerMemory> {
+  const sixtyDaysAgo = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000);
+
+  const [purchases, allNegos, acceptedNegos, abandonedCarts] = await Promise.all([
+    prisma.order.count({
+      where: { buyerUserId, status: { in: ["DELIVERED", "CONFIRMED", "SHIPPED"] } },
+    }),
+    prisma.negotiation.count({
+      where: { buyerUserId, createdAt: { gte: sixtyDaysAgo } },
+    }),
+    prisma.negotiation.findMany({
+      where: { buyerUserId, status: "ACCEPTED", createdAt: { gte: sixtyDaysAgo } },
+      select: { originalPriceUsdCents: true, finalPriceUsdCents: true, offers: { select: { id: true } } },
+      take: 100,
+    }),
+    prisma.cart.count({
+      where: { buyerUserId, status: "ABANDONED" },
+    }),
+  ]);
+
+  const totalCarts = abandonedCarts + purchases;
+  const abandonmentRate = totalCarts > 0 ? Math.round((abandonedCarts / totalCarts) * 100) : 0;
+
+  // Behaviour sur les contre-offres
+  const avgOffersPerNego = acceptedNegos.length > 0
+    ? acceptedNegos.reduce((s, n) => s + n.offers.length, 0) / acceptedNegos.length
+    : 1;
+  const avgCounterBehavior: BuyerMemory["avgCounterBehavior"] =
+    avgOffersPerNego <= 1.2 ? "ACCEPTS_FIRST" : avgOffersPerNego <= 3 ? "BALANCED" : "NEGOTIATES_HARD";
+
+  // Sensibilité prix
+  const avgDiscounts = acceptedNegos
+    .filter((n) => n.finalPriceUsdCents && n.finalPriceUsdCents > 0)
+    .map((n) => ((n.originalPriceUsdCents - n.finalPriceUsdCents!) / n.originalPriceUsdCents) * 100);
+  const avgDiscount = avgDiscounts.length > 0
+    ? avgDiscounts.reduce((a, b) => a + b, 0) / avgDiscounts.length
+    : 10;
+  const priceSensitivity: BuyerMemory["priceSensitivity"] =
+    avgDiscount >= 20 ? "HIGH" : avgDiscount >= 10 ? "MEDIUM" : "LOW";
+
+  // Sérieux = achats complétés vs total interactions
+  const seriousnessScore = Math.min(100, Math.round(
+    (purchases > 0 ? 40 : 0) +
+    (abandonmentRate < 30 ? 20 : abandonmentRate < 60 ? 10 : 0) +
+    (allNegos > 0 ? Math.min(20, purchases / allNegos * 40) : 10) +
+    Math.min(20, purchases * 4),
+  ));
+
+  // Taux client fidèle (achats avec le même vendeur)
+  const repeatBuyers = await prisma.order.groupBy({
+    by: ["sellerUserId"],
+    where: { buyerUserId, status: { in: ["DELIVERED", "CONFIRMED"] } },
+    _count: true,
+  });
+  const repeatCount = repeatBuyers.filter((r) => r._count > 1).length;
+  const repeatBuyerRate = repeatBuyers.length > 0
+    ? Math.round((repeatCount / repeatBuyers.length) * 100)
+    : 0;
+
+  return {
+    seriousnessScore,
+    totalPurchases: purchases,
+    abandonmentRate,
+    avgCounterBehavior,
+    priceSensitivity,
+    repeatBuyerRate,
+  };
 }
 
 // ─────────────────────────────────────────────
@@ -127,6 +471,7 @@ export async function getBuyerNegotiationHint(
       title: true,
       priceUsdCents: true,
       category: true,
+      city: true,
       isNegotiable: true,
       status: true,
       stockQuantity: true,
@@ -150,10 +495,30 @@ export async function getBuyerNegotiationHint(
     totalNegoCount
   );
 
+  // ── Enrichissement marché (best-effort) ──
+  let enrichmentData: BuyerNegotiationHint["enrichment"] = null;
+  let adaptiveFloor = 70; // défaut : 70%
+  let adaptiveMaxDiscount = 25; // défaut : cap 25%
+  try {
+    const enrichment = await getMarketEnrichment(listing.category, listing.city ?? "Kinshasa");
+    const thresholds = computeAdaptiveThresholds(enrichment);
+    adaptiveFloor = 70 + thresholds.floorAdjustPercent;
+    adaptiveMaxDiscount = 25 + thresholds.discountAdjustPercent;
+    enrichmentData = {
+      marketHeatScore: enrichment.marketHeatScore,
+      priceFlexibilityScore: enrichment.priceFlexibilityScore,
+      regionalDemandScore: enrichment.regionalDemandScore,
+      competitionPressureScore: enrichment.competitionPressureScore,
+      confidenceScore: enrichment.confidenceScore,
+      sourceType: enrichment.sourceType,
+      externalInsight: enrichment.externalData?.insight ?? null,
+    };
+  } catch { /* enrichment non critique */ }
+
   const originalPrice = listing.priceUsdCents;
-  const suggestedDiscount = Math.min(avgDiscountPercent, 25); // cap à 25%
+  const suggestedDiscount = Math.min(avgDiscountPercent, adaptiveMaxDiscount);
   const suggestedOfferUsdCents = Math.round(originalPrice * (1 - suggestedDiscount / 100));
-  const minRealisticOfferUsdCents = Math.round(originalPrice * 0.70); // floor = 70%
+  const minRealisticOfferUsdCents = Math.round(originalPrice * (adaptiveFloor / 100));
 
   // Contexte marché
   let marketContext: BuyerNegotiationHint["marketContext"];
@@ -165,20 +530,29 @@ export async function getBuyerNegotiationHint(
     marketContext = "COMPETITIVE";
   }
 
-  // Message suggéré
+  // Message suggéré — adapté au contexte marché
   const discount = Math.round(
     ((originalPrice - proposedPriceUsdCents) / originalPrice) * 100
   );
   let messageSuggestion: string;
+  const isHotMarket = enrichmentData && enrichmentData.marketHeatScore > 60;
+  const isFlexible = enrichmentData && enrichmentData.priceFlexibilityScore > 50;
+
   if (discount <= 5) {
-    messageSuggestion = `Bonjour, je suis très intéressé par cet article. Seriez-vous d'accord pour ${(proposedPriceUsdCents / 100).toFixed(2)}$ ? Je suis prêt à conclure rapidement.`;
+    messageSuggestion = isHotMarket
+      ? `Bonjour, cet article m'intéresse beaucoup. Je propose ${(proposedPriceUsdCents / 100).toFixed(2)}$ — prêt à finaliser immédiatement.`
+      : `Bonjour, je suis très intéressé par cet article. Seriez-vous d'accord pour ${(proposedPriceUsdCents / 100).toFixed(2)}$ ? Je suis prêt à conclure rapidement.`;
   } else if (discount <= 15) {
-    messageSuggestion = `Bonjour, je vous propose ${(proposedPriceUsdCents / 100).toFixed(2)}$ pour cet article. Votre prix est raisonnable mais j'ai quelques contraintes budgétaires.`;
+    messageSuggestion = isFlexible
+      ? `Bonjour, les prix dans cette catégorie semblent flexibles. Je propose ${(proposedPriceUsdCents / 100).toFixed(2)}$ — c'est un prix juste pour les deux parties.`
+      : `Bonjour, je vous propose ${(proposedPriceUsdCents / 100).toFixed(2)}$ pour cet article. Votre prix est raisonnable mais j'ai quelques contraintes budgétaires.`;
   } else {
-    messageSuggestion = `Bonjour, je vous propose ${(proposedPriceUsdCents / 100).toFixed(2)}$. Je suis sérieux et disponible pour conclure rapidement si vous acceptez.`;
+    messageSuggestion = isHotMarket
+      ? `Bonjour, malgré la forte demande, je propose ${(proposedPriceUsdCents / 100).toFixed(2)}$. Acheteur sérieux, paiement rapide garanti.`
+      : `Bonjour, je vous propose ${(proposedPriceUsdCents / 100).toFixed(2)}$. Je suis sérieux et disponible pour conclure rapidement si vous acceptez.`;
   }
 
-  // Insight contextuel
+  // Insight contextuel — enrichi avec données marché
   let insight: string;
   if (successRate >= 70) {
     insight = `✅ Ce vendeur accepte souvent les offres — bonne chance de succès.`;
@@ -188,6 +562,10 @@ export async function getBuyerNegotiationHint(
     insight = `ℹ️ Pas d'historique pour cette annonce. Restez respectueux du prix affiché.`;
   } else {
     insight = `🔒 Peu de négociations acceptées ici. Une offre proche du prix affiché a plus de chances.`;
+  }
+  // Ajouter contexte marché externe si disponible
+  if (enrichmentData?.externalInsight) {
+    insight += ` 📊 ${enrichmentData.externalInsight}`;
   }
 
   return {
@@ -201,6 +579,7 @@ export async function getBuyerNegotiationHint(
     messageSuggestion,
     insight,
     sampleSize: pool.length,
+    enrichment: enrichmentData,
   };
 }
 
@@ -221,6 +600,7 @@ export async function getSellerNegotiationAdvice(
           title: true,
           priceUsdCents: true,
           category: true,
+          city: true,
           stockQuantity: true,
           isNegotiable: true,
         },
@@ -296,9 +676,61 @@ export async function getSellerNegotiationAdvice(
   if (accountAgeDays >= 30) conversionProb += 5;
   if (discountPercent <= 10) conversionProb += 10; // small discount → easy to accept
   if (discountPercent >= 30) conversionProb -= 20; // big discount → risky
+
+  // ── Enrichissement marché (best-effort) ──
+  let sellerEnrichment: SellerNegotiationAdvice["enrichment"] = null;
+  let counterHighPercent = 92; // défaut : counter à -8%
+  let counterLowPercent = 85;  // défaut : counter à -15%
+  let enrichmentRaw: MarketEnrichment | null = null;
+  try {
+    enrichmentRaw = await getMarketEnrichment(
+      negotiation.listing.category,
+      negotiation.listing.city ?? "Kinshasa",
+    );
+    const thresholds = computeAdaptiveThresholds(enrichmentRaw);
+    counterHighPercent = thresholds.adaptiveCounterPercent;
+    counterLowPercent = Math.max(75, counterHighPercent - 8);
+    // Marché chaud → conversion plus probable
+    if (enrichmentRaw.marketHeatScore > 60) conversionProb += 5;
+    // Compétition forte → accepter plus facilement
+    if (enrichmentRaw.competitionPressureScore > 70) conversionProb += 5;
+    sellerEnrichment = {
+      marketHeatScore: enrichmentRaw.marketHeatScore,
+      competitionPressureScore: enrichmentRaw.competitionPressureScore,
+      adaptiveCounterPercent: counterHighPercent,
+      confidenceScore: enrichmentRaw.confidenceScore,
+      sourceType: enrichmentRaw.sourceType,
+      externalInsight: enrichmentRaw.externalData?.insight ?? null,
+    };
+  } catch { /* enrichment non critique */ }
+
+  // ── Posture de négociation ──
+  let posture: NegotiationPosture | null = null;
+  try {
+    const postureResult = await computeNegotiationPosture(
+      negotiation.listing.id,
+      sellerUserId,
+      negotiation.listing.category,
+      negotiation.listing.city ?? "Kinshasa",
+      negotiation.listing.stockQuantity,
+      enrichmentRaw,
+    );
+    posture = postureResult.posture;
+
+    // La posture influence la décision
+    if (posture === "LIQUIDATION") {
+      counterHighPercent = Math.max(75, counterHighPercent - 5);
+      counterLowPercent = Math.max(70, counterLowPercent - 5);
+      conversionProb += 10;
+    } else if (posture === "FIRM") {
+      counterHighPercent = Math.min(97, counterHighPercent + 3);
+      conversionProb -= 5;
+    }
+  } catch { /* posture non critique */ }
+
   conversionProb = Math.min(95, Math.max(10, conversionProb));
 
-  // ── Recommendation ──
+  // ── Recommendation — seuils adaptatifs ──
   let recommendation: SellerNegotiationAdvice["recommendation"];
   let counterSuggestionUsdCents: number | null = null;
   let insight: string;
@@ -308,11 +740,11 @@ export async function getSellerNegotiationAdvice(
     insight = `✅ Faible remise (${discountPercent}%) + acheteur fiable. Accepter maintenant maximise la conversion.`;
   } else if (discountPercent <= 20) {
     recommendation = "COUNTER";
-    counterSuggestionUsdCents = Math.round(originalPrice * 0.92); // counter à -8%
-    insight = `⚡ Remise modérée (${discountPercent}%). Proposez ${(counterSuggestionUsdCents / 100).toFixed(2)}$ comme compromis.`;
+    counterSuggestionUsdCents = Math.round(originalPrice * (counterHighPercent / 100));
+    insight = `⚡ Remise modérée (${discountPercent}%). Proposez ${(counterSuggestionUsdCents / 100).toFixed(2)}$ comme compromis (${100 - counterHighPercent}% de remise).`;
   } else if (discountPercent <= 30 && trustLevel === "HIGH") {
     recommendation = "COUNTER";
-    counterSuggestionUsdCents = Math.round(originalPrice * 0.85);
+    counterSuggestionUsdCents = Math.round(originalPrice * (counterLowPercent / 100));
     insight = `🤝 Acheteur de confiance mais remise élevée (${discountPercent}%). Contre-proposez ${(counterSuggestionUsdCents / 100).toFixed(2)}$.`;
   } else if (urgency === "HIGH") {
     // Stock bas → accepter même à prix plus bas
@@ -321,6 +753,10 @@ export async function getSellerNegotiationAdvice(
   } else {
     recommendation = "REFUSE";
     insight = `🚫 Remise trop élevée (${discountPercent}%) avec acheteur peu fiable. Refuser protège votre marge.`;
+  }
+  // Ajouter contexte marché externe
+  if (sellerEnrichment?.externalInsight) {
+    insight += ` 📊 ${sellerEnrichment.externalInsight}`;
   }
 
   return {
@@ -340,6 +776,8 @@ export async function getSellerNegotiationAdvice(
     },
     insight,
     urgency,
+    posture,
+    enrichment: sellerEnrichment,
   };
 }
 
@@ -445,6 +883,9 @@ export async function runBatchAutoNegotiation(): Promise<BatchAutoResult> {
   const autoEnabled = config.autoNegotiationEnabled !== false;
   if (!autoEnabled) return result;
 
+  // Réinitialiser le cache abonnements pour ce cycle batch
+  clearSubscriptionCache();
+
   // Règles par défaut (si pas de config vendeur spécifique)
   const defaultRules: AutoNegotiationRules = {
     enabled: true,
@@ -455,12 +896,33 @@ export async function runBatchAutoNegotiation(): Promise<BatchAutoResult> {
     stockUrgencyBoost: true,
   };
 
+  // Pré-charger l'enrichissement par catégorie (cache Redis, une seule requête par catégorie)
+  const enrichmentCache = new Map<string, Awaited<ReturnType<typeof getMarketEnrichment>>>();
+
   for (const nego of pendingNegos) {
     if (!nego.listing.isNegotiable) continue;
+
+    // ── Vérifier que le vendeur a accès IA_MERCHANT (plan ou addon) ──
+    if (!(await checkIaAccessOrLog(nego.sellerUserId, "IA_MERCHANT", "runBatchAutoNegotiation"))) continue;
 
     try {
       // Ajustement dynamique des règles selon le contexte
       const dynamicRules = { ...defaultRules };
+
+      // ── Enrichissement marché adaptatif ──
+      let catEnrichment = enrichmentCache.get(nego.listing.category);
+      if (!catEnrichment) {
+        try {
+          catEnrichment = await getMarketEnrichment(nego.listing.category);
+          enrichmentCache.set(nego.listing.category, catEnrichment);
+        } catch { /* pas critique */ }
+      }
+      if (catEnrichment) {
+        const thresholds = computeAdaptiveThresholds(catEnrichment);
+        dynamicRules.minFloorPercent = Math.max(55, dynamicRules.minFloorPercent + thresholds.floorAdjustPercent);
+        dynamicRules.maxAutoDiscountPercent = Math.min(35, dynamicRules.maxAutoDiscountPercent + thresholds.discountAdjustPercent);
+        dynamicRules.preferredCounterPercent = thresholds.adaptiveCounterPercent;
+      }
 
       // Si stock bas → accepter plus facilement
       if (dynamicRules.stockUrgencyBoost && nego.listing.stockQuantity !== null && nego.listing.stockQuantity <= 3) {
@@ -475,12 +937,35 @@ export async function runBatchAutoNegotiation(): Promise<BatchAutoResult> {
         dynamicRules.maxAutoDiscountPercent = Math.min(30, dynamicRules.maxAutoDiscountPercent + 5);
       }
 
-      // Catégorie compétitive → contre-proposer plutôt que refuser
-      const competitorsCount = await prisma.listing.count({
-        where: { category: nego.listing.category, status: "ACTIVE" },
-      });
-      if (competitorsCount > 20) {
-        dynamicRules.preferredCounterPercent = Math.max(80, dynamicRules.preferredCounterPercent - 5);
+      // ── Posture de négociation → influence les seuils ──
+      try {
+        const postureResult = await computeNegotiationPosture(
+          nego.listingId,
+          nego.sellerUserId,
+          nego.listing.category,
+          "Kinshasa",
+          nego.listing.stockQuantity,
+          catEnrichment ?? null,
+        );
+        if (postureResult.posture === "LIQUIDATION") {
+          dynamicRules.maxAutoDiscountPercent = Math.min(40, dynamicRules.maxAutoDiscountPercent + 10);
+          dynamicRules.minFloorPercent = Math.max(50, dynamicRules.minFloorPercent - 10);
+        } else if (postureResult.posture === "FLEXIBLE") {
+          dynamicRules.maxAutoDiscountPercent = Math.min(35, dynamicRules.maxAutoDiscountPercent + 5);
+        } else if (postureResult.posture === "FIRM") {
+          dynamicRules.maxAutoDiscountPercent = Math.max(10, dynamicRules.maxAutoDiscountPercent - 5);
+          dynamicRules.preferredCounterPercent = Math.min(97, dynamicRules.preferredCounterPercent + 3);
+        }
+      } catch { /* posture non critique */ }
+
+      // Catégorie compétitive → contre-proposer plutôt que refuser (fallback si pas d'enrichissement)
+      if (!catEnrichment) {
+        const competitorsCount = await prisma.listing.count({
+          where: { category: nego.listing.category, status: "ACTIVE" },
+        });
+        if (competitorsCount > 20) {
+          dynamicRules.preferredCounterPercent = Math.max(80, dynamicRules.preferredCounterPercent - 5);
+        }
       }
 
       const decision = await autoRespondToNegotiation(nego.id, nego.sellerUserId, dynamicRules);

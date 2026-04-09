@@ -13,6 +13,7 @@
 import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
 import { getTrendingCategories } from "../../shared/market/market-shared.js";
+import { checkIaAccessOrLog } from "../../shared/billing/subscription-guard.js";
 
 // ─────────────────────────────────────────────
 // Types
@@ -403,6 +404,11 @@ export async function runAutoAdOptimization(): Promise<AdAutoOptResult> {
 
   for (const ad of activeAds) {
     try {
+      // F13 fix: skip ads whose owner lost their subscription
+      if (ad.userId) {
+        if (!(await checkIaAccessOrLog(ad.userId, "IA_MERCHANT", "runAutoAdOptimization"))) continue;
+      }
+
       const impressions = ad.impressions ?? 0;
       const clicks = ad.clicks ?? 0;
       const ctr = impressions > 0 ? (clicks / impressions) * 100 : 0;

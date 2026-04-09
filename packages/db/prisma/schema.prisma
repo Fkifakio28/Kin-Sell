@@ -638,6 +638,7 @@ model Order {
   deliveryPlaceId          String?
   deliveryFormattedAddress String?
   validationCode           String?
+  validationCodeExpiresAt  DateTime?
   confirmedAt              DateTime?
   deliveredAt              DateTime?
   canceledAt               DateTime?

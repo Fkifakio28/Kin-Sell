@@ -21,12 +21,13 @@
 
 import { prisma } from "../../shared/db/prisma.js";
 import { runBatchAutoNegotiation } from "../negotiations/negotiation-ai.service.js";
-import { runBatchCartRecovery, runBatchOrderAutoValidation } from "../orders/order-ai.service.js";
+import { runBatchCartRecovery, runBatchOrderAutoValidation, runBatchPostOrderTracking } from "../orders/order-ai.service.js";
 import { runAutoAdOptimization } from "../ads/ad-advisor.service.js";
 import { batchCreateWeeklySnapshots } from "../analytics/ai-memory.service.js";
 import { runPeriodicSmartCheck } from "../analytics/ai-trigger.service.js";
 import { runBatchPricingNudges } from "../analytics/pricing-nudge.service.js";
 import { runBatchCommercialAdvice } from "../analytics/commercial-advisor.service.js";
+import { runSubscriptionExpiryCheck, clearSubscriptionCache, userHasIaAccess } from "../../shared/billing/subscription-guard.js";
 
 // ─────────────────────────────────────────────
 // State
@@ -87,7 +88,9 @@ async function runMediumCycle(): Promise<void> {
  * Cycle lent (1h) : Validation commandes + recommandations intelligentes
  */
 async function runSlowCycle(): Promise<void> {
+  await safeRun("BILLING expiration abonnements", runSubscriptionExpiryCheck);
   await safeRun("IA_COMMANDE auto-validation", runBatchOrderAutoValidation);
+  await safeRun("IA_COMMANDE suivi post-commande", runBatchPostOrderTracking);
   await safeRun("IA_ADS recommandations intelligentes", runBatchSmartRecommendations);
   await safeRun("IA_PRICING nudges intelligents", runBatchPricingNudges);
   await safeRun("IA_COMMERCIAL conseiller commercial", runBatchCommercialAdvice);
@@ -98,6 +101,8 @@ async function runSlowCycle(): Promise<void> {
  * et génère des offres personnalisées (abonnement, boost, pub, addon, upgrade).
  */
 async function runBatchSmartRecommendations(): Promise<{ checked: number; recommended: number }> {
+  clearSubscriptionCache();
+
   // Trouver les vendeurs actifs récents (ont publié ou vendu dans les 30 derniers jours)
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
   const activeSellerIds = await prisma.listing.findMany({
@@ -112,6 +117,8 @@ async function runBatchSmartRecommendations(): Promise<{ checked: number; recomm
 
   for (const { ownerUserId } of activeSellerIds) {
     try {
+      const hasAccess = await userHasIaAccess(ownerUserId, "IA_MERCHANT");
+      if (!hasAccess) continue;
       const results = await runPeriodicSmartCheck(ownerUserId);
       checked++;
       recommended += results.length;

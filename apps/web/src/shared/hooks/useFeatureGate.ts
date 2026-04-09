@@ -3,6 +3,7 @@ import { useMemo } from "react";
 type PlanSummary = {
   planCode?: string | null;
   analyticsTier?: string | null;
+  features?: string[] | null;
   addOns?: Array<{ code: string; status: string }> | null;
 };
 
@@ -22,16 +23,17 @@ export function useFeatureGate(plan: PlanSummary | null | undefined) {
 
   const hasIaMarchand = useMemo(() => {
     if (!plan) return false;
-    const planIncludes = ["AUTO", "PRO_VENDOR", "SCALE", "BUSINESS"].includes(plan.planCode ?? "");
+    // Plan inclut la feature directement (includes FREE via PLAN_CATALOG)
+    const featureIncluded = plan.features?.includes("IA_MERCHANT") ?? false;
     const addonActive = plan.addOns?.some((a) => a.code === "IA_MERCHANT" && a.status === "ACTIVE") ?? false;
-    return planIncludes || addonActive;
+    return featureIncluded || addonActive;
   }, [plan]);
 
   const hasIaOrder = useMemo(() => {
     if (!plan) return false;
-    const planIncludes = ["AUTO", "PRO_VENDOR", "SCALE"].includes(plan.planCode ?? "");
+    const featureIncluded = plan.features?.includes("IA_ORDER") ?? false;
     const addonActive = plan.addOns?.some((a) => a.code === "IA_ORDER" && a.status === "ACTIVE") ?? false;
-    return planIncludes || addonActive;
+    return featureIncluded || addonActive;
   }, [plan]);
 
   return { hasAnalytics, hasPremiumAnalytics, hasIaMarchand, hasIaOrder };

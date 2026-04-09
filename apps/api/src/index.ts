@@ -44,6 +44,7 @@ import { seedDefaultAgents } from "./modules/analytics/ai-admin.service.js";
 import { getRedis, disconnectRedis } from "./shared/db/redis.js";
 import { batchCreateWeeklySnapshots } from "./modules/analytics/ai-memory.service.js";
 import { startAdOrchestrator } from "./modules/ads/kinsell-internal-ads-orchestrator.js";
+import { runSubscriptionExpiryCheck, clearSubscriptionCache } from "./shared/billing/subscription-guard.js";
 
 const app = express();
 const httpServer = createServer(app);
@@ -227,6 +228,23 @@ httpServer.listen(env.API_PORT, async () => {
   scheduleWeeklySnapshots();
   // Start autonomous IA Ads orchestrator (Gemini + ChatGPT)
   startAdOrchestrator();
+  // ── Subscription expiry scheduler (every 30 min) ──
+  // F18 fix: ensures subscriptions & addons with past endsAt get expired
+  const runExpiry = async () => {
+    try {
+      clearSubscriptionCache();
+      const r = await runSubscriptionExpiryCheck();
+      if (r.expiredSubscriptions || r.expiredAddons) {
+        logger.info(`[Billing] Expired ${r.expiredSubscriptions} subs, ${r.expiredAddons} addons`);
+      }
+    } catch (err) {
+      logger.error(err, "[Billing] Subscription expiry check failed");
+    }
+  };
+  // First run after 60s, then every 30min
+  setTimeout(() => { void runExpiry(); }, 60_000);
+  setInterval(() => { void runExpiry(); }, 30 * 60 * 1000);
+  logger.info("[Billing] Subscription expiry scheduler started (every 30min)");
   logger.info("[IA] Agents initialisés (scheduler autonome désactivé)");
 });
 
