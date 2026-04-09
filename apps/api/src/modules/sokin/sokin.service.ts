@@ -1,10 +1,10 @@
 /**
- * So-Kin Service (Refonte v3 - Annonces uniquement)
+ * So-Kin Service (v4 - Publications sociales enrichies)
  * 
  * Fonctionnalités:
- * - Créer/lire/supprimer les annonces
+ * - Créer/lire/supprimer les publications
  * - Alimenter le fil public filtré par localisation
- * - No reactions, no shares, no user profiles
+ * - Types de publication : SHOWCASE, DISCUSSION, QUESTION, SELLING, PROMO, SEARCH, UPDATE, REVIEW, TREND
  */
 
 import { prisma } from "../../shared/db/prisma.js";
@@ -17,16 +17,26 @@ const normalizeMediaUrls = (mediaUrls: string[]): string[] =>
     .map((value) => value.trim())
     .filter((value) => value.length > 0);
 
-const validatePostMediaUrls = (mediaUrls: string[]) => {
-  if (mediaUrls.length < 1) {
-    throw new HttpError(400, "Une annonce doit contenir au moins 1 média");
+/** Types visuels qui exigent au moins 1 média */
+const MEDIA_REQUIRED_TYPES = ["SHOWCASE", "SELLING", "PROMO"];
+
+const validatePostMediaUrls = (mediaUrls: string[], postType: string) => {
+  if (MEDIA_REQUIRED_TYPES.includes(postType) && mediaUrls.length < 1) {
+    throw new HttpError(400, "Ce type de publication nécessite au moins 1 média");
   }
   if (mediaUrls.length > 5) {
-    throw new HttpError(400, "Maximum 5 médias par annonce");
+    throw new HttpError(400, "Maximum 5 médias par publication");
   }
   const videoCount = mediaUrls.filter((url) => isVideoMediaUrl(url)).length;
   if (videoCount > 2) {
-    throw new HttpError(400, "Maximum 2 vidéos par annonce");
+    throw new HttpError(400, "Maximum 2 vidéos par publication");
+  }
+};
+
+/** Vérifier qu'une publication contient au moins texte OU média */
+const validatePostContent = (text: string, mediaUrls: string[]) => {
+  if (text.trim().length === 0 && mediaUrls.length === 0) {
+    throw new HttpError(400, "Une publication doit contenir du texte ou au moins 1 média");
   }
 };
 
@@ -41,13 +51,25 @@ function resolveCountryTerms(country?: string): string[] {
 }
 
 /**
- * Récupère les annonces de l'utilisateur
+ * Récupère les publications de l'utilisateur avec filtre de statut
  */
-export const getMySoKinPosts = async (authorId: string) => {
+export const getMySoKinPosts = async (
+  authorId: string,
+  statusFilter?: "ACTIVE" | "HIDDEN" | "ARCHIVED" | "DELETED" | "all"
+) => {
+  const statusWhere =
+    statusFilter === "all"
+      ? {}
+      : statusFilter === "DELETED"
+        ? { status: "DELETED" as const }
+        : statusFilter
+          ? { status: statusFilter as any }
+          : { status: { not: "DELETED" as const } };
+
   return prisma.soKinPost.findMany({
     where: {
       authorId,
-      status: { not: "DELETED" },
+      ...statusWhere,
     },
     include: {
       author: {
@@ -62,7 +84,7 @@ export const getMySoKinPosts = async (authorId: string) => {
 };
 
 /**
- * Crée une nouvelle annonce
+ * Crée une nouvelle publication
  */
 export const createSoKinPost = async (
   authorId: string,
@@ -71,14 +93,19 @@ export const createSoKinPost = async (
   location?: string,
   tags?: string[],
   hashtags?: string[],
-  scheduledAt?: Date
+  scheduledAt?: Date,
+  postType: string = "SHOWCASE",
+  subject?: string
 ) => {
   const normalizedMediaUrls = normalizeMediaUrls(mediaUrls);
-  validatePostMediaUrls(normalizedMediaUrls);
+  validatePostContent(text, normalizedMediaUrls);
+  validatePostMediaUrls(normalizedMediaUrls, postType);
 
   const post = await prisma.soKinPost.create({
     data: {
       authorId,
+      postType: postType as any,
+      subject: subject || null,
       text,
       mediaUrls: normalizedMediaUrls,
       location,
@@ -137,6 +164,47 @@ export const toggleSoKinPost = async (authorId: string, postId: string) => {
 };
 
 /**
+ * Archive une publication (ARCHIVED = masquée + classée)
+ */
+export const archiveSoKinPost = async (authorId: string, postId: string) => {
+  const post = await prisma.soKinPost.findUnique({ where: { id: postId } });
+  if (!post || post.status === "DELETED") {
+    throw new HttpError(404, "Publication introuvable");
+  }
+  if (post.authorId !== authorId) {
+    throw new HttpError(403, "Non autorisé");
+  }
+  const newStatus = post.status === "ARCHIVED" ? "ACTIVE" : "ARCHIVED";
+  const updated = await prisma.soKinPost.update({
+    where: { id: postId },
+    data: { status: newStatus },
+    include: { author: { include: { profile: true } } },
+  });
+  return updated;
+};
+
+/**
+ * Compteurs par statut pour l'utilisateur
+ */
+export const getMyPostCounts = async (authorId: string) => {
+  const groups = await prisma.soKinPost.groupBy({
+    by: ["status"],
+    where: { authorId },
+    _count: { status: true },
+  });
+  const counts: Record<string, number> = {
+    ACTIVE: 0,
+    HIDDEN: 0,
+    ARCHIVED: 0,
+    DELETED: 0,
+  };
+  for (const g of groups) {
+    counts[g.status] = g._count.status;
+  }
+  return counts;
+};
+
+/**
  * Récupère le fil public des annonces (filtré par localisation)
  */
 export const getPublicFeed = async (
@@ -145,7 +213,8 @@ export const getPublicFeed = async (
   city?: string,
   country?: string,
   offset = 0,
-  cursor?: string
+  cursor?: string,
+  types?: string[]
 ) => {
   const countryTerms = resolveCountryTerms(country);
   const andClauses: Record<string, unknown>[] = [
@@ -157,6 +226,11 @@ export const getPublicFeed = async (
       ],
     },
   ];
+
+  // Filtre par types de post
+  if (types && types.length > 0) {
+    andClauses.push({ postType: { in: types } });
+  }
 
   // Filtre par ville
   if (city) {
@@ -247,22 +321,38 @@ export const getPublicPostById = async (postId: string, viewerUserId?: string) =
 };
 
 /**
- * Liste les commentaires d'une annonce (plus récents en premier)
+ * Liste les commentaires d'une annonce avec réponses imbriquées
+ * @param sort  'recent' (défaut) | 'relevant' (nombre de réponses décroissant)
  */
-export const getPostComments = async (postId: string, limit = 50) => {
+export const getPostComments = async (
+  postId: string,
+  limit = 50,
+  sort: "recent" | "relevant" = "recent"
+) => {
   const safeLimit = Math.min(Math.max(limit, 1), 100);
-  return (prisma as any).soKinComment.findMany({
-    where: { postId },
+
+  const authorInclude = { include: { profile: true } };
+
+  // Récupérer les commentaires racines (sans parent)
+  const roots = await prisma.soKinComment.findMany({
+    where: { postId, parentCommentId: null },
     include: {
-      author: {
-        include: {
-          profile: true,
-        },
+      author: authorInclude,
+      replies: {
+        include: { author: authorInclude },
+        orderBy: { createdAt: "asc" as const },
+        take: 5, // max 5 réponses imbriquées affichées
       },
+      _count: { select: { replies: true } },
     },
-    orderBy: { createdAt: "desc" },
+    orderBy:
+      sort === "relevant"
+        ? [{ replies: { _count: "desc" as const } }, { createdAt: "desc" as const }]
+        : { createdAt: "desc" as const },
     take: safeLimit,
   });
+
+  return roots;
 };
 
 /**
@@ -284,7 +374,7 @@ export const createPostComment = async (
   }
 
   if (parentCommentId) {
-    const parent = await (prisma as any).soKinComment.findUnique({
+    const parent = await prisma.soKinComment.findUnique({
       where: { id: parentCommentId },
       select: { id: true, postId: true },
     });

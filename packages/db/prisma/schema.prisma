@@ -233,6 +233,8 @@ model User {
   reviewsGiven             UserReview[]              @relation("ReviewsGiven")
   reviewsReceived          UserReview[]              @relation("ReviewsReceived")
   soKinReactions           SoKinReaction[]
+  soKinBookmarks           SoKinBookmark[]           @relation("SoKinBookmarks")
+  soKinReports             SoKinReport[]             @relation("SoKinReports")
   soKinStories             SoKinStory[]              @relation("SoKinStories")
   soKinStoryViews          SoKinStoryView[]
   businessFollows          BusinessFollow[]          @relation("BusinessFollows")
@@ -1318,12 +1320,27 @@ enum SoKinPostStatus {
   ACTIVE
   FLAGGED
   HIDDEN
+  ARCHIVED
   DELETED
+}
+
+enum SoKinPostType {
+  SHOWCASE   // Publication visuelle (ancien comportement par défaut)
+  DISCUSSION // Discussion libre, texte seul OK
+  QUESTION   // Question communautaire
+  SELLING    // Annonce de vente (lié article/service)
+  PROMO      // Promotion/offre
+  SEARCH     // Recherche / demande
+  UPDATE     // Mise à jour / actualité
+  REVIEW     // Avis / témoignage
+  TREND      // Tendance / buzz
 }
 
 model SoKinPost {
   id              String          @id @default(cuid())
   authorId        String
+  postType        SoKinPostType   @default(SHOWCASE)
+  subject         String?
   text            String
   visibility      String          @default("PUBLIC")
   mediaUrls       String[]        @default([])
@@ -1345,12 +1362,15 @@ model SoKinPost {
 
   author       User            @relation("SoKinPosts", fields: [authorId], references: [id], onDelete: Cascade)
   reactions    SoKinReaction[]
+  bookmarks    SoKinBookmark[]
+  reports      SoKinReport[]
   commentsList SoKinComment[]
 
   @@index([authorId])
   @@index([status])
   @@index([createdAt])
   @@index([status, createdAt])
+  @@index([postType])
 }
 
 model SoKinComment {
@@ -1947,6 +1967,59 @@ model SoKinReaction {
   user User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([postId, userId])
+  @@index([postId])
+  @@index([userId])
+}
+
+// ══════════════════════════════════════════════
+// SO-KIN BOOKMARKS — Sauvegardes de posts
+// ══════════════════════════════════════════════
+
+model SoKinBookmark {
+  id        String   @id @default(cuid())
+  postId    String
+  userId    String
+  createdAt DateTime @default(now())
+
+  post SoKinPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User      @relation("SoKinBookmarks", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  @@index([userId, createdAt])
+  @@index([postId])
+}
+
+// ══════════════════════════════════════════════
+// SO-KIN REPORTS — Signalements de posts
+// ══════════════════════════════════════════════
+
+enum SoKinReportReason {
+  SPAM
+  HARASSMENT
+  HATE_SPEECH
+  VIOLENCE
+  NUDITY
+  SCAM
+  MISINFORMATION
+  OTHER
+}
+
+model SoKinReport {
+  id         String            @id @default(cuid())
+  postId     String
+  userId     String
+  reason     SoKinReportReason
+  details    String?
+  status     String            @default("PENDING") // PENDING | REVIEWED | DISMISSED
+  reviewedBy String?
+  reviewedAt DateTime?
+  createdAt  DateTime          @default(now())
+
+  post SoKinPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User      @relation("SoKinReports", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  @@index([status])
   @@index([postId])
   @@index([userId])
 }

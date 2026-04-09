@@ -1,4 +1,4 @@
-/**
+﻿/**
  * So-Kin Page — v4 Mobile First
  *
  * Structure:
@@ -32,6 +32,9 @@ import {
   type SoKinApiFeedPost,
   type SoKinApiComment,
   type SoKinApiPost,
+  type SoKinPostType,
+  type SoKinReactionType,
+  type SoKinContentTab,
 } from '../../lib/api-client';
 import { ApiError } from '../../lib/api-core';
 import { AdBanner } from '../../components/AdBanner';
@@ -58,10 +61,28 @@ type SoKinPostRef = {
 type SoKinPublishPayload = {
   text: string;
   mediaFiles: File[];
+  postType: SoKinPostType;
+  subject?: string;
   location?: string;
   tags?: string[];
   hashtags?: string[];
   scheduledAt?: string;
+};
+
+/** Types visuels qui exigent au moins 1 média */
+const MEDIA_REQUIRED_TYPES: SoKinPostType[] = ['SHOWCASE', 'SELLING', 'PROMO'];
+
+/** Métadonnées UX par type de publication */
+const POST_TYPE_META: Record<SoKinPostType, { label: string; icon: string; placeholder: string }> = {
+  SHOWCASE:   { label: 'Showcase',   icon: '📸', placeholder: 'Partagez un moment, une découverte…' },
+  DISCUSSION: { label: 'Discussion', icon: '💬', placeholder: 'Lancez un sujet, échangez avec la communauté…' },
+  QUESTION:   { label: 'Question',   icon: '❓', placeholder: 'Posez votre question à la communauté…' },
+  SELLING:    { label: 'Vente',      icon: '🛍️', placeholder: 'Décrivez ce que vous vendez…' },
+  PROMO:      { label: 'Promo',      icon: '🏷️', placeholder: 'Partagez votre offre ou promotion…' },
+  SEARCH:     { label: 'Recherche',  icon: '🔎', placeholder: 'Décrivez ce que vous recherchez…' },
+  UPDATE:     { label: 'Actualité',  icon: '🔄', placeholder: 'Quoi de neuf ?…' },
+  REVIEW:     { label: 'Avis',       icon: '📝', placeholder: 'Partagez votre avis sur un produit ou service…' },
+  TREND:      { label: 'Tendance',   icon: '🔥', placeholder: "Qu'est-ce qui buzze à Kinshasa ?…" },
 };
 
 type HeaderNotification = {
@@ -90,6 +111,8 @@ const OVERLAY_VISIBILITY_LOCK_MS = 180;
 
 type SoKinCreateDraft = {
   text?: string;
+  postType?: SoKinPostType;
+  subject?: string;
   location?: string;
   tags?: string[];
   hashtags?: string[];
@@ -108,8 +131,11 @@ function readSoKinCreateDraft(): SoKinCreateDraft {
     const raw = localStorage.getItem(CREATE_DRAFT_STORAGE_KEY);
     if (!raw) return {};
     const parsed = JSON.parse(raw) as SoKinCreateDraft;
+    const validTypes: SoKinPostType[] = ['SHOWCASE', 'DISCUSSION', 'QUESTION', 'SELLING', 'PROMO', 'SEARCH', 'UPDATE', 'REVIEW', 'TREND'];
     return {
       text: typeof parsed.text === 'string' ? parsed.text.slice(0, 500) : '',
+      postType: typeof parsed.postType === 'string' && validTypes.includes(parsed.postType as SoKinPostType) ? parsed.postType as SoKinPostType : undefined,
+      subject: typeof parsed.subject === 'string' ? parsed.subject.slice(0, 120) : '',
       location: typeof parsed.location === 'string' ? parsed.location.slice(0, 120) : '',
       tags: Array.isArray(parsed.tags) ? parsed.tags.filter((v): v is string => typeof v === 'string').slice(0, 20) : [],
       hashtags: Array.isArray(parsed.hashtags) ? parsed.hashtags.filter((v): v is string => typeof v === 'string').slice(0, 20) : [],
@@ -123,6 +149,15 @@ function readSoKinCreateDraft(): SoKinCreateDraft {
 /* ─────────────────────────────────────────────────────── */
 /* HELPERS                                                  */
 /* ─────────────────────────────────────────────────────── */
+
+/** Onglets de feed */
+type FeedTab = 'pour-toi' | 'local' | 'ventes';
+
+const FEED_TABS: { key: FeedTab; label: string; icon: string }[] = [
+  { key: 'pour-toi', label: 'Pour toi',  icon: '✨' },
+  { key: 'local',    label: 'Local',     icon: '📍' },
+  { key: 'ventes',   label: 'Ventes',    icon: '🏷️' },
+];
 
 function relTime(iso: string, t: (k: string) => string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -189,6 +224,59 @@ function IconSend() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
       <path d="M2 21l21-9L2 3v7l15 2-15 2v7z" />
+    </svg>
+  );
+}
+
+function IconHeart({ filled }: { filled?: boolean }) {
+  return filled ? (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="#ff4d6a" stroke="#ff4d6a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+    </svg>
+  ) : (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+    </svg>
+  );
+}
+
+function IconComment() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+    </svg>
+  );
+}
+
+function IconRepost() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <polyline points="17 1 21 5 17 9" />
+      <path d="M3 11V9a4 4 0 0 1 4-4h14" />
+      <polyline points="7 23 3 19 7 15" />
+      <path d="M21 13v2a4 4 0 0 1-4 4H3" />
+    </svg>
+  );
+}
+
+function IconBookmark({ filled }: { filled?: boolean }) {
+  return filled ? (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+    </svg>
+  ) : (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+    </svg>
+  );
+}
+
+function IconMoreHoriz() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <circle cx="5" cy="12" r="2" />
+      <circle cx="12" cy="12" r="2" />
+      <circle cx="19" cy="12" r="2" />
     </svg>
   );
 }
@@ -325,12 +413,14 @@ function CommentsDrawer({
   submitting,
   replyTo,
   profileState,
+  sort,
   onClose,
   onDraftChange,
   onSubmit,
   onPrepareReply,
   onOpenProfile,
   onCloseProfileState,
+  onSortChange,
 }: {
   post: SoKinApiFeedPost | null;
   open: boolean;
@@ -341,18 +431,17 @@ function CommentsDrawer({
   submitting: boolean;
   replyTo: SoKinApiComment | null;
   profileState: CommentProfileState;
+  sort: 'recent' | 'relevant';
   onClose: () => void;
   onDraftChange: (value: string) => void;
   onSubmit: () => void;
   onPrepareReply: (comment: SoKinApiComment) => void;
   onOpenProfile: (comment: SoKinApiComment) => void;
   onCloseProfileState: () => void;
+  onSortChange: (sort: 'recent' | 'relevant') => void;
 }) {
   const [showEmoji, setShowEmoji] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  const orderedComments = [...comments].sort(
-    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-  );
 
   useEffect(() => {
     if (!open) return;
@@ -361,6 +450,45 @@ function CommentsDrawer({
   }, [open]);
 
   const title = post ? `${post.comments ?? 0} réponse${(post.comments ?? 0) > 1 ? 's' : ''}` : 'Commentaires';
+
+  /* Helper: rendre un commentaire (racine ou réponse) */
+  const renderComment = (comment: SoKinApiComment, isReply = false) => {
+    const name = comment.author.profile?.displayName ?? 'Utilisateur';
+    const idLabel = comment.author.profile?.username ? `@${comment.author.profile.username.replace('@', '')}` : comment.author.id;
+    const avatar = comment.author.profile?.avatarUrl;
+    return (
+      <article key={comment.id} className={`sk-comment-item${isReply ? ' sk-comment-item--reply' : ''}`}>
+        <div className="sk-comment-avatar-wrap">
+          {avatar ? (
+            <img src={resolveMediaUrl(avatar)} alt={name} className="sk-comment-avatar" />
+          ) : (
+            <span className="sk-comment-avatar sk-comment-avatar--empty" aria-hidden="true">{name.charAt(0).toUpperCase()}</span>
+          )}
+        </div>
+        <div className="sk-comment-main">
+          <strong className="sk-comment-name">{name}</strong>
+          <button
+            type="button"
+            className="sk-comment-id"
+            disabled={profileState.status === 'loading'}
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenProfile(comment);
+            }}
+          >
+            {idLabel}
+          </button>
+          <p
+            className="sk-comment-content sk-comment-content--clickable"
+            onClick={() => onPrepareReply(comment)}
+            title="Répondre à ce commentaire"
+          >
+            {comment.content}
+          </p>
+        </div>
+      </article>
+    );
+  };
 
   return (
     <>
@@ -376,47 +504,47 @@ function CommentsDrawer({
         <button type="button" className="sk-comments-close" onClick={onClose} aria-label="Fermer les commentaires">-</button>
       </header>
 
+      {/* Onglets de tri */}
+      <nav className="sk-comments-sort" aria-label="Tri des commentaires">
+        <button
+          type="button"
+          className={`sk-comments-sort-btn${sort === 'recent' ? ' sk-comments-sort-btn--active' : ''}`}
+          onClick={() => onSortChange('recent')}
+        >Récents</button>
+        <button
+          type="button"
+          className={`sk-comments-sort-btn${sort === 'relevant' ? ' sk-comments-sort-btn--active' : ''}`}
+          onClick={() => onSortChange('relevant')}
+        >Pertinents</button>
+      </nav>
+
       <section className="sk-comments-list" aria-label="Liste des commentaires">
         {loading ? (
           <p className="sk-comments-empty">Chargement des commentaires…</p>
         ) : comments.length === 0 ? (
           <p className="sk-comments-empty">Aucun commentaire pour le moment.</p>
         ) : (
-          orderedComments.map((comment) => {
-            const name = comment.author.profile?.displayName ?? 'Utilisateur';
-            const idLabel = comment.author.profile?.username ? `@${comment.author.profile.username.replace('@', '')}` : comment.author.id;
-            const avatar = comment.author.profile?.avatarUrl;
+          comments.map((comment) => {
+            const totalReplies = comment._count?.replies ?? 0;
+            const shownReplies = comment.replies ?? [];
             return (
-              <article key={comment.id} className="sk-comment-item">
-                <div className="sk-comment-avatar-wrap">
-                  {avatar ? (
-                    <img src={resolveMediaUrl(avatar)} alt={name} className="sk-comment-avatar" />
-                  ) : (
-                    <span className="sk-comment-avatar sk-comment-avatar--empty" aria-hidden="true">{name.charAt(0).toUpperCase()}</span>
-                  )}
-                </div>
-                <div className="sk-comment-main">
-                  <strong className="sk-comment-name">{name}</strong>
-                  <button
-                    type="button"
-                    className="sk-comment-id"
-                    disabled={profileState.status === 'loading'}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onOpenProfile(comment);
-                    }}
-                  >
-                    {idLabel}
-                  </button>
-                  <p
-                    className="sk-comment-content sk-comment-content--clickable"
-                    onClick={() => onPrepareReply(comment)}
-                    title="Répondre à ce commentaire"
-                  >
-                    {comment.content}
-                  </p>
-                </div>
-              </article>
+              <div key={comment.id} className="sk-comment-thread">
+                {renderComment(comment)}
+                {shownReplies.length > 0 && (
+                  <div className="sk-comment-replies">
+                    {shownReplies.map((reply) => renderComment(reply, true))}
+                    {totalReplies > shownReplies.length && (
+                      <button
+                        type="button"
+                        className="sk-comment-more-replies"
+                        onClick={() => onPrepareReply(comment)}
+                      >
+                        Voir {totalReplies - shownReplies.length} autre{totalReplies - shownReplies.length > 1 ? 's' : ''} réponse{totalReplies - shownReplies.length > 1 ? 's' : ''}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
             );
           })
         )}
@@ -488,8 +616,11 @@ function CommentsDrawer({
 }
 
 /* ─────────────────────────────────────────────────────── */
-/* ANNOUNCE CARD — carte principale de chaque annonce     */
+/* POST CARD — carte sociale enrichie                      */
 /* ─────────────────────────────────────────────────────── */
+
+/** Types commerciaux : bloc CTA commerce affiché */
+const COMMERCIAL_TYPES = ['SELLING', 'PROMO', 'SHOWCASE'] as const;
 
 function AnnounceCard({
   post,
@@ -511,22 +642,63 @@ function AnnounceCard({
   isContacting: boolean;
 }) {
   const navigate = useNavigate();
+  const [myReaction, setMyReaction] = useState<SoKinReactionType | null>(null);
+  const [likeCount, setLikeCount] = useState(post.likes ?? 0);
+  const [saved, setSaved] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [reacting, setReacting] = useState(false);
 
   const profile = post.author.profile;
   const authorName = profile?.displayName ?? 'Utilisateur';
   const authorHandle = profile?.username ?? post.author.id;
   const authorAvatar = profile?.avatarUrl;
-  const authorCity = profile?.city;
   const cleanHandle = authorHandle?.replace('@', '') ?? '';
 
   const mediaItems = categorizeMedia(post.mediaUrls ?? []);
   const replyCount = post.comments ?? 0;
+  const postType = ((post as any).postType ?? 'SHOWCASE') as SoKinPostType;
+  const ptMeta = POST_TYPE_META[postType] ?? POST_TYPE_META.SHOWCASE;
+  const postSubject = (post as any).subject as string | null | undefined;
+  const isCommercialType = (COMMERCIAL_TYPES as readonly string[]).includes(postType);
+  const postTags = (post as any).tags as string[] | undefined;
+  const postHashtags = (post as any).hashtags as string[] | undefined;
+  const postLocation = (post as any).location as string | undefined;
+  const liked = myReaction !== null;
+
+  const handleLike = useCallback(async () => {
+    if (!isLoggedIn || reacting) return;
+    setReacting(true);
+    // Optimistic update
+    const wasLiked = myReaction !== null;
+    setMyReaction(wasLiked ? null : 'LIKE');
+    setLikeCount((c) => wasLiked ? Math.max(0, c - 1) : c + 1);
+    try {
+      await sokinApi.react(post.id, 'LIKE');
+    } catch {
+      // Rollback
+      setMyReaction(wasLiked ? 'LIKE' : null);
+      setLikeCount((c) => wasLiked ? c + 1 : Math.max(0, c - 1));
+    } finally {
+      setReacting(false);
+    }
+  }, [isLoggedIn, reacting, myReaction, post.id]);
+
+  const handleSave = useCallback(async () => {
+    if (!isLoggedIn) return;
+    const wasSaved = saved;
+    setSaved(!wasSaved);
+    try {
+      await sokinApi.bookmark(post.id);
+    } catch {
+      setSaved(wasSaved);
+    }
+  }, [isLoggedIn, saved, post.id]);
 
   return (
-    <article className="sk-card">
-      {/* ── En-tête ── */}
+    <article className={`sk-card${isCommercialType ? ' sk-card--commercial' : ''}`}>
+
+      {/* ═══ 1. HEADER : avatar + nom + handle + temps + menu ═══ */}
       <header className="sk-card-header">
-        {/* Gauche : photo + nom + identifiant */}
         <button
           type="button"
           className="sk-card-author"
@@ -535,11 +707,7 @@ function AnnounceCard({
         >
           <div className="sk-card-avatar-wrap">
             {authorAvatar ? (
-              <img
-                src={resolveMediaUrl(authorAvatar)}
-                alt={authorName}
-                className="sk-card-avatar"
-              />
+              <img src={resolveMediaUrl(authorAvatar)} alt={authorName} className="sk-card-avatar" />
             ) : (
               <span className="sk-card-avatar-empty" aria-hidden="true">
                 {authorName.charAt(0).toUpperCase()}
@@ -547,58 +715,174 @@ function AnnounceCard({
             )}
           </div>
           <div className="sk-card-author-info">
-            <strong className="sk-card-author-name">{authorName}</strong>
+            <div className="sk-card-author-line">
+              <strong className="sk-card-author-name">{authorName}</strong>
+              {postType !== 'SHOWCASE' && (
+                <span className="sk-card-type-pill">
+                  <span>{ptMeta.icon}</span>
+                  <span>{ptMeta.label}</span>
+                </span>
+              )}
+            </div>
             <span className="sk-card-author-meta">
-              <span className="sk-card-author-handle">ID: {cleanHandle || post.author.id}</span>
+              <span className="sk-card-author-handle">@{cleanHandle || post.author.id}</span>
+              {postLocation && <span className="sk-card-author-loc"> · 📍 {postLocation}</span>}
               <span className="sk-card-author-time"> · {relTime(post.createdAt, t)}</span>
             </span>
           </div>
         </button>
 
-        {/* Droite : bouton contacter */}
-        <button
-          type="button"
-          className="sk-card-contact-btn"
-          onClick={onContact}
-          disabled={isContacting}
-          aria-busy={isContacting}
-          title="Contacter l'auteur"
-          aria-label="Contacter l'auteur"
-        >
-          {isContacting ? (
-            <span style={{ fontSize: 12, lineHeight: 1 }}>⏳</span>
-          ) : (
-            <>
-              <IconMessage />
-              <span>Contacter</span>
-            </>
+        {/* Menu contextuel ··· */}
+        <div className="sk-card-menu-wrap">
+          <button
+            type="button"
+            className="sk-card-menu-btn"
+            onClick={() => setMenuOpen((v) => !v)}
+            aria-label="Plus d'options"
+          >
+            <IconMoreHoriz />
+          </button>
+          {menuOpen && (
+            <div className="sk-card-menu-dropdown" role="menu">
+              <button type="button" role="menuitem" onClick={() => { onContact(); setMenuOpen(false); }}>
+                <IconMessage /> Contacter
+              </button>
+              <button type="button" role="menuitem" onClick={() => { handleSave(); setMenuOpen(false); }}>
+                <IconBookmark filled={saved} /> {saved ? 'Retiré des favoris' : 'Sauvegarder'}
+              </button>
+              <button type="button" role="menuitem" onClick={() => {
+                if (isLoggedIn) {
+                  sokinApi.report(post.id, { reason: 'SPAM' }).catch(() => {});
+                }
+                setMenuOpen(false);
+              }}>
+                🚩 Signaler
+              </button>
+            </div>
           )}
-        </button>
+        </div>
       </header>
 
-      {/* ── Corps : collage médias ── */}
-      {mediaItems.length > 0 ? (
-        <>
-          <MediaCollage items={mediaItems} onItemClick={onMediaClick} />
-          {post.text && <p className="sk-card-text sk-card-text--after-media">{post.text}</p>}
-        </>
-      ) : (
-        <div className="sk-card-text-only" style={{ background: `linear-gradient(135deg, #000, ${['#1c133b', '#2b1649', '#321f58', '#161616'][post.id.charCodeAt(0) % 4]})` }}>
-          {post.text && <p className="sk-card-text sk-card-text--centered">{post.text}</p>}
+      {/* ═══ 2. SUJET (si défini) ═══ */}
+      {postSubject && (
+        <div className="sk-card-subject-bar">
+          <h3 className="sk-card-subject">{postSubject}</h3>
         </div>
       )}
 
-      {/* ── Pied de page ── */}
-      <footer className="sk-card-footer">
+      {/* ═══ 3. TEXTE ═══ */}
+      {post.text ? (
+        mediaItems.length > 0
+          ? <p className="sk-card-text">{post.text}</p>
+          : (
+            <div className="sk-card-text-only" style={{ background: `linear-gradient(135deg, #000, ${['#1c133b', '#2b1649', '#321f58', '#161616'][post.id.charCodeAt(0) % 4]})` }}>
+              <p className="sk-card-text sk-card-text--centered">{post.text}</p>
+            </div>
+          )
+      ) : null}
+
+      {/* ═══ 4. MÉDIAS ═══ */}
+      {mediaItems.length > 0 && (
+        <MediaCollage items={mediaItems} onItemClick={onMediaClick} />
+      )}
+
+      {/* ═══ 5. HASHTAGS + TAGS ═══ */}
+      {((postHashtags && postHashtags.length > 0) || (postTags && postTags.length > 0)) && (
+        <div className="sk-card-tags">
+          {postHashtags?.map((h) => (
+            <span key={h} className="sk-card-hashtag">#{h}</span>
+          ))}
+          {postTags?.map((tag) => (
+            <span key={tag} className="sk-card-tag">@{tag}</span>
+          ))}
+        </div>
+      )}
+
+      {/* ═══ 6. COMPTEURS SOCIAUX ═══ */}
+      <div className="sk-card-counters">
+        {likeCount > 0 && (
+          <span className="sk-card-counter">
+            <span className="sk-card-counter-dot sk-card-counter-dot--like" />
+            {likeCount}
+          </span>
+        )}
+        {replyCount > 0 && (
+          <button type="button" className="sk-card-counter sk-card-counter--link" onClick={onOpenComments}>
+            {replyCount} commentaire{replyCount > 1 ? 's' : ''}
+          </button>
+        )}
+      </div>
+
+      {/* ═══ 7. BARRE SOCIALE — actions principales ═══ */}
+      <div className="sk-card-social-bar">
         <button
           type="button"
-          className="sk-card-replies-link"
+          className={`sk-social-btn sk-social-btn--like${liked ? ' sk-social-btn--active' : ''}`}
+          onClick={handleLike}
+          aria-label={liked ? 'Ne plus aimer' : 'Aimer'}
+          aria-pressed={liked}
+        >
+          <span className="sk-social-icon"><IconHeart filled={liked} /></span>
+          <span>J'aime</span>
+        </button>
+
+        <button
+          type="button"
+          className={`sk-social-btn sk-social-btn--comment${isCommentsOpen ? ' sk-social-btn--active' : ''}`}
           onClick={onOpenComments}
+          aria-label="Commenter"
           aria-expanded={isCommentsOpen}
         >
-          {replyCount} réponse{replyCount > 1 ? 's' : ''}
+          <span className="sk-social-icon"><IconComment /></span>
+          <span>Commenter</span>
         </button>
-      </footer>
+
+        <button
+          type="button"
+          className="sk-social-btn sk-social-btn--repost"
+          aria-label="Reposter"
+        >
+          <span className="sk-social-icon"><IconRepost /></span>
+          <span>Reposter</span>
+        </button>
+
+        <button
+          type="button"
+          className={`sk-social-btn sk-social-btn--save${saved ? ' sk-social-btn--active' : ''}`}
+          onClick={handleSave}
+          aria-label={saved ? 'Retirer des favoris' : 'Sauvegarder'}
+          aria-pressed={saved}
+        >
+          <span className="sk-social-icon"><IconBookmark filled={saved} /></span>
+          <span>Sauver</span>
+        </button>
+      </div>
+
+      {/* ═══ 8. BLOC COMMERCE (conditionnel) ═══ */}
+      {isCommercialType && (
+        <div className="sk-card-commerce">
+          <button
+            type="button"
+            className="sk-card-cta-btn"
+            onClick={onContact}
+            disabled={isContacting}
+            aria-busy={isContacting}
+          >
+            {isContacting ? (
+              <span>⏳</span>
+            ) : (
+              <>
+                <IconMessage />
+                <span>
+                  {postType === 'SELLING' ? 'Contacter le vendeur' :
+                   postType === 'PROMO' ? 'Profiter de l\u2019offre' :
+                   'En savoir plus'}
+                </span>
+              </>
+            )}
+          </button>
+        </div>
+      )}
     </article>
   );
 }
@@ -635,7 +919,7 @@ function ComposeZone({
           className="sk-compose-trigger"
           onClick={onCreatePost}
         >
-          {`Publiez une annonce, ${displayName}…`}
+          {`Quoi de neuf, ${displayName} ?`}
         </button>
       </div>
     </section>
@@ -804,6 +1088,8 @@ function DesktopStudioComposer({
   publishError: string | null;
   onPublish: (data: SoKinPublishPayload) => void;
 }) {
+  const [postType, setPostType] = useState<SoKinPostType>('SHOWCASE');
+  const [subject, setSubject] = useState('');
   const [text, setText] = useState('');
   const [mediaFiles, setMediaFiles] = useState<File[]>([]);
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
@@ -826,8 +1112,12 @@ function DesktopStudioComposer({
 
   const fileRef = useRef<HTMLInputElement>(null);
 
+  const mediaRequired = MEDIA_REQUIRED_TYPES.includes(postType);
+  const typeMeta = POST_TYPE_META[postType];
   const canPreview = text.trim().length > 0 || mediaFiles.length > 0;
-  const canPublish = text.trim().length > 0 && mediaFiles.length >= 1;
+  const hasText = text.trim().length > 0;
+  const hasMedia = mediaFiles.length > 0;
+  const canPublish = (hasText || hasMedia) && (!mediaRequired || hasMedia);
 
   useEffect(() => {
     const urls = mediaFiles.map((f) => URL.createObjectURL(f));
@@ -998,7 +1288,11 @@ function DesktopStudioComposer({
   const submit = () => {
     setLocalError(null);
     if (!canPublish) {
-      setLocalError('Texte + au moins 1 média requis pour publier.');
+      if (mediaRequired && mediaFiles.length < 1) {
+        setLocalError('Ce type de publication nécessite au moins 1 média.');
+      } else {
+        setLocalError('Ajoutez du texte ou au moins 1 média.');
+      }
       return;
     }
     const schedErr = validateDesktopSchedule(scheduledAt);
@@ -1011,6 +1305,8 @@ function DesktopStudioComposer({
     onPublish({
       text,
       mediaFiles,
+      postType,
+      subject: subject.trim() || undefined,
       location: location.trim() || undefined,
       tags: selectedTags.map((v) => v.replace(/^@/, '')),
       hashtags: selectedArticles.map((v) => v.replace(/^#/, '')),
@@ -1044,11 +1340,41 @@ function DesktopStudioComposer({
         </header>
 
         <p className="sk-studio-context">Feed public ({cityLabel})</p>
-        <p className="sk-studio-question">Quoi de neuf !</p>
+
+        {/* ── Sélecteur de type (desktop) ── */}
+        <div className="sk-type-selector" role="radiogroup" aria-label="Type de publication">
+          {(Object.keys(POST_TYPE_META) as SoKinPostType[]).map((type) => (
+            <button
+              key={type}
+              type="button"
+              className={`sk-type-chip${postType === type ? ' sk-type-chip--active' : ''}`}
+              onClick={() => setPostType(type)}
+              role="radio"
+              aria-checked={postType === type}
+            >
+              <span className="sk-type-chip-icon">{POST_TYPE_META[type].icon}</span>
+              <span className="sk-type-chip-label">{POST_TYPE_META[type].label}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* ── Sujet optionnel ── */}
+        {(['QUESTION', 'REVIEW', 'TREND', 'SEARCH'] as SoKinPostType[]).includes(postType) && (
+          <input
+            type="text"
+            className="sk-modal-input sk-subject-input"
+            placeholder="Sujet (optionnel)"
+            value={subject}
+            onChange={(e) => setSubject(e.target.value)}
+            maxLength={120}
+          />
+        )}
+
+        <p className="sk-studio-question">{typeMeta.icon} {typeMeta.label}</p>
 
         <textarea
           className="sk-modal-textarea sk-modal-textarea--studio"
-          placeholder="Écrire votre annonce..."
+          placeholder={typeMeta.placeholder}
           value={text}
           maxLength={500}
           onChange={(e) => setText(e.target.value)}
@@ -1186,11 +1512,12 @@ function DesktopStudioComposer({
         <div className="sk-desktop-preview-overlay" onClick={() => setShowPreview(false)}>
           <div className="sk-desktop-preview-modal" onClick={(e) => e.stopPropagation()}>
             <header className="sk-desktop-preview-head">
-              <strong>Prévisualisation</strong>
+              <strong>{typeMeta.icon} {typeMeta.label} — Prévisualisation</strong>
               <button type="button" className="sk-btn sk-btn--primary" onClick={submit} disabled={isPublishing || !canPublish}>
                 {isPublishing ? 'Publication…' : 'Publier'}
               </button>
             </header>
+            {subject.trim() && <p className="sk-create-preview-subject"><strong>{subject}</strong></p>}
             <p className="sk-create-preview-text">{text || 'Aucun texte saisi.'}</p>
             {previewUrls.length > 0 ? (
               <div className="sk-modal-previews">
@@ -1232,6 +1559,7 @@ function CreateAnnounceScreen({
   userIdentifier,
   cityLabel,
   country,
+  initialPostType = 'SHOWCASE',
 }: {
   onClose: () => void;
   onPublish: (data: SoKinPublishPayload) => void;
@@ -1242,8 +1570,11 @@ function CreateAnnounceScreen({
   userIdentifier: string;
   cityLabel: string;
   country: string;
+  initialPostType?: SoKinPostType;
 }) {
   const initialDraft = useMemo(() => readSoKinCreateDraft(), []);
+  const [postType, setPostType] = useState<SoKinPostType>(initialDraft.postType ?? initialPostType);
+  const [subject, setSubject] = useState(initialDraft.subject ?? '');
   const [text, setText] = useState(initialDraft.text ?? '');
   const [mediaFiles, setMediaFiles] = useState<File[]>([]);
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
@@ -1271,8 +1602,12 @@ function CreateAnnounceScreen({
   const fileRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  const mediaRequired = MEDIA_REQUIRED_TYPES.includes(postType);
+  const typeMeta = POST_TYPE_META[postType];
   const canPreview = text.trim().length > 0 || mediaFiles.length > 0;
-  const canPublish = text.trim().length > 0 && mediaFiles.length >= 1;
+  const hasText = text.trim().length > 0;
+  const hasMedia = mediaFiles.length > 0;
+  const canPublish = (hasText || hasMedia) && (!mediaRequired || hasMedia);
   const imageCount = mediaFiles.filter((f) => !f.type.startsWith('video/')).length;
   const videoCount = mediaFiles.filter((f) => f.type.startsWith('video/')).length;
   const hasUnsavedInput =
@@ -1281,7 +1616,8 @@ function CreateAnnounceScreen({
     location.trim().length > 0 ||
     selectedTags.length > 0 ||
     selectedArticles.length > 0 ||
-    scheduledAt.trim().length > 0;
+    scheduledAt.trim().length > 0 ||
+    subject.trim().length > 0;
   const maxScheduleLocal = useMemo(() => {
     const target = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
     const offset = target.getTimezoneOffset() * 60_000;
@@ -1305,10 +1641,10 @@ function CreateAnnounceScreen({
   }, []);
 
   const validateMediaSelection = (files: File[]) => {
-    if (files.length < 1) return 'Ajoutez au moins 1 média à votre annonce.';
-    if (files.length > 5) return 'Maximum 5 médias par annonce.';
-    const videoCount = files.filter((f) => f.type.startsWith('video/')).length;
-    if (videoCount > 2) return 'Maximum 2 vidéos par annonce.';
+    if (mediaRequired && files.length < 1) return 'Ajoutez au moins 1 média pour ce type de publication.';
+    if (files.length > 5) return 'Maximum 5 médias par publication.';
+    const vc = files.filter((f) => f.type.startsWith('video/')).length;
+    if (vc > 2) return 'Maximum 2 vidéos par publication.';
     return null;
   };
 
@@ -1335,7 +1671,8 @@ function CreateAnnounceScreen({
         location.trim().length > 0 ||
         selectedTags.length > 0 ||
         selectedArticles.length > 0 ||
-        scheduledAt.trim().length > 0;
+        scheduledAt.trim().length > 0 ||
+        subject.trim().length > 0;
       if (!hasAnyDraft) {
         localStorage.removeItem(CREATE_DRAFT_STORAGE_KEY);
         return;
@@ -1344,6 +1681,8 @@ function CreateAnnounceScreen({
         CREATE_DRAFT_STORAGE_KEY,
         JSON.stringify({
           text,
+          postType,
+          subject,
           location,
           tags: selectedTags.map((v) => v.replace(/^@/, '')),
           hashtags: selectedArticles.map((v) => v.replace(/^#/, '')),
@@ -1354,7 +1693,7 @@ function CreateAnnounceScreen({
     } catch {
       // Ignorer les erreurs storage (quota / private mode)
     }
-  }, [text, location, selectedTags, selectedArticles, scheduledAt]);
+  }, [text, postType, subject, location, selectedTags, selectedArticles, scheduledAt]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1651,8 +1990,8 @@ function CreateAnnounceScreen({
 
   const submit = () => {
     setLocalError(null);
-    if (!text.trim()) {
-      setLocalError('Le texte de l’annonce est obligatoire.');
+    if (!text.trim() && mediaFiles.length === 0) {
+      setLocalError('Ajoutez du texte ou au moins 1 média.');
       setMode('edit');
       return;
     }
@@ -1669,10 +2008,11 @@ function CreateAnnounceScreen({
       return;
     }
 
-    // La planification est transmise au backend sans simulation locale de succès.
     onPublish({
       text,
       mediaFiles,
+      postType,
+      subject: subject.trim() || undefined,
       location: location.trim() || undefined,
       tags: selectedTags.map((v) => v.replace(/^@/, '')),
       hashtags: selectedArticles.map((v) => v.replace(/^#/, '')),
@@ -1732,7 +2072,7 @@ function CreateAnnounceScreen({
 
         {mode === 'edit' ? (
           <>
-            <article className="sk-studio-card" aria-label="Zone de création d'annonce">
+            <article className="sk-studio-card" aria-label="Zone de création de publication">
               <header className="sk-studio-profile">
                 {avatarUrl ? (
                   <img src={resolveMediaUrl(avatarUrl)} alt={displayName} className="sk-studio-avatar" />
@@ -1746,13 +2086,43 @@ function CreateAnnounceScreen({
               </header>
 
               <p className="sk-studio-context">Feed public {cityLabel}</p>
-              <p className="sk-studio-question">Quoi de neuf ?</p>
+
+              {/* ── Sélecteur de type ── */}
+              <div className="sk-type-selector" role="radiogroup" aria-label="Type de publication">
+                {(Object.keys(POST_TYPE_META) as SoKinPostType[]).map((type) => (
+                  <button
+                    key={type}
+                    type="button"
+                    className={`sk-type-chip${postType === type ? ' sk-type-chip--active' : ''}`}
+                    onClick={() => setPostType(type)}
+                    role="radio"
+                    aria-checked={postType === type}
+                  >
+                    <span className="sk-type-chip-icon">{POST_TYPE_META[type].icon}</span>
+                    <span className="sk-type-chip-label">{POST_TYPE_META[type].label}</span>
+                  </button>
+                ))}
+              </div>
+
+              {/* ── Sujet optionnel ── */}
+              {(['QUESTION', 'REVIEW', 'TREND', 'SEARCH'] as SoKinPostType[]).includes(postType) && (
+                <input
+                  type="text"
+                  className="sk-modal-input sk-subject-input"
+                  placeholder="Sujet (optionnel)"
+                  value={subject}
+                  onChange={(e) => setSubject(e.target.value)}
+                  maxLength={120}
+                />
+              )}
+
+              <p className="sk-studio-question">{typeMeta.icon} {typeMeta.label}</p>
 
               <div className="sk-studio-text-wrap">
                 <textarea
                   ref={textareaRef}
                   className="sk-modal-textarea sk-modal-textarea--studio"
-                  placeholder="Écrire une annonce claire et utile…"
+                  placeholder={typeMeta.placeholder}
                   value={text}
                   onChange={(e) => {
                     setText(e.target.value);
@@ -1819,7 +2189,7 @@ function CreateAnnounceScreen({
             )}
 
             <div className="sk-modal-media-row">
-              <span className="sk-modal-media-hint">Médias: {mediaFiles.length}/5</span>
+              <span className="sk-modal-media-hint">Médias: {mediaFiles.length}/5 {mediaRequired ? '(obligatoire)' : '(optionnel)'}</span>
               <span className="sk-modal-media-hint">Jusqu'à 5 médias, dont 2 vidéos max</span>
               <span className="sk-media-counter" aria-live="polite">
                 {imageCount} image{imageCount > 1 ? 's' : ''} / {videoCount} vidéo{videoCount > 1 ? 's' : ''}
@@ -2013,7 +2383,8 @@ function CreateAnnounceScreen({
                 <span>{userIdentifier}</span>
               </div>
             </header>
-            <h3 className="sk-create-preview-title">Annonce prête à publier</h3>
+            <h3 className="sk-create-preview-title">{typeMeta.icon} {typeMeta.label} — Publication prête</h3>
+            {subject.trim() && <p className="sk-create-preview-subject"><strong>{subject}</strong></p>}
             <p className="sk-create-preview-text">{text.trim() || 'Aucun texte saisi.'}</p>
             {mediaFiles.length > 0 ? (
               <div className="sk-modal-previews">
@@ -2080,6 +2451,10 @@ export function SoKinPage() {
   const [loadingMyPublishedPosts, setLoadingMyPublishedPosts] = useState(false);
   const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
   const [togglingPostId, setTogglingPostId] = useState<string | null>(null);
+  const [contentTab, setContentTab] = useState<SoKinContentTab>('all');
+  const [postCounts, setPostCounts] = useState<Record<string, number>>({ ACTIVE: 0, HIDDEN: 0, ARCHIVED: 0, DELETED: 0 });
+  const [archivingPostId, setArchivingPostId] = useState<string | null>(null);
+  const [feedTab, setFeedTab] = useState<FeedTab>('pour-toi');
 
   // Viewer (géré au niveau page : un seul à la fois)
   const [viewerItem, setViewerItem] = useState<MediaItem | null>(null);
@@ -2090,6 +2465,7 @@ export function SoKinPage() {
   const [submittingCommentPostId, setSubmittingCommentPostId] = useState<string | null>(null);
   const [commentDraft, setCommentDraft] = useState('');
   const [replyToComment, setReplyToComment] = useState<SoKinApiComment | null>(null);
+  const [commentSort, setCommentSort] = useState<'recent' | 'relevant'>('recent');
   const [commentProfileState, setCommentProfileState] = useState<CommentProfileState>({
     status: 'idle',
     profile: null,
@@ -2110,6 +2486,7 @@ export function SoKinPage() {
   const dashboardPath = getDashboardPath(user?.role);
 
   // ── Chargement du fil ──
+  const VENTES_TYPES = ['SELLING', 'PROMO', 'SHOWCASE'];
   const loadFeed = useCallback(
     async (reset = false) => {
       if (loadingRef.current) return;
@@ -2118,10 +2495,10 @@ export function SoKinPage() {
       try {
         const limit = 20;
         const currentOffset = reset ? 0 : offsetRef.current;
-        const data = await sokinApi.publicFeed({
-          limit,
-          offset: currentOffset,
-        });
+        const feedParams: { limit: number; offset: number; city?: string; types?: string[] } = { limit, offset: currentOffset };
+        if (feedTab === 'local') feedParams.city = city;
+        if (feedTab === 'ventes') feedParams.types = VENTES_TYPES;
+        const data = await sokinApi.publicFeed(feedParams);
         const incoming = data.posts;
         if (reset) {
           setPosts(incoming);
@@ -2143,30 +2520,50 @@ export function SoKinPage() {
         loadingRef.current = false;
       }
     },
-    [hasMore]
+    [hasMore, feedTab, city]
   );
 
-  const loadMyPublishedPosts = useCallback(async () => {
+  const loadMyPublishedPosts = useCallback(async (tab?: SoKinContentTab) => {
     if (!isLoggedIn) {
       setMyPublishedPosts([]);
       return;
     }
     setLoadingMyPublishedPosts(true);
     try {
-      const data = await sokinApi.myPosts();
-      setMyPublishedPosts((data.posts ?? []).filter((p) => p.status === 'ACTIVE' || p.status === 'HIDDEN'));
+      const filterTab = tab ?? contentTab;
+      const [postsData, countsData] = await Promise.all([
+        sokinApi.myPosts({ status: filterTab === 'all' ? undefined : filterTab }),
+        sokinApi.myCounts().catch(() => ({ counts: {} })),
+      ]);
+      const posts = postsData.posts ?? [];
+      // Si onglet 'all', on exclut DELETED pour ne pas polluer la vue par défaut
+      setMyPublishedPosts(filterTab === 'all' ? posts.filter((p) => p.status !== 'DELETED') : posts);
+      setPostCounts({
+        ACTIVE: 0, HIDDEN: 0, ARCHIVED: 0, DELETED: 0,
+        ...countsData.counts,
+      });
     } catch {
       setMyPublishedPosts([]);
     } finally {
       setLoadingMyPublishedPosts(false);
     }
-  }, [isLoggedIn]);
+  }, [isLoggedIn, contentTab]);
 
   // Chargement initial
   useEffect(() => {
     void loadFeed(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Rechargement quand l'onglet feed change
+  useEffect(() => {
+    setPosts([]);
+    offsetRef.current = 0;
+    setHasMore(true);
+    setLoadingFeed(true);
+    void loadFeed(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [feedTab]);
 
   useEffect(() => {
     void loadMyPublishedPosts();
@@ -2273,10 +2670,10 @@ export function SoKinPage() {
   }, [user?.id, on, off, loadFeed]);
 
   // ── Handlers ──
-  const loadComments = useCallback(async (postId: string) => {
+  const loadComments = useCallback(async (postId: string, sort: 'recent' | 'relevant' = 'recent') => {
     setLoadingCommentsPostId(postId);
     try {
-      const data = await sokinApi.postComments(postId, { limit: 100 });
+      const data = await sokinApi.postComments(postId, { limit: 100, sort });
       setCommentsByPost((prev) => ({ ...prev, [postId]: data.comments ?? [] }));
     } catch {
       setCommentsByPost((prev) => ({ ...prev, [postId]: [] }));
@@ -2293,9 +2690,17 @@ export function SoKinPage() {
 
   const handleOpenComments = useCallback((postId: string) => {
     setOpenCommentsPostId(postId);
+    setCommentSort('recent');
     clearCommentsComposer();
-    void loadComments(postId);
+    void loadComments(postId, 'recent');
   }, [clearCommentsComposer, loadComments]);
+
+  const handleCommentSortChange = useCallback((newSort: 'recent' | 'relevant') => {
+    setCommentSort(newSort);
+    if (openCommentsPostId) {
+      void loadComments(openCommentsPostId, newSort);
+    }
+  }, [openCommentsPostId, loadComments]);
 
   const handleCloseComments = useCallback(() => {
     setOpenCommentsPostId(null);
@@ -2528,13 +2933,45 @@ export function SoKinPage() {
     navigate(dashboardPath || '/account');
   }, [dashboardPath, navigate]);
 
+  const handleArchivePublishedPost = useCallback(async (postId: string) => {
+    if (archivingPostId) return;
+    setArchivingPostId(postId);
+    try {
+      const updated = await sokinApi.archivePost(postId);
+      setMyPublishedPosts((prev) => prev.map((p) => (p.id === postId ? { ...p, status: updated.status } : p)));
+      if (updated.status === 'ARCHIVED') {
+        setPosts((prev) => prev.filter((item) => item.id !== postId));
+      }
+      setPostCounts((prev) => {
+        const next = { ...prev };
+        if (updated.status === 'ARCHIVED') {
+          next.ACTIVE = Math.max(0, (next.ACTIVE ?? 0) - 1);
+          next.ARCHIVED = (next.ARCHIVED ?? 0) + 1;
+        } else {
+          next.ARCHIVED = Math.max(0, (next.ARCHIVED ?? 0) - 1);
+          next.ACTIVE = (next.ACTIVE ?? 0) + 1;
+        }
+        return next;
+      });
+    } catch {
+      // no-op
+    } finally {
+      setArchivingPostId(null);
+    }
+  }, [archivingPostId]);
+
+  const handleContentTabChange = useCallback((tab: SoKinContentTab) => {
+    setContentTab(tab);
+    void loadMyPublishedPosts(tab);
+  }, [loadMyPublishedPosts]);
+
   const handlePublish = async (data: SoKinPublishPayload) => {
     if (isPublishing || !isLoggedIn) return;
     setIsPublishing(true);
     setPublishError(null);
     try {
       if (!data.text.trim()) {
-        throw new Error('Le texte de l’annonce est obligatoire.');
+        throw new Error('Le texte de la publication est obligatoire.');
       }
 
       const mediaUrls = await Promise.all(
@@ -2544,6 +2981,8 @@ export function SoKinPage() {
       const created = await sokinApi.createPost({
         text: data.text,
         mediaUrls,
+        postType: data.postType,
+        subject: data.subject,
         location: data.location,
         tags: data.tags,
         hashtags: data.hashtags,
@@ -2630,10 +3069,25 @@ export function SoKinPage() {
               </button>
               <div className="sk-topbar-center">
                 <span className="sk-topbar-title">So-Kin</span>
-                <span className="sk-topbar-sub">Annonces</span>
+                <span className="sk-topbar-sub">{FEED_TABS.find((ft) => ft.key === feedTab)?.label ?? 'Feed'}</span>
               </div>
               <div className="sk-topbar-end" aria-hidden="true" />
             </header>
+
+            {/* ── Onglets de feed ── */}
+            <nav className="sk-feed-tabs" aria-label="Onglets du fil">
+              {FEED_TABS.map((tab) => (
+                <button
+                  key={tab.key}
+                  type="button"
+                  className={`sk-feed-tab${feedTab === tab.key ? ' sk-feed-tab--active' : ''}`}
+                  onClick={() => setFeedTab(tab.key)}
+                >
+                  <span className="sk-feed-tab-icon">{tab.icon}</span>
+                  <span>{tab.label}</span>
+                </button>
+              ))}
+            </nav>
 
             <ComposeZone
               avatarUrl={avatarUrl}
@@ -2659,50 +3113,91 @@ export function SoKinPage() {
           <button
             type="button"
             className={`sk-floating-create${fabVisible ? '' : ' sk-floating-create--hidden'}`}
-            aria-label="Gérer mes annonces"
+            aria-label="Mon contenu"
             onClick={async () => { if (!isLoggedIn) { navigate('/login'); return; } setShowMobileManage(true); await loadMyPublishedPosts(); }}
           >
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
           </button>
 
-          {/* ── Mobile: Manage Posts Drawer ── */}
+          {/* ── Mobile: Mon contenu Drawer ── */}
           {showMobileManage && (
             <div className="sk-mobile-manage-overlay" onClick={() => setShowMobileManage(false)}>
               <aside className="sk-mobile-manage-drawer" onClick={(e) => e.stopPropagation()}>
                 <header className="sk-mobile-manage-header">
-                  <h3>📋 Mes annonces</h3>
+                  <h3>📋 Mon contenu</h3>
                   <button type="button" onClick={() => setShowMobileManage(false)} className="sk-mobile-manage-close">✕</button>
                 </header>
+
+                {/* Onglets de filtre */}
+                <nav className="sk-content-tabs" aria-label="Filtrer par statut">
+                  {([
+                    ['all', 'Tout', postCounts.ACTIVE + postCounts.HIDDEN + postCounts.ARCHIVED],
+                    ['ACTIVE', 'Publiés', postCounts.ACTIVE],
+                    ['HIDDEN', 'Masqués', postCounts.HIDDEN],
+                    ['ARCHIVED', 'Archivés', postCounts.ARCHIVED],
+                    ['DELETED', 'Supprimés', postCounts.DELETED],
+                  ] as [SoKinContentTab, string, number][]).map(([key, label, count]) => (
+                    <button
+                      key={key}
+                      type="button"
+                      className={`sk-content-tab${contentTab === key ? ' sk-content-tab--active' : ''}`}
+                      onClick={() => handleContentTabChange(key)}
+                    >
+                      {label} <span className="sk-content-tab-count">{count}</span>
+                    </button>
+                  ))}
+                </nav>
+
                 <div className="sk-mobile-manage-body">
                   {loadingMyPublishedPosts ? (
                     <p className="sk-mobile-manage-empty">Chargement…</p>
                   ) : myPublishedPosts.length === 0 ? (
-                    <p className="sk-mobile-manage-empty">Aucune annonce publiée.</p>
+                    <p className="sk-mobile-manage-empty">Aucune publication dans cette catégorie.</p>
                   ) : (
-                    myPublishedPosts.map((post) => (
-                      <article key={post.id} className={`sk-mobile-manage-item${post.status === 'HIDDEN' ? ' sk-mobile-manage-item--hidden' : ''}`}>
-                        <button type="button" className="sk-mobile-manage-main" onClick={() => { setShowMobileManage(false); void handleOpenPublishedPost(post.id); }}>
-                          <strong>{post.text?.slice(0, 50) || 'Annonce sans texte'}</strong>
-                          <span>{new Date(post.createdAt).toLocaleDateString('fr-FR')}</span>
-                          <span className={`sk-mobile-manage-status ${post.status === 'ACTIVE' ? 'sk-mobile-manage-status--active' : 'sk-mobile-manage-status--hidden'}`}>
-                            {post.status === 'ACTIVE' ? '🟢 Active' : '🟡 Désactivée'}
-                          </span>
-                        </button>
-                        <div className="sk-mobile-manage-actions">
-                          <button type="button" className="sk-mobile-manage-btn sk-mobile-manage-btn--toggle" onClick={() => void handleTogglePublishedPost(post.id)} disabled={togglingPostId === post.id}>
-                            {togglingPostId === post.id ? '⏳' : post.status === 'ACTIVE' ? '⏸️ Désactiver' : '▶️ Activer'}
+                    myPublishedPosts.map((post) => {
+                      const statusConfig: Record<string, { icon: string; label: string; cls: string }> = {
+                        ACTIVE: { icon: '🟢', label: 'Publié', cls: 'sk-mobile-manage-status--active' },
+                        HIDDEN: { icon: '🟡', label: 'Masqué', cls: 'sk-mobile-manage-status--hidden' },
+                        ARCHIVED: { icon: '📦', label: 'Archivé', cls: 'sk-mobile-manage-status--archived' },
+                        DELETED: { icon: '🗑️', label: 'Supprimé', cls: 'sk-mobile-manage-status--deleted' },
+                      };
+                      const sc = statusConfig[post.status] ?? statusConfig.ACTIVE;
+                      return (
+                        <article key={post.id} className={`sk-mobile-manage-item${post.status !== 'ACTIVE' ? ` sk-mobile-manage-item--${post.status.toLowerCase()}` : ''}`}>
+                          <button type="button" className="sk-mobile-manage-main" onClick={() => { setShowMobileManage(false); void handleOpenPublishedPost(post.id); }}>
+                            <strong>{post.text?.slice(0, 50) || 'Publication sans texte'}</strong>
+                            <span>{new Date(post.createdAt).toLocaleDateString('fr-FR')}</span>
+                            <span className={`sk-mobile-manage-status ${sc.cls}`}>{sc.icon} {sc.label}</span>
                           </button>
-                          <button type="button" className="sk-mobile-manage-btn sk-mobile-manage-btn--edit" onClick={() => { setShowMobileManage(false); handleEditPublishedPost(post.id); }}>✏️ Modifier</button>
-                          <button type="button" className="sk-mobile-manage-btn sk-mobile-manage-btn--delete" onClick={() => void handleDeletePublishedPost(post.id)} disabled={deletingPostId === post.id}>
-                            {deletingPostId === post.id ? '⏳' : '🗑️ Supprimer'}
-                          </button>
-                        </div>
-                      </article>
-                    ))
+                          {/* Mini stats */}
+                          <div className="sk-mobile-manage-stats">
+                            <span title="Likes">❤️ {post.likes ?? 0}</span>
+                            <span title="Commentaires">💬 {post.comments ?? 0}</span>
+                            <span title="Partages">🔄 {post.shares ?? 0}</span>
+                          </div>
+                          {post.status !== 'DELETED' && (
+                            <div className="sk-mobile-manage-actions">
+                              {post.status !== 'ARCHIVED' && (
+                                <button type="button" className="sk-mobile-manage-btn sk-mobile-manage-btn--toggle" onClick={() => void handleTogglePublishedPost(post.id)} disabled={togglingPostId === post.id}>
+                                  {togglingPostId === post.id ? '⏳' : post.status === 'ACTIVE' ? '⏸️ Masquer' : '▶️ Publier'}
+                                </button>
+                              )}
+                              <button type="button" className="sk-mobile-manage-btn sk-mobile-manage-btn--archive" onClick={() => void handleArchivePublishedPost(post.id)} disabled={archivingPostId === post.id}>
+                                {archivingPostId === post.id ? '⏳' : post.status === 'ARCHIVED' ? '📤 Désarchiver' : '📦 Archiver'}
+                              </button>
+                              <button type="button" className="sk-mobile-manage-btn sk-mobile-manage-btn--edit" onClick={() => { setShowMobileManage(false); handleEditPublishedPost(post.id); }}>✏️ Modifier</button>
+                              <button type="button" className="sk-mobile-manage-btn sk-mobile-manage-btn--delete" onClick={() => void handleDeletePublishedPost(post.id)} disabled={deletingPostId === post.id}>
+                                {deletingPostId === post.id ? '⏳' : '🗑️ Supprimer'}
+                              </button>
+                            </div>
+                          )}
+                        </article>
+                      );
+                    })
                   )}
                 </div>
                 <footer className="sk-mobile-manage-footer">
-                  <button type="button" className="sk-mobile-manage-new" onClick={() => { setShowMobileManage(false); handleOpenCreate(); }}>+ Nouvelle annonce</button>
+                  <button type="button" className="sk-mobile-manage-new" onClick={() => { setShowMobileManage(false); handleOpenCreate(); }}>+ Nouvelle publication</button>
                 </footer>
               </aside>
             </div>
@@ -2787,14 +3282,37 @@ export function SoKinPage() {
               <nav className="sk-desktop-nav glass-container">
                 <button type="button" className="sk-desktop-nav-item" onClick={() => navigate('/')}>🏠 Accueil</button>
                 <button type="button" className="sk-desktop-nav-item sk-desktop-nav-item--active" onClick={() => navigate('/sokin')}>📱 So-Kin</button>
-                <button type="button" className="sk-desktop-nav-item" onClick={() => navigate('/explorer/public-profiles')}>👥 Profils publics</button>
-                <button type="button" className="sk-desktop-nav-item" onClick={() => navigate('/explorer/shops-online')}>🏪 Marché public</button>
                 <button type="button" className="sk-desktop-nav-item" onClick={() => navigate('/explorer')}>🔍 Explorer</button>
+                <button type="button" className="sk-desktop-nav-item" onClick={() => navigate('/explorer/public-profiles')}>👥 Profils</button>
+                <button type="button" className="sk-desktop-nav-item" onClick={() => navigate('/explorer/shops-online')}>🏪 Marché</button>
+                {isLoggedIn && (
+                  <>
+                    <hr className="sk-desktop-nav-sep" />
+                    <button type="button" className="sk-desktop-nav-item" onClick={() => navigate('/messaging')}>💬 Messages</button>
+                    <button type="button" className="sk-desktop-nav-item" onClick={() => navigate('/notifications')}>🔔 Notifications</button>
+                    <button type="button" className="sk-desktop-nav-item" onClick={() => navigate(dashboardPath)}>👤 Mon profil</button>
+                  </>
+                )}
               </nav>
             </aside>
 
             {/* ── CENTER ── */}
             <main className="sk-desktop-center" aria-label="Contenu principal So-Kin">
+              {/* Onglets de feed desktop */}
+              <nav className="sk-feed-tabs sk-feed-tabs--desktop" aria-label="Onglets du fil">
+                {FEED_TABS.map((tab) => (
+                  <button
+                    key={tab.key}
+                    type="button"
+                    className={`sk-feed-tab${feedTab === tab.key ? ' sk-feed-tab--active' : ''}`}
+                    onClick={() => setFeedTab(tab.key)}
+                  >
+                    <span className="sk-feed-tab-icon">{tab.icon}</span>
+                    <span>{tab.label}</span>
+                  </button>
+                ))}
+              </nav>
+
               <DesktopStudioComposer
                 avatarUrl={avatarUrl}
                 displayName={displayName}
@@ -2824,47 +3342,96 @@ export function SoKinPage() {
 
             {/* ── RIGHT SIDEBAR ── */}
             <aside className="sk-desktop-right" aria-label="Actions et contenu utilisateur">
-              <section className="sk-desktop-panel sk-desktop-commercial glass-container" aria-label="Bloc commercial Kin-Sell">
-                <span className="sk-desktop-commercial-icon">📦</span>
-                <p className="sk-desktop-commercial-brand">✦ Kin-Sell</p>
-                <p className="sk-desktop-commercial-line">Publiez vos articles</p>
-                <p className="sk-desktop-commercial-line">En 3 étapes simples. Photos, prix, description. Votre vitrine en 5 min.</p>
-                <button type="button" className="sk-desktop-primary" onClick={openAccountArticles}>publier maintenant</button>
+              {/* ── Tendances ── */}
+              <section className="sk-desktop-panel sk-desktop-trends glass-container" aria-label="Tendances locales">
+                <h3>🔥 Tendances à {city}</h3>
+                <ul className="sk-desktop-trend-list">
+                  <li className="sk-desktop-trend-item"><span className="sk-desktop-trend-tag">#Kinshasa</span><span className="sk-desktop-trend-meta">Populaire</span></li>
+                  <li className="sk-desktop-trend-item"><span className="sk-desktop-trend-tag">#Ventes</span><span className="sk-desktop-trend-meta">Commerce</span></li>
+                  <li className="sk-desktop-trend-item"><span className="sk-desktop-trend-tag">#SoKin</span><span className="sk-desktop-trend-meta">Réseau</span></li>
+                </ul>
               </section>
 
-              <section className="sk-desktop-panel glass-container" aria-label="Annonces publiées">
-                <h3>Mes annonces publiées</h3>
+              {/* ── Bloc commercial (discret) ── */}
+              <section className="sk-desktop-panel sk-desktop-commercial sk-desktop-commercial--discreet glass-container" aria-label="Bloc commercial Kin-Sell">
+                <p className="sk-desktop-commercial-line">📦 Publiez vos articles en 3 étapes simples.</p>
+                <button type="button" className="sk-desktop-outline" onClick={openAccountArticles}>Publier maintenant</button>
+              </section>
+
+              <section className="sk-desktop-panel glass-container" aria-label="Mon contenu">
+                <h3>Mon contenu</h3>
+
+                {/* Onglets desktop */}
+                <nav className="sk-content-tabs sk-content-tabs--desktop" aria-label="Filtrer par statut">
+                  {([
+                    ['all', 'Tout', postCounts.ACTIVE + postCounts.HIDDEN + postCounts.ARCHIVED],
+                    ['ACTIVE', 'Publiés', postCounts.ACTIVE],
+                    ['HIDDEN', 'Masqués', postCounts.HIDDEN],
+                    ['ARCHIVED', 'Archivés', postCounts.ARCHIVED],
+                  ] as [SoKinContentTab, string, number][]).map(([key, label, count]) => (
+                    <button
+                      key={key}
+                      type="button"
+                      className={`sk-content-tab${contentTab === key ? ' sk-content-tab--active' : ''}`}
+                      onClick={() => handleContentTabChange(key)}
+                    >
+                      {label} <span className="sk-content-tab-count">{count}</span>
+                    </button>
+                  ))}
+                </nav>
 
                 {loadingMyPublishedPosts ? (
                   <p className="sk-desktop-user-meta">Chargement…</p>
                 ) : myPublishedPosts.length === 0 ? (
-                  <p className="sk-desktop-user-meta">Aucune annonce publiée.</p>
+                  <p className="sk-desktop-user-meta">Aucune publication dans cette catégorie.</p>
                 ) : (
                   <div className="sk-desktop-published-list">
-                    {myPublishedPosts.slice(0, 8).map((post) => (
-                      <article key={post.id} className="sk-desktop-published-item">
-                        <button
-                          type="button"
-                          className="sk-desktop-published-main"
-                          onClick={() => void handleOpenPublishedPost(post.id)}
-                          title="Voir l'annonce"
-                        >
-                          <strong>{post.text?.slice(0, 46) || 'Annonce sans texte'}</strong>
-                          <span>ID: {post.id.slice(0, 8)} · {new Date(post.createdAt).toLocaleDateString('fr-FR')}</span>
-                        </button>
-                        <div className="sk-desktop-published-actions">
-                          <button type="button" className="sk-desktop-outline" onClick={() => handleEditPublishedPost(post.id)}>Modifier</button>
+                    {myPublishedPosts.slice(0, 8).map((post) => {
+                      const statusConfig: Record<string, { icon: string; label: string }> = {
+                        ACTIVE: { icon: '🟢', label: 'Publié' },
+                        HIDDEN: { icon: '🟡', label: 'Masqué' },
+                        ARCHIVED: { icon: '📦', label: 'Archivé' },
+                        DELETED: { icon: '🗑️', label: 'Supprimé' },
+                      };
+                      const sc = statusConfig[post.status] ?? statusConfig.ACTIVE;
+                      return (
+                        <article key={post.id} className="sk-desktop-published-item">
                           <button
                             type="button"
-                            className="sk-desktop-outline sk-desktop-outline--danger"
-                            onClick={() => void handleDeletePublishedPost(post.id)}
-                            disabled={deletingPostId === post.id}
+                            className="sk-desktop-published-main"
+                            onClick={() => void handleOpenPublishedPost(post.id)}
+                            title="Voir la publication"
                           >
-                            {deletingPostId === post.id ? 'Suppression…' : 'Supprimer'}
+                            <strong>{post.text?.slice(0, 46) || 'Publication sans texte'}</strong>
+                            <span className="sk-desktop-published-meta">
+                              {sc.icon} {sc.label} · {new Date(post.createdAt).toLocaleDateString('fr-FR')}
+                            </span>
+                            <span className="sk-desktop-published-stats">❤️ {post.likes ?? 0} · 💬 {post.comments ?? 0} · 🔄 {post.shares ?? 0}</span>
                           </button>
-                        </div>
-                      </article>
-                    ))}
+                          {post.status !== 'DELETED' && (
+                            <div className="sk-desktop-published-actions">
+                              {post.status !== 'ARCHIVED' && (
+                                <button type="button" className="sk-desktop-outline" onClick={() => void handleTogglePublishedPost(post.id)} disabled={togglingPostId === post.id}>
+                                  {togglingPostId === post.id ? '…' : post.status === 'ACTIVE' ? 'Masquer' : 'Publier'}
+                                </button>
+                              )}
+                              <button type="button" className="sk-desktop-outline" onClick={() => void handleArchivePublishedPost(post.id)} disabled={archivingPostId === post.id}>
+                                {archivingPostId === post.id ? '…' : post.status === 'ARCHIVED' ? 'Désarchiver' : 'Archiver'}
+                              </button>
+                              <button type="button" className="sk-desktop-outline" onClick={() => handleEditPublishedPost(post.id)}>Modifier</button>
+                              <button
+                                type="button"
+                                className="sk-desktop-outline sk-desktop-outline--danger"
+                                onClick={() => void handleDeletePublishedPost(post.id)}
+                                disabled={deletingPostId === post.id}
+                              >
+                                {deletingPostId === post.id ? '…' : 'Supprimer'}
+                              </button>
+                            </div>
+                          )}
+                        </article>
+                      );
+                    })}
                   </div>
                 )}
 
@@ -2920,12 +3487,14 @@ export function SoKinPage() {
         submitting={submittingCommentPostId === openCommentsPostId}
         replyTo={replyToComment}
         profileState={commentProfileState}
+        sort={commentSort}
         onClose={handleCloseComments}
         onDraftChange={setCommentDraft}
         onSubmit={handleSubmitComment}
         onPrepareReply={handlePrepareReply}
         onOpenProfile={handleOpenCommentProfile}
         onCloseProfileState={() => setCommentProfileState({ status: 'idle', profile: null, message: null })}
+        onSortChange={handleCommentSortChange}
       />
 
       {showCreateScreen && (

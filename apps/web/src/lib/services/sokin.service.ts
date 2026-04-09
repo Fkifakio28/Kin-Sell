@@ -1,9 +1,14 @@
 import { request, mutate } from "../api-core";
 
+// ── So-Kin Post Types ──
+export type SoKinPostType = 'SHOWCASE' | 'DISCUSSION' | 'QUESTION' | 'SELLING' | 'PROMO' | 'SEARCH' | 'UPDATE' | 'REVIEW' | 'TREND';
+
 // ── So-Kin Posts ──
 export type SoKinApiPost = {
   id: string;
   authorId: string;
+  postType: SoKinPostType;
+  subject: string | null;
   text: string;
   mediaUrls: string[];
   location: string | null;
@@ -12,12 +17,14 @@ export type SoKinApiPost = {
   likes: number;
   comments: number;
   shares: number;
-  status: 'ACTIVE' | 'HIDDEN' | 'FLAGGED' | 'DELETED';
+  status: 'ACTIVE' | 'HIDDEN' | 'ARCHIVED' | 'FLAGGED' | 'DELETED';
   createdAt: string;
   updatedAt: string;
 };
 
 export type SoKinReactionType = 'LIKE' | 'LOVE' | 'HAHA' | 'WOW' | 'SAD' | 'ANGRY';
+
+export type SoKinReportReason = 'SPAM' | 'HARASSMENT' | 'HATE_SPEECH' | 'VIOLENCE' | 'NUDITY' | 'SCAM' | 'MISINFORMATION' | 'OTHER';
 
 export type SoKinApiFeedPost = SoKinApiPost & {
   author: {
@@ -50,6 +57,8 @@ export type SoKinApiComment = {
       city: string | null;
     } | null;
   };
+  replies?: SoKinApiComment[];
+  _count?: { replies: number };
 };
 
 export type SoKinPublicUser = {
@@ -63,10 +72,16 @@ export type SoKinPublicUser = {
   verificationStatus: string;
 };
 
+export type SoKinContentTab = 'all' | 'ACTIVE' | 'HIDDEN' | 'ARCHIVED' | 'DELETED';
+
 export const sokin = {
-  myPosts: () =>
-    request<{ posts: SoKinApiPost[] }>('/sokin/posts/mine'),
-  createPost: (body: { text: string; mediaUrls?: string[]; location?: string; tags?: string[]; hashtags?: string[]; scheduledAt?: string }) =>
+  myPosts: (params?: { status?: SoKinContentTab }) =>
+    request<{ posts: SoKinApiPost[] }>('/sokin/posts/mine', {
+      params: { status: params?.status },
+    }),
+  myCounts: () =>
+    request<{ counts: Record<string, number> }>('/sokin/posts/counts'),
+  createPost: (body: { text: string; mediaUrls?: string[]; location?: string; tags?: string[]; hashtags?: string[]; scheduledAt?: string; postType?: SoKinPostType; subject?: string }) =>
     mutate<SoKinApiPost>('/sokin/posts', { method: 'POST', body }, ['/sokin/posts']),
   archivePost: (id: string) =>
     mutate<SoKinApiPost>(`/sokin/posts/${encodeURIComponent(id)}/archive`, { method: 'PATCH' }, ['/sokin/posts']),
@@ -74,7 +89,7 @@ export const sokin = {
     mutate<{ post: SoKinApiPost }>(`/sokin/posts/${encodeURIComponent(id)}/toggle`, { method: 'PATCH' }, ['/sokin/posts']),
   deletePost: (id: string) =>
     mutate<{ success: boolean }>(`/sokin/posts/${encodeURIComponent(id)}`, { method: 'DELETE' }, ['/sokin/posts']),
-  publicFeed: (params?: { limit?: number; offset?: number; cursor?: string; city?: string; country?: string }) =>
+  publicFeed: (params?: { limit?: number; offset?: number; cursor?: string; city?: string; country?: string; types?: string[] }) =>
     request<{ posts: SoKinApiFeedPost[] }>('/sokin/posts', {
       params: {
         limit: params?.limit,
@@ -82,14 +97,16 @@ export const sokin = {
         cursor: params?.cursor,
         city: params?.city,
         country: params?.country,
+        types: params?.types?.join(','),
       },
     }),
   publicPost: (id: string) =>
     request<{ post: SoKinApiFeedPost }>(`/sokin/posts/${encodeURIComponent(id)}`),
-  postComments: (id: string, params?: { limit?: number }) =>
+  postComments: (id: string, params?: { limit?: number; sort?: 'recent' | 'relevant' }) =>
     request<{ comments: SoKinApiComment[] }>(`/sokin/posts/${encodeURIComponent(id)}/comments`, {
       params: {
         limit: params?.limit,
+        sort: params?.sort,
       },
     }),
   createComment: (id: string, body: { content: string; parentCommentId?: string }) =>
@@ -98,6 +115,38 @@ export const sokin = {
     request<{ users: SoKinPublicUser[] }>('/sokin/users', {
       params: params as Record<string, string | undefined>,
     }),
+
+  // ── Interactions sociales ──
+
+  /** Réagir à un post (toggle) */
+  react: (id: string, type: SoKinReactionType = 'LIKE') =>
+    mutate<{ action: 'added' | 'removed' | 'changed'; reaction: { type: SoKinReactionType } | null }>(
+      `/sokin/posts/${encodeURIComponent(id)}/react`, { method: 'POST', body: { type } }, []
+    ),
+
+  /** Sauvegarder/retirer un post des favoris */
+  bookmark: (id: string) =>
+    mutate<{ saved: boolean }>(
+      `/sokin/posts/${encodeURIComponent(id)}/bookmark`, { method: 'POST' }, []
+    ),
+
+  /** Liste des posts sauvegardés */
+  myBookmarks: (params?: { limit?: number }) =>
+    request<{ posts: SoKinApiFeedPost[] }>('/sokin/bookmarks', {
+      params: { limit: params?.limit },
+    }),
+
+  /** Signaler un post */
+  report: (id: string, body: { reason: SoKinReportReason; details?: string }) =>
+    mutate<{ report: { id: string } }>(
+      `/sokin/posts/${encodeURIComponent(id)}/report`, { method: 'POST', body }, []
+    ),
+
+  /** État social sur plusieurs posts (réactions + bookmarks) */
+  socialState: (postIds: string[]) =>
+    request<{ reactions: Record<string, SoKinReactionType>; bookmarks: string[] }>(
+      '/sokin/posts/social-state', { params: { postIds: postIds.join(',') } }
+    ),
 };
 
 // ── Blog ──
