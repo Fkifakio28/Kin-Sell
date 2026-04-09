@@ -12,9 +12,9 @@
  *   2. Enrich with Gemini regional context
  *   3. Generate ad copy via ChatGPT
  *   4. Score and rank ads
- *   5. Store as INTERNAL advertisements with auto-rotation
+ *   5. Store as KIN_SELL advertisements with auto-rotation
  *
- * All generated ads are tagged type="INTERNAL" and source-attributed.
+ * All generated ads are tagged type="KIN_SELL" + paymentRef="INTERNAL_AUTO".
  * The orchestrator runs on a configurable interval (default: every 12 hours).
  */
 
@@ -39,7 +39,7 @@ interface InternalAd {
   description: string;
   ctaText: string;
   targetPages: string[];
-  type: "INTERNAL";
+  type: "KIN_SELL";
   priority: number;
   linkUrl: string;
   score: ConfidenceScore;
@@ -169,7 +169,7 @@ async function generateInternalAds(
         description: adResult.copy.description,
         ctaText: adResult.copy.ctaText,
         targetPages: [adResult.copy.targetPage, "home"],
-        type: "INTERNAL",
+        type: "KIN_SELL",
         priority,
         linkUrl: `/explorer?category=${encodeURIComponent(cat.category)}`,
         score: adResult.score,
@@ -227,7 +227,7 @@ async function storeInternalAds(ads: InternalAd[]): Promise<number> {
           description: ad.description,
           ctaText: ad.ctaText,
           linkUrl: ad.linkUrl,
-          type: "INTERNAL",
+          type: "KIN_SELL",
           status: "ACTIVE",
           targetPages: ad.targetPages,
           priority: ad.priority,
@@ -257,7 +257,8 @@ async function expireOldInternalAds(): Promise<number> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const result = await (prisma as any).advertisement.updateMany({
       where: {
-        type: "INTERNAL",
+        type: "KIN_SELL",
+        paymentRef: "INTERNAL_AUTO",
         status: "ACTIVE",
         endDate: { lt: new Date() },
       },
@@ -271,7 +272,7 @@ async function countActiveInternalAds(): Promise<number> {
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return await (prisma as any).advertisement.count({
-      where: { type: "INTERNAL", status: "ACTIVE" },
+      where: { type: "KIN_SELL", paymentRef: "INTERNAL_AUTO", status: "ACTIVE" },
     });
   } catch { return 0; }
 }
