@@ -2047,6 +2047,44 @@
   color: #e0d6ff;
   font-weight: 600;
 }
+.ud-art-filter-btn--promo {
+  border-color: rgba(255, 152, 0, 0.2);
+}
+.ud-art-filter-btn--promo:hover {
+  background: rgba(255, 152, 0, 0.1);
+  border-color: rgba(255, 152, 0, 0.35);
+}
+.ud-art-filter-btn--promo.active {
+  background: rgba(255, 152, 0, 0.18);
+  border-color: #ff9800;
+  color: #ffe0b2;
+}
+
+/* Promo price display */
+.ud-art-price-old {
+  text-decoration: line-through;
+  opacity: 0.5;
+  font-weight: 400;
+  font-size: 0.75rem;
+  margin-right: 0.3rem;
+}
+.ud-art-price-promo {
+  color: #ff9800;
+  font-weight: 700;
+}
+.ud-art-promo-badge {
+  display: inline-block;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  background: rgba(255, 152, 0, 0.15);
+  border: 1px solid rgba(255, 152, 0, 0.3);
+  color: #ffb74d;
+  font-size: 0.65rem;
+  font-weight: 600;
+  margin-left: 0.35rem;
+  vertical-align: middle;
+  white-space: nowrap;
+}
 
 /* ── Filters bar (filtres + toggle vue) ── */
 .ud-art-filters-bar {

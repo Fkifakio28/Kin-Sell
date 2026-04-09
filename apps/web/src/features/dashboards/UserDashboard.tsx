@@ -407,7 +407,7 @@ export function UserDashboard() {
   const [articlesStats, setArticlesStats] = useState<MyListingsStats | null>(null);
   const [articlesPage, setArticlesPage] = useState(1);
   const [articlesTotalPages, setArticlesTotalPages] = useState(1);
-  const [articlesFilter, setArticlesFilter] = useState<ListingStatus | ''>('');
+  const [articlesFilter, setArticlesFilter] = useState<ListingStatus | '' | 'PROMO'>('');
   const [loadingArticles, setLoadingArticles] = useState(false);
   const [artViewMode, setArtViewMode] = useState<'grid' | 'list'>(() => (localStorage.getItem('ks-art-view') as 'grid' | 'list') || 'grid');
   const { selectedIds: selectedArticleIds, setSelectedIds: setSelectedArticleIds, toggle: toggleArticleSelection, selectAll: selectAllArticles, deselectAll: deselectAllArticles, promoItems: promoArticles, openPromo: openArticlePromo, closePromo: closeArticlePromo } = useListingSelection();
@@ -984,11 +984,11 @@ export function UserDashboard() {
   };
 
   /* ── Articles loader ── */
-  const refreshArticles = useCallback(async (page: number, statusFilter: ListingStatus | '') => {
+  const refreshArticles = useCallback(async (page: number, statusFilter: ListingStatus | '' | 'PROMO') => {
     setLoadingArticles(true);
     try {
       const params: Record<string, string | number | undefined> = { page, limit: 12 };
-      if (statusFilter) params.status = statusFilter;
+      if (statusFilter && statusFilter !== 'PROMO') params.status = statusFilter;
       const [listData, statsData] = await Promise.all([
         listingsApi.mine(params as { status?: ListingStatus; page?: number; limit?: number }),
         listingsApi.mineStats(),
@@ -2532,14 +2532,14 @@ export function UserDashboard() {
                 <span className="ud-art-select-all-check" />
               </label>
               <div className="ud-art-filters">
-                {(['', 'ACTIVE', 'INACTIVE', 'ARCHIVED'] as const).map((f) => (
+                {(['', 'ACTIVE', 'INACTIVE', 'ARCHIVED', 'PROMO'] as const).map((f) => (
                   <button
                     key={f}
                     type="button"
-                    className={`ud-art-filter-btn${articlesFilter === f ? ' active' : ''}`}
-                    onClick={() => { setArticlesFilter(f as ListingStatus | ''); setArticlesPage(1); }}
+                    className={`ud-art-filter-btn${articlesFilter === f ? ' active' : ''}${f === 'PROMO' ? ' ud-art-filter-btn--promo' : ''}`}
+                    onClick={() => { setArticlesFilter(f as ListingStatus | '' | 'PROMO'); setArticlesPage(1); }}
                   >
-                    {f === '' ? t('user.filterAll') : f === 'ACTIVE' ? t('user.filterActive') : f === 'INACTIVE' ? t('user.filterInactive') : t('user.filterArchived')}
+                    {f === '' ? t('user.filterAll') : f === 'ACTIVE' ? t('user.filterActive') : f === 'INACTIVE' ? t('user.filterInactive') : f === 'ARCHIVED' ? t('user.filterArchived') : '🏷 Promo'}
                   </button>
                 ))}
               </div>
@@ -2577,7 +2577,7 @@ export function UserDashboard() {
                   <span className="ud-art-list-col ud-art-list-col--status">Statut</span>
                   <span className="ud-art-list-col ud-art-list-col--actions">Actions</span>
                 </div>
-                {myArticles.map((article) => (
+                {(articlesFilter === 'PROMO' ? myArticles.filter(a => a.promoActive) : myArticles).map((article) => (
                   <div key={article.id} className={`ud-art-list-row${article.status === 'INACTIVE' ? ' ud-art-list-row--dim' : ''}${selectedArticleIds.has(article.id) ? ' ud-art-list-row--selected' : ''}`}>
                     <label className="ud-art-list-col ud-art-list-col--chk" onClick={(e) => e.stopPropagation()}>
                       <input type="checkbox" checked={selectedArticleIds.has(article.id)} onChange={() => toggleArticleSelection(article.id)} />
@@ -2600,7 +2600,13 @@ export function UserDashboard() {
                       </span>
                     </span>
                     <span className="ud-art-list-col ud-art-list-col--price ud-art-list-price">
-                      {formatPriceLabelFromUsdCents(article.priceUsdCents)}
+                      {article.promoActive && article.promoPriceUsdCents != null ? (
+                        <>
+                          <span className="ud-art-price-old">{formatPriceLabelFromUsdCents(article.priceUsdCents)}</span>
+                          <span className="ud-art-price-promo">{formatPriceLabelFromUsdCents(article.promoPriceUsdCents)}</span>
+                          <span className="ud-art-promo-badge">🏷 Promo</span>
+                        </>
+                      ) : formatPriceLabelFromUsdCents(article.priceUsdCents)}
                     </span>
                     <span className="ud-art-list-col ud-art-list-col--status">
                       <span className={`ud-art-list-status${article.status === 'ACTIVE' ? ' ud-art-list-status--active' : article.status === 'INACTIVE' ? ' ud-art-list-status--inactive' : ' ud-art-list-status--archived'}`}>
@@ -2625,7 +2631,7 @@ export function UserDashboard() {
             ) : (
               <div className="ud-art-slider-wrap">
                 <div className="ud-art-grid">
-                  {myArticles.map((article) => (
+                  {(articlesFilter === 'PROMO' ? myArticles.filter(a => a.promoActive) : myArticles).map((article) => (
                     <article key={article.id} className={`ud-art-card${article.status === 'INACTIVE' ? ' ud-art-card--dim' : ''}${selectedArticleIds.has(article.id) ? ' ud-art-card--selected' : ''}`}>
                       <label className="ud-art-card-chk" onClick={(e) => e.stopPropagation()}>
                         <input type="checkbox" checked={selectedArticleIds.has(article.id)} onChange={() => toggleArticleSelection(article.id)} />
@@ -2647,8 +2653,14 @@ export function UserDashboard() {
                         <h4 className="ud-art-card-title">{article.title}</h4>
                         <p className="ud-art-card-meta">{article.category} · {article.city}</p>
                         <p className="ud-art-card-price">
-                          {formatPriceLabelFromUsdCents(article.priceUsdCents)}
+                          {article.promoActive && article.promoPriceUsdCents != null ? (
+                            <>
+                              <span className="ud-art-price-old">{formatPriceLabelFromUsdCents(article.priceUsdCents)}</span>
+                              <span className="ud-art-price-promo">{formatPriceLabelFromUsdCents(article.promoPriceUsdCents)}</span>
+                            </>
+                          ) : formatPriceLabelFromUsdCents(article.priceUsdCents)}
                         </p>
+                        {article.promoActive && <span className="ud-art-promo-badge">🏷 Promo</span>}
                         {article.type === 'PRODUIT' && (
                           <p className="ud-art-card-stock">
                             {t('user.stockLabel')}: {article.stockQuantity !== null ? article.stockQuantity : '∞'}
