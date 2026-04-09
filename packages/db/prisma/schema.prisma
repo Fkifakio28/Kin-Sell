@@ -1351,6 +1351,7 @@ model SoKinPost {
   likes           Int             @default(0)
   comments        Int             @default(0)
   shares          Int             @default(0)
+  views           Int             @default(0)
   sponsored       Boolean         @default(false)
   status          SoKinPostStatus @default(ACTIVE)
   moderatedBy     String?
@@ -2022,6 +2023,30 @@ model SoKinReport {
   @@index([status])
   @@index([postId])
   @@index([userId])
+}
+
+// ══════════════════════════════════════════════
+// SO-KIN TRACKING — Événements analytiques
+// ══════════════════════════════════════════════
+
+model SoKinEvent {
+  id        String   @id @default(cuid())
+  event     String   // VIEW, COMMENT_OPEN, PROFILE_CLICK, LISTING_CLICK, CONTACT_CLICK, DM_OPEN
+  postId    String
+  authorId  String   // dénormalisé pour agrégats rapides
+  viewerId  String?  // null si visiteur non connecté
+  postType  String?  // dénormalisé
+  city      String?
+  country   String?
+  source    String?  // feed tab: pour_toi, local, suivis, ventes, detail, direct
+  meta      Json?    // données complémentaires (listingId, hashtags, etc.)
+  createdAt DateTime @default(now())
+
+  @@index([postId, event])
+  @@index([authorId, event, createdAt])
+  @@index([event, createdAt])
+  @@index([city, event, createdAt])
+  @@index([createdAt])
 }
 
 // ══════════════════════════════════════════════

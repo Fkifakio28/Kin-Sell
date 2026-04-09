@@ -37,6 +37,7 @@ import {
 } from "./sokin-social.service.js";
 import { emitToAll } from "../messaging/socket.js";
 import { rateLimit, RateLimits } from "../../shared/middleware/rate-limit.middleware.js";
+import { trackEvents, VALID_EVENTS, getAuthorTrackingStats, type SoKinEventType } from "./sokin-tracking.service.js";
 
 const isVideoMediaUrl = (value: string) => /\.(mp4|webm|mov|ogg)(\?.*)?$/i.test(value);
 
@@ -370,6 +371,65 @@ router.post(
     const { reason, details } = reportSchema.parse(req.body);
     const report = await reportPost(req.auth!.userId, req.params.id, reason, details);
     res.status(201).json({ report });
+  })
+);
+
+/* ─── Tracking analytique ─── */
+
+const trackSchema = z.object({
+  events: z.array(z.object({
+    event: z.enum(VALID_EVENTS as unknown as [string, ...string[]]),
+    postId: z.string().min(1).max(50),
+    authorId: z.string().min(1).max(50),
+    postType: z.string().max(20).optional(),
+    city: z.string().max(100).optional(),
+    country: z.string().max(100).optional(),
+    source: z.string().max(30).optional(),
+    meta: z.record(z.unknown()).optional(),
+  })).min(1).max(30),
+});
+
+/**
+ * POST /track
+ * Batch tracking d'événements So-Kin (fire-and-forget, rate-limité)
+ * Accepte les visiteurs non connectés (vues anonymes)
+ */
+router.post(
+  "/track",
+  rateLimit(RateLimits.AD_TRACKING),
+  asyncHandler(async (req, res) => {
+    const { events } = trackSchema.parse(req.body);
+    const viewerId = (req as any).auth?.userId ?? null;
+    const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.ip || "unknown";
+
+    const enriched = events.map((ev) => ({
+      ...ev,
+      event: ev.event as SoKinEventType,
+      viewerId,
+      postType: ev.postType ?? null,
+      city: ev.city ?? null,
+      country: ev.country ?? null,
+      source: ev.source ?? null,
+      meta: ev.meta ?? null,
+    }));
+
+    // Fire-and-forget : ne pas bloquer la réponse
+    trackEvents(enriched, ip).catch(() => {});
+
+    res.json({ ok: true });
+  })
+);
+
+/**
+ * GET /tracking/stats
+ * Stats de tracking résumées pour l'auteur connecté (7 derniers jours)
+ */
+router.get(
+  "/tracking/stats",
+  requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const stats = await getAuthorTrackingStats(req.auth!.userId);
+    res.json({ stats });
   })
 );
 

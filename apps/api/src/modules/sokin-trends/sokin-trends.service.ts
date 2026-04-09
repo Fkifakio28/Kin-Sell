@@ -189,6 +189,7 @@ export async function getPostInsight(postId: string, userId: string): Promise<Po
       likes: true,
       comments: true,
       shares: true,
+      // views: awaiting prisma generate (accessed via 'as any')
       mediaUrls: true,
       hashtags: true,
       text: true,
@@ -208,9 +209,10 @@ export async function getPostInsight(postId: string, userId: string): Promise<Po
     };
   }
 
-  // Estimation des vues (heuristique simple)
+  // Vues réelles (champ views) avec fallback estimation
   const engagement = post.likes + post.comments + post.shares;
-  const estimatedViews = Math.max(engagement * 8, 10); // ratio réaliste ~12%
+  const realViews = (post as any).views ?? 0;
+  const estimatedViews = realViews > 0 ? realViews : Math.max(engagement * 8, 10);
   const engagementRate = estimatedViews > 0 ? Math.round((engagement / estimatedViews) * 100) : 0;
 
   // Score de potentiel (0-100)

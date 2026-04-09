@@ -40,6 +40,7 @@ import { ApiError } from '../../lib/api-core';
 import { AdBanner } from '../../components/AdBanner';
 import { SeoMeta } from '../../components/SeoMeta';
 import { buildSoKinFeedItems } from './ad-cadence';
+import { observePostView, trackSoKinEvent, flushTracking } from '../../lib/services/sokin-tracking.service';
 import { sokinTrends, sokinAnalytics, type TrendingTopic, type TrendingHashtag, type SuggestedProfile, type PostInsight } from '../../lib/services/sokin-analytics.service';
 import './sokin.css';
 
@@ -636,6 +637,7 @@ function AnnounceCard({
   postInsight,
   onLoadInsight,
   isAuthor,
+  feedSource,
 }: {
   post: SoKinApiFeedPost;
   t: (k: string) => string;
@@ -648,14 +650,41 @@ function AnnounceCard({
   postInsight?: PostInsight | null;
   onLoadInsight?: () => void;
   isAuthor?: boolean;
+  feedSource?: string;
 }) {
   const navigate = useNavigate();
+  const cardRef = useRef<HTMLElement>(null);
   const [myReaction, setMyReaction] = useState<SoKinReactionType | null>(null);
   const [likeCount, setLikeCount] = useState(post.likes ?? 0);
   const [saved, setSaved] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [reacting, setReacting] = useState(false);
   const [insightExpanded, setInsightExpanded] = useState(false);
+
+  // ── Tracking : observer les vues de post ──
+  useEffect(() => {
+    const el = cardRef.current;
+    if (!el) return;
+    return observePostView(el, {
+      postId: post.id,
+      authorId: post.authorId,
+      postType: post.postType,
+      city: (post as any).location ?? undefined,
+      source: feedSource,
+    });
+  }, [post.id, post.authorId, post.postType, feedSource]);
+
+  const trackEv = useCallback((event: Parameters<typeof trackSoKinEvent>[0]['event'], meta?: Record<string, unknown>) => {
+    trackSoKinEvent({
+      event,
+      postId: post.id,
+      authorId: post.authorId,
+      postType: post.postType,
+      city: (post as any).location ?? undefined,
+      source: feedSource,
+      meta,
+    });
+  }, [post.id, post.authorId, post.postType, feedSource]);
 
   const profile = post.author.profile;
   const authorName = profile?.displayName ?? 'Utilisateur';
@@ -704,14 +733,14 @@ function AnnounceCard({
   }, [isLoggedIn, saved, post.id]);
 
   return (
-    <article className={`sk-card${isCommercialType ? ' sk-card--commercial' : ''}`}>
+    <article ref={cardRef} className={`sk-card${isCommercialType ? ' sk-card--commercial' : ''}`}>
 
       {/* ═══ L1. HEADER : avatar + nom + handle + temps + badge + menu ═══ */}
       <header className="sk-card-header">
         <button
           type="button"
           className="sk-card-author"
-          onClick={() => navigate(`/user/${cleanHandle}`)}
+          onClick={() => { trackEv('PROFILE_CLICK'); navigate(`/user/${cleanHandle}`); }}
           aria-label={`Voir le profil de ${authorName}`}
         >
           <div className="sk-card-avatar-wrap">
@@ -752,7 +781,7 @@ function AnnounceCard({
           {menuOpen && (
             <div className="sk-card-menu-dropdown" role="menu">
               {isCommercialType && (
-                <button type="button" role="menuitem" onClick={() => { onContact(); setMenuOpen(false); }}>
+                <button type="button" role="menuitem" onClick={() => { trackEv('CONTACT_CLICK'); onContact(); setMenuOpen(false); }}>
                   <IconMessage /> Contacter
                 </button>
               )}
@@ -887,7 +916,7 @@ function AnnounceCard({
         <button
           type="button"
           className={`sk-social-btn sk-social-btn--comment${isCommentsOpen ? ' sk-social-btn--active' : ''}`}
-          onClick={onOpenComments}
+          onClick={() => { trackEv('COMMENT_OPEN'); onOpenComments(); }}
           aria-label="Commenter"
           aria-expanded={isCommentsOpen}
         >
@@ -923,7 +952,7 @@ function AnnounceCard({
             <button
               type="button"
               className="sk-card-commerce-action"
-              onClick={onContact}
+              onClick={() => { trackEv('CONTACT_CLICK'); onContact(); }}
               disabled={isContacting}
               aria-busy={isContacting}
             >
@@ -1026,6 +1055,7 @@ function AnnouncesFeed({
   currentUserId,
   postInsightsCache,
   onLoadInsight,
+  feedSource,
 }: {
   posts: SoKinApiFeedPost[];
   hasMore: boolean;
@@ -1042,6 +1072,7 @@ function AnnouncesFeed({
   currentUserId?: string;
   postInsightsCache?: Record<string, PostInsight>;
   onLoadInsight?: (postId: string) => void;
+  feedSource?: string;
 }) {
   const feedItems = useMemo(() => buildSoKinFeedItems(posts, 4), [posts]);
   const [resolvedAdsBySlot, setResolvedAdsBySlot] = useState<Record<string, string | null>>({});
@@ -1088,6 +1119,7 @@ function AnnouncesFeed({
           isAuthor={isAuthor}
           postInsight={postInsightsCache?.[post.id] ?? null}
           onLoadInsight={onLoadInsight ? () => onLoadInsight(post.id) : undefined}
+          feedSource={feedSource}
         />
       );
 
@@ -2558,6 +2590,9 @@ export function SoKinPage() {
   const displayName = user?.profile?.displayName ?? 'Utilisateur';
   const dashboardPath = getDashboardPath(user?.role);
 
+  // ── Flush tracking au démontage ──
+  useEffect(() => () => { flushTracking(); }, []);
+
   // ── Chargement du fil ──
   const VENTES_TYPES = ['SELLING', 'PROMO', 'SHOWCASE'];
   const loadFeed = useCallback(
@@ -3228,6 +3263,7 @@ export function SoKinPage() {
               currentUserId={user?.id}
               postInsightsCache={postInsightsCache}
               onLoadInsight={loadPostInsight}
+              feedSource={feedTab}
             />
           </div>
 
@@ -3505,6 +3541,7 @@ export function SoKinPage() {
                 currentUserId={user?.id}
                 postInsightsCache={postInsightsCache}
                 onLoadInsight={loadPostInsight}
+                feedSource={feedTab}
               />
             </main>
 
