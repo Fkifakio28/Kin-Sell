@@ -201,6 +201,38 @@ router.post(
   })
 );
 
+/* ── Promotion: activer/désactiver une promo sur un ou plusieurs articles ── */
+router.patch(
+  "/promo",
+  requireAuth,
+  asyncHandler(async (request: AuthenticatedRequest, response) => {
+    const schema = z.object({
+      listingIds: z.array(z.string()).min(1).max(50),
+      promoPriceUsdCents: z.number().int().min(0),
+      activate: z.boolean().default(true),
+      title: z.string().max(120).optional(),
+      diffusion: z.enum(["SIMPLE", "BOOSTED"]).optional(),
+      expiresAt: z.string().datetime().optional(),
+    });
+    const { listingIds, promoPriceUsdCents, activate, title, diffusion, expiresAt } = schema.parse(request.body);
+    const result = await listingsService.setPromo(
+      request.auth!.userId, listingIds, promoPriceUsdCents, activate,
+      { title, diffusion: diffusion as any, expiresAt }
+    );
+    response.json(result);
+  })
+);
+
+/* ── Mes promotions: liste des promotions créées par l'utilisateur ── */
+router.get(
+  "/promotions",
+  requireAuth,
+  asyncHandler(async (request: AuthenticatedRequest, response) => {
+    const promotions = await listingsService.getMyPromotions(request.auth!.userId);
+    response.json(promotions);
+  })
+);
+
 /* ── Update listing ── */
 router.patch(
   "/:id",
@@ -387,38 +419,6 @@ router.post(
       sellerUserId: listing.ownerUserId,
       message: "Conversation créée. Vous pouvez discuter avec le vendeur.",
     });
-  })
-);
-
-/* ── Promotion: activer/désactiver une promo sur un ou plusieurs articles ── */
-router.patch(
-  "/promo",
-  requireAuth,
-  asyncHandler(async (request: AuthenticatedRequest, response) => {
-    const schema = z.object({
-      listingIds: z.array(z.string()).min(1).max(50),
-      promoPriceUsdCents: z.number().int().min(0),
-      activate: z.boolean().default(true),
-      title: z.string().max(120).optional(),
-      diffusion: z.enum(["SIMPLE", "BOOSTED"]).optional(),
-      expiresAt: z.string().datetime().optional(),
-    });
-    const { listingIds, promoPriceUsdCents, activate, title, diffusion, expiresAt } = schema.parse(request.body);
-    const result = await listingsService.setPromo(
-      request.auth!.userId, listingIds, promoPriceUsdCents, activate,
-      { title, diffusion: diffusion as any, expiresAt }
-    );
-    response.json(result);
-  })
-);
-
-/* ── Mes promotions: liste des promotions créées par l'utilisateur ── */
-router.get(
-  "/promotions",
-  requireAuth,
-  asyncHandler(async (request: AuthenticatedRequest, response) => {
-    const promotions = await listingsService.getMyPromotions(request.auth!.userId);
-    response.json(promotions);
   })
 );
 
