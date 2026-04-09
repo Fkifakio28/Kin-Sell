@@ -230,8 +230,9 @@ type AdvisorRule = (ctx: AdvisorContext) => CommercialRecommendation | null;
 const ruleUserNeedsBoost: AdvisorRule = (ctx) => {
   if (ctx.isBusiness) return null;
   if (ctx.planCode !== "FREE") return null;
-  if (ctx.profile.totalListings < 3) return null;
+  if (ctx.profile.totalListings < 5) return null;
   if (ctx.stagnantRatio < 0.4) return null;
+  if (ctx.stagnantCount < 2) return null;
 
   const signals: string[] = [];
   if (ctx.listingsLast7d >= 3) signals.push(`${ctx.listingsLast7d} publications/7j`);
@@ -245,11 +246,11 @@ const ruleUserNeedsBoost: AdvisorRule = (ctx) => {
     priority: 7,
     confidence: Math.min(90, 50 + ctx.stagnantCount * 5 + ctx.listingsLast7d * 3),
     title: "Boostez votre visibilité",
-    message: `Vous publiez régulièrement mais ${ctx.stagnantCount} de vos annonces manquent de visibilité. Le forfait BOOST (6$/mois) met en avant votre profil et vos articles automatiquement.`,
+    message: `Vous publiez régulièrement mais ${ctx.stagnantCount} de vos annonces manquent de visibilité. Le forfait BOOST (${OFFER_MAP.get("BOOST")!.pricingLabel}) met en avant votre profil et vos articles automatiquement.`,
     rationale: `User FREE avec ${ctx.stagnantCount} annonces stagnantes sur ${ctx.profile.totalListings} — bon candidat BOOST`,
     ctaLabel: "Passer à BOOST",
     ctaTarget: OFFER_MAP.get("BOOST")!.ctaPath,
-    pricing: "6$/mois",
+    pricing: OFFER_MAP.get("BOOST")!.pricingLabel,
     signals,
     metric: { stagnant: ctx.stagnantCount, total: ctx.profile.totalListings, ratio: Math.round(ctx.stagnantRatio * 100) },
   };
@@ -273,11 +274,11 @@ const ruleUserNeedsAuto: AdvisorRule = (ctx) => {
     priority: 8,
     confidence: Math.min(95, 45 + ctx.messagesLast7d + ctx.salesLast7d * 5),
     title: "Automatisez vos ventes",
-    message: `Avec ${ctx.messagesLast7d} messages et ${ctx.salesLast7d} ventes cette semaine, vous passez beaucoup de temps en gestion manuelle. Le forfait AUTO (12$/mois) automatise les réponses, le suivi commandes et les relances.`,
+    message: `Avec ${ctx.messagesLast7d} messages et ${ctx.salesLast7d} ventes cette semaine, vous passez beaucoup de temps en gestion manuelle. Le forfait AUTO (${OFFER_MAP.get("AUTO")!.pricingLabel}) automatise les réponses, le suivi commandes et les relances.`,
     rationale: `User avec fort volume messages/ventes, besoin d'automation — candidat AUTO`,
     ctaLabel: "Passer à AUTO",
     ctaTarget: OFFER_MAP.get("AUTO")!.ctaPath,
-    pricing: "12$/mois",
+    pricing: OFFER_MAP.get("AUTO")!.pricingLabel,
     signals,
     metric: { messagesLast7d: ctx.messagesLast7d, salesLast7d: ctx.salesLast7d },
   };
@@ -305,11 +306,11 @@ const ruleUserNeedsProVendor: AdvisorRule = (ctx) => {
     priority: 9,
     confidence: Math.min(95, 55 + ctx.salesLast30d * 2 + (ctx.profile.lifecycle === "POWER" ? 15 : 0)),
     title: "Passez Pro Vendeur",
-    message: `${ctx.salesLast30d} ventes ce mois et un profil ${ctx.profile.lifecycle.toLowerCase()} — vous êtes un vendeur sérieux. Le forfait PRO VENDEUR (20$/mois) débloque l'analytics marché, l'automatisation complète et des outils d'analyse pour dominer votre catégorie.`,
+    message: `${ctx.salesLast30d} ventes ce mois et un profil ${ctx.profile.lifecycle.toLowerCase()} — vous êtes un vendeur sérieux. Le forfait PRO VENDEUR (${OFFER_MAP.get("PRO_VENDOR")!.pricingLabel}) débloque l'analytics marché, l'automatisation complète et des outils d'analyse pour dominer votre catégorie.`,
     rationale: `Vendeur ${ctx.profile.lifecycle} avec ${ctx.salesLast30d} ventes/30j, revenu ${(ctx.profile.revenueLastThirtyDays / 100).toFixed(0)}$ — PRO_VENDOR optimal`,
     ctaLabel: "Devenir Pro Vendeur",
     ctaTarget: OFFER_MAP.get("PRO_VENDOR")!.ctaPath,
-    pricing: "20$/mois",
+    pricing: OFFER_MAP.get("PRO_VENDOR")!.pricingLabel,
     signals,
     metric: { salesLast30d: ctx.salesLast30d, revenue: ctx.profile.revenueLastThirtyDays, lifecycle: ctx.profile.lifecycle },
   };
@@ -335,11 +336,11 @@ const ruleBusinessNeedsBusiness: AdvisorRule = (ctx) => {
     priority: 8,
     confidence: Math.min(95, 50 + ctx.salesLast30d * 3 + Math.min(20, growth / 5)),
     title: "Passez au forfait Business",
-    message: `Votre boutique affiche ${ctx.salesLast30d} ventes ce mois${growth > 0 ? ` (+${Math.round(growth)}%)` : ""}. Le forfait BUSINESS (30$/mois) inclut l'IA marchand, l'analytics marché et une visibilité renforcée pour accélérer.`,
+    message: `Votre boutique affiche ${ctx.salesLast30d} ventes ce mois${growth > 0 ? ` (+${Math.round(growth)}%)` : ""}. Le forfait BUSINESS (${OFFER_MAP.get("BUSINESS")!.pricingLabel}) inclut l'IA marchand, l'analytics marché et une visibilité renforcée pour accélérer.`,
     rationale: `Business STARTER en croissance (${Math.round(growth)}%), ${ctx.salesLast30d} ventes — upgrade BUSINESS`,
     ctaLabel: "Passer à Business",
     ctaTarget: OFFER_MAP.get("BUSINESS")!.ctaPath,
-    pricing: "30$/mois",
+    pricing: OFFER_MAP.get("BUSINESS")!.pricingLabel,
     signals,
     metric: { salesLast30d: ctx.salesLast30d, growth: Math.round(growth), listings: ctx.profile.totalListings },
   };
@@ -367,11 +368,11 @@ const ruleBusinessNeedsScale: AdvisorRule = (ctx) => {
     priority: 9,
     confidence: Math.min(95, 55 + ctx.salesLast30d + ctx.profile.totalListings),
     title: "Passez à SCALE",
-    message: `Avec ${ctx.profile.totalListings} articles et ${ctx.salesLast30d} ventes ce mois, votre activité mérite le forfait SCALE (50$/mois). L'analytics premium, l'IA commande et les outils d'automatisation complète libèrent votre temps pour vous concentrer sur la croissance.`,
+    message: `Avec ${ctx.profile.totalListings} articles et ${ctx.salesLast30d} ventes ce mois, votre activité mérite le forfait SCALE (${OFFER_MAP.get("SCALE")!.pricingLabel}). L'analytics premium, l'IA commande et les outils d'automatisation complète libèrent votre temps pour vous concentrer sur la croissance.`,
     rationale: `Business ${ctx.profile.lifecycle} avec catalogue conséquent — SCALE recommandé`,
     ctaLabel: "Passer à SCALE",
     ctaTarget: OFFER_MAP.get("SCALE")!.ctaPath,
-    pricing: "50$/mois",
+    pricing: OFFER_MAP.get("SCALE")!.pricingLabel,
     signals,
     metric: { salesLast30d: ctx.salesLast30d, listings: ctx.profile.totalListings, lifecycle: ctx.profile.lifecycle },
   };
@@ -404,7 +405,7 @@ const ruleNeedsIaMerchant: AdvisorRule = (ctx) => {
     rationale: `Négociations fréquentes (${ctx.profile.negotiationCount}) mais conversion faible (${ctx.profile.conversionRate}%) — IA_MERCHANT utile`,
     ctaLabel: ctx.isBusiness ? "Optimiser mes conversions" : "Activer IA Marchand",
     ctaTarget: OFFER_MAP.get("IA_MERCHANT")!.ctaPath,
-    pricing: "3$/mois",
+    pricing: OFFER_MAP.get("IA_MERCHANT")!.pricingLabel,
     signals,
     metric: { negotiations: ctx.profile.negotiationCount, conversion: ctx.profile.conversionRate },
   };
@@ -435,7 +436,7 @@ const ruleNeedsIaOrder: AdvisorRule = (ctx) => {
     rationale: `Volume élevé commandes/messages → automation nécessaire — IA_ORDER`,
     ctaLabel: ctx.isBusiness ? "Automatiser les opérations" : "Activer IA Commande",
     ctaTarget: OFFER_MAP.get("IA_ORDER")!.ctaPath,
-    pricing: "7$/mois",
+    pricing: OFFER_MAP.get("IA_ORDER")!.pricingLabel,
     signals,
     metric: { ordersLast30d: ctx.ordersLast30d, messagesLast30d: ctx.messagesLast30d },
   };
@@ -445,8 +446,36 @@ const ruleNeedsIaOrder: AdvisorRule = (ctx) => {
 
 const rulePromoNeedsBoost: AdvisorRule = (ctx) => {
   if (ctx.promoWithoutBoost < 2) return null;
-  if (!ctx.hasBoostAddon && ctx.planIndex < 1) return null; // sans addon ni plan boost
+  // Si l'user a déjà l'addon boost, proposer l'action de boost (→ dashboard)
+  // Si l'user n'a PAS l'addon et est FREE, proposer l'addon BOOST_VISIBILITY
+  // Si l'user a un plan >= BOOST, le boost est inclus → proposer l'action
+  if (!ctx.hasBoostAddon && ctx.planIndex < 1) {
+    // Proposer l'addon BOOST_VISIBILITY
+    const signals = [
+      `${ctx.promoWithoutBoost} promos sans boost`,
+      `${ctx.activePromos} promos actives`,
+    ];
+    return {
+      productType: "ADDON",
+      productCode: "BOOST_VISIBILITY",
+      priority: 6,
+      confidence: Math.min(85, 50 + ctx.promoWithoutBoost * 10),
+      title: ctx.isBusiness
+        ? "Amplifiez vos promotions avec le Boost"
+        : "Vos promos méritent plus de visibilité",
+      message: ctx.isBusiness
+        ? `${ctx.promoWithoutBoost} promos actives sans boost — l'add-on Boost Visibilité multiplie leur portée par 2 à 5×.`
+        : `${ctx.promoWithoutBoost} de vos promos ne sont pas boostées. L'add-on Boost Visibilité (${OFFER_MAP.get("BOOST_VISIBILITY")!.pricingLabel}) les met en avant auprès des acheteurs.`,
+      rationale: `Promos sans addon boost — proposer BOOST_VISIBILITY`,
+      ctaLabel: ctx.isBusiness ? "Souscrire au Boost" : "Activer le Boost",
+      ctaTarget: OFFER_MAP.get("BOOST_VISIBILITY")!.ctaPath,
+      pricing: OFFER_MAP.get("BOOST_VISIBILITY")!.pricingLabel,
+      signals,
+      metric: { promoWithoutBoost: ctx.promoWithoutBoost, activePromos: ctx.activePromos },
+    };
+  }
 
+  // A déjà l'addon ou un plan avec boost → proposer l'action
   const signals = [
     `${ctx.promoWithoutBoost} promos sans boost`,
     `${ctx.activePromos} promos actives`,
@@ -454,7 +483,7 @@ const rulePromoNeedsBoost: AdvisorRule = (ctx) => {
 
   return {
     productType: "BOOST",
-    productCode: "BOOST_LISTING",
+    productCode: "BOOST_VISIBILITY",
     priority: 6,
     confidence: Math.min(85, 50 + ctx.promoWithoutBoost * 10),
     title: ctx.isBusiness
@@ -606,7 +635,7 @@ const ruleNeedsAnalytics: AdvisorRule = (ctx) => {
       : `Avec ${ctx.profile.completedSales} ventes${ctx.topCategory ? ` et une expertise en ${ctx.topCategory.name}` : ""}, l'Analytique vous montre les prix du marché, les tendances de votre zone et des conseils personnalisés pour vendre mieux.`,
     rationale: `Vendeur ${ctx.profile.lifecycle} avec historique suffisant pour tirer profit d'analytics — ${targetPlan}`,
     ctaLabel: ctx.isBusiness ? "Activer le pilotage data" : "Activer l'Analytique",
-    ctaTarget: `/forfaits?highlight=${targetPlan}`,
+    ctaTarget: OFFER_MAP.get(targetPlan as OfferCode)?.ctaPath ?? `/forfaits?highlight=${targetPlan}`,
     pricing: targetPrice,
     signals,
     metric: { sales: ctx.profile.completedSales, category: ctx.topCategory?.name ?? "diverse", lifecycle: ctx.profile.lifecycle },
@@ -641,7 +670,7 @@ const ruleCategorySpecialist: AdvisorRule = (ctx) => {
       : `Vous dominez "${ctx.topCategory.name}" avec ${ctx.topCategory.salesCount} ventes. Un forfait supérieur vous donne les outils analytics pour comprendre votre marché, optimiser vos prix et garder votre avance.`,
     rationale: `Dominance catégorie ${ctx.topCategory.name} (${ctx.topCategory.salesCount} ventes) — analytics premium utile`,
     ctaLabel: ctx.isBusiness ? `Piloter ${ctx.topCategory.name}` : `Passer à ${targetPlan}`,
-    ctaTarget: `/forfaits?highlight=${targetPlan}`,
+    ctaTarget: OFFER_MAP.get(targetPlan as OfferCode)?.ctaPath ?? `/forfaits?highlight=${targetPlan}`,
     pricing: price,
     signals,
     metric: { category: ctx.topCategory.name, salesInCategory: ctx.topCategory.salesCount },

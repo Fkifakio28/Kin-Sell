@@ -360,7 +360,7 @@ function buildAdsPackAdvice(
       ctaLabel: "Voir les packs pub",
       ctaTarget: OFFER_MAP.get("ADS_PACK")!.ctaPath,
       ctaAction: "NAVIGATE",
-      pricing: "À partir de 5$ pour 3 pubs",
+      pricing: OFFER_MAP.get("ADS_PACK")!.pricingLabel,
       metric: { sales: completedSales },
     } as PostPublishAdvice;
   }

@@ -48,6 +48,7 @@ export type AnalyticsTrigger =
   | "SALES_HISTORY"
   | "PRICE_HESITATION"
   | "GROWING_BUSINESS"
+  | "PREMIUM_UPGRADE"
   | "CATALOG_DIVERSITY"
   | "IRREGULAR_RESULTS"
   | "OPTIMIZATION_INTENT";
@@ -662,7 +663,7 @@ function detectPremiumUpgrade(ctx: AnalyticsContext): AnalyticsCTA | null {
   const revenue = (ctx.revenueLast30dCents / 100).toFixed(0);
 
   return {
-    trigger: "GROWING_BUSINESS",
+    trigger: "PREMIUM_UPGRADE",
     tier: "PREMIUM",
     priority: 6,
     icon: "🏆",
@@ -713,13 +714,39 @@ const ALL_DETECTORS = [
   detectPremiumUpgrade,
 ];
 
+// Anti-spam : 72h cooldown par trigger, 12h global si dismiss récent
+const CTA_COOLDOWN_HOURS = 72;
+const CTA_DISMISS_COOLDOWN_HOURS = 12;
+
+async function canShowCTA(userId: string, trigger: string): Promise<boolean> {
+  const since = new Date(Date.now() - CTA_COOLDOWN_HOURS * 60 * 60 * 1000);
+  const existing = await prisma.aiRecommendation.count({
+    where: { userId, triggerType: trigger, engineKey: "analytics-cta", createdAt: { gte: since } },
+  });
+  return existing === 0;
+}
+
+async function hasRecentDismiss(userId: string): Promise<boolean> {
+  const since = new Date(Date.now() - CTA_DISMISS_COOLDOWN_HOURS * 60 * 60 * 1000);
+  const count = await prisma.aiRecommendation.count({
+    where: { userId, engineKey: "analytics-cta", dismissed: true, createdAt: { gte: since } },
+  });
+  return count > 0;
+}
+
 /**
  * Évalue tous les déclencheurs pour un utilisateur et retourne
  * les CTA analytics les plus pertinents (max 2).
+ * Anti-spam : 72h cooldown par trigger, 12h cooldown global après dismiss.
  */
 export async function evaluateAnalyticsCTAs(userId: string): Promise<AnalyticsCTAReport> {
   const profile = await computeSellerProfile(userId);
   if (!profile) {
+    return { ctas: [], hasAnalytics: false, currentTier: "NONE", suggestedUpgrade: null };
+  }
+
+  // Cooldown global si dismiss récent
+  if (await hasRecentDismiss(userId)) {
     return { ctas: [], hasAnalytics: false, currentTier: "NONE", suggestedUpgrade: null };
   }
 
@@ -731,17 +758,25 @@ export async function evaluateAnalyticsCTAs(userId: string): Promise<AnalyticsCT
     if (cta) ctas.push(cta);
   }
 
-  // Trier par priorité, max 2
+  // Trier par priorité
   ctas.sort((a, b) => b.priority - a.priority);
-  const topCTAs = ctas.slice(0, 2);
+
+  // Anti-spam : filtrer les triggers en cooldown (max 2 résultats)
+  const filtered: AnalyticsCTA[] = [];
+  for (const cta of ctas) {
+    if (filtered.length >= 2) break;
+    if (await canShowCTA(userId, cta.trigger)) {
+      filtered.push(cta);
+    }
+  }
 
   const suggestedUpgrade: AnalyticsTier | null =
     ctx.currentTier === "NONE" ? "MEDIUM"
-    : ctx.currentTier === "MEDIUM" && topCTAs.some((c) => c.tier === "PREMIUM") ? "PREMIUM"
+    : ctx.currentTier === "MEDIUM" && filtered.some((c) => c.tier === "PREMIUM") ? "PREMIUM"
     : null;
 
   return {
-    ctas: topCTAs,
+    ctas: filtered,
     hasAnalytics: ctx.currentTier !== "NONE",
     currentTier: ctx.currentTier,
     suggestedUpgrade,

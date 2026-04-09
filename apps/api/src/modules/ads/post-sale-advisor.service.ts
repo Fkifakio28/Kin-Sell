@@ -295,7 +295,9 @@ async function analyzeSaleContext(
     orderValueCents: order.totalUsdCents,
     isHighValue: order.totalUsdCents > avgOrderValueCents * 1.5,
     recentBoostCount,
-    recentAdCount: 0, // simplifié
+    recentAdCount: await prisma.advertisement.count({
+      where: { userId, status: "ACTIVE", createdAt: { gte: thirtyDaysAgo } },
+    }),
     topCategory: catStats[0]?.category ?? null,
     isBusiness: profile?.isBusiness ?? false,
   };
@@ -428,7 +430,9 @@ function buildAdsCampaignAdvice(
       priority: 6,
       icon: "📢",
       title: "Campagne premium pour vos articles haut de gamme",
-      message: `Cette vente à ${(ctx.orderValueCents / 100).toFixed(2)}$ est ${Math.round(((ctx.orderValueCents - ctx.avgOrderValueCents) / ctx.avgOrderValueCents) * 100)}% au-dessus de votre moyenne. Visez ce segment avec une campagne pub ciblée.`,
+      message: ctx.avgOrderValueCents > 0
+        ? `Cette vente à ${(ctx.orderValueCents / 100).toFixed(2)}$ est ${Math.round(((ctx.orderValueCents - ctx.avgOrderValueCents) / ctx.avgOrderValueCents) * 100)}% au-dessus de votre moyenne. Visez ce segment avec une campagne pub ciblée.`
+        : `Cette vente à ${(ctx.orderValueCents / 100).toFixed(2)}$ est remarquable. Visez ce segment avec une campagne pub ciblée.`,
       rationale: "Les articles haut de gamme convertissent mieux avec de la pub ciblée — les acheteurs qui ont le budget vous trouvent directement.",
       ctaLabel: "Voir les options pub",
       ctaTarget: OFFER_MAP.get("ADS_PACK")!.ctaPath,

@@ -192,6 +192,15 @@ function detectFreqPublisher(ctx: NudgeContext): PricingNudge | null {
   if (ctx.hasBoost) return null; // déjà équipé pour la visibilité
 
   const suggestedPlan = ctx.isBusiness ? "STARTER" : "BOOST";
+
+  // Ne pas proposer un downgrade
+  const planHierarchy = ctx.isBusiness
+    ? ["STARTER", "BUSINESS", "SCALE"]
+    : ["FREE", "BOOST", "AUTO", "PRO_VENDOR"];
+  const currentIdx = planHierarchy.indexOf(ctx.currentPlanCode);
+  const suggestedIdx = planHierarchy.indexOf(suggestedPlan);
+  if (currentIdx >= suggestedIdx) return null;
+
   return {
     triggerType: "PRICING_FREQ_PUBLISHER",
     priority: 6,
@@ -222,7 +231,7 @@ function detectPromoCreator(ctx: NudgeContext): PricingNudge | null {
       ? "Vos promotions méritent une stratégie. Un forfait Business amplifie leur portée et vous permet de mesurer leur performance réelle."
       : "Vos promotions sont en place, mais peu d'acheteurs les voient. Un forfait avec boost intégré multiplie leur portée.",
     ctaLabel: ctx.isBusiness ? "Voir les forfaits Business" : "Découvrir les forfaits",
-    ctaTarget: ctx.isBusiness ? OFFER_MAP.get("BUSINESS")!.ctaPath : "/forfaits?tab=users",
+    ctaTarget: ctx.isBusiness ? OFFER_MAP.get("BUSINESS")!.ctaPath : OFFER_MAP.get("BOOST")!.ctaPath,
     reason: "Promotions actives sur plan gratuit/starter",
   };
 }
