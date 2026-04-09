@@ -138,7 +138,7 @@ async function callGeminiForCopy(prompt: string): Promise<{ text: string; succes
 
   try {
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -227,7 +227,7 @@ Retourne UNIQUEMENT un JSON valide avec cette structure :
   }
 
   const { text, success } = await callGeminiForCopy(prompt);
-  const externalScore = scoreExternal(success, 0, "Gemini 2.0 Flash");
+  const externalScore = scoreExternal(success, 0, "Gemini 2.5 Flash");
 
   if (success) {
     try {
@@ -310,7 +310,7 @@ Retourne UNIQUEMENT un JSON valide avec cette structure :
           tone: ["PROMOTIONAL", "INFORMATIVE", "URGENT", "SEASONAL"].includes(parsed.tone) ? parsed.tone : "PROMOTIONAL",
           languageCode: "fr",
         },
-        score: scoreExternal(true, 0, "Gemini 2.0 Flash"),
+        score: scoreExternal(true, 0, "Gemini 2.5 Flash"),
         generatedAt: new Date().toISOString(),
       };
 
