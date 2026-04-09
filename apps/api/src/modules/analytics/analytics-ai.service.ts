@@ -48,26 +48,22 @@ function hourBucket(date: Date): number {
 export interface BasicInsights {
   tier: "MEDIUM";
   activitySummary: {
-    totalListings: number;
+    listings: number;
     activeListings: number;
-    totalNegotiations: number;
+    negotiations: number;
     acceptedNegotiations: number;
-    totalOrders: number;
-    totalRevenueCents: number;
+    orders: number;
+    revenueCents: number;
   };
   marketPosition: {
     avgPriceCents: number;
-    marketMedianCents: number;
-    status: "BELOW_MARKET" | "ON_MARKET" | "ABOVE_MARKET";
+    medianCents: number;
+    position: "BELOW_MARKET" | "ON_MARKET" | "ABOVE_MARKET";
     message: string;
   };
-  trendingCategories: string[];
-  bestPublicationHour: {
-    hour: number;
-    label: string;
-    insight: string;
-  };
-  simpleRecommendations: string[];
+  trendingCategories: { category: string; count: number }[];
+  bestPublicationHour: number;
+  recommendations: string[];
 }
 
 export async function getBasicInsights(userId: string): Promise<BasicInsights> {
@@ -170,26 +166,22 @@ export async function getBasicInsights(userId: string): Promise<BasicInsights> {
   return {
     tier: "MEDIUM",
     activitySummary: {
-      totalListings,
+      listings: totalListings,
       activeListings,
-      totalNegotiations,
+      negotiations: totalNegotiations,
       acceptedNegotiations,
-      totalOrders: orderAgg._count.id,
-      totalRevenueCents: orderAgg._sum.totalUsdCents ?? 0,
+      orders: orderAgg._count.id,
+      revenueCents: orderAgg._sum.totalUsdCents ?? 0,
     },
     marketPosition: {
       avgPriceCents: avgMyPrice,
-      marketMedianCents,
-      status: positionStatus,
+      medianCents: marketMedianCents,
+      position: positionStatus,
       message: positionMessage,
     },
-    trendingCategories,
-    bestPublicationHour: {
-      hour: bestHour,
-      label: bestHourLabel,
-      insight: `Les commandes sur Kin-Sell sont les plus fréquentes vers ${bestHourLabel}.`,
-    },
-    simpleRecommendations: recommendations,
+    trendingCategories: trendingCategories.map(c => ({ category: c, count: 0 })),
+    bestPublicationHour: bestHour,
+    recommendations,
   };
 }
 
