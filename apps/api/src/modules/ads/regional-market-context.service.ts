@@ -106,6 +106,7 @@ async function callGemini(prompt: string): Promise<{ text: string; sources: stri
             temperature: 0.3,
             maxOutputTokens: 2048,
             responseMimeType: "application/json",
+            thinkingConfig: { thinkingBudget: 0 },
           },
         }),
         signal: AbortSignal.timeout(30_000),
@@ -118,7 +119,9 @@ async function callGemini(prompt: string): Promise<{ text: string; sources: stri
     }
 
     const data = (await response.json()) as GeminiResponse;
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+    // Get last text part (Gemini 2.5 may put thinking in earlier parts)
+    const allParts = data.candidates?.[0]?.content?.parts ?? [];
+    const text = allParts.filter(p => p.text).map(p => p.text!).pop() ?? "";
     const sources = (data.candidates?.[0]?.groundingMetadata?.groundingChunks ?? [])
       .map(c => c.web?.title ?? c.web?.uri ?? "")
       .filter(Boolean);

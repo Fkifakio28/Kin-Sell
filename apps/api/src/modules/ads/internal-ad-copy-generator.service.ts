@@ -148,6 +148,7 @@ async function callGeminiForCopy(prompt: string): Promise<{ text: string; succes
             temperature: 0.7,
             maxOutputTokens: 600,
             responseMimeType: "application/json",
+            thinkingConfig: { thinkingBudget: 0 },
           },
         }),
         signal: AbortSignal.timeout(25_000),
@@ -160,7 +161,9 @@ async function callGeminiForCopy(prompt: string): Promise<{ text: string; succes
     }
 
     const data = (await response.json()) as GeminiResponse;
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+    // Get last text part (Gemini 2.5 may put thinking in earlier parts)
+    const parts = data.candidates?.[0]?.content?.parts ?? [];
+    const text = parts.filter(p => p.text).map(p => p.text!).pop() ?? "";
     return { text, success: text.length > 10 };
   } catch (err) {
     logger.warn({ err }, "[Gemini-Copy] Request failed");
