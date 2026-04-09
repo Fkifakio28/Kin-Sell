@@ -493,7 +493,7 @@ function ExplorerPageMobile() {
                       ) : (
                         <p className="ex-article-price">{article.priceLabel}</p>
                       )}
-                      <p className="ex-article-publisher">{article.publisherName}</p>
+                      <p className="ex-article-publisher"><a href={article.publisherLink} onClick={(e) => { e.preventDefault(); e.stopPropagation(); nav(article.publisherLink); }} style={{ color: 'inherit', textDecoration: 'none' }}>{article.publisherName}</a></p>
                       <div className="ex-article-actions">
                         <button type="button" className="ex-article-act" onClick={() => nav(article.targetPath)}>Voir</button>
                         <button type="button" className="ex-article-act" title="Contacter" onClick={(e) => void handleExCardContact(article, e)}>💬</button>

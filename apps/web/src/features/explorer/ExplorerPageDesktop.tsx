@@ -627,7 +627,7 @@ export function ExplorerPageDesktop() {
                     ) : (
                       <p className="explorer-article-price">{article.priceLabel}</p>
                     )}
-                    <p className="explorer-article-publisher">{article.publisherName}</p>
+                    <p className="explorer-article-publisher"><a href={article.publisherLink} onClick={(e) => { e.preventDefault(); e.stopPropagation(); nav(article.publisherLink); }} style={{ color: 'inherit', textDecoration: 'none' }}>{article.publisherName}</a></p>
                     <div className="explorer-article-actions-row">
                       <button type="button" className="explorer-article-action-btn" onClick={() => nav(article.targetPath)}>Voir plus</button>
                       <button type="button" className="explorer-article-action-btn" title="Contacter" onClick={(e) => void handleExCardContact(article, e)}>💬</button>
@@ -763,7 +763,7 @@ export function ExplorerPageDesktop() {
                     ) : (
                       <p className="explorer-article-price">{article.priceLabel}</p>
                     )}
-                    <p className="explorer-article-publisher">{article.publisherName}</p>
+                    <p className="explorer-article-publisher"><a href={article.publisherLink} onClick={(e) => { e.preventDefault(); e.stopPropagation(); nav(article.publisherLink); }} style={{ color: 'inherit', textDecoration: 'none' }}>{article.publisherName}</a></p>
                     <div className="explorer-article-actions-row">
                       <button type="button" className="explorer-article-action-btn" onClick={() => nav(article.targetPath)}>Voir plus</button>
                       <button type="button" className="explorer-article-action-btn" title="Contacter" onClick={(e) => void handleExCardContact(article, e)}>💬</button>

@@ -1381,6 +1381,15 @@
   color: #fff;
   transition: transform .15s;
 }
+.mg-profile-action--view {
+  background: rgba(111, 88, 255, 0.15);
+  color: var(--color-primary, #6f58ff);
+  border: 1px solid rgba(111, 88, 255, 0.3);
+  margin-bottom: 8px;
+}
+.mg-profile-action--view:hover {
+  background: rgba(111, 88, 255, 0.25);
+}
 .mg-profile-action:hover {
   transform: scale(1.04);
   box-shadow: 0 0 16px rgba(111 88 255 / .4);

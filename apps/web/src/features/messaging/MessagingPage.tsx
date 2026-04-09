@@ -1489,6 +1489,9 @@ export function MessagingPage() {
             <p className="mg-profile-name">{profileUser.displayName}</p>
             {profileUser.username && <p className="mg-profile-username">@{profileUser.username}</p>}
             <p className="mg-profile-id">ID: {profileUser.userId.slice(0, 12)}</p>
+            {profileUser.username && (
+              <button className="mg-profile-action mg-profile-action--view" onClick={() => { setProfileUser(null); navigate(`/user/${profileUser.username}`); }}>👤 Voir le profil</button>
+            )}
             <button className="mg-profile-action" onClick={() => setProfileUser(null)}>Envoyer un message</button>
           </div>
         </div>
@@ -1718,7 +1721,12 @@ export function MessagingPage() {
                 : initials(getConversationName(activeConv, myId, t))}
               {!activeConv.isGroup && getOtherUserId(activeConv, myId) && onlineUserIds.has(getOtherUserId(activeConv, myId)!) && <span className="mg-online-badge" />}
             </div>
-            <div className="mg-conv-header-info">
+            <div className="mg-conv-header-info" style={{ cursor: 'pointer' }} onClick={() => {
+              if (!activeConv.isGroup) {
+                const other = getOtherParticipant(activeConv, myId);
+                if (other?.user.profile.username) navigate(`/user/${other.user.profile.username}`);
+              }
+            }}>
               <strong>{getConversationName(activeConv, myId, t)}</strong>
               <span className="mg-conv-header-status">
                 {typingNames.length > 0
