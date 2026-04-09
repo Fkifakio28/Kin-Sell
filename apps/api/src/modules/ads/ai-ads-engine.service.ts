@@ -62,6 +62,11 @@ export interface SellerProfile {
   topCity: string | null;
   hasStagnantListings: boolean;
   stagnantCount: number;
+
+  // So-Kin social presence
+  sokinPostCount: number;
+  sokinAvgBoostScore: number;     // 0-100
+  sokinTopBoostPostId: string | null;
 }
 
 export interface SmartOffer {
@@ -208,6 +213,18 @@ export async function computeSellerProfile(userId: string): Promise<SellerProfil
     prisma.aiRecommendation.count({ where: { userId } }),
     prisma.aiRecommendation.count({ where: { userId, accepted: true } }),
   ]);
+
+  // So-Kin social presence
+  const sokinPosts = await prisma.soKinPost.findMany({
+    where: { authorId: userId, status: "ACTIVE" },
+    select: { id: true, boostScore: true } as any,
+    orderBy: { createdAt: "desc" },
+    take: 50,
+  }) as any[];
+  const sokinPostCount = sokinPosts.length;
+  const boostScores = sokinPosts.map((p: any) => p.boostScore ?? 0).filter((s: number) => s > 0);
+  const sokinAvgBoostScore = boostScores.length > 0 ? Math.round(boostScores.reduce((a: number, b: number) => a + b, 0) / boostScores.length) : 0;
+  const sokinTopBoostPostId = boostScores.length > 0 ? sokinPosts.sort((a: any, b: any) => (b.boostScore ?? 0) - (a.boostScore ?? 0))[0]?.id ?? null : null;
   const engagementRate = previousRecommendations > 0
     ? Math.round((acceptedRecommendations / previousRecommendations) * 100)
     : 0;
@@ -256,6 +273,11 @@ export async function computeSellerProfile(userId: string): Promise<SellerProfil
   // Boosts déjà utilisés (0-5)
   if (activeBoostedListings >= 5) score += 5;
   else if (activeBoostedListings >= 1) score += 3;
+
+  // Présence So-Kin (0-5) — bonus social
+  if (sokinAvgBoostScore >= 50) score += 5;
+  else if (sokinPostCount >= 5) score += 3;
+  else if (sokinPostCount >= 1) score += 1;
 
   score = Math.min(100, score);
 
@@ -316,6 +338,9 @@ export async function computeSellerProfile(userId: string): Promise<SellerProfil
     topCity,
     hasStagnantListings: stagnant.length > 0,
     stagnantCount: stagnant.length,
+    sokinPostCount,
+    sokinAvgBoostScore,
+    sokinTopBoostPostId,
   };
 }
 

@@ -1352,6 +1352,10 @@ model SoKinPost {
   comments        Int             @default(0)
   shares          Int             @default(0)
   views           Int             @default(0)
+  socialScore     Int             @default(0)   // 0-100 potentiel social
+  businessScore   Int             @default(0)   // 0-100 potentiel business
+  boostScore      Int             @default(0)   // 0-100 potentiel boost
+  scoredAt        DateTime?                     // dernier recalcul
   sponsored       Boolean         @default(false)
   status          SoKinPostStatus @default(ACTIVE)
   moderatedBy     String?

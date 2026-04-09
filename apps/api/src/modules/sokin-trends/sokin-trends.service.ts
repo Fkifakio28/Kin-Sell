@@ -173,6 +173,9 @@ export interface PostInsight {
   views: number;
   engagementRate: number;
   potentialScore: number;
+  socialScore: number;
+  businessScore: number;
+  boostScore: number;
   boostSuggested: boolean;
   tip: string | null;
 }
@@ -204,6 +207,9 @@ export async function getPostInsight(postId: string, userId: string): Promise<Po
       views: 0,
       engagementRate: 0,
       potentialScore: 0,
+      socialScore: 0,
+      businessScore: 0,
+      boostScore: 0,
       boostSuggested: false,
       tip: null,
     };
@@ -228,6 +234,11 @@ export async function getPostInsight(postId: string, userId: string): Promise<Po
   // Suggestion de boost
   const boostSuggested = potentialScore >= 60 && engagement >= 3;
 
+  // Scores So-Kin V1 (depuis le champ persisté)
+  const socialScore = (post as any).socialScore ?? 0;
+  const businessScore = (post as any).businessScore ?? 0;
+  const boostScore = (post as any).boostScore ?? 0;
+
   // Tip contextuel
   let tip: string | null = null;
   if (post.mediaUrls.length === 0) tip = "Ajoutez des photos pour +40% d'engagement";
@@ -240,6 +251,9 @@ export async function getPostInsight(postId: string, userId: string): Promise<Po
     views: estimatedViews,
     engagementRate,
     potentialScore,
+    socialScore,
+    businessScore,
+    boostScore,
     boostSuggested,
     tip,
   };

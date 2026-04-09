@@ -75,6 +75,13 @@ export interface BasicInsights {
   trendingCategories: { category: string; count: number }[];
   bestPublicationHour: number;
   recommendations: string[];
+  sokinSummary: {
+    postCount: number;
+    totalViews: number;
+    avgSocialScore: number;
+    avgBusinessScore: number;
+    topPostId: string | null;
+  } | null;
 }
 
 export async function getBasicInsights(userId: string): Promise<BasicInsights> {
@@ -158,6 +165,30 @@ export async function getBasicInsights(userId: string): Promise<BasicInsights> {
       ? `${bestHour}h (après-midi)`
       : `${bestHour}h (soir)`;
 
+  // So-Kin social summary
+  const sokinActivePosts = await prisma.soKinPost.findMany({
+    where: { authorId: userId, status: "ACTIVE" },
+    select: { id: true, views: true, socialScore: true, businessScore: true, boostScore: true } as any,
+    orderBy: { createdAt: "desc" },
+    take: 50,
+  }) as any[];
+
+  let sokinSummary: BasicInsights["sokinSummary"] = null;
+  if (sokinActivePosts.length > 0) {
+    const totalViews = sokinActivePosts.reduce((s: number, p: any) => s + (p.views ?? 0), 0);
+    const socialScores = sokinActivePosts.map((p: any) => p.socialScore ?? 0);
+    const businessScores = sokinActivePosts.map((p: any) => p.businessScore ?? 0);
+    const boostScores = sokinActivePosts.map((p: any) => p.boostScore ?? 0);
+    const topPost = sokinActivePosts.sort((a: any, b: any) => (b.boostScore ?? 0) - (a.boostScore ?? 0))[0];
+    sokinSummary = {
+      postCount: sokinActivePosts.length,
+      totalViews,
+      avgSocialScore: Math.round(socialScores.reduce((a: number, b: number) => a + b, 0) / socialScores.length),
+      avgBusinessScore: Math.round(businessScores.reduce((a: number, b: number) => a + b, 0) / businessScores.length),
+      topPostId: topPost?.id ?? null,
+    };
+  }
+
   // Simple recommendations
   const recommendations: string[] = [];
   if (activeListings === 0) {
@@ -173,6 +204,18 @@ export async function getBasicInsights(userId: string): Promise<BasicInsights> {
     recommendations.push("Votre taux d'acceptation en négociation est faible. Activez l'IA Marchand pour optimiser.");
   }
   recommendations.push(`Publiez vers ${bestHourLabel} pour maximiser la visibilité.`);
+
+  // So-Kin recommendations
+  if (sokinSummary) {
+    if (sokinSummary.avgSocialScore >= 40 && sokinSummary.avgBusinessScore < 20) {
+      recommendations.push("Vos posts So-Kin ont un bon engagement social. Liez-y vos articles pour convertir.");
+    }
+    if (sokinSummary.totalViews > 100 && sokinSummary.avgBusinessScore >= 30) {
+      recommendations.push("Votre visibilité So-Kin est forte. Un boost pourrait multiplier vos ventes.");
+    }
+  } else if (activeListings > 0) {
+    recommendations.push("Publiez sur So-Kin pour gagner en visibilité locale.");
+  }
 
   return {
     tier: "MEDIUM",
@@ -193,6 +236,7 @@ export async function getBasicInsights(userId: string): Promise<BasicInsights> {
     trendingCategories: trendingCategories.map(c => ({ category: c, count: 0 })),
     bestPublicationHour: bestHour,
     recommendations,
+    sokinSummary,
   };
 }
 

@@ -46,6 +46,7 @@ import { getRedis, disconnectRedis } from "./shared/db/redis.js";
 import { batchCreateWeeklySnapshots } from "./modules/analytics/ai-memory.service.js";
 import { startAdOrchestrator } from "./modules/ads/kinsell-internal-ads-orchestrator.js";
 import { runSubscriptionExpiryCheck, clearSubscriptionCache } from "./shared/billing/subscription-guard.js";
+import { startScoringScheduler } from "./modules/sokin/sokin-scoring.service.js";
 
 const app = express();
 const httpServer = createServer(app);
@@ -210,6 +211,7 @@ httpServer.listen(env.API_PORT, async () => {
   // Warm up Redis connection
   getRedis();
   startAdScheduler();
+  startScoringScheduler();
   await seedDefaultAgents();
   startVerificationScheduler();
   // Weekly snapshots scheduler: every Sunday at 02:00 (check every hour)

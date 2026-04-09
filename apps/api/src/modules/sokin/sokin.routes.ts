@@ -38,6 +38,7 @@ import {
 import { emitToAll } from "../messaging/socket.js";
 import { rateLimit, RateLimits } from "../../shared/middleware/rate-limit.middleware.js";
 import { trackEvents, VALID_EVENTS, getAuthorTrackingStats, type SoKinEventType } from "./sokin-tracking.service.js";
+import { scorePost, scoreAndPersist, batchRecalculate, getTopBoostCandidates, getTopSocialPosts, getTopBusinessPosts } from "./sokin-scoring.service.js";
 
 const isVideoMediaUrl = (value: string) => /\.(mp4|webm|mov|ogg)(\?.*)?$/i.test(value);
 
@@ -430,6 +431,80 @@ router.get(
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     const stats = await getAuthorTrackingStats(req.auth!.userId);
     res.json({ stats });
+  })
+);
+
+// ═══════ Scoring So-Kin ═══════
+
+/**
+ * GET /scoring/post/:id
+ * Calcule et retourne les 3 scores + breakdown pour un post.
+ * Accessible à l'auteur du post uniquement.
+ */
+router.get(
+  "/scoring/post/:id",
+  requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const scored = await scorePost(req.params.id);
+    if (!scored) {
+      res.status(404).json({ error: "Post non trouvé" });
+      return;
+    }
+    res.json({ scoring: scored });
+  })
+);
+
+/**
+ * POST /scoring/recalculate/:id
+ * Force le recalcul et la persistance des scores pour un post.
+ * Accessible à l'auteur ou admin.
+ */
+router.post(
+  "/scoring/recalculate/:id",
+  requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const scored = await scoreAndPersist(req.params.id);
+    if (!scored) {
+      res.status(404).json({ error: "Post non trouvé" });
+      return;
+    }
+    res.json({ scoring: scored });
+  })
+);
+
+/**
+ * GET /scoring/top
+ * Top posts par score (social, business ou boost).
+ * Query: type=social|business|boost, limit=20, city=...
+ */
+router.get(
+  "/scoring/top",
+  asyncHandler(async (req, res) => {
+    const type = (req.query.type as string) || "boost";
+    const limit = Math.min(parseInt(req.query.limit as string) || 20, 50);
+    const city = (req.query.city as string)?.slice(0, 100);
+
+    let posts;
+    if (type === "social") posts = await getTopSocialPosts(limit, city);
+    else if (type === "business") posts = await getTopBusinessPosts(limit, city);
+    else posts = await getTopBoostCandidates(limit, city);
+
+    res.json({ posts, type });
+  })
+);
+
+/**
+ * POST /scoring/batch
+ * Déclenche un recalcul batch (admin / cron).
+ * Limité à 100 posts par appel.
+ */
+router.post(
+  "/scoring/batch",
+  requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const limit = Math.min(parseInt(req.query.limit as string) || 100, 200);
+    const result = await batchRecalculate(limit);
+    res.json({ result });
   })
 );
 
