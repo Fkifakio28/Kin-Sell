@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+﻿import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useAuth } from "../../app/providers/AuthProvider";
 import { useLocaleCurrency } from "../../app/providers/LocaleCurrencyProvider";
@@ -22,6 +22,10 @@ type Plan = {
   highlight?: string;
   features: string[];
   badge?: string;
+  popBadge?: string;
+  ctaText?: string;
+  tagline?: string;
+  upgradeHint?: string;
 };
 
 type AddonCode = "IA_MERCHANT" | "IA_ORDER" | "BOOST_VISIBILITY" | "ADS_PACK" | "ADS_PREMIUM";
@@ -57,30 +61,47 @@ const USER_PLANS: Plan[] = [
     code: "FREE",
     name: "FREE",
     price: "0$/mois",
-    badge: "Base",
-    highlight: "Point fort: IA marchand gratuite",
-    features: ["Publier des annonces", "Acheter sur Kin-Sell", "Messagerie intégrée", "IA marchand gratuite"]
+    badge: "Gratuit",
+    highlight: "Vendez sans limite, sans frais",
+    tagline: "Tout ce qu'il faut pour votre première vente",
+    ctaText: "Commencer gratuitement",
+    features: ["Publications illimitées", "Messagerie directe acheteur", "IA Marchande incluse", "Conseils IA après publication"],
+    upgradeHint: "Envie d'être vu ? → BOOST"
   },
   {
     code: "BOOST",
     name: "BOOST",
     price: "6$/mois",
     badge: "Visibilité",
-    features: ["Boost profil", "Boost annonces", "Publicité basique", "Visibilité améliorée"]
+    popBadge: "Pour vendre plus",
+    highlight: "Vos annonces devant les bons acheteurs",
+    tagline: "Sortez du lot avec la publicité marketplace",
+    ctaText: "Booster mes ventes",
+    features: ["Tout FREE inclus", "Publicité marketplace", "Conseils IA de ciblage", "Accès Boost profil (add-on)"],
+    upgradeHint: "Moins de gestion ? → AUTO"
   },
   {
     code: "AUTO",
     name: "AUTO",
     price: "12$/mois",
-    badge: "Automation",
-    features: ["Tout BOOST", "IA commande", "Auto-réponse", "Gestion des ventes"]
+    badge: "Meilleur équilibre",
+    popBadge: "Recommandé",
+    highlight: "L'IA gère vos ventes — vous vendez",
+    tagline: "L'automatisation qui libère votre temps",
+    ctaText: "Automatiser mes ventes",
+    features: ["Tout BOOST inclus", "IA Commande incluse", "Relances & suivi automatiques", "Validation assistée"],
+    upgradeHint: "Besoin de données marché ? → PRO"
   },
   {
     code: "PRO_VENDOR",
     name: "PRO VENDEUR",
     price: "20$/mois",
-    badge: "Analytics Medium",
-    features: ["Tout AUTO", "Kin-Sell Analytique Medium", "Tendances marché", "Prix optimal"]
+    badge: "Pilotage",
+    popBadge: "Pour les pros",
+    highlight: "Comprenez votre marché avant les autres",
+    tagline: "Données réelles + mémoire stratégique",
+    ctaText: "Passer en mode pilotage",
+    features: ["Tout AUTO inclus", "Analytique Medium (Gemini)", "Diagnostic & anomalies", "Tendances & mémoire stratégique"]
   }
 ];
 
@@ -89,22 +110,34 @@ const BUSINESS_PLANS: Plan[] = [
     code: "STARTER",
     name: "STARTER",
     price: "15$/mois",
-    badge: "Entrée",
-    features: ["Boutique entreprise", "Visibilité standard", "Publicité basique", "Sans IA / sans analytics"]
+    badge: "Lancement",
+    highlight: "Votre vitrine professionnelle sur Kin-Sell",
+    tagline: "Crédibilité + visibilité dès le départ",
+    ctaText: "Lancer ma boutique",
+    features: ["Boutique dédiée", "Profil business vérifiable", "Publicité marketplace", "IA Marchande incluse"],
+    upgradeHint: "IA + Analytics ? → BUSINESS"
   },
   {
     code: "BUSINESS",
     name: "BUSINESS",
     price: "30$/mois",
     badge: "Croissance",
-    features: ["Tout STARTER", "IA marchand", "Analytics Medium", "Optimisation opérationnelle"]
+    popBadge: "Le plus populaire",
+    highlight: "IA + Analytics pour accélérer",
+    tagline: "Automatisation + intelligence marché en un plan",
+    ctaText: "Accélérer ma croissance",
+    features: ["Tout STARTER inclus", "IA Commande incluse", "Analytique Medium (Gemini)", "Diagnostic, tendances & mémoire"]
   },
   {
     code: "SCALE",
     name: "SCALE",
     price: "50$/mois",
-    badge: "Premium",
-    features: ["Tout BUSINESS", "IA commande", "Analytics Premium", "Insights et stratégie avancés"]
+    badge: "Expansion",
+    popBadge: "Pour scaler",
+    highlight: "Anticipez le marché, débloquez tout",
+    tagline: "Tous les outils Kin-Sell, zéro limite",
+    ctaText: "Débloquer tout Kin-Sell",
+    features: ["Tout BUSINESS inclus", "Analytique Premium & prédictions", "Publicité homepage", "Support dédié"]
   }
 ];
 
@@ -113,7 +146,7 @@ const ADDONS: Array<{ code: AddonCode; name: string; price: string; details: str
     code: "IA_MERCHANT",
     name: "IA MARCHAND (add-on)",
     price: "3$/mois",
-    details: ["Aide négociation", "Suggestion prix", "Contre-offres", "Gratuite uniquement pour utilisateur FREE"]
+    details: ["Aide négociation avancée", "Suggestion prix marché", "Contre-offres assistées", "Incluse dans AUTO, PRO, BUSINESS, SCALE"]
   },
   {
     code: "IA_ORDER",
@@ -146,41 +179,55 @@ function PlanCard({
   isCurrent,
   canChange,
   loading,
-  onChoose
+  onChoose,
+  recommended,
 }: {
   plan: Plan;
   isCurrent: boolean;
   canChange: boolean;
   loading: boolean;
   onChoose: (code: string) => void;
+  recommended?: boolean;
 }) {
+  const priceNum = plan.price.replace('/mois', '');
   return (
-    <article className="pricing-card glass-card" id={`plan-${plan.code}`}>
-      <div className="pricing-card-head">
-        <h3>{plan.name}</h3>
-        {plan.badge ? <span className="pricing-card-badge">{plan.badge}</span> : null}
+    <article className={`plan-card${recommended ? ' plan-card--recommended' : ''}`} id={`plan-${plan.code}`}>
+      {plan.popBadge && recommended && <span className="plan-card__popular">{plan.popBadge}</span>}
+      {plan.popBadge && !recommended && <span className="plan-card__pop-label">{plan.popBadge}</span>}
+      <h3 className="plan-card__name">{plan.name}</h3>
+      {plan.badge ? <span className="plan-card__badge">{plan.badge}</span> : null}
+      <div>
+        <span className="plan-card__price">{priceNum}</span>
+        {plan.price.includes('/mois') && <span className="plan-card__period"> /mois</span>}
       </div>
-      <p className="pricing-card-price">{plan.price}</p>
-      {plan.highlight ? <p className="pricing-card-highlight">{plan.highlight}</p> : null}
-      <ul className="pricing-list">
+      {plan.highlight ? <p className="plan-card__highlight">{plan.highlight}</p> : null}
+      {plan.tagline ? <p className="plan-card__tagline">{plan.tagline}</p> : null}
+      <div className="plan-card__divider" />
+      <ul className="plan-card__features">
         {plan.features.map((feature) => (
-          <li key={feature}>{feature}</li>
+          <li key={feature} className="plan-card__feat">
+            <span className="plan-card__feat-check">✓</span>
+            {feature}
+          </li>
         ))}
       </ul>
-      {isCurrent ? (
-        <span className="pricing-current">Plan actif</span>
-      ) : canChange ? (
-        <button className="pricing-cta pricing-cta-btn" type="button" onClick={() => onChoose(plan.code)} disabled={loading}>
-          {loading ? "Traitement..." : "Choisir ce forfait"}
-        </button>
-      ) : (
-        <Link className="pricing-cta" to="/register">Créer un compte</Link>
-      )}
+      <div className="plan-card__cta">
+        {isCurrent ? (
+          <span className="plan-card__current">✓ Plan actif</span>
+        ) : canChange ? (
+          <button className="plan-card__btn" type="button" onClick={() => onChoose(plan.code)} disabled={loading}>
+            {loading ? "Traitement..." : plan.ctaText || "Choisir ce plan"}
+          </button>
+        ) : (
+          <Link className="plan-card__btn" to="/register">{plan.ctaText || "Créer un compte"}</Link>
+        )}
+        {plan.upgradeHint && !isCurrent && (
+          <p className="plan-card__upgrade-hint">{plan.upgradeHint}</p>
+        )}
+      </div>
     </article>
   );
 }
-
-
 
 export function PricingPage() {
   const { user, isLoggedIn } = useAuth();
@@ -203,8 +250,9 @@ export function PricingPage() {
   }, [role]);
 
   const [activeTab, setActiveTab] = useState<PricingTab>(defaultTab);
+  const [openFaq, setOpenFaq] = useState<number | null>(null);
 
-  // ── Deep-link : parse URL et appliquer tab + highlight ──
+  // â”€â”€ Deep-link : parse URL et appliquer tab + highlight â”€â”€
   const deepLinkApplied = useRef(false);
   useEffect(() => {
     if (deepLinkApplied.current) return;
@@ -343,175 +391,175 @@ export function PricingPage() {
 
 
 
-  // handleActivateOrder supprimé — l'activation ne peut plus se faire côté frontend.
+  // handleActivateOrder supprimé ─” l'activation ne peut plus se faire côté frontend.
   // Seuls PayPal (capture auto) ou un super admin (validation manuelle) peuvent activer un forfait.
 
-  // handleToggleAddon supprimé — les add-ons ne peuvent plus être activés côté frontend.
+  // handleToggleAddon supprimé ─” les add-ons ne peuvent plus être activés côté frontend.
   // L'activation se fait uniquement via paiement validé ou action admin.
   // Le bouton redirige vers un upgrade de forfait ou contact support.
 
-  const roleHint =
-    role === "USER"
-      ? "Mode utilisateur: offres utilisateurs et add-ons affichés en priorité."
-      : role === "BUSINESS"
-        ? "Mode entreprise: offres entreprises et add-ons affichés en priorité."
-        : "Mode visiteur: comparez librement les offres utilisateurs, entreprises et options avancées.";
+
+
+  const faqData = [
+    { q: 'Comment fonctionne le paiement ?', a: 'Tous les paiements passent par PayPal. Votre forfait est activé automatiquement dès la confirmation du paiement. Aucune intervention manuelle requise.' },
+    { q: 'Puis-je changer de forfait à tout moment ?', a: 'Oui. Vous pouvez upgrader à tout moment. Le nouveau forfait prend effet immédiatement après paiement.' },
+    { q: 'Qu\'est-ce qu\'un add-on ?', a: 'Un add-on est une fonctionnalité supplémentaire que vous pouvez ajouter à n\'importe quel forfait (ex : Boost Visibilité, IA Commande). Les add-ons sont indépendants du forfait choisi.' },
+    { q: 'L\'IA Marchande est-elle vraiment gratuite ?', a: 'Oui. L\'IA Marchande (conseils de prix, aide à la négociation) est incluse dans tous les forfaits, y compris FREE. Aucun coût caché.' },
+    { q: 'Quelle est la différence entre Analytique Medium et Premium ?', a: 'Medium inclut le diagnostic de performance, la détection d\'anomalies, les tendances marché et la mémoire stratégique. Premium ajoute les prédictions de demande, les recommandations stratégiques et un score de confiance par source de données.' },
+  ];
 
   return (
-    <section className="pricing-shell animate-fade-in">
+    <div className="pricing-page animate-fade-in">
       <SeoMeta
         title="Tarifs et abonnements | Kin-Sell"
         description="Choisissez le plan adapté à vos besoins: FREE, BOOST, AUTO, PRO VENDEUR pour les particuliers; STARTER, BUSINESS, SCALE pour les entreprises."
         canonical="https://kin-sell.com/pricing"
       />
-      <header className="pricing-hero glass-container">
-        <p className="pricing-eyebrow">{t('pricing.eyebrow')}</p>
-        <h1>{t('pricing.title')}</h1>
-        <p>{t('pricing.subtitle')}</p>
-        <div className="pricing-role-hint">{roleHint}</div>
+
+      {/* ───────────────  HERO  ─────────────── */}
+      <header className="pricing-hero">
+        <span className="pricing-hero__eyebrow">Tarifs & Abonnements</span>
+        <h1 className="pricing-hero__title">Le bon plan pour chaque ambition</h1>
+        <p className="pricing-hero__subtitle">
+          Des outils concrets pour vendre plus, plus vite, plus intelligemment.
+          Choisissez le niveau qui correspond à votre activité.
+        </p>
         {currentPlan ? (
-          <div className="pricing-role-hint">
-            Forfait actif: {currentPlan.planName} ({(currentPlan.priceUsdCents / 100).toFixed(2)}$ / {currentPlan.billingCycle === "MONTHLY" ? "mois" : "one-shot"})
+          <div className="pricing-hero__plan-active">
+            ✓ Forfait actif : {currentPlan.planName} ─” {(currentPlan.priceUsdCents / 100).toFixed(2)}$ / {currentPlan.billingCycle === "MONTHLY" ? "mois" : "one-shot"}
           </div>
         ) : null}
-        {infoMessage ? <div className="pricing-feedback pricing-feedback--ok">{infoMessage}</div> : null}
-        {errorMessage ? <div className="pricing-feedback pricing-feedback--error">{errorMessage}</div> : null}
       </header>
 
-      <section className="pricing-tabs-wrap glass-container">
-        <div className="pricing-tabs" role="tablist" aria-label={t('pricing.tabsLabel')}>
-          <button type="button" className={`pricing-tab${activeTab === "users" ? " active" : ""}`} onClick={() => setActiveTab("users")}>{t('pricing.tabUsers')}</button>
-          <button type="button" className={`pricing-tab${activeTab === "business" ? " active" : ""}`} onClick={() => setActiveTab("business")}>{t('pricing.tabBusiness')}</button>
-          <button type="button" className={`pricing-tab${activeTab === "addons" ? " active" : ""}`} onClick={() => setActiveTab("addons")}>{t('pricing.tabAddons')}</button>
-        </div>
+      {/* â”€â”€ Alerts â”€â”€ */}
+      {infoMessage ? <div className="pricing-alert pricing-alert--ok">{infoMessage}</div> : null}
+      {errorMessage ? <div className="pricing-alert pricing-alert--error">{errorMessage}</div> : null}
 
-        <div className="pricing-role-switch">
-          {role === "USER" ? <button type="button" className="pricing-switch-btn" onClick={() => setActiveTab("business")}>{t('pricing.viewBusiness')}</button> : null}
-          {role === "BUSINESS" ? <button type="button" className="pricing-switch-btn" onClick={() => setActiveTab("users")}>{t('pricing.viewUsers')}</button> : null}
-          {role === "VISITOR" ? <span className="pricing-visitor-note">{t('pricing.fullComparison')}</span> : null}
+      {/* ───────────────  TOGGLE  ─────────────── */}
+      <div className="pricing-toggle">
+        <div className="pricing-toggle__inner">
+          <button type="button" className={`pricing-toggle__btn${activeTab === "users" ? " pricing-toggle__btn--active" : ""}`} onClick={() => setActiveTab("users")}>
+            ðŸ‘¤ Vendeurs
+          </button>
+          <button type="button" className={`pricing-toggle__btn${activeTab === "business" ? " pricing-toggle__btn--active" : ""}`} onClick={() => setActiveTab("business")}>
+            ðŸ¢ Business
+          </button>
+          <button type="button" className={`pricing-toggle__btn${activeTab === "addons" ? " pricing-toggle__btn--active" : ""}`} onClick={() => setActiveTab("addons")}>
+            ðŸ§© Add-ons
+          </button>
         </div>
-      </section>
+      </div>
+
+      {/* ───────────────  PLAN CARDS  ─────────────── */}
 
       {activeTab === "users" ? (
-        <section className="pricing-grid">
+        <section className="pricing-plans">
           {USER_PLANS.map((plan) => (
             <PlanCard
-              key={plan.name}
+              key={plan.code}
               plan={plan}
               isCurrent={currentPlan?.planCode === plan.code}
               canChange={isLoggedIn && busyPlanCode === null}
               loading={busyPlanCode === plan.code}
               onChoose={handleChoosePlan}
+              recommended={plan.code === "AUTO"}
             />
           ))}
         </section>
       ) : null}
 
       {activeTab === "business" ? (
-        <section className="pricing-grid pricing-grid--business">
+        <section className="pricing-plans pricing-plans--3col">
           {BUSINESS_PLANS.map((plan) => (
             <PlanCard
-              key={plan.name}
+              key={plan.code}
               plan={plan}
               isCurrent={currentPlan?.planCode === plan.code}
               canChange={isLoggedIn && busyPlanCode === null}
               loading={busyPlanCode === plan.code}
               onChoose={handleChoosePlan}
+              recommended={plan.code === "BUSINESS"}
             />
           ))}
         </section>
       ) : null}
 
       {activeTab === "addons" ? (
-        <section className="pricing-grid pricing-grid--addons">
+        <section className="pricing-plans pricing-plans--3col">
           {ADDONS.map((addon) => (
-            <article className="pricing-card glass-card" key={addon.name} id={`plan-${addon.code}`}>
-              <div className="pricing-card-head">
-                <h3>{addon.name}</h3>
-              </div>
-              <p className="pricing-card-price">{addon.price}</p>
-              <ul className="pricing-list">
-                {addon.details.map((detail) => (
-                  <li key={detail}>{detail}</li>
+            <article className="addon-card" key={addon.code} id={`plan-${addon.code}`}>
+              <h3 className="addon-card__name">{addon.name}</h3>
+              <p className="addon-card__price">{addon.price}</p>
+              <ul className="addon-card__list">
+                {addon.details.map((d) => (
+                  <li key={d}>{d}</li>
                 ))}
               </ul>
               {isLoggedIn && currentPlan ? (
                 currentPlan.addOns.some((a) => a.code === addon.code && a.status === "ACTIVE") ? (
-                  <span className="pricing-current">✅ Actif</span>
+                  <span className="plan-card__current">✓ Actif</span>
                 ) : currentPlan.addOns.some((a) => a.code === addon.code && a.status === "DISABLED") ? (
-                  <span className="pricing-current" style={{ color: "var(--color-text-secondary, #999)" }}>Désactivé</span>
+                  <span style={{ textAlign: 'center', fontSize: 13, color: 'var(--color-text-secondary, #aaa)' }}>Désactivé</span>
                 ) : (
-                  <button type="button" className="pricing-cta pricing-cta-btn" onClick={() => { setActiveTab("users"); setInfoMessage("Choisissez un forfait payant pour accéder à cet add-on, ou contactez le support."); }}>
+                  <button type="button" className="plan-card__btn" onClick={() => { setActiveTab("users"); setInfoMessage("Choisissez un forfait payant pour accéder à cet add-on, ou contactez le support."); }}>
                     Souscrire
                   </button>
                 )
               ) : !isLoggedIn ? (
-                <Link className="pricing-cta" to="/register">Créer un compte</Link>
+                <Link className="plan-card__btn" to="/register">Créer un compte</Link>
               ) : null}
             </article>
           ))}
 
-          <article className="pricing-card glass-card pricing-card--analytics-lock" id="plan-analytics-lock">
-            <div className="pricing-card-head">
-              <h3>Analytics</h3>
-              <span className="pricing-card-badge">Important</span>
-            </div>
-            <p className="pricing-card-price">Uniquement en pack</p>
-            <ul className="pricing-list">
-              <li>Analytics Medium: tendances, prix, produits populaires</li>
-              <li>Analytics Premium: Medium + prédictions + stratégie</li>
+          <article className="addon-card addon-card--analytics" id="plan-analytics-lock">
+            <h3 className="addon-card__name">Analytics</h3>
+            <p className="addon-card__price" style={{ fontSize: 14, fontWeight: 600 }}>Inclus dans les forfaits</p>
+            <ul className="addon-card__list">
+              <li>Analytics Medium : tendances, prix, produits populaires</li>
+              <li>Analytics Premium : Medium + prédictions + stratégie</li>
               <li>Non disponible en add-on individuel</li>
             </ul>
           </article>
         </section>
       ) : null}
 
+      {/* ───────────────  PAYMENT FLOW  ─────────────── */}
+
       {pendingPlanCode ? (
-        <section className="pricing-footer-note glass-container">
-          <h2>Paiement PayPal — {pendingPlanCode}</h2>
-          <p style={{ color: "var(--color-text-secondary)", fontSize: "14px", marginBottom: "8px" }}>
+        <section className="pricing-payment">
+          <h2 className="pricing-payment__title">Paiement PayPal ─” {pendingPlanCode}</h2>
+          <p className="pricing-payment__text">
             Vous serez redirigé vers PayPal pour effectuer le paiement. Votre forfait sera activé automatiquement après confirmation.
           </p>
           <button
             type="button"
-            className="pricing-cta pricing-cta-btn"
-            style={{ marginTop: "12px", fontSize: "15px", padding: "12px 20px" }}
+            className="pricing-payment__btn"
             disabled={busyPlanCode !== null}
             onClick={() => void handlePay()}
           >
-            {busyPlanCode ? "Traitement…" : "💳 Payer avec PayPal"}
+            {busyPlanCode ? "Traitement…" : "ðŸ’³ Payer avec PayPal"}
           </button>
-          <button
-            type="button"
-            className="pricing-switch-btn"
-            style={{ alignSelf: "flex-start", fontSize: "12px" }}
-            onClick={() => setPendingPlanCode(null)}
-          >
+          <br />
+          <button type="button" className="pricing-payment__cancel" onClick={() => setPendingPlanCode(null)}>
             ✕ Annuler
           </button>
         </section>
       ) : null}
 
       {latestCheckout ? (
-        <section className="pricing-footer-note glass-container">
-          <h2>Détails du paiement</h2>
-          <p>Ordre {latestCheckout.orderId} · {(latestCheckout.amountUsdCents / 100).toFixed(2)} {latestCheckout.currency}</p>
-          {latestCheckout.transferReference ? <p>Référence: <strong>{latestCheckout.transferReference}</strong></p> : null}
-          {latestCheckout.expiresAt ? <p>Expire le: {new Date(latestCheckout.expiresAt).toLocaleString("fr-FR")}</p> : null}
-
+        <section className="pricing-payment">
+          <h2 className="pricing-payment__title">Détails du paiement</h2>
+          <p className="pricing-payment__text">
+            Ordre {latestCheckout.orderId} · {(latestCheckout.amountUsdCents / 100).toFixed(2)} {latestCheckout.currency}
+          </p>
+          {latestCheckout.transferReference ? <p className="pricing-payment__text">Référence : <strong>{latestCheckout.transferReference}</strong></p> : null}
+          {latestCheckout.expiresAt ? <p className="pricing-payment__text">Expire le : {new Date(latestCheckout.expiresAt).toLocaleString("fr-FR")}</p> : null}
           {latestCheckout.paymentUrl ? (
-            <a
-              href={latestCheckout.paymentUrl}
-              className="pricing-cta pricing-cta-btn"
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{ display: "inline-block", textAlign: "center", textDecoration: "none", marginTop: "8px" }}
-            >
-              💳 Ouvrir PayPal — {(latestCheckout.amountUsdCents / 100).toFixed(2)}$
+            <a href={latestCheckout.paymentUrl} className="pricing-payment__btn" target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', textDecoration: 'none', marginBottom: 12 }}>
+              ðŸ’³ Ouvrir PayPal ─” {(latestCheckout.amountUsdCents / 100).toFixed(2)}$
             </a>
           ) : null}
-
-          <ul className="pricing-list" style={{ marginTop: 12 }}>
+          <ul style={{ margin: '12px 0 0', paddingLeft: 18, color: 'var(--color-text-secondary, #aaa)', fontSize: 13 }}>
             {latestCheckout.instructions.map((instruction) => (
               <li key={instruction}>{instruction}</li>
             ))}
@@ -519,38 +567,25 @@ export function PricingPage() {
         </section>
       ) : null}
 
+      {/* ───────────────  ORDERS  ─────────────── */}
+
       {isLoggedIn ? (
-        <section className="pricing-footer-note glass-container">
-          <h2>Mes ordres de paiement</h2>
+        <section className="pricing-orders">
+          <h2 className="pricing-orders__title">Mes ordres de paiement</h2>
           {paymentOrders.length === 0 ? (
-            <p>Aucun ordre pour le moment.</p>
+            <p className="pricing-orders__empty">Aucun ordre pour le moment.</p>
           ) : (
-            <div className="pricing-orders-list">
+            <div>
               {paymentOrders.map((order) => (
-                <article className="pricing-order-item" key={order.id}>
+                <article className="order-card" key={order.id}>
                   <p><strong>{order.planCode}</strong> · {(order.amountUsdCents / 100).toFixed(2)} {order.currency}</p>
-                  <p>Référence: {order.transferReference}</p>
-                  <p>Statut: {order.status}</p>
-                  <div className="pricing-role-switch">
-                    {order.status === "PENDING" ? (
-                      <span className="pricing-current" style={{ color: "var(--color-warning, #f90)" }}>⏳ En attente de paiement PayPal</span>
-                    ) : null}
-                    {order.status === "USER_CONFIRMED" ? (
-                      <span className="pricing-current">⏳ En attente de validation</span>
-                    ) : null}
-                    {order.status === "PAID" || order.status === "VALIDATED" ? (
-                      <span className="pricing-current">✅ Forfait activé</span>
-                    ) : null}
-                    {order.status === "FAILED" ? (
-                      <span className="pricing-current" style={{ color: "var(--color-error, #f44)" }}>❌ Paiement échoué</span>
-                    ) : null}
-                    {order.status === "CANCELED" ? (
-                      <span className="pricing-current" style={{ color: "var(--color-text-secondary, #999)" }}>❌ Annulé</span>
-                    ) : null}
-                    {order.status === "EXPIRED" ? (
-                      <span className="pricing-current" style={{ color: "var(--color-text-secondary, #999)" }}>⏰ Expiré</span>
-                    ) : null}
-                  </div>
+                  <p>Référence : {order.transferReference}</p>
+                  {order.status === "PENDING" && <span className="order-status order-status--pending">â³ En attente</span>}
+                  {order.status === "USER_CONFIRMED" && <span className="order-status order-status--pending">â³ Validation en cours</span>}
+                  {(order.status === "PAID" || order.status === "VALIDATED") && <span className="order-status order-status--ok">✓ Activé</span>}
+                  {order.status === "FAILED" && <span className="order-status order-status--fail">✕ Échoué</span>}
+                  {order.status === "CANCELED" && <span className="order-status order-status--fail">✕ Annulé</span>}
+                  {order.status === "EXPIRED" && <span className="order-status order-status--expired">â° Expiré</span>}
                 </article>
               ))}
             </div>
@@ -558,134 +593,394 @@ export function PricingPage() {
         </section>
       ) : null}
 
-      <section className="pricing-footer-note glass-container">
-        <h2>Paiement sécurisé</h2>
-        <p>
-          💳 PayPal — Paiement sécurisé avec activation automatique de votre forfait.
+      {/* ───────────────  COMPARATIF  ─────────────── */}
+      <section className="pricing-section">
+        <div className="pricing-section__header">
+          <h2 className="pricing-section__title">Comparatif détaillé</h2>
+          <p className="pricing-section__sub">Tous les forfaits côte à côte. Trouvez celui qui vous correspond.</p>
+        </div>
+
+        {/* â”€â”€ Forfaits Utilisateurs â”€â”€ */}
+        <div className="comparison-label">
+          <span className="comparison-label__icon">ðŸ‘¤</span>
+          <h3 className="comparison-label__text">Vendeurs</h3>
+          <div className="comparison-label__line" />
+        </div>
+        <div className="comparison-scroll">
+          <table className="comparison-table">
+            <thead>
+              <tr>
+                <th>Fonctionnalité</th>
+                <th>FREE · 0$</th>
+                <th>BOOST · 6$/m</th>
+                <th>AUTO · 12$/m</th>
+                <th>PRO · 20$/m</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                { feat: 'Publications illimitées', vals: ['✅', '✅', '✅', '✅'] },
+                { feat: 'Achat & messagerie', vals: ['✅', '✅', '✅', '✅'] },
+                { feat: 'IA marchande (prix & négo)', vals: ['✅', '✅', '✅', '✅'] },
+                { feat: 'Conseils IA post-publication', vals: ['✅', '✅', '✅', '✅'] },
+                { feat: 'Publicité marketplace', vals: ['─”', '✅', '✅', '✅'] },
+                { feat: 'IA Commande (suivi & relances)', vals: ['─”', '─”', '✅', '✅'] },
+                { feat: 'Kin-Sell Analytique', vals: ['─”', '─”', '─”', '✅ Medium'] },
+                { feat: 'Diagnostic de performance', vals: ['─”', '─”', '─”', '✅'] },
+                { feat: "Détection d'anomalies", vals: ['─”', '─”', '─”', '✅'] },
+                { feat: 'Tendances de marché', vals: ['─”', '─”', '─”', '✅'] },
+                { feat: 'Mémoire stratégique', vals: ['─”', '─”', '─”', '✅'] },
+                { feat: 'Analytics enrichi (Gemini)', vals: ['─”', '─”', '─”', '✅'] },
+                { feat: 'Boost profil / annonces', vals: ['Add-on', 'Add-on', 'Add-on', 'Add-on'] },
+                { feat: 'Portée boost', vals: ['─”', 'Local · National · Cross-border', 'Local · National · Cross-border', 'Local · National · Cross-border'] },
+                { feat: 'Usage recommandé', vals: ['Découverte', 'Visibilité', 'Automatisation', 'Pilotage'] },
+              ].map((row, i) => (
+                <tr key={row.feat}>
+                  <td>{row.feat}</td>
+                  {row.vals.map((v, j) => (
+                    <td key={j} className={v === '─”' ? 'val-no' : v.startsWith('✅') ? 'val-yes' : v === 'Add-on' ? 'val-addon' : 'val-info'}>{v}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* â”€â”€ Forfaits Business â”€â”€ */}
+        <div className="comparison-label">
+          <span className="comparison-label__icon">ðŸ¢</span>
+          <h3 className="comparison-label__text">Business</h3>
+          <div className="comparison-label__line" />
+        </div>
+        <div className="comparison-scroll">
+          <table className="comparison-table">
+            <thead>
+              <tr>
+                <th>Fonctionnalité</th>
+                <th>STARTER · 15$/m</th>
+                <th>BUSINESS · 30$/m</th>
+                <th>SCALE · 50$/m</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                { feat: 'Boutique dédiée', vals: ['✅', '✅', '✅'] },
+                { feat: 'Publications illimitées', vals: ['✅', '✅', '✅'] },
+                { feat: 'Profil business vérifiable', vals: ['✅', '✅', '✅'] },
+                { feat: 'IA marchande (prix & négo)', vals: ['✅', '✅', '✅'] },
+                { feat: 'Publicité marketplace', vals: ['✅', '✅', '✅'] },
+                { feat: 'Conseils IA post-publication', vals: ['✅', '✅', '✅'] },
+                { feat: 'IA Commande (suivi & relances)', vals: ['─”', '✅', '✅'] },
+                { feat: 'Kin-Sell Analytique', vals: ['─”', '✅ Medium', '✅ Premium'] },
+                { feat: 'Diagnostic de performance', vals: ['─”', '✅', '✅'] },
+                { feat: "Détection d'anomalies", vals: ['─”', '✅', '✅'] },
+                { feat: 'Tendances de marché', vals: ['─”', '✅', '✅'] },
+                { feat: 'Mémoire stratégique', vals: ['─”', '✅', '✅'] },
+                { feat: 'Analytics enrichi (Gemini)', vals: ['─”', '✅', '✅'] },
+                { feat: 'Publicité premium (homepage)', vals: ['─”', '─”', '✅'] },
+                { feat: 'Boost boutique / annonces', vals: ['Add-on', 'Add-on', 'Add-on'] },
+                { feat: 'Portée boost', vals: ['Local · National · Cross-border', 'Local · National · Cross-border', 'Local · National · Cross-border'] },
+                { feat: 'Support dédié', vals: ['─”', '─”', '✅'] },
+                { feat: 'Usage recommandé', vals: ['Lancement', 'Croissance', 'Expansion'] },
+              ].map((row) => (
+                <tr key={row.feat}>
+                  <td>{row.feat}</td>
+                  {row.vals.map((v, j) => (
+                    <td key={j} className={v === '─”' ? 'val-no' : v.startsWith('✅') ? 'val-yes' : v === 'Add-on' ? 'val-addon' : 'val-info'}>{v}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {/* ───────────────  IA KIN-SELL  ─────────────── */}
+      <section className="pricing-section">
+        <div className="pricing-section__header">
+          <h2 className="pricing-section__title">4 intelligences artificielles, un seul objectif</h2>
+          <p className="pricing-section__sub">
+            Chaque IA couvre un maillon clé de votre activité. Certaines sont accessibles à tous, d{"'"}autres se débloquent avec votre forfait.
+          </p>
+        </div>
+
+        {/* â”€â”€ IA Marchande â”€â”€ */}
+        <div className="ia-block">
+          <div className="ia-block__header">
+            <div className="ia-block__icon">ðŸ¤</div>
+            <div>
+              <h3 className="ia-block__title">IA Marchande</h3>
+              <span className="ia-block__avail">✅ Incluse dans tous les forfaits</span>
+            </div>
+          </div>
+          <p className="ia-block__desc">
+            Votre assistante de négociation personnelle. Elle analyse le marché local en temps réel pour vous suggérer le bon prix, conseille l{"'"}acheteur avant qu{"'"}il négocie, accompagne le vendeur dans ses décisions et peut répondre automatiquement aux offres en attente par lot.
+          </p>
+          <div className="ia-block__tags">
+            {['Suggestion de prix', 'Conseil pré-négociation', 'Aide décision vendeur', 'Auto-réponse par lot'].map(t => (
+              <span key={t} className="ia-tag">{t}</span>
+            ))}
+          </div>
+        </div>
+
+        {/* â”€â”€ IA Commande â”€â”€ */}
+        <div className="ia-block">
+          <div className="ia-block__header">
+            <div className="ia-block__icon">ðŸ“¦</div>
+            <div>
+              <h3 className="ia-block__title">IA Commande</h3>
+              <span className="ia-block__avail">✅ AUTO · PRO VENDEUR · BUSINESS · SCALE</span>
+            </div>
+          </div>
+          <p className="ia-block__desc">
+            Après la vente, l{"'"}IA Commande prend le relais. Elle suit chaque commande, relance automatiquement les acheteurs inactifs et aide à la validation des transactions. Moins de gestion manuelle, plus de ventes conclues.
+          </p>
+          <div className="ia-block__tags">
+            {['Suivi intelligent', 'Relances auto', 'Auto-validation', 'Historique acheteur'].map(t => (
+              <span key={t} className="ia-tag">{t}</span>
+            ))}
+          </div>
+          <p className="ia-block__addon">ðŸ”Œ Disponible en add-on : 7$/mois (pour FREE, BOOST, STARTER)</p>
+        </div>
+
+        {/* â”€â”€ IA Ads â”€â”€ */}
+        <div className="ia-block">
+          <div className="ia-block__header">
+            <div className="ia-block__icon">ðŸ“¢</div>
+            <div>
+              <h3 className="ia-block__title">IA Ads</h3>
+              <span className="ia-block__avail">✅ Conseils post-publication : tous les forfaits</span>
+            </div>
+          </div>
+          <p className="ia-block__desc">
+            Après chaque publication, l{"'"}IA analyse votre annonce et produit des recommandations ciblées : timing, budget, ciblage. En parallèle, Kin-Sell génère ses propres campagnes internes via Gemini avec un contexte marché régional.
+          </p>
+          <div className="ia-block__tags">
+            {['Conseils post-publication', 'Ciblage intelligent', 'Analyse performance', 'Campagnes Kin-Sell autonomes'].map(t => (
+              <span key={t} className="ia-tag">{t}</span>
+            ))}
+          </div>
+          <div className="ia-detail-box">
+            <div className="ia-detail-box__title">Fonctionnement interne</div>
+            <p className="ia-detail-box__text">
+              Kin-Sell génère automatiquement des publicités internes via Gemini 2.5 Flash, enrichies par le contexte marché régional. Ces campagnes tournent par catégorie et par ville, avec un quota IA journalier maîtrisé et un cache intelligent.
+            </p>
+          </div>
+        </div>
+
+        {/* â”€â”€ Kin-Sell Analytique â”€â”€ */}
+        <div className="ia-block">
+          <div className="ia-block__header">
+            <div className="ia-block__icon ia-block__icon--green">ðŸ“Š</div>
+            <div>
+              <h3 className="ia-block__title">Kin-Sell Analytique</h3>
+              <span className="ia-block__avail">✅ PRO VENDEUR · BUSINESS (Medium) · SCALE (Premium)</span>
+            </div>
+          </div>
+          <p className="ia-block__desc">
+            Le moteur d{"'"}intelligence stratégique. Il combine vos données internes avec des données marché externes via Gemini pour produire des analyses fiables avec un niveau de confiance explicite.
+          </p>
+          <div className="analytique-grid">
+            <div className="analytique-card">
+              <div className="analytique-card__label analytique-card__label--medium">Medium</div>
+              <ul className="analytique-card__list">
+                <li>Diagnostic de performance vendeur</li>
+                <li>Détection d{"'"}anomalies (ventes, prix, vues)</li>
+                <li>Tendances marché par catégorie</li>
+                <li>Analytics enrichi (données Gemini)</li>
+                <li>Mémoire stratégique</li>
+              </ul>
+              <div className="analytique-card__plans">✅ PRO VENDEUR · BUSINESS</div>
+            </div>
+            <div className="analytique-card analytique-card--premium">
+              <div className="analytique-card__label analytique-card__label--premium">Premium</div>
+              <ul className="analytique-card__list">
+                <li>Tout Medium inclus</li>
+                <li>Prédictions de demande</li>
+                <li>Recommandations stratégiques</li>
+                <li>Rapport complet enrichi</li>
+                <li>Score de confiance par source</li>
+              </ul>
+              <div className="analytique-card__plans">✅ SCALE uniquement</div>
+            </div>
+          </div>
+          <div className="ia-attribution">
+            <div className="ia-attribution__title">Niveau de confiance & sources</div>
+            <p className="ia-attribution__text">
+              Chaque insight indique sa source : données internes Kin-Sell, données externes (Gemini + Google Search), ou combinaison hybride. Un score de confiance accompagne chaque analyse.
+            </p>
+          </div>
+        </div>
+
+        {/* â”€â”€ Boost â”€â”€ */}
+        <div className="boost-block">
+          <div className="boost-block__header">
+            <span style={{ fontSize: 22 }}>ðŸš€</span>
+            <h3 className="boost-block__title">Boost & portée géographique</h3>
+            <span className="boost-block__price-tag">Add-on · à partir de 1$/24h</span>
+          </div>
+          <p className="boost-block__desc">
+            Boostez la visibilité de vos annonces ou de votre boutique avec une portée géographique adaptée à votre marché. Disponible sur tous les forfaits.
+          </p>
+          <div className="boost-scopes">
+            {[
+              { scope: 'Local', mult: '×1', desc: 'Votre ville' },
+              { scope: 'National', mult: '×2.5', desc: 'Tout le pays' },
+              { scope: 'Cross-border', mult: '×5', desc: 'Pays limitrophes' },
+            ].map(s => (
+              <div key={s.scope} className="boost-scope">
+                <div className="boost-scope__name">{s.scope}</div>
+                <div className="boost-scope__mult">{s.mult}</div>
+                <div className="boost-scope__desc">{s.desc}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ───────────────  RÉSULTATS ATTENDUS  ─────────────── */}
+      <section className="pricing-section">
+        <div className="pricing-section__header">
+          <h2 className="pricing-section__title">L{"'"}impact réel sur votre activité</h2>
+          <p className="pricing-section__sub">
+            Pas de chiffres inventés. Voici ce qui change concrètement à chaque palier.
+          </p>
+        </div>
+
+        {/* â”€â”€ Parcours Vendeurs â”€â”€ */}
+        <div className="results-timeline" style={{ marginBottom: 32 }}>
+          <div className="results-label">
+            <span className="results-label__icon">ðŸ‘¤</span>
+            <h3 className="results-label__text">Parcours Vendeur</h3>
+            <div className="results-label__line" />
+          </div>
+          {[
+            {
+              plan: 'FREE', price: '0$', accent: 'var(--color-text-secondary, #aaa)', borderColor: 'rgba(111,88,255,0.06)',
+              bgTag: 'rgba(111,88,255,0.08)', title: 'Vendez librement, dès maintenant',
+              detail: 'Publications illimitées, messagerie directe et IA Marchande pour fixer le bon prix et négocier avec assurance. Tout ce qu\'il faut pour conclure votre première vente sur Kin-Sell.',
+              unlock: null,
+            },
+            {
+              plan: 'BOOST', price: '6$/mois', accent: '#6f58ff', borderColor: 'rgba(111,88,255,0.12)',
+              bgTag: 'rgba(111,88,255,0.12)', title: 'Vos annonces deviennent visibles',
+              detail: 'La publicité marketplace place vos annonces devant les acheteurs qui cherchent activement. L\'IA Ads analyse chaque publication et vous recommande comment la rendre plus performante.',
+              unlock: 'Publicité marketplace + conseils IA Ads',
+            },
+            {
+              plan: 'AUTO', price: '12$/mois', accent: '#6f58ff', borderColor: 'rgba(111,88,255,0.15)',
+              bgTag: 'rgba(111,88,255,0.12)', title: 'Vos ventes tournent sans vous',
+              detail: 'L\'IA Commande structure vos échanges, relance les acheteurs silencieux et vous aide à valider chaque transaction. Le temps gagné, vous le consacrez à vendre plus.',
+              unlock: 'IA Commande (suivi, relances, validation)',
+            },
+            {
+              plan: 'PRO VENDEUR', price: '20$/mois', accent: '#4caf50', borderColor: 'rgba(76,175,80,0.15)',
+              bgTag: 'rgba(76,175,80,0.12)', title: 'Vous comprenez votre marché avant les autres',
+              detail: 'Kin-Sell Analytique Medium vous donne un diagnostic complet : performance produits, anomalies de prix, tendances par catégorie et mémoire stratégique. Vos décisions reposent sur des données réelles.',
+              unlock: 'Analytique Medium + mémoire stratégique',
+            },
+          ].map((r, i) => (
+            <div key={r.plan} className="results-step">
+              {i < 3 && <div className="results-step__connector" style={{ background: 'rgba(111,88,255,0.08)' }} />}
+              <div className="results-step__dot" style={{ background: i === 3 ? 'rgba(76,175,80,0.15)' : 'rgba(111,88,255,0.1)', border: `2px solid ${r.accent}` }}>
+                <div className="results-step__dot-inner" style={{ background: r.accent }} />
+              </div>
+              <div className="results-step__card" style={{ background: 'rgba(111,88,255,0.02)', border: `1px solid ${r.borderColor}` }}>
+                <div className="results-step__meta">
+                  <span className="results-step__tag" style={{ background: r.bgTag, color: r.accent }}>{r.plan}</span>
+                  <span className="results-step__price">{r.price}</span>
+                  {r.unlock && <span className="results-step__unlock" style={{ color: '#6f58ff' }}>+ {r.unlock}</span>}
+                </div>
+                <h4 className="results-step__title">{r.title}</h4>
+                <p className="results-step__detail">{r.detail}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* â”€â”€ Parcours Business â”€â”€ */}
+        <div className="results-timeline">
+          <div className="results-label">
+            <span className="results-label__icon">ðŸ¢</span>
+            <h3 className="results-label__text">Parcours Business</h3>
+            <div className="results-label__line" />
+          </div>
+          {[
+            {
+              plan: 'STARTER', price: '15$/mois', accent: '#6f58ff', borderColor: 'rgba(111,88,255,0.12)',
+              bgTag: 'rgba(111,88,255,0.12)', bg: 'rgba(111,88,255,0.02)',
+              title: 'Votre entreprise a une vitrine crédible',
+              detail: 'Boutique dédiée avec profil vérifiable et publicité marketplace. Vos clients trouvent votre catalogue complet au même endroit et vous identifient comme un professionnel établi.',
+              unlock: null,
+            },
+            {
+              plan: 'BUSINESS', price: '30$/mois', accent: '#4caf50', borderColor: 'rgba(76,175,80,0.12)',
+              bgTag: 'rgba(76,175,80,0.12)', bg: 'rgba(111,88,255,0.02)',
+              title: 'Automatisation et intelligence réunies',
+              detail: 'L\'IA Commande gère le suivi de vos transactions pendant que l\'Analytique Medium vous livre un diagnostic clair : performances, anomalies, tendances et mémoire stratégique.',
+              unlock: 'IA Commande + Analytique Medium + mémoire',
+            },
+            {
+              plan: 'SCALE', price: '50$/mois', accent: '#ff9800', borderColor: 'rgba(255,152,0,0.15)',
+              bgTag: 'rgba(255,152,0,0.12)', bg: 'rgba(255,152,0,0.02)',
+              title: 'Chaque décision devient un avantage concurrentiel',
+              detail: 'Analytique Premium : prédictions de demande, recommandations stratégiques et score de confiance par source. Publicité homepage, support dédié. Tous les outils Kin-Sell débloqués.',
+              unlock: 'Analytique Premium + prédictions + homepage ads',
+            },
+          ].map((r, i) => (
+            <div key={r.plan} className="results-step">
+              {i < 2 && <div className="results-step__connector" style={{ background: i === 1 ? 'rgba(255,152,0,0.1)' : 'rgba(111,88,255,0.08)' }} />}
+              <div className="results-step__dot" style={{ background: i === 2 ? 'rgba(255,152,0,0.15)' : i === 1 ? 'rgba(76,175,80,0.15)' : 'rgba(111,88,255,0.1)', border: `2px solid ${r.accent}` }}>
+                <div className="results-step__dot-inner" style={{ background: r.accent }} />
+              </div>
+              <div className="results-step__card" style={{ background: r.bg, border: `1px solid ${r.borderColor}` }}>
+                <div className="results-step__meta">
+                  <span className="results-step__tag" style={{ background: r.bgTag, color: r.accent }}>{r.plan}</span>
+                  <span className="results-step__price">{r.price}</span>
+                  {r.unlock && <span className="results-step__unlock" style={{ color: r.accent }}>+ {r.unlock}</span>}
+                </div>
+                <h4 className="results-step__title">{r.title}</h4>
+                <p className="results-step__detail">{r.detail}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ───────────────  FAQ  ─────────────── */}
+      <section className="pricing-section">
+        <div className="pricing-section__header">
+          <h2 className="pricing-section__title">Questions fréquentes</h2>
+        </div>
+        <div className="faq-list">
+          {faqData.map((item, i) => (
+            <div key={i} className={`faq-item${openFaq === i ? ' faq-item--open' : ''}`}>
+              <button type="button" className="faq-item__q" onClick={() => setOpenFaq(openFaq === i ? null : i)}>
+                {item.q}
+                <span className="faq-item__chevron">â–¼</span>
+              </button>
+              {openFaq === i && <p className="faq-item__a">{item.a}</p>}
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ───────────────  CTA FINAL  ─────────────── */}
+      <section className="pricing-cta-final">
+        <h2 className="pricing-cta-final__title">Prêt à vendre plus intelligemment ?</h2>
+        <p className="pricing-cta-final__text">
+          Rejoignez les vendeurs et entreprises qui utilisent Kin-Sell pour accélérer leur activité à Kinshasa.
         </p>
-        {!isLoggedIn ? <Link to="/register" className="pricing-cta">Créer un compte Kin-Sell</Link> : null}
+        {isLoggedIn ? (
+          <button type="button" className="pricing-cta-final__btn" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+            Choisir mon plan â†‘
+          </button>
+        ) : (
+          <Link className="pricing-cta-final__btn" to="/register">
+            Créer mon compte Kin-Sell
+          </Link>
+        )}
       </section>
-
-      {/* ═══════════════  MATRICE DE COMPARAISON  ═══════════════ */}
-      <section className="glass-container" style={{ marginTop: 32, padding: '24px 20px' }}>
-        <h2 style={{ textAlign: 'center', fontSize: 20, fontWeight: 700, color: 'var(--color-text-primary, #fff)', marginBottom: 24 }}>
-          📊 Comparaison des forfaits
-        </h2>
-
-        {/* ── Forfaits Utilisateurs ── */}
-        <h3 style={{ fontSize: 16, fontWeight: 600, color: '#6f58ff', marginBottom: 12 }}>Forfaits Utilisateurs</h3>
-        <div style={{ overflowX: 'auto', marginBottom: 28 }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-            <thead>
-              <tr style={{ borderBottom: '2px solid rgba(111,88,255,0.2)' }}>
-                <th style={{ textAlign: 'left', padding: '10px 12px', color: 'var(--color-text-secondary, #aaa)' }}>Fonctionnalité</th>
-                {['FREE', 'BOOST', 'AUTO', 'PRO VENDEUR'].map(p => (
-                  <th key={p} style={{ textAlign: 'center', padding: '10px 8px', color: 'var(--color-text-primary, #fff)', fontWeight: 600, minWidth: 80 }}>{p}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {[
-                { feat: 'Publications', vals: ['3/jour', '10/jour', '15/jour', 'Illimité'] },
-                { feat: 'Négociations IA', vals: ['❌', '❌', '✅ Assistée', '✅ Avancée'] },
-                { feat: 'IA Ads (conseils boost)', vals: ['❌', '✅ Basic', '✅ Avancé', '✅ Premium'] },
-                { feat: 'IA Commande', vals: ['❌', '❌', 'Add-on', '✅ Inclus'] },
-                { feat: 'Kin-Sell Analytique', vals: ['❌', '❌', '❌', '✅ Medium'] },
-                { feat: 'Boost visibilité', vals: ['❌', '✅', '✅', '✅'] },
-                { feat: 'Badge vendeur', vals: ['❌', '❌', '✅', '✅ Pro'] },
-                { feat: 'Support prioritaire', vals: ['❌', '❌', '❌', '✅'] },
-              ].map((row, i) => (
-                <tr key={row.feat} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', background: i % 2 === 0 ? 'rgba(111,88,255,0.02)' : 'transparent' }}>
-                  <td style={{ padding: '8px 12px', color: 'var(--color-text-primary, #fff)', fontWeight: 500 }}>{row.feat}</td>
-                  {row.vals.map((v, j) => (
-                    <td key={j} style={{ textAlign: 'center', padding: '8px 6px', color: v.startsWith('❌') ? 'rgba(255,255,255,0.3)' : v.startsWith('✅') ? '#4caf50' : 'var(--color-text-secondary, #aaa)' }}>{v}</td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {/* ── Forfaits Business ── */}
-        <h3 style={{ fontSize: 16, fontWeight: 600, color: '#6f58ff', marginBottom: 12 }}>Forfaits Business</h3>
-        <div style={{ overflowX: 'auto', marginBottom: 28 }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-            <thead>
-              <tr style={{ borderBottom: '2px solid rgba(111,88,255,0.2)' }}>
-                <th style={{ textAlign: 'left', padding: '10px 12px', color: 'var(--color-text-secondary, #aaa)' }}>Fonctionnalité</th>
-                {['STARTER', 'BUSINESS', 'SCALE'].map(p => (
-                  <th key={p} style={{ textAlign: 'center', padding: '10px 8px', color: 'var(--color-text-primary, #fff)', fontWeight: 600, minWidth: 100 }}>{p}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {[
-                { feat: 'Boutique en ligne', vals: ['✅', '✅', '✅'] },
-                { feat: 'Publications', vals: ['15/jour', '50/jour', 'Illimité'] },
-                { feat: 'IA Marchande (auto-négo)', vals: ['❌', '✅ Inclus', '✅ Inclus'] },
-                { feat: 'IA Commande (auto-vente)', vals: ['❌', 'Add-on', '✅ Inclus'] },
-                { feat: 'IA Ads (conseils boost)', vals: ['✅ Basic', '✅ Avancé', '✅ Premium'] },
-                { feat: 'Kin-Sell Analytique', vals: ['❌', '✅ Medium', '✅ Premium'] },
-                { feat: 'Panneau de stats avancé', vals: ['✅ Basic', '✅ Avancé', '✅ Premium'] },
-                { feat: 'Support prioritaire', vals: ['❌', '✅', '✅ Dédié'] },
-                { feat: 'Badge entreprise', vals: ['✅', '✅ Gold', '✅ Diamond'] },
-              ].map((row, i) => (
-                <tr key={row.feat} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', background: i % 2 === 0 ? 'rgba(111,88,255,0.02)' : 'transparent' }}>
-                  <td style={{ padding: '8px 12px', color: 'var(--color-text-primary, #fff)', fontWeight: 500 }}>{row.feat}</td>
-                  {row.vals.map((v, j) => (
-                    <td key={j} style={{ textAlign: 'center', padding: '8px 6px', color: v.startsWith('❌') ? 'rgba(255,255,255,0.3)' : v.startsWith('✅') ? '#4caf50' : 'var(--color-text-secondary, #aaa)' }}>{v}</td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      {/* ═══════════════  IA INCLUSES PAR PLAN  ═══════════════ */}
-      <section className="glass-container" style={{ marginTop: 24, padding: '24px 20px' }}>
-        <h2 style={{ textAlign: 'center', fontSize: 20, fontWeight: 700, color: 'var(--color-text-primary, #fff)', marginBottom: 20 }}>
-          🤖 Intelligences Artificielles par forfait
-        </h2>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
-          {[
-            { name: 'IA Marchande', icon: '🤝', desc: 'Répond et négocie automatiquement en vous représentant.', plans: 'BUSINESS, SCALE', addon: 'IA_MERCHANT (3$/mois)' },
-            { name: 'IA Commande', icon: '📦', desc: 'Automatise les confirmations de vente, relances et suivi.', plans: 'PRO VENDEUR, SCALE', addon: 'IA_ORDER (7$/mois)' },
-            { name: 'IA Ads', icon: '📢', desc: 'Conseils personnalisés pour booster articles et boutique.', plans: 'BOOST+', addon: null },
-            { name: 'Kin-Sell Analytique', icon: '📊', desc: 'Analyses marché, tendances prix, diagnostics de performance.', plans: 'PRO VENDEUR (Medium), BUSINESS (Medium), SCALE (Premium)', addon: null },
-          ].map(ia => (
-            <div key={ia.name} style={{ background: 'rgba(111,88,255,0.05)', border: '1px solid rgba(111,88,255,0.12)', borderRadius: 12, padding: 16 }}>
-              <div style={{ fontSize: 28, marginBottom: 8 }}>{ia.icon}</div>
-              <h3 style={{ margin: '0 0 6px', fontSize: 15, fontWeight: 600, color: 'var(--color-text-primary, #fff)' }}>{ia.name}</h3>
-              <p style={{ margin: '0 0 10px', fontSize: 12, color: 'var(--color-text-secondary, #aaa)', lineHeight: 1.5 }}>{ia.desc}</p>
-              <div style={{ fontSize: 11, color: '#4caf50', marginBottom: 4 }}>✅ Inclus dans : {ia.plans}</div>
-              {ia.addon && <div style={{ fontSize: 11, color: '#ff9800' }}>🔌 Ou en add-on : {ia.addon}</div>}
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* ═══════════════  RÉSULTATS ATTENDUS  ═══════════════ */}
-      <section className="glass-container" style={{ marginTop: 24, padding: '24px 20px', marginBottom: 40 }}>
-        <h2 style={{ textAlign: 'center', fontSize: 20, fontWeight: 700, color: 'var(--color-text-primary, #fff)', marginBottom: 20 }}>
-          📈 Résultats attendus
-        </h2>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 14 }}>
-          {[
-            { plan: 'BOOST', result: '+40% de visibilité', detail: 'Vos articles remontent dans les résultats, plus de vues et contacts.' },
-            { plan: 'AUTO', result: '+60% ventes auto', detail: 'L\'IA négocie et assiste vos acheteurs, moins d\'effort pour plus de ventes.' },
-            { plan: 'PRO VENDEUR', result: 'Insights marché', detail: 'Comprenez les tendances, ajustez vos prix, optimisez votre catalogue.' },
-            { plan: 'BUSINESS', result: '+2x croissance', detail: 'Boutique pro, IA marchande, analytics : votre business en pilote auto.' },
-            { plan: 'SCALE', result: 'Automatisation totale', detail: 'Toutes les IA, analytics premium, support dédié : scalez sans limite.' },
-          ].map(r => (
-            <div key={r.plan} style={{ background: 'rgba(111,88,255,0.04)', border: '1px solid rgba(111,88,255,0.1)', borderRadius: 10, padding: 14 }}>
-              <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 6, background: 'rgba(111,88,255,0.15)', color: '#6f58ff', fontSize: 11, fontWeight: 600, marginBottom: 8 }}>{r.plan}</span>
-              <h4 style={{ margin: '0 0 4px', fontSize: 16, fontWeight: 700, color: '#4caf50' }}>{r.result}</h4>
-              <p style={{ margin: 0, fontSize: 12, color: 'var(--color-text-secondary, #aaa)', lineHeight: 1.5 }}>{r.detail}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-    </section>
+    </div>
   );
 }
