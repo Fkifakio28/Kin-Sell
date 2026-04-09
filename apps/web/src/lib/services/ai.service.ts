@@ -111,11 +111,71 @@ export type MemoryReport = {
   historicalComparison: { vsLastWeek: Record<string, number>; vsLastMonth: Record<string, number> };
 };
 
+export type AnomalyReport = {
+  metric: string;
+  currentValue: number;
+  historicalAvg: number;
+  deviationPercent: number;
+  direction: "UP" | "DOWN";
+  severity: "LOW" | "MEDIUM" | "HIGH";
+  insight: string;
+};
+
+export type TrendAnalysis = {
+  metric: string;
+  direction: "GROWING" | "STABLE" | "DECLINING";
+  weekOverWeek: number;
+  monthOverMonth: number;
+  insight: string;
+};
+
+export type SellerProfile = {
+  userId: string;
+  lifecycle: string;
+  score: number;
+  activeListings: number;
+  totalRevenueCents: number;
+  subscriptionPlan: string | null;
+  addons: string[];
+  joinedAt: string;
+};
+
+export type EnrichedCategoryInsight = {
+  data: {
+    category: string;
+    internalCount: number;
+    internalAvgPriceCents: number;
+    externalDemand: "LOW" | "MEDIUM" | "HIGH" | "UNKNOWN";
+    externalTrend: "GROWING" | "STABLE" | "DECLINING" | "UNKNOWN";
+    externalPriceRange: { minUsdCents: number; maxUsdCents: number } | null;
+    seasonalNote: string | null;
+    competitorDensity: "LOW" | "MEDIUM" | "HIGH" | "UNKNOWN";
+    insight: string;
+  };
+  score: { source: string; confidence: number; reasoning: string; dataPoints: number; freshness: string };
+};
+
+export type EnrichedAnalyticsReport = {
+  categories: EnrichedCategoryInsight[];
+  regionalDemand: {
+    data: { city: string; country: string; topDemandCategories: Array<{ category: string; demandLevel: string }>; marketSummary: string };
+    score: { source: string; confidence: number; reasoning: string };
+  } | null;
+  overallConfidence: { source: string; confidence: number; reasoning: string };
+  enrichedAt: string;
+};
+
 export const analyticsAi = {
   basic: () => request<BasicInsights>("/analytics/ai/basic"),
   deep: () => request<DeepInsights>("/analytics/ai/deep"),
   diagnostic: () => request<DiagnosticReport>("/analytics/ai/diagnostic"),
   memory: () => request<MemoryReport>("/analytics/ai/memory"),
+  anomalies: () => request<AnomalyReport[]>("/analytics/ai/anomalies"),
+  trends: () => request<TrendAnalysis[]>("/analytics/ai/trends"),
+  sellerProfile: () => request<SellerProfile>("/analytics/ai/seller-profile"),
+  enriched: (city?: string) => request<EnrichedAnalyticsReport>("/analytics/ai/enriched", { params: city ? { city } : undefined }),
+  categoryDemand: (category: string, city?: string) =>
+    request<EnrichedCategoryInsight>("/analytics/ai/category-demand", { params: { category, ...(city ? { city } : {}) } }),
 };
 
 // ── AI Recommendations (Smart Triggers) ──

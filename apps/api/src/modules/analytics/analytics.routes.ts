@@ -14,6 +14,7 @@ import * as commercialAdvisor from "./commercial-advisor.service.js";
 import { getPostPublishAdvice, type PublishContext } from "../ads/post-publish-advisor.service.js";
 import { getPostSaleAdvice } from "../ads/post-sale-advisor.service.js";
 import { evaluateAnalyticsCTAs } from "./analytics-cta.service.js";
+import { getEnrichedAnalytics, getCategoryDemandAnalysis } from "./analytics-external-intelligence.service.js";
 import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
 
@@ -327,6 +328,42 @@ router.get(
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     const report = await evaluateAnalyticsCTAs(req.auth!.userId);
     res.json(report);
+  })
+);
+
+// ══════════════════════════════════════════════
+// ENRICHED ANALYTICS — Internal + External Intelligence
+// ══════════════════════════════════════════════
+
+/**
+ * GET /analytics/ai/enriched
+ * 🧠 Enriched analytics combining internal data + Gemini external intelligence
+ * 🔴 Palier 2 PREMIUM requis
+ */
+router.get(
+  "/ai/enriched",
+  requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res, next) => { await requirePremium(req, res, next); }),
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const city = (req.query.city as string) || "Kinshasa";
+    const report = await getEnrichedAnalytics(req.auth!.userId, city);
+    res.json(report);
+  })
+);
+
+/**
+ * GET /analytics/ai/category-demand
+ * 📊 Demand analysis for a specific category (internal + external)
+ */
+router.get(
+  "/ai/category-demand",
+  requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const category = req.query.category as string;
+    const city = (req.query.city as string) || "Kinshasa";
+    if (!category) { res.status(400).json({ error: "category requis" }); return; }
+    const analysis = await getCategoryDemandAnalysis(category, city);
+    res.json(analysis);
   })
 );
 

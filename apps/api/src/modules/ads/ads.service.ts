@@ -1,4 +1,5 @@
 import { prisma } from '../../shared/db/prisma.js';
+import { expireBoosts } from './ads-boost.service.js';
 
 const VALID_PAGES = ['home', 'explorer', 'sokin', 'sokin-market', 'sokin-profiles'];
 
@@ -185,6 +186,8 @@ export const startAdScheduler = (): void => {
         where: { status: 'ACTIVE', endDate: { lt: now } },
         data: { status: 'INACTIVE' },
       });
+      // Expire boosts past their expiration date
+      await expireBoosts();
     } catch { /* Silent until migration runs */ }
   };
 

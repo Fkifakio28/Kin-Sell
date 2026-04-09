@@ -39,6 +39,7 @@ import { AdsBoostPopup } from '../../components/AdsBoostPopup';
 import { PostPublishAdvisor } from '../../components/PostPublishAdvisor';
 import { PostSaleAdvisor } from '../../components/PostSaleAdvisor';
 import { AnalyticsCTAPanel } from '../../components/AnalyticsCTAPanel';
+import { DashboardAdvancedAnalytics } from './sections/DashboardAdvancedAnalytics';
 import { SmartUpsellBanner, SmartUpsellCard, PostActionTip } from '../../components/SmartUpsell';
 import { PromoCreator } from '../../components/PromoCreator';
 import { PromoBulkBar } from '../../components/PromoBulkBar';
@@ -3013,6 +3014,8 @@ export function BusinessDashboard() {
                 )}
               </section>
             )}
+
+            <DashboardAdvancedAnalytics hasPremiumAnalytics={bizHasPremium} />
 
             {/* ─ Recommandations Kin-Sell Analytique ─ */}
             <section className="ud-glass-panel bz-glass-panel" style={{ marginTop: 16 }}>

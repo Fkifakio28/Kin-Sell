@@ -12,6 +12,9 @@ import {
   activateBoost,
   activateHighlight,
 } from './ads-boost.service.js';
+import { rateLimit, RateLimits } from '../../shared/middleware/rate-limit.middleware.js';
+import { runOrchestration } from './kinsell-internal-ads-orchestrator.js';
+import { getRegionalMarketContext } from './regional-market-context.service.js';
 
 const router = Router();
 
@@ -22,14 +25,14 @@ router.get('/banner', asyncHandler(async (req, res) => {
   res.json({ ad: ad ?? null });
 }));
 
-// ── Public: record impression ────────────────────────────────────────────────
-router.post('/:id/impression', asyncHandler(async (req, res) => {
+// ── Public: record impression (rate-limited) ────────────────────────────────
+router.post('/:id/impression', rateLimit(RateLimits.AD_TRACKING), asyncHandler(async (req, res) => {
   await adsService.recordImpression(req.params.id);
   res.json({ ok: true });
 }));
 
-// ── Public: record click ─────────────────────────────────────────────────────
-router.post('/:id/click', asyncHandler(async (req, res) => {
+// ── Public: record click (rate-limited) ──────────────────────────────────────
+router.post('/:id/click', rateLimit(RateLimits.AD_TRACKING), asyncHandler(async (req, res) => {
   await adsService.recordClick(req.params.id);
   res.json({ ok: true });
 }));
@@ -157,6 +160,21 @@ router.post('/highlight', requireAuth, asyncHandler(async (req: AuthenticatedReq
   });
 
   res.json(result);
+}));
+
+// ── Admin: Force orchestrator run ────────────────────────────────────────────
+router.post('/orchestrator/run', requireAuth, requireRoles(Role.SUPER_ADMIN), asyncHandler(async (_req, res) => {
+  const result = await runOrchestration();
+  res.json(result);
+}));
+
+// ── Public: Regional market context for a category ──────────────────────────
+router.get('/market-context', asyncHandler(async (req, res) => {
+  const category = (req.query.category as string) || '';
+  const city = (req.query.city as string) || 'Kinshasa';
+  if (!category) { res.status(400).json({ error: 'category requis' }); return; }
+  const context = await getRegionalMarketContext(category, city);
+  res.json(context);
 }));
 
 export default router;

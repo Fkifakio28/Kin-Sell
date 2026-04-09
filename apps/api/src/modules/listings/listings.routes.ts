@@ -8,6 +8,7 @@ import { requireNoRestriction } from "../../shared/middleware/trust-guard.middle
 import * as listingsService from "./listings.service.js";
 import * as bulkImportService from "./bulk-import.service.js";
 import { getOrCreateDMConversation, sendMessage } from "../messaging/messaging.service.js";
+import { prisma } from "../../shared/db/prisma.js";
 
 const listingTypeSchema = z.enum(["PRODUIT", "SERVICE"]);
 const listingStatusSchema = z.enum(["ACTIVE", "INACTIVE", "ARCHIVED", "DELETED"]);
@@ -93,6 +94,23 @@ router.get(
     const payload = searchSchema.parse(request.query);
     const result = await listingsService.searchListings(payload);
     response.json(result);
+  })
+);
+
+/* ── Public: record listing view (rate-limited per IP) ── */
+router.post(
+  "/:id/view",
+  rateLimit(RateLimits.AD_TRACKING),
+  asyncHandler(async (request, response) => {
+    const { id } = request.params;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (prisma as any).listing.update({
+        where: { id, isPublished: true, status: "ACTIVE" },
+        data: { viewCount: { increment: 1 } },
+      });
+    } catch { /* ignore non-existent listing */ }
+    response.json({ ok: true });
   })
 );
 

@@ -66,6 +66,7 @@ import {
   DashboardContactsSection,
   DashboardVerificationSection,
 } from './sections';
+import { DashboardAdvancedAnalytics } from './sections/DashboardAdvancedAnalytics';
 import './dashboard.css';
 
 const PRODUCT_CATEGORIES = LISTING_PRODUCT_CATEGORIES;
@@ -4389,6 +4390,7 @@ export function UserDashboard() {
               hasPremiumAnalytics={hasPremiumAnalytics}
               formatMoney={formatMoneyFromUsdCents}
             />
+            <DashboardAdvancedAnalytics hasPremiumAnalytics={hasPremiumAnalytics} />
           </div>
         )}
         {activeSection === 'analytics' && !hasAnalytics && (

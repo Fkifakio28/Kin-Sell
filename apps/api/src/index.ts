@@ -42,6 +42,8 @@ import { setupSocketServer } from "./modules/messaging/socket.js";
 import { errorHandler } from "./shared/errors/error-handler.js";
 import { seedDefaultAgents } from "./modules/analytics/ai-admin.service.js";
 import { getRedis, disconnectRedis } from "./shared/db/redis.js";
+import { batchCreateWeeklySnapshots } from "./modules/analytics/ai-memory.service.js";
+import { startAdOrchestrator } from "./modules/ads/kinsell-internal-ads-orchestrator.js";
 
 const app = express();
 const httpServer = createServer(app);
@@ -207,6 +209,24 @@ httpServer.listen(env.API_PORT, async () => {
   startAdScheduler();
   await seedDefaultAgents();
   startVerificationScheduler();
+  // Weekly snapshots scheduler: every Sunday at 02:00 (check every hour)
+  const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+  const scheduleWeeklySnapshots = () => {
+    const now = new Date();
+    const nextSunday = new Date(now);
+    nextSunday.setDate(now.getDate() + (7 - now.getDay()) % 7);
+    nextSunday.setHours(2, 0, 0, 0);
+    if (nextSunday <= now) nextSunday.setDate(nextSunday.getDate() + 7);
+    const delay = nextSunday.getTime() - now.getTime();
+    setTimeout(() => {
+      void batchCreateWeeklySnapshots().catch(() => {});
+      setInterval(() => { void batchCreateWeeklySnapshots().catch(() => {}); }, WEEK_MS);
+    }, delay);
+    logger.info(`[Analytics] Weekly snapshots scheduled in ${Math.round(delay / 3600_000)}h`);
+  };
+  scheduleWeeklySnapshots();
+  // Start autonomous IA Ads orchestrator (Gemini + ChatGPT)
+  startAdOrchestrator();
   logger.info("[IA] Agents initialisés (scheduler autonome désactivé)");
 });
 

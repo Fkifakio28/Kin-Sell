@@ -72,6 +72,10 @@ const schema = z.object({
 
   // ── Cloudflare Turnstile ──
   TURNSTILE_SECRET_KEY: z.string().optional(),
+
+  // ── AI Services ──
+  OPENAI_API_KEY: z.string().optional(),
+  GEMINI_API_KEY: z.string().optional(),
 });
 
 export const env = schema.parse(process.env);

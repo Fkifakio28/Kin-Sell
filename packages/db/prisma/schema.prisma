@@ -539,6 +539,7 @@ model Listing {
   priceUsdCents      Int                @default(0)
   priceCurrency      String             @default("USD")
   priceOriginal      Int                @default(0)
+  viewCount          Int                @default(0)
   scope              ListingScope       @default(NATIONAL)
   stockQuantity      Int?
   serviceDurationMin Int?

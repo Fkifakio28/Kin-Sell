@@ -160,6 +160,8 @@ export const listings = {
     ),
   getMyPromotions: () =>
     request<PromotionSummary[]>("/listings/promotions"),
+  trackView: (listingId: string) =>
+    mutate<{ ok: boolean }>(`/listings/${encodeURIComponent(listingId)}/view`, { method: "POST" }, []),
 };
 
 export type BulkImportItemInput = {

@@ -276,6 +276,9 @@ export function PublicProfilePage({ username }: { username: string }) {
     if (!hash || !profile) return;
     const el = document.getElementById(hash);
     if (el) {
+      // Track listing view
+      const listingId = hash.replace('listing-', '');
+      if (listingId) void listingsApi.trackView(listingId);
       requestAnimationFrame(() => {
         el.scrollIntoView({ behavior: 'smooth', block: 'center' });
         el.classList.add('up-card--highlight');

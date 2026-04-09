@@ -43,6 +43,8 @@ export const RateLimits = {
   LOGIN: { windowMs: 900_000, max: 5, label: "LOGIN" },
   /** Register: 3 per hour (per IP) */
   REGISTER: { windowMs: 3600_000, max: 3, label: "REGISTER" },
+  /** Ad tracking (impression/click): 60 per minute per IP */
+  AD_TRACKING: { windowMs: 60_000, max: 60, label: "AD_TRACKING" },
 } as const;
 
 type RateLimitConfig = { windowMs: number; max: number; label: string };
