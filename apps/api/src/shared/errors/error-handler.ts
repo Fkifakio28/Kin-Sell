@@ -20,6 +20,12 @@ export const errorHandler = (error: unknown, _request: Request, response: Respon
     return;
   }
 
+  // body-parser SyntaxError (malformed JSON)
+  if (error instanceof SyntaxError && "status" in error && (error as any).status === 400) {
+    response.status(400).json({ error: "Corps de requête JSON invalide" });
+    return;
+  }
+
   logger.error({ err: error, path: _request.path, method: _request.method }, "Unhandled error");
 
   response.status(500).json({ error: "Erreur interne serveur" });
