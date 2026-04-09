@@ -91,6 +91,43 @@ const DEFAULT_RADIUS_KM = 25;
 
 const toRad = (value: number) => (value * Math.PI) / 180;
 
+/**
+ * Check if a boosted listing should display as boosted for the current viewer.
+ * Rules:
+ * - LOCAL: only if viewer's city matches the listing's city
+ * - NATIONAL: only if viewer's country matches the listing's country
+ * - CROSS_BORDER: only if viewer's country is in boostTargetCountries
+ * - null/undefined scope → backward compat: always boosted if active
+ */
+function isBoostVisibleToViewer(
+  row: { isBoosted: boolean; boostExpiresAt: Date | null; boostScope?: string | null; boostTargetCountries?: string[]; city: string; country?: string | null },
+  viewerCity?: string,
+  viewerCountry?: string,
+): boolean {
+  if (!row.isBoosted) return false;
+  if (row.boostExpiresAt && row.boostExpiresAt <= new Date()) return false;
+
+  const scope = row.boostScope ?? null;
+  // No scope set → backward compat: always visible as boosted
+  if (!scope) return true;
+
+  switch (scope) {
+    case "LOCAL":
+      if (!viewerCity) return true; // No viewer context → show
+      return row.city.toLowerCase() === viewerCity.toLowerCase();
+    case "NATIONAL":
+      if (!viewerCountry) return true;
+      return (row.country ?? "").toLowerCase() === viewerCountry.toLowerCase();
+    case "CROSS_BORDER": {
+      if (!viewerCountry) return true;
+      const targets = row.boostTargetCountries ?? [];
+      return targets.some((t) => t.toLowerCase() === viewerCountry.toLowerCase());
+    }
+    default:
+      return true;
+  }
+}
+
 const getDistanceKm = (from: GeoPoint, to: GeoPoint) => {
   const earthRadiusKm = 6371;
   const deltaLat = toRad(to.lat - from.lat);
@@ -569,7 +606,7 @@ export const searchListings = async (input: SearchListingsInput) => {
         imageUrl: row.imageUrl,
         priceUsdCents: row.priceUsdCents,
         isNegotiable: row.isNegotiable,
-        isBoosted: row.isBoosted && (!row.boostExpiresAt || row.boostExpiresAt > new Date()),
+        isBoosted: isBoostVisibleToViewer(row as any, input.city, input.country),
         promoActive: row.promoActive,
         promoPriceUsdCents: row.promoPriceUsdCents,
         createdAt: row.createdAt,
@@ -621,7 +658,7 @@ export const searchListings = async (input: SearchListingsInput) => {
           id: row.id, type: row.type, title: row.title, description: row.description,
           category: row.category, city: row.city, latitude: row.latitude, longitude: row.longitude,
           imageUrl: row.imageUrl, priceUsdCents: row.priceUsdCents, isNegotiable: row.isNegotiable,
-          isBoosted: row.isBoosted && (!row.boostExpiresAt || row.boostExpiresAt > new Date()),
+          isBoosted: isBoostVisibleToViewer(row as any, input.city, input.country),
           promoActive: row.promoActive,
           promoPriceUsdCents: row.promoPriceUsdCents,
           createdAt: row.createdAt, distanceKm: null,
@@ -662,7 +699,7 @@ export const searchListings = async (input: SearchListingsInput) => {
           id: row.id, type: row.type, title: row.title, description: row.description,
           category: row.category, city: row.city, latitude: row.latitude, longitude: row.longitude,
           imageUrl: row.imageUrl, priceUsdCents: row.priceUsdCents, isNegotiable: row.isNegotiable,
-          isBoosted: row.isBoosted && (!row.boostExpiresAt || row.boostExpiresAt > new Date()),
+          isBoosted: isBoostVisibleToViewer(row as any, input.city, input.country),
           promoActive: row.promoActive,
           promoPriceUsdCents: row.promoPriceUsdCents,
           createdAt: row.createdAt, distanceKm: null,
@@ -768,7 +805,7 @@ export const latestListings = async (input: { type?: ListingType; city?: string;
     imageUrl: row.imageUrl,
     priceUsdCents: row.priceUsdCents,
     isNegotiable: row.isNegotiable,
-    isBoosted: row.isBoosted && (!row.boostExpiresAt || row.boostExpiresAt > new Date()),
+    isBoosted: isBoostVisibleToViewer(row as any, input.city, input.country),
     promoActive: row.promoActive,
     promoPriceUsdCents: row.promoPriceUsdCents,
     latitude: row.latitude,

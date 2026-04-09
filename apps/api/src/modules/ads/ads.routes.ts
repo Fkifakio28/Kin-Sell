@@ -11,6 +11,8 @@ import {
   getHighlightProposal,
   activateBoost,
   activateHighlight,
+  SCOPE_PRICING_MULTIPLIER,
+  type PromotionScope,
 } from './ads-boost.service.js';
 import { rateLimit, RateLimits } from '../../shared/middleware/rate-limit.middleware.js';
 import { runOrchestration } from './kinsell-internal-ads-orchestrator.js';
@@ -18,10 +20,12 @@ import { getRegionalMarketContext } from './regional-market-context.service.js';
 
 const router = Router();
 
-// ── Public: random active banner for a given page ────────────────────────────
+// ── Public: random active banner for a given page (geo-filtered) ────────────
 router.get('/banner', asyncHandler(async (req, res) => {
   const page = (req.query.page as string) || 'home';
-  const ad = await adsService.getActiveBannerForPage(page);
+  const viewerCity = (req.query.city as string) || undefined;
+  const viewerCountry = (req.query.country as string) || undefined;
+  const ad = await adsService.getActiveBannerForPage(page, viewerCity, viewerCountry);
   res.json({ ad: ad ?? null });
 }));
 
@@ -57,8 +61,15 @@ router.get('/highlight-proposal', requireAuth, asyncHandler(async (req: Authenti
 // SÉCURITÉ : exige l'add-on BOOST_VISIBILITY actif ou rôle SUPER_ADMIN
 // RATE LIMIT : max 50 boosts actifs par utilisateur
 router.post('/boost', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
-  const { listingId, durationDays } = req.body as { listingId: string; durationDays?: number };
+  const { listingId, durationDays, scope, targetCountries } = req.body as {
+    listingId: string;
+    durationDays?: number;
+    scope?: PromotionScope;
+    targetCountries?: string[];
+  };
   if (!listingId) { res.status(400).json({ error: 'listingId requis' }); return; }
+
+  const boostScope: PromotionScope = (['LOCAL', 'NATIONAL', 'CROSS_BORDER'].includes(scope ?? '') ? scope! : 'LOCAL');
 
   // Super admins peuvent toujours activer un boost
   if (req.auth!.role !== Role.SUPER_ADMIN) {
@@ -92,7 +103,13 @@ router.post('/boost', requireAuth, asyncHandler(async (req: AuthenticatedRequest
     }
   }
 
-  const result = await activateBoost(req.auth!.userId, listingId, durationDays || 7);
+  const result = await activateBoost(
+    req.auth!.userId,
+    listingId,
+    durationDays || 7,
+    boostScope,
+    targetCountries ?? [],
+  );
 
   // Journaliser
   await prisma.auditLog.create({
@@ -101,7 +118,12 @@ router.post('/boost', requireAuth, asyncHandler(async (req: AuthenticatedRequest
       action: 'ADS_BOOST_ACTIVATED',
       entityType: 'Listing',
       entityId: listingId,
-      metadata: { durationDays: durationDays || 7 },
+      metadata: {
+        durationDays: durationDays || 7,
+        scope: boostScope,
+        pricingMultiplier: result.pricingMultiplier,
+        targetCountries: targetCountries ?? [],
+      },
     },
   });
 
@@ -112,7 +134,14 @@ router.post('/boost', requireAuth, asyncHandler(async (req: AuthenticatedRequest
 // SÉCURITÉ : exige l'add-on BOOST_VISIBILITY actif ou rôle SUPER_ADMIN
 // RATE LIMIT : max 5 highlights actifs par utilisateur
 router.post('/highlight', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
-  const { durationDays, businessId } = req.body as { durationDays?: number; businessId?: string };
+  const { durationDays, businessId, scope, targetCountries } = req.body as {
+    durationDays?: number;
+    businessId?: string;
+    scope?: PromotionScope;
+    targetCountries?: string[];
+  };
+
+  const hlScope: PromotionScope = (['LOCAL', 'NATIONAL', 'CROSS_BORDER'].includes(scope ?? '') ? scope! : 'LOCAL');
 
   // Super admins peuvent toujours activer une mise en avant
   if (req.auth!.role !== Role.SUPER_ADMIN) {
@@ -146,7 +175,13 @@ router.post('/highlight', requireAuth, asyncHandler(async (req: AuthenticatedReq
     }
   }
 
-  const result = await activateHighlight(req.auth!.userId, durationDays || 7, businessId);
+  const result = await activateHighlight(
+    req.auth!.userId,
+    durationDays || 7,
+    businessId,
+    hlScope,
+    targetCountries ?? [],
+  );
 
   // Journaliser
   await prisma.auditLog.create({
@@ -155,7 +190,13 @@ router.post('/highlight', requireAuth, asyncHandler(async (req: AuthenticatedReq
       action: 'ADS_HIGHLIGHT_ACTIVATED',
       entityType: 'User',
       entityId: req.auth!.userId,
-      metadata: { durationDays: durationDays || 7, businessId: businessId || null },
+      metadata: {
+        durationDays: durationDays || 7,
+        businessId: businessId || null,
+        scope: hlScope,
+        pricingMultiplier: result.pricingMultiplier,
+        targetCountries: targetCountries ?? [],
+      },
     },
   });
 
@@ -175,6 +216,17 @@ router.get('/market-context', asyncHandler(async (req, res) => {
   if (!category) { res.status(400).json({ error: 'category requis' }); return; }
   const context = await getRegionalMarketContext(category, city);
   res.json(context);
+}));
+
+// ── Public: Pricing multipliers per scope ─────────────────────────────────────
+router.get('/pricing', asyncHandler(async (_req, res) => {
+  res.json({
+    scopes: [
+      { scope: 'LOCAL', label: 'Ville uniquement', multiplier: SCOPE_PRICING_MULTIPLIER.LOCAL },
+      { scope: 'NATIONAL', label: 'Pays entier', multiplier: SCOPE_PRICING_MULTIPLIER.NATIONAL },
+      { scope: 'CROSS_BORDER', label: 'Inter-pays (ciblé)', multiplier: SCOPE_PRICING_MULTIPLIER.CROSS_BORDER },
+    ],
+  });
 }));
 
 export default router;

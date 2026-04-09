@@ -43,6 +43,8 @@ interface InternalAd {
   priority: number;
   linkUrl: string;
   score: ConfidenceScore;
+  baseCity: string;
+  baseCountry: string;
 }
 
 interface OrchestrationResult {
@@ -67,6 +69,7 @@ async function analyzeInternalData(): Promise<{
   totalListings: number;
   totalUsers: number;
   topCity: string;
+  topCountry: string;
 }> {
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -75,7 +78,7 @@ async function analyzeInternalData(): Promise<{
     const [listings, userCount] = await Promise.all([
       db.listing.findMany({
         where: { status: "ACTIVE", isPublished: true },
-        select: { category: true, priceUsdCents: true, isBoosted: true, city: true },
+        select: { category: true, priceUsdCents: true, isBoosted: true, city: true, country: true },
       }),
       db.user.count({ where: { accountStatus: "ACTIVE" } }),
     ]);
@@ -107,15 +110,23 @@ async function analyzeInternalData(): Promise<{
 
     const topCity = [...cityMap.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "Kinshasa";
 
+    // Resolve top country from listings
+    const countryMap = new Map<string, number>();
+    for (const l of listings) {
+      if (l.country) countryMap.set(l.country, (countryMap.get(l.country) ?? 0) + 1);
+    }
+    const topCountry = [...countryMap.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "RD Congo";
+
     return {
       categories: categories.slice(0, 8),
       totalListings: listings.length,
       totalUsers: userCount,
       topCity,
+      topCountry,
     };
   } catch (err) {
     logger.warn({ err }, "[AdOrchestrator] Internal data analysis failed");
-    return { categories: [], totalListings: 0, totalUsers: 0, topCity: "Kinshasa" };
+    return { categories: [], totalListings: 0, totalUsers: 0, topCity: "Kinshasa", topCountry: "RD Congo" };
   }
 }
 
@@ -124,6 +135,7 @@ async function analyzeInternalData(): Promise<{
 async function generateInternalAds(
   categories: CategoryInsight[],
   topCity: string,
+  topCountry: string = "RD Congo",
 ): Promise<InternalAd[]> {
   const ads: InternalAd[] = [];
 
@@ -161,6 +173,8 @@ async function generateInternalAds(
         priority,
         linkUrl: `/explorer?category=${encodeURIComponent(cat.category)}`,
         score: adResult.score,
+        baseCity: topCity,
+        baseCountry: topCountry,
       });
     } catch (err) {
       logger.warn({ err, category: cat.category }, "[AdOrchestrator] Failed to generate ad");
@@ -223,6 +237,10 @@ async function storeInternalAds(ads: InternalAd[]): Promise<number> {
           advertiserEmail: "ia@kin-sell.com",
           amountPaidCents: 0,
           paymentRef: "INTERNAL_AUTO",
+          promotionScope: "LOCAL",
+          baseCity: ad.baseCity,
+          baseCountry: ad.baseCountry,
+          pricingMultiplier: 1.0,
         },
       });
       created++;
@@ -290,7 +308,7 @@ export async function runOrchestration(): Promise<OrchestrationResult> {
     }
 
     // Step 3: Analyze internal data
-    const { categories, topCity, totalListings } = await analyzeInternalData();
+    const { categories, topCity, topCountry, totalListings } = await analyzeInternalData();
     if (categories.length === 0) {
       logger.info("[AdOrchestrator] No categories found — skipping generation");
       return result;
@@ -303,7 +321,7 @@ export async function runOrchestration(): Promise<OrchestrationResult> {
     logger.info(`[AdOrchestrator] Generating ${needed} ads for ${topCategories.map(c => c.category).join(", ")} (${totalListings} total listings)`);
 
     // Step 4+5: Generate ads (Gemini context + ChatGPT copy)
-    const ads = await generateInternalAds(topCategories, topCity);
+    const ads = await generateInternalAds(topCategories, topCity, topCountry);
 
     // Step 6: Store
     result.generated = await storeInternalAds(ads);

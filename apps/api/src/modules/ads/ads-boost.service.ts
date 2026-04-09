@@ -14,6 +14,39 @@ import { logger } from "../../shared/logger.js";
 import { promoteListingBoost, promoteHighlight as promoHighlight } from "./ia-messenger-promo.service.js";
 
 // ─────────────────────────────────────────────
+// Promotion Scope & Pricing
+// ─────────────────────────────────────────────
+
+export type PromotionScope = "LOCAL" | "NATIONAL" | "CROSS_BORDER";
+
+export const SCOPE_PRICING_MULTIPLIER: Record<PromotionScope, number> = {
+  LOCAL: 1.0,
+  NATIONAL: 2.5,
+  CROSS_BORDER: 5.0,
+};
+
+export interface UserGeoBase {
+  city?: string | null;
+  region?: string | null;
+  country?: string | null;
+  countryCode?: string | null;
+}
+
+/** Resolve seller's geographic base from profile */
+export async function resolveUserGeo(userId: string): Promise<UserGeoBase> {
+  const profile = await prisma.userProfile.findUnique({
+    where: { userId },
+    select: { city: true, region: true, country: true, countryCode: true },
+  });
+  return {
+    city: profile?.city ?? null,
+    region: profile?.region ?? null,
+    country: profile?.country ?? null,
+    countryCode: profile?.countryCode ?? null,
+  };
+}
+
+// ─────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────
 
@@ -41,6 +74,9 @@ export interface AdsBoostStatus {
   listingId: string;
   isBoosted: boolean;
   boostExpiresAt: string | null;
+  boostScope: PromotionScope;
+  boostTargetCountries: string[];
+  pricingMultiplier: number;
 }
 
 // ─────────────────────────────────────────────
@@ -188,7 +224,9 @@ export async function getHighlightProposal(
 export async function activateBoost(
   userId: string,
   listingId: string,
-  durationDays: number
+  durationDays: number,
+  scope: PromotionScope = "LOCAL",
+  targetCountries: string[] = [],
 ): Promise<AdsBoostStatus> {
   const listing = await prisma.listing.findUnique({
     where: { id: listingId },
@@ -198,6 +236,13 @@ export async function activateBoost(
   if (!listing) throw new HttpError(404, "Article introuvable");
   if (listing.ownerUserId !== userId) throw new HttpError(403, "Non autorisé");
 
+  // Validate CROSS_BORDER has target countries
+  if (scope === "CROSS_BORDER" && targetCountries.length === 0) {
+    throw new HttpError(400, "Le boost inter-pays nécessite au moins un pays cible.");
+  }
+
+  const multiplier = SCOPE_PRICING_MULTIPLIER[scope] ?? 1.0;
+
   const expiresAt = new Date();
   expiresAt.setDate(expiresAt.getDate() + Math.min(durationDays, 90));
 
@@ -206,6 +251,8 @@ export async function activateBoost(
     data: {
       isBoosted: true,
       boostExpiresAt: expiresAt,
+      boostScope: scope as any,
+      boostTargetCountries: scope === "CROSS_BORDER" ? targetCountries : [],
     },
   });
 
@@ -218,6 +265,9 @@ export async function activateBoost(
     listingId,
     isBoosted: true,
     boostExpiresAt: expiresAt.toISOString(),
+    boostScope: scope,
+    boostTargetCountries: scope === "CROSS_BORDER" ? targetCountries : [],
+    pricingMultiplier: multiplier,
   };
 }
 
@@ -229,8 +279,15 @@ export async function activateBoost(
 export async function activateHighlight(
   userId: string,
   durationDays: number,
-  businessId?: string
-): Promise<{ boostedCount: number; expiresAt: string }> {
+  businessId?: string,
+  scope: PromotionScope = "LOCAL",
+  targetCountries: string[] = [],
+): Promise<{ boostedCount: number; expiresAt: string; boostScope: PromotionScope; pricingMultiplier: number }> {
+  if (scope === "CROSS_BORDER" && targetCountries.length === 0) {
+    throw new HttpError(400, "La mise en avant inter-pays nécessite au moins un pays cible.");
+  }
+
+  const multiplier = SCOPE_PRICING_MULTIPLIER[scope] ?? 1.0;
   const expiresAt = new Date();
   expiresAt.setDate(expiresAt.getDate() + Math.min(durationDays, 90));
 
@@ -248,6 +305,8 @@ export async function activateHighlight(
     data: {
       isBoosted: true,
       boostExpiresAt: expiresAt,
+      boostScope: scope as any,
+      boostTargetCountries: scope === "CROSS_BORDER" ? targetCountries : [],
     },
   });
 
@@ -260,6 +319,8 @@ export async function activateHighlight(
   return {
     boostedCount: result.count,
     expiresAt: expiresAt.toISOString(),
+    boostScope: scope,
+    pricingMultiplier: multiplier,
   };
 }
 

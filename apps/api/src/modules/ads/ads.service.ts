@@ -3,8 +3,12 @@ import { expireBoosts } from './ads-boost.service.js';
 
 const VALID_PAGES = ['home', 'explorer', 'sokin', 'sokin-market', 'sokin-profiles'];
 
-// ── Public: random active banner for a page ──────────────────────────────────
-export const getActiveBannerForPage = async (page: string): Promise<unknown | null> => {
+// ── Public: random active banner for a page (geo-filtered) ──────────────────
+export const getActiveBannerForPage = async (
+  page: string,
+  viewerCity?: string,
+  viewerCountry?: string,
+): Promise<unknown | null> => {
   try {
     const now = new Date();
     const validPage = VALID_PAGES.includes(page) ? page : 'home';
@@ -22,10 +26,40 @@ export const getActiveBannerForPage = async (page: string): Promise<unknown | nu
         ],
       },
       orderBy: [{ priority: 'desc' }, { impressions: 'asc' }],
-      take: 10,
+      take: 50,
     });
     if (!ads || ads.length === 0) return null;
-    return ads[Math.floor(Math.random() * ads.length)];
+
+    // Geographic filtering: only show ads that match the viewer's location
+    const filtered = ads.filter((ad: any) => {
+      const scope = ad.promotionScope ?? 'LOCAL';
+
+      // No base location set → show to everyone (backward compat)
+      if (!ad.baseCountry && !ad.baseCity) return true;
+
+      switch (scope) {
+        case 'LOCAL':
+          // Must match viewer's city (case-insensitive)
+          if (!viewerCity) return false;
+          return ad.baseCity?.toLowerCase() === viewerCity.toLowerCase();
+        case 'NATIONAL':
+          // Must match viewer's country
+          if (!viewerCountry) return false;
+          return ad.baseCountry?.toLowerCase() === viewerCountry.toLowerCase();
+        case 'CROSS_BORDER':
+          // Must be in target countries list
+          if (!viewerCountry) return false;
+          const targets = (ad.targetCountries ?? []) as string[];
+          return targets.some(
+            (t: string) => t.toLowerCase() === viewerCountry.toLowerCase()
+          );
+        default:
+          return true;
+      }
+    });
+    if (filtered.length === 0) return null;
+
+    return filtered[Math.floor(Math.random() * Math.min(filtered.length, 10))];
   } catch {
     return null; // Graceful fallback before migration
   }
@@ -108,6 +142,13 @@ export const adminCreateAd = async (data: {
   priority?: number;
   advertiserEmail?: string;
   advertiserName?: string;
+  promotionScope?: string;
+  baseCountry?: string;
+  baseRegion?: string;
+  baseCity?: string;
+  targetCountries?: string[];
+  targetRegions?: string[];
+  pricingMultiplier?: number;
   userId?: string;
   businessId?: string;
 }) => {
@@ -129,6 +170,13 @@ export const adminCreateAd = async (data: {
       priority: data.priority ?? 0,
       advertiserEmail: data.advertiserEmail ?? null,
       advertiserName: data.advertiserName ?? null,
+      promotionScope: data.promotionScope ?? 'LOCAL',
+      baseCountry: data.baseCountry ?? null,
+      baseRegion: data.baseRegion ?? null,
+      baseCity: data.baseCity ?? null,
+      targetCountries: data.targetCountries ?? [],
+      targetRegions: data.targetRegions ?? [],
+      pricingMultiplier: data.pricingMultiplier ?? 1.0,
       userId: data.userId ?? null,
       businessId: data.businessId ?? null,
     },

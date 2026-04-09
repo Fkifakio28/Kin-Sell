@@ -546,9 +546,11 @@ model Listing {
   serviceLocation    String?
   isPublished        Boolean            @default(true)
   isNegotiable       Boolean            @default(true)
-  isBoosted          Boolean            @default(false)
-  boostExpiresAt     DateTime?
-  promoActive        Boolean            @default(false)
+  isBoosted            Boolean            @default(false)
+  boostExpiresAt       DateTime?
+  boostScope           PromotionScope?
+  boostTargetCountries String[]           @default([])
+  promoActive          Boolean            @default(false)
   promoPriceUsdCents Int?
   promoExpiresAt     DateTime?
   promotionId        String? // Lien vers la Promotion groupée
@@ -1507,6 +1509,12 @@ enum AdvertisementType {
   BUSINESS
 }
 
+enum PromotionScope {
+  LOCAL        // Ville du vendeur uniquement
+  NATIONAL     // Pays du vendeur entier
+  CROSS_BORDER // Inter-pays avec ciblage explicite
+}
+
 model Advertisement {
   id              String              @id @default(cuid())
   title           String
@@ -1527,12 +1535,19 @@ model Advertisement {
   cancelledBy     String?
   cancelledAt     DateTime?
   cancelNote      String?
-  advertiserEmail String?
-  advertiserName  String?
-  userId          String?
-  businessId      String?
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @updatedAt
+  advertiserEmail  String?
+  advertiserName   String?
+  promotionScope   PromotionScope      @default(LOCAL)
+  baseCountry      String?
+  baseRegion       String?
+  baseCity         String?
+  targetCountries  String[]            @default([])
+  targetRegions    String[]            @default([])
+  pricingMultiplier Float              @default(1.0)
+  userId           String?
+  businessId       String?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
 
   user     User?            @relation("UserAds", fields: [userId], references: [id], onDelete: SetNull)
   business BusinessAccount? @relation("BusinessAds", fields: [businessId], references: [id], onDelete: SetNull)
@@ -1542,6 +1557,9 @@ model Advertisement {
   @@index([userId])
   @@index([businessId])
   @@index([startDate, endDate])
+  @@index([promotionScope])
+  @@index([baseCountry])
+  @@index([baseCity])
 }
 
 // ══════════════════════════════════════════════
