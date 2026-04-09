@@ -20,7 +20,10 @@ import { HttpError } from "../../shared/errors/http-error.js";
 
 const router = Router();
 
-// Middleware PREMIUM — vérifie l'abonnement actif PRO/PREMIUM/BUSINESS
+// Plans considérés « premium » pour l'accès Analytics Tier 2
+const PREMIUM_PLAN_CODES = new Set(["PRO_VENDOR", "BUSINESS", "SCALE"]);
+
+// Middleware PREMIUM — vérifie l'abonnement actif avec accès analytics avancé
 async function requirePremium(req: AuthenticatedRequest, _res: any, next: any) {
   const userId = req.auth!.userId;
   const subscription = await prisma.subscription.findFirst({
@@ -29,7 +32,7 @@ async function requirePremium(req: AuthenticatedRequest, _res: any, next: any) {
   });
   if (!subscription) throw new HttpError(403, "Abonnement Premium requis pour accéder à cette fonctionnalité.");
   const code = subscription.planCode.toUpperCase();
-  if (!code.includes("PRO") && !code.includes("PREMIUM") && !code.includes("BUSINESS")) {
+  if (!PREMIUM_PLAN_CODES.has(code)) {
     throw new HttpError(403, "Abonnement Premium requis pour accéder à cette fonctionnalité.");
   }
   next();

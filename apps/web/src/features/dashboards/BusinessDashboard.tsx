@@ -224,9 +224,9 @@ export function BusinessDashboard() {
   const [createUploadPreviews, setCreateUploadPreviews] = useState<string[]>([]);
 
   // ─── Produits/Services: filtres, pagination, actions ─────
-  const [prodFilter, setProdFilter] = useState<ListingStatus | ''>('');
+  const [prodFilter, setProdFilter] = useState<ListingStatus | '' | 'PROMO'>('');
   const [prodPage, setProdPage] = useState(1);
-  const [svcFilter, setSvcFilter] = useState<ListingStatus | ''>('');
+  const [svcFilter, setSvcFilter] = useState<ListingStatus | '' | 'PROMO'>('');
   const [svcPage, setSvcPage] = useState(1);
   const [bzArticleBusy, setBzArticleBusy] = useState<string | null>(null);
   const [bzActionMsg, setBzActionMsg] = useState<string | null>(null);
@@ -601,10 +601,10 @@ export function BusinessDashboard() {
     inactive: allServices.filter(l => l.status === 'INACTIVE').length,
     archived: allServices.filter(l => l.status === 'ARCHIVED').length,
   };
-  const filteredProduits = prodFilter ? allProduits.filter(l => l.status === prodFilter) : allProduits;
+  const filteredProduits = prodFilter === 'PROMO' ? allProduits.filter(l => l.promoActive) : prodFilter ? allProduits.filter(l => l.status === prodFilter) : allProduits;
   const prodTotalPages = Math.max(1, Math.ceil(filteredProduits.length / BZ_PAGE_LIMIT));
   const pagedProduits = filteredProduits.slice((prodPage - 1) * BZ_PAGE_LIMIT, prodPage * BZ_PAGE_LIMIT);
-  const filteredServices = svcFilter ? allServices.filter(l => l.status === svcFilter) : allServices;
+  const filteredServices = svcFilter === 'PROMO' ? allServices.filter(l => l.promoActive) : svcFilter ? allServices.filter(l => l.status === svcFilter) : allServices;
   const svcTotalPages = Math.max(1, Math.ceil(filteredServices.length / BZ_PAGE_LIMIT));
   const pagedServices = filteredServices.slice((svcPage - 1) * BZ_PAGE_LIMIT, svcPage * BZ_PAGE_LIMIT);
 
@@ -1966,9 +1966,9 @@ export function BusinessDashboard() {
                 <input type="checkbox" checked={pagedProduits.length > 0 && selectedProdIds.size === pagedProduits.length} onChange={(e) => { if (e.target.checked) selectAllProd(pagedProduits); else deselectAllProd(); }} />
                 <span className="ud-art-select-all-check" />
               </label>
-              {(['', 'ACTIVE', 'INACTIVE', 'ARCHIVED'] as const).map((f) => (
-                <button key={f} type="button" className={`bz-art-filter-btn${prodFilter === f ? ' active' : ''}`} onClick={() => { setProdFilter(f as ListingStatus | ''); setProdPage(1); deselectAllProd(); }}>
-                  {f === '' ? '🗂 Tous' : f === 'ACTIVE' ? '🟢 Actifs' : f === 'INACTIVE' ? '⏸ Inactifs' : '📦 Archivés'}
+              {(['', 'ACTIVE', 'INACTIVE', 'ARCHIVED', 'PROMO'] as const).map((f) => (
+                <button key={f} type="button" className={`bz-art-filter-btn${prodFilter === f ? ' active' : ''}${f === 'PROMO' ? ' ud-art-filter-btn--promo' : ''}`} onClick={() => { setProdFilter(f as ListingStatus | '' | 'PROMO'); setProdPage(1); deselectAllProd(); }}>
+                  {f === '' ? '🗂 Tous' : f === 'ACTIVE' ? '🟢 Actifs' : f === 'INACTIVE' ? '⏸ Inactifs' : f === 'ARCHIVED' ? '📦 Archivés' : '🏷 Promo'}
                 </button>
               ))}
               <div className="ud-art-view-toggle">
@@ -2270,9 +2270,9 @@ export function BusinessDashboard() {
                 <input type="checkbox" checked={pagedServices.length > 0 && selectedSvcIds.size === pagedServices.length} onChange={(e) => { if (e.target.checked) selectAllSvc(pagedServices); else deselectAllSvc(); }} />
                 <span className="ud-art-select-all-check" />
               </label>
-              {(['', 'ACTIVE', 'INACTIVE', 'ARCHIVED'] as const).map((f) => (
-                <button key={f} type="button" className={`bz-art-filter-btn${svcFilter === f ? ' active' : ''}`} onClick={() => { setSvcFilter(f as ListingStatus | ''); setSvcPage(1); deselectAllSvc(); }}>
-                  {f === '' ? '🗂 Tous' : f === 'ACTIVE' ? '🟢 Actifs' : f === 'INACTIVE' ? '⏸ Inactifs' : '📦 Archivés'}
+              {(['', 'ACTIVE', 'INACTIVE', 'ARCHIVED', 'PROMO'] as const).map((f) => (
+                <button key={f} type="button" className={`bz-art-filter-btn${svcFilter === f ? ' active' : ''}${f === 'PROMO' ? ' ud-art-filter-btn--promo' : ''}`} onClick={() => { setSvcFilter(f as ListingStatus | '' | 'PROMO'); setSvcPage(1); deselectAllSvc(); }}>
+                  {f === '' ? '🗂 Tous' : f === 'ACTIVE' ? '🟢 Actifs' : f === 'INACTIVE' ? '⏸ Inactifs' : f === 'ARCHIVED' ? '📦 Archivés' : '🏷 Promo'}
                 </button>
               ))}
               <div className="ud-art-view-toggle">

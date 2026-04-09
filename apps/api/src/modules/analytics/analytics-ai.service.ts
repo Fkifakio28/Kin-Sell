@@ -23,6 +23,8 @@ import { getMarketMedian, computePricePosition, getTrendingCategories, PRICE_THR
 // Utils
 // ─────────────────────────────────────────────
 
+const PREMIUM_PLAN_CODES = new Set(["PRO_VENDOR", "BUSINESS", "SCALE"]);
+
 async function hasPremiumAccess(userId: string): Promise<boolean> {
   const subscription = await prisma.subscription.findFirst({
     where: {
@@ -34,7 +36,7 @@ async function hasPremiumAccess(userId: string): Promise<boolean> {
   });
   if (!subscription) return false;
   const code = subscription.planCode.toUpperCase();
-  return code.includes("PRO") || code.includes("PREMIUM") || code.includes("BUSINESS");
+  return PREMIUM_PLAN_CODES.has(code);
 }
 
 function hourBucket(date: Date): number {

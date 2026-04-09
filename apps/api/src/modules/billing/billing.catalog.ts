@@ -65,7 +65,7 @@ export const PLAN_CATALOG: PlanCatalogItem[] = [
     scope: "BUSINESS",
     monthlyPriceUsdCents: 3000,
     analyticsTier: "MEDIUM",
-    features: ["SHOP", "BASIC_VISIBILITY", "BASIC_ADS", "IA_MERCHANT", "ANALYTICS_MEDIUM"]
+    features: ["SHOP", "BASIC_VISIBILITY", "BASIC_ADS", "IA_MERCHANT", "IA_ORDER", "ANALYTICS_MEDIUM"]
   },
   {
     code: "SCALE",

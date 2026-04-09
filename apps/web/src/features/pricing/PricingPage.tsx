@@ -252,7 +252,7 @@ export function PricingPage() {
   const [activeTab, setActiveTab] = useState<PricingTab>(defaultTab);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
 
-  // â”€â”€ Deep-link : parse URL et appliquer tab + highlight â”€â”€
+  // ── Deep-link : parse URL et appliquer tab + highlight ──
   const deepLinkApplied = useRef(false);
   useEffect(() => {
     if (deepLinkApplied.current) return;
@@ -391,10 +391,10 @@ export function PricingPage() {
 
 
 
-  // handleActivateOrder supprimé ─” l'activation ne peut plus se faire côté frontend.
+  // handleActivateOrder supprimé — l'activation ne peut plus se faire côté frontend.
   // Seuls PayPal (capture auto) ou un super admin (validation manuelle) peuvent activer un forfait.
 
-  // handleToggleAddon supprimé ─” les add-ons ne peuvent plus être activés côté frontend.
+  // handleToggleAddon supprimé — les add-ons ne peuvent plus être activés côté frontend.
   // L'activation se fait uniquement via paiement validé ou action admin.
   // Le bouton redirige vers un upgrade de forfait ou contact support.
 
@@ -426,12 +426,12 @@ export function PricingPage() {
         </p>
         {currentPlan ? (
           <div className="pricing-hero__plan-active">
-            ✓ Forfait actif : {currentPlan.planName} ─” {(currentPlan.priceUsdCents / 100).toFixed(2)}$ / {currentPlan.billingCycle === "MONTHLY" ? "mois" : "one-shot"}
+            ✓ Forfait actif : {currentPlan.planName} — {(currentPlan.priceUsdCents / 100).toFixed(2)}$ / {currentPlan.billingCycle === "MONTHLY" ? "mois" : "one-shot"}
           </div>
         ) : null}
       </header>
 
-      {/* â”€â”€ Alerts â”€â”€ */}
+      {/* ── Alerts ── */}
       {infoMessage ? <div className="pricing-alert pricing-alert--ok">{infoMessage}</div> : null}
       {errorMessage ? <div className="pricing-alert pricing-alert--error">{errorMessage}</div> : null}
 
@@ -439,13 +439,13 @@ export function PricingPage() {
       <div className="pricing-toggle">
         <div className="pricing-toggle__inner">
           <button type="button" className={`pricing-toggle__btn${activeTab === "users" ? " pricing-toggle__btn--active" : ""}`} onClick={() => setActiveTab("users")}>
-            ðŸ‘¤ Vendeurs
+            👤 Vendeurs
           </button>
           <button type="button" className={`pricing-toggle__btn${activeTab === "business" ? " pricing-toggle__btn--active" : ""}`} onClick={() => setActiveTab("business")}>
-            ðŸ¢ Business
+            🏢 Business
           </button>
           <button type="button" className={`pricing-toggle__btn${activeTab === "addons" ? " pricing-toggle__btn--active" : ""}`} onClick={() => setActiveTab("addons")}>
-            ðŸ§© Add-ons
+            🧩 Add-ons
           </button>
         </div>
       </div>
@@ -527,7 +527,7 @@ export function PricingPage() {
 
       {pendingPlanCode ? (
         <section className="pricing-payment">
-          <h2 className="pricing-payment__title">Paiement PayPal ─” {pendingPlanCode}</h2>
+          <h2 className="pricing-payment__title">Paiement PayPal — {pendingPlanCode}</h2>
           <p className="pricing-payment__text">
             Vous serez redirigé vers PayPal pour effectuer le paiement. Votre forfait sera activé automatiquement après confirmation.
           </p>
@@ -537,7 +537,7 @@ export function PricingPage() {
             disabled={busyPlanCode !== null}
             onClick={() => void handlePay()}
           >
-            {busyPlanCode ? "Traitement…" : "ðŸ’³ Payer avec PayPal"}
+            {busyPlanCode ? "Traitement…" : "💳 Payer avec PayPal"}
           </button>
           <br />
           <button type="button" className="pricing-payment__cancel" onClick={() => setPendingPlanCode(null)}>
@@ -556,7 +556,7 @@ export function PricingPage() {
           {latestCheckout.expiresAt ? <p className="pricing-payment__text">Expire le : {new Date(latestCheckout.expiresAt).toLocaleString("fr-FR")}</p> : null}
           {latestCheckout.paymentUrl ? (
             <a href={latestCheckout.paymentUrl} className="pricing-payment__btn" target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', textDecoration: 'none', marginBottom: 12 }}>
-              ðŸ’³ Ouvrir PayPal ─” {(latestCheckout.amountUsdCents / 100).toFixed(2)}$
+              💳 Ouvrir PayPal — {(latestCheckout.amountUsdCents / 100).toFixed(2)}$
             </a>
           ) : null}
           <ul style={{ margin: '12px 0 0', paddingLeft: 18, color: 'var(--color-text-secondary, #aaa)', fontSize: 13 }}>
@@ -580,12 +580,12 @@ export function PricingPage() {
                 <article className="order-card" key={order.id}>
                   <p><strong>{order.planCode}</strong> · {(order.amountUsdCents / 100).toFixed(2)} {order.currency}</p>
                   <p>Référence : {order.transferReference}</p>
-                  {order.status === "PENDING" && <span className="order-status order-status--pending">â³ En attente</span>}
-                  {order.status === "USER_CONFIRMED" && <span className="order-status order-status--pending">â³ Validation en cours</span>}
+                  {order.status === "PENDING" && <span className="order-status order-status--pending">⏳ En attente</span>}
+                  {order.status === "USER_CONFIRMED" && <span className="order-status order-status--pending">⏳ Validation en cours</span>}
                   {(order.status === "PAID" || order.status === "VALIDATED") && <span className="order-status order-status--ok">✓ Activé</span>}
                   {order.status === "FAILED" && <span className="order-status order-status--fail">✕ Échoué</span>}
                   {order.status === "CANCELED" && <span className="order-status order-status--fail">✕ Annulé</span>}
-                  {order.status === "EXPIRED" && <span className="order-status order-status--expired">â° Expiré</span>}
+                  {order.status === "EXPIRED" && <span className="order-status order-status--expired">⏰ Expiré</span>}
                 </article>
               ))}
             </div>
@@ -600,9 +600,9 @@ export function PricingPage() {
           <p className="pricing-section__sub">Tous les forfaits côte à côte. Trouvez celui qui vous correspond.</p>
         </div>
 
-        {/* â”€â”€ Forfaits Utilisateurs â”€â”€ */}
+        {/* ── Forfaits Utilisateurs ── */}
         <div className="comparison-label">
-          <span className="comparison-label__icon">ðŸ‘¤</span>
+          <span className="comparison-label__icon">👤</span>
           <h3 className="comparison-label__text">Vendeurs</h3>
           <div className="comparison-label__line" />
         </div>
@@ -623,22 +623,22 @@ export function PricingPage() {
                 { feat: 'Achat & messagerie', vals: ['✅', '✅', '✅', '✅'] },
                 { feat: 'IA marchande (prix & négo)', vals: ['✅', '✅', '✅', '✅'] },
                 { feat: 'Conseils IA post-publication', vals: ['✅', '✅', '✅', '✅'] },
-                { feat: 'Publicité marketplace', vals: ['─”', '✅', '✅', '✅'] },
-                { feat: 'IA Commande (suivi & relances)', vals: ['─”', '─”', '✅', '✅'] },
-                { feat: 'Kin-Sell Analytique', vals: ['─”', '─”', '─”', '✅ Medium'] },
-                { feat: 'Diagnostic de performance', vals: ['─”', '─”', '─”', '✅'] },
-                { feat: "Détection d'anomalies", vals: ['─”', '─”', '─”', '✅'] },
-                { feat: 'Tendances de marché', vals: ['─”', '─”', '─”', '✅'] },
-                { feat: 'Mémoire stratégique', vals: ['─”', '─”', '─”', '✅'] },
-                { feat: 'Analytics enrichi (Gemini)', vals: ['─”', '─”', '─”', '✅'] },
+                { feat: 'Publicité marketplace', vals: ['—', '✅', '✅', '✅'] },
+                { feat: 'IA Commande (suivi & relances)', vals: ['—', '—', '✅', '✅'] },
+                { feat: 'Kin-Sell Analytique', vals: ['—', '—', '—', '✅ Medium'] },
+                { feat: 'Diagnostic de performance', vals: ['—', '—', '—', '✅'] },
+                { feat: "Détection d'anomalies", vals: ['—', '—', '—', '✅'] },
+                { feat: 'Tendances de marché', vals: ['—', '—', '—', '✅'] },
+                { feat: 'Mémoire stratégique', vals: ['—', '—', '—', '✅'] },
+                { feat: 'Analytics enrichi (Gemini)', vals: ['—', '—', '—', '✅'] },
                 { feat: 'Boost profil / annonces', vals: ['Add-on', 'Add-on', 'Add-on', 'Add-on'] },
-                { feat: 'Portée boost', vals: ['─”', 'Local · National · Cross-border', 'Local · National · Cross-border', 'Local · National · Cross-border'] },
+                { feat: 'Portée boost', vals: ['—', 'Local · National · Cross-border', 'Local · National · Cross-border', 'Local · National · Cross-border'] },
                 { feat: 'Usage recommandé', vals: ['Découverte', 'Visibilité', 'Automatisation', 'Pilotage'] },
               ].map((row, i) => (
                 <tr key={row.feat}>
                   <td>{row.feat}</td>
                   {row.vals.map((v, j) => (
-                    <td key={j} className={v === '─”' ? 'val-no' : v.startsWith('✅') ? 'val-yes' : v === 'Add-on' ? 'val-addon' : 'val-info'}>{v}</td>
+                    <td key={j} className={v === '—' ? 'val-no' : v.startsWith('✅') ? 'val-yes' : v === 'Add-on' ? 'val-addon' : 'val-info'}>{v}</td>
                   ))}
                 </tr>
               ))}
@@ -646,9 +646,9 @@ export function PricingPage() {
           </table>
         </div>
 
-        {/* â”€â”€ Forfaits Business â”€â”€ */}
+        {/* ── Forfaits Business ── */}
         <div className="comparison-label">
-          <span className="comparison-label__icon">ðŸ¢</span>
+          <span className="comparison-label__icon">🏢</span>
           <h3 className="comparison-label__text">Business</h3>
           <div className="comparison-label__line" />
         </div>
@@ -670,23 +670,23 @@ export function PricingPage() {
                 { feat: 'IA marchande (prix & négo)', vals: ['✅', '✅', '✅'] },
                 { feat: 'Publicité marketplace', vals: ['✅', '✅', '✅'] },
                 { feat: 'Conseils IA post-publication', vals: ['✅', '✅', '✅'] },
-                { feat: 'IA Commande (suivi & relances)', vals: ['─”', '✅', '✅'] },
-                { feat: 'Kin-Sell Analytique', vals: ['─”', '✅ Medium', '✅ Premium'] },
-                { feat: 'Diagnostic de performance', vals: ['─”', '✅', '✅'] },
-                { feat: "Détection d'anomalies", vals: ['─”', '✅', '✅'] },
-                { feat: 'Tendances de marché', vals: ['─”', '✅', '✅'] },
-                { feat: 'Mémoire stratégique', vals: ['─”', '✅', '✅'] },
-                { feat: 'Analytics enrichi (Gemini)', vals: ['─”', '✅', '✅'] },
-                { feat: 'Publicité premium (homepage)', vals: ['─”', '─”', '✅'] },
+                { feat: 'IA Commande (suivi & relances)', vals: ['—', '✅', '✅'] },
+                { feat: 'Kin-Sell Analytique', vals: ['—', '✅ Medium', '✅ Premium'] },
+                { feat: 'Diagnostic de performance', vals: ['—', '✅', '✅'] },
+                { feat: "Détection d'anomalies", vals: ['—', '✅', '✅'] },
+                { feat: 'Tendances de marché', vals: ['—', '✅', '✅'] },
+                { feat: 'Mémoire stratégique', vals: ['—', '✅', '✅'] },
+                { feat: 'Analytics enrichi (Gemini)', vals: ['—', '✅', '✅'] },
+                { feat: 'Publicité premium (homepage)', vals: ['—', '—', '✅'] },
                 { feat: 'Boost boutique / annonces', vals: ['Add-on', 'Add-on', 'Add-on'] },
                 { feat: 'Portée boost', vals: ['Local · National · Cross-border', 'Local · National · Cross-border', 'Local · National · Cross-border'] },
-                { feat: 'Support dédié', vals: ['─”', '─”', '✅'] },
+                { feat: 'Support dédié', vals: ['—', '—', '✅'] },
                 { feat: 'Usage recommandé', vals: ['Lancement', 'Croissance', 'Expansion'] },
               ].map((row) => (
                 <tr key={row.feat}>
                   <td>{row.feat}</td>
                   {row.vals.map((v, j) => (
-                    <td key={j} className={v === '─”' ? 'val-no' : v.startsWith('✅') ? 'val-yes' : v === 'Add-on' ? 'val-addon' : 'val-info'}>{v}</td>
+                    <td key={j} className={v === '—' ? 'val-no' : v.startsWith('✅') ? 'val-yes' : v === 'Add-on' ? 'val-addon' : 'val-info'}>{v}</td>
                   ))}
                 </tr>
               ))}
@@ -704,10 +704,10 @@ export function PricingPage() {
           </p>
         </div>
 
-        {/* â”€â”€ IA Marchande â”€â”€ */}
+        {/* ── IA Marchande ── */}
         <div className="ia-block">
           <div className="ia-block__header">
-            <div className="ia-block__icon">ðŸ¤</div>
+            <div className="ia-block__icon">🤝</div>
             <div>
               <h3 className="ia-block__title">IA Marchande</h3>
               <span className="ia-block__avail">✅ Incluse dans tous les forfaits</span>
@@ -723,10 +723,10 @@ export function PricingPage() {
           </div>
         </div>
 
-        {/* â”€â”€ IA Commande â”€â”€ */}
+        {/* ── IA Commande ── */}
         <div className="ia-block">
           <div className="ia-block__header">
-            <div className="ia-block__icon">ðŸ“¦</div>
+            <div className="ia-block__icon">📦</div>
             <div>
               <h3 className="ia-block__title">IA Commande</h3>
               <span className="ia-block__avail">✅ AUTO · PRO VENDEUR · BUSINESS · SCALE</span>
@@ -740,13 +740,13 @@ export function PricingPage() {
               <span key={t} className="ia-tag">{t}</span>
             ))}
           </div>
-          <p className="ia-block__addon">ðŸ”Œ Disponible en add-on : 7$/mois (pour FREE, BOOST, STARTER)</p>
+          <p className="ia-block__addon">📌 Disponible en add-on : 7$/mois (pour FREE, BOOST, STARTER)</p>
         </div>
 
-        {/* â”€â”€ IA Ads â”€â”€ */}
+        {/* ── IA Ads ── */}
         <div className="ia-block">
           <div className="ia-block__header">
-            <div className="ia-block__icon">ðŸ“¢</div>
+            <div className="ia-block__icon">📢</div>
             <div>
               <h3 className="ia-block__title">IA Ads</h3>
               <span className="ia-block__avail">✅ Conseils post-publication : tous les forfaits</span>
@@ -768,10 +768,10 @@ export function PricingPage() {
           </div>
         </div>
 
-        {/* â”€â”€ Kin-Sell Analytique â”€â”€ */}
+        {/* ── Kin-Sell Analytique ── */}
         <div className="ia-block">
           <div className="ia-block__header">
-            <div className="ia-block__icon ia-block__icon--green">ðŸ“Š</div>
+            <div className="ia-block__icon ia-block__icon--green">📊</div>
             <div>
               <h3 className="ia-block__title">Kin-Sell Analytique</h3>
               <span className="ia-block__avail">✅ PRO VENDEUR · BUSINESS (Medium) · SCALE (Premium)</span>
@@ -812,10 +812,10 @@ export function PricingPage() {
           </div>
         </div>
 
-        {/* â”€â”€ Boost â”€â”€ */}
+        {/* ── Boost ── */}
         <div className="boost-block">
           <div className="boost-block__header">
-            <span style={{ fontSize: 22 }}>ðŸš€</span>
+            <span style={{ fontSize: 22 }}>🚀</span>
             <h3 className="boost-block__title">Boost & portée géographique</h3>
             <span className="boost-block__price-tag">Add-on · à partir de 1$/24h</span>
           </div>
@@ -847,10 +847,10 @@ export function PricingPage() {
           </p>
         </div>
 
-        {/* â”€â”€ Parcours Vendeurs â”€â”€ */}
+        {/* ── Parcours Vendeurs ── */}
         <div className="results-timeline" style={{ marginBottom: 32 }}>
           <div className="results-label">
-            <span className="results-label__icon">ðŸ‘¤</span>
+            <span className="results-label__icon">👤</span>
             <h3 className="results-label__text">Parcours Vendeur</h3>
             <div className="results-label__line" />
           </div>
@@ -898,10 +898,10 @@ export function PricingPage() {
           ))}
         </div>
 
-        {/* â”€â”€ Parcours Business â”€â”€ */}
+        {/* ── Parcours Business ── */}
         <div className="results-timeline">
           <div className="results-label">
-            <span className="results-label__icon">ðŸ¢</span>
+            <span className="results-label__icon">🏢</span>
             <h3 className="results-label__text">Parcours Business</h3>
             <div className="results-label__line" />
           </div>
@@ -957,7 +957,7 @@ export function PricingPage() {
             <div key={i} className={`faq-item${openFaq === i ? ' faq-item--open' : ''}`}>
               <button type="button" className="faq-item__q" onClick={() => setOpenFaq(openFaq === i ? null : i)}>
                 {item.q}
-                <span className="faq-item__chevron">â–¼</span>
+                <span className="faq-item__chevron">▼</span>
               </button>
               {openFaq === i && <p className="faq-item__a">{item.a}</p>}
             </div>
@@ -973,7 +973,7 @@ export function PricingPage() {
         </p>
         {isLoggedIn ? (
           <button type="button" className="pricing-cta-final__btn" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
-            Choisir mon plan â†‘
+            Choisir mon plan →
           </button>
         ) : (
           <Link className="pricing-cta-final__btn" to="/register">
