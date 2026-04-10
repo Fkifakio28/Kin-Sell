@@ -147,6 +147,18 @@ export const ln: Record<string, string> = {
     "auth.appealSentBody": "Appel na yo etindami epai ya équipe ya modération. Okoyebisama soki décision ezwami.",
     "auth.appealMinChars": "Limbolá situation na yo malamu (au moins ba caractères 10).",
     "auth.appealError": "Erreur moko esalemi. Meka lisusu na mwa tango.",
+    "auth.termsCheckbox.prefix": "Natángi mpe nandimi",
+    "auth.termsCheckbox.termsLink": "Masɛngami ya kosalela",
+    "auth.termsCheckbox.and": "na",
+    "auth.termsCheckbox.privacyLink": "Politique ya confidentialité",
+    "auth.termsCheckbox.required": "Osengeli kondima masɛngami mpo ofungola compte.",
+
+    // ── Cookie Consent ──
+    "cookie.title": "Tosaleláká cookies",
+    "cookie.text": "Kin-Sell esaleláká cookies ya ntina mpo na authentification mpe fonctionnement ya site. Cookie ya pub ezali te.",
+    "cookie.accept": "Nandimi",
+    "cookie.termsLink": "Masɛngami ya kosalela",
+    "cookie.privacyLink": "Politique ya confidentialité",
 
     "nav.home": "Ndako",
     "nav.explorer": "Koluka",

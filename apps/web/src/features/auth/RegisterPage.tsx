@@ -50,6 +50,9 @@ export function RegisterPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [cfToken, setCfToken] = useState("");
 
+  // Terms acceptance
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
+
   // Phone registration state
   const [phone, setPhone] = useState("");
   const [phoneDisplayName, setPhoneDisplayName] = useState("");
@@ -104,6 +107,7 @@ export function RegisterPage() {
     setErrorMessage(null);
     if (!phone.trim()) { setErrorMessage(t("auth.phoneRequired")); return; }
     if (!phoneDisplayName.trim()) { setErrorMessage("Nom d'affichage requis."); return; }
+    if (!acceptedTerms) { setErrorMessage(t("auth.termsCheckbox.required")); return; }
     setIsSubmitting(true);
     try {
       const res = await authApi.requestOtp({ phone: phone.trim() });
@@ -158,6 +162,11 @@ export function RegisterPage() {
     event.preventDefault();
     setErrorMessage(null);
     setSocialMessage(null);
+
+    if (!acceptedTerms) {
+      setErrorMessage(t("auth.termsCheckbox.required"));
+      return;
+    }
 
     if (password.length < 8) {
       setErrorMessage(t("auth.passwordMinError"));
@@ -311,9 +320,26 @@ export function RegisterPage() {
 
           {errorMessage ? <div className="auth-error">{errorMessage}</div> : null}
 
+          <label className="auth-checkbox-label" htmlFor="register-terms">
+            <input
+              type="checkbox"
+              id="register-terms"
+              className="auth-checkbox"
+              checked={acceptedTerms}
+              onChange={(e) => setAcceptedTerms(e.target.checked)}
+              required
+            />
+            <span className="auth-checkbox-text">
+              {t("auth.termsCheckbox.prefix")}{" "}
+              <a href="/terms" target="_blank" rel="noopener noreferrer" className="auth-checkbox-link">{t("auth.termsCheckbox.termsLink")}</a>
+              {" "}{t("auth.termsCheckbox.and")}{" "}
+              <a href="/privacy" target="_blank" rel="noopener noreferrer" className="auth-checkbox-link">{t("auth.termsCheckbox.privacyLink")}</a>.
+            </span>
+          </label>
+
           <TurnstileWidget onToken={handleTurnstileToken} />
 
-          <button type="submit" className="auth-submit-button" disabled={isSubmitting || isLoading}>
+          <button type="submit" className="auth-submit-button" disabled={isSubmitting || isLoading || !acceptedTerms}>
             {isSubmitting ? t("auth.creating") : t("auth.createAccount")}
           </button>
 
@@ -360,7 +386,24 @@ export function RegisterPage() {
 
           {errorMessage ? <div className="auth-error">{errorMessage}</div> : null}
 
-          <button type="submit" className="auth-submit-button" disabled={isSubmitting}>
+          <label className="auth-checkbox-label" htmlFor="register-terms-phone">
+            <input
+              type="checkbox"
+              id="register-terms-phone"
+              className="auth-checkbox"
+              checked={acceptedTerms}
+              onChange={(e) => setAcceptedTerms(e.target.checked)}
+              required
+            />
+            <span className="auth-checkbox-text">
+              {t("auth.termsCheckbox.prefix")}{" "}
+              <a href="/terms" target="_blank" rel="noopener noreferrer" className="auth-checkbox-link">{t("auth.termsCheckbox.termsLink")}</a>
+              {" "}{t("auth.termsCheckbox.and")}{" "}
+              <a href="/privacy" target="_blank" rel="noopener noreferrer" className="auth-checkbox-link">{t("auth.termsCheckbox.privacyLink")}</a>.
+            </span>
+          </label>
+
+          <button type="submit" className="auth-submit-button" disabled={isSubmitting || !acceptedTerms}>
             {isSubmitting ? t("auth.sendingOtp") : t("auth.receiveCode")}
           </button>
 

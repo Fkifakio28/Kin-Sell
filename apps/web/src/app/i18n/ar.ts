@@ -124,6 +124,18 @@ export const ar: Record<string, string> = {
   "auth.roleLabel": "أنا:",
   "auth.roleUser": "مستخدم",
   "auth.roleBusiness": "مؤسسة",
+  "auth.termsCheckbox.prefix": "لقد قرأت وأوافق على",
+  "auth.termsCheckbox.termsLink": "شروط الاستخدام",
+  "auth.termsCheckbox.and": "و",
+  "auth.termsCheckbox.privacyLink": "سياسة الخصوصية",
+  "auth.termsCheckbox.required": "يجب قبول الشروط لإنشاء حساب.",
+
+  // ── Cookie Consent ──
+  "cookie.title": "نستخدم ملفات تعريف الارتباط",
+  "cookie.text": "يستخدم Kin-Sell ملفات تعريف الارتباط الأساسية للمصادقة وعمل الموقع. لا يتم استخدام ملفات تعريف الارتباط الإعلانية.",
+  "cookie.accept": "أوافق",
+  "cookie.termsLink": "شروط الاستخدام",
+  "cookie.privacyLink": "سياسة الخصوصية",
 
   // ── Home ──
   "home.heroTitle": "Kin-Sell",

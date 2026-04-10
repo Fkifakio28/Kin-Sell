@@ -582,6 +582,60 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* ── Checkbox CGU ── */
+.auth-checkbox-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  cursor: pointer;
+  padding: 0.4rem 0;
+}
+
+.auth-checkbox {
+  flex-shrink: 0;
+  width: 1.15rem;
+  height: 1.15rem;
+  margin-top: 0.15rem;
+  border-radius: 4px;
+  border: 1.5px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.06);
+  appearance: none;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.auth-checkbox:checked {
+  background: var(--color-accent, #6f58ff);
+  border-color: var(--color-accent, #6f58ff);
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 14 14' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M3 7.5L5.5 10L11 4' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-size: 80%;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+
+.auth-checkbox:focus-visible {
+  outline: 2px solid var(--color-accent, #6f58ff);
+  outline-offset: 2px;
+}
+
+.auth-checkbox-text {
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+}
+
+.auth-checkbox-link {
+  color: var(--color-accent, #9279ff);
+  text-decoration: none;
+  font-weight: 500;
+  transition: color 0.2s;
+}
+
+.auth-checkbox-link:hover {
+  color: var(--color-text-primary);
+  text-decoration: underline;
+}
+
 
 @keyframes authParallax {
   from {

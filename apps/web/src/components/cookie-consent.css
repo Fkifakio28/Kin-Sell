@@ -1,0 +1,118 @@
+.cookie-consent {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 9999;
+  padding: 1rem;
+  animation: cookieSlideUp 0.45s ease-out both;
+}
+
+.cookie-consent-card {
+  max-width: 42rem;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.1rem 1.4rem;
+  border-radius: 16px;
+  backdrop-filter: blur(18px) saturate(1.4);
+  background: rgba(18, 11, 43, 0.82);
+  border: 1px solid rgba(111, 88, 255, 0.18);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+}
+
+.cookie-consent-icon {
+  font-size: 1.6rem;
+  flex-shrink: 0;
+}
+
+.cookie-consent-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.cookie-consent-title {
+  margin: 0 0 0.25rem;
+  font-family: var(--font-family-display);
+  font-size: 0.95rem;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.cookie-consent-text {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+}
+
+.cookie-consent-links {
+  margin: 0.35rem 0 0;
+  font-size: 0.76rem;
+  color: var(--color-text-muted);
+}
+
+.cookie-consent-link {
+  color: var(--color-accent, #9279ff);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.cookie-consent-link:hover {
+  color: var(--color-text-primary);
+  text-decoration: underline;
+}
+
+.cookie-consent-separator {
+  margin: 0 0.4rem;
+  opacity: 0.5;
+}
+
+.cookie-consent-accept {
+  flex-shrink: 0;
+  padding: 0.6rem 1.3rem;
+  border: none;
+  border-radius: 10px;
+  background: var(--color-accent, #6f58ff);
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.15s;
+  white-space: nowrap;
+}
+
+.cookie-consent-accept:hover {
+  background: #8570ff;
+  transform: translateY(-1px);
+}
+
+.cookie-consent-accept:active {
+  transform: translateY(0);
+}
+
+@keyframes cookieSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Mobile */
+@media (max-width: 640px) {
+  .cookie-consent-card {
+    flex-direction: column;
+    text-align: center;
+    gap: 0.75rem;
+    padding: 1rem;
+  }
+
+  .cookie-consent-accept {
+    width: 100%;
+  }
+}

@@ -1,6 +1,7 @@
 import { Suspense, useEffect, useState } from "react";
 import { Outlet, ScrollRestoration, useLocation } from "react-router-dom";
 import { BackgroundMusic } from "../../components/BackgroundMusic";
+import { CookieConsent } from "../../components/CookieConsent";
 import { Footer } from "../../components/Footer";
 import { shouldShowSplash, SplashScreen } from "../../components/SplashScreen";
 import { SuspensionGuard } from "../providers/AuthProvider";
@@ -58,6 +59,7 @@ export function RootLayout() {
       {hideFooter ? null : <Footer />}
       <ScrollRestoration />
       {splashVisible && <SplashScreen onDismiss={handleSplashDismiss} />}
+      <CookieConsent />
       <BackgroundMusic playing={musicPlaying} />
     </div>
   );

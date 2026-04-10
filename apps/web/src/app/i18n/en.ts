@@ -146,6 +146,18 @@ export const en: Record<string, string> = {
     "auth.appealSentBody": "Your appeal has been sent to our moderation team. You will be notified as soon as a decision is made.",
     "auth.appealMinChars": "Please explain your situation (minimum 10 characters).",
     "auth.appealError": "An error occurred. Please try again in a few moments.",
+    "auth.termsCheckbox.prefix": "I have read and accept the",
+    "auth.termsCheckbox.termsLink": "Terms of Use",
+    "auth.termsCheckbox.and": "and the",
+    "auth.termsCheckbox.privacyLink": "Privacy Policy",
+    "auth.termsCheckbox.required": "You must accept the terms to create an account.",
+
+    // ── Cookie Consent ──
+    "cookie.title": "We use cookies",
+    "cookie.text": "Kin-Sell uses essential cookies for authentication and site functionality. No advertising cookies are used.",
+    "cookie.accept": "I accept",
+    "cookie.termsLink": "Terms of Use",
+    "cookie.privacyLink": "Privacy Policy",
 
     "nav.home": "Home",
     "nav.explorer": "Explore",
