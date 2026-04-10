@@ -24,7 +24,7 @@ try {
 } catch {}
 
 const secret = process.env.JWT_SECRET || 'dev-secret';
-const token = jwt.sign({ userId: u.id, role: u.role }, secret, { expiresIn: '1h' });
+const token = jwt.sign({ sub: u.id, role: u.role, sid: 'test-session' }, secret, { expiresIn: '1h' });
 
 if (runTests) {
   console.log(`User: ${email} | Role: ${u.role} | ID: ${u.id}`);
