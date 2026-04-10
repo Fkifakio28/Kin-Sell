@@ -1,15 +1,19 @@
 /**
- * So-Kin Trends Routes — Tendances locales, profils suggérés, insights posts, analytics
+ * So-Kin Trends Routes — Tendances, analytics, insights produit
  *
- * Endpoints publics (avec auth optionnel pour insights) :
+ * Endpoints publics :
  * - GET /sokin/trends          — Tendances locales (hashtags + sujets)
  * - GET /sokin/trends/profiles — Profils suggérés
- * - GET /sokin/trends/post-insight/:id — Insights d'un post (auteur only)
  *
- * Endpoints analytics So-Kin (auth requis) :
+ * Endpoints analytics (auth) :
+ * - GET /sokin/trends/post-insight/:id   — Insights bruts d'un post
  * - GET /sokin/trends/analytics/post/:id — Performance détaillée d'un post
  * - GET /sokin/trends/analytics/my       — Insights complets auteur (7d/30d)
  * - GET /sokin/trends/analytics/global   — Tendances So-Kin globales
+ *
+ * Endpoints insights produit — mobile-first (auth) :
+ * - GET /sokin/trends/insights/post/:id  — Insight card post (gratuit + premium)
+ * - GET /sokin/trends/insights/my        — Dashboard auteur (gratuit + premium)
  */
 
 import { Router } from "express";
@@ -17,6 +21,7 @@ import { requireAuth, type AuthenticatedRequest } from "../../shared/auth/auth-m
 import { asyncHandler } from "../../shared/utils/async-handler.js";
 import { getTrending, getSuggestedProfiles, getPostInsight } from "./sokin-trends.service.js";
 import { getPostPerformance, getAuthorSoKinInsights, getSoKinTrendsInsight } from "../analytics/sokin-analytics.service.js";
+import { getPostInsightCard, getAuthorDashboard } from "../sokin/sokin-author-insights.service.js";
 import { HttpError } from "../../shared/errors/http-error.js";
 
 const router = Router();
@@ -113,5 +118,44 @@ router.get(
     const city = (req.query.city as string) || undefined;
     const trends = await getSoKinTrendsInsight(city);
     res.json(trends);
+  })
+);
+
+// ═══════════════════════════════════════════════════════
+// INSIGHTS AUTEUR — API produit mobile-first
+// ═══════════════════════════════════════════════════════
+
+/**
+ * GET /sokin/trends/insights/post/:id
+ * Insight card d'un post — mobile-ready, labels prêts à afficher
+ * Gratuit : portée, engagement, commentaires, reposts, saves, potentiel, suggestion
+ * Premium : + intérêt local, clics listing, ouvertures DM
+ */
+router.get(
+  "/insights/post/:id",
+  requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const postId = req.params.id;
+    if (!postId) throw new HttpError(400, "postId requis");
+    const card = await getPostInsightCard(postId, req.auth!.userId);
+    if (!card) throw new HttpError(404, "Post introuvable ou non autorisé");
+    res.json(card);
+  })
+);
+
+/**
+ * GET /sokin/trends/insights/my?period=7d|30d
+ * Dashboard auteur — vue d'ensemble + suggestion globale
+ * Gratuit : overview, topPost, suggestion
+ * Premium : + bestTiming, hotHashtags, topCity, socialVsBusiness
+ */
+router.get(
+  "/insights/my",
+  requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const period = (req.query.period as "7d" | "30d") || "7d";
+    if (period !== "7d" && period !== "30d") throw new HttpError(400, "Période invalide (7d ou 30d)");
+    const dashboard = await getAuthorDashboard(req.auth!.userId, period);
+    res.json(dashboard);
   })
 );
