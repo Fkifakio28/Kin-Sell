@@ -22,6 +22,9 @@ type PublicListing = {
   priceUsdCents: number;
   imageUrl?: string | null;
   mediaUrls: string[];
+  promoActive?: boolean;
+  promoPriceUsdCents?: number | null;
+  promoExpiresAt?: string | null;
 };
 
 type PublicBusiness = {
@@ -464,7 +467,15 @@ export function BusinessShopPage({ slug }: BusinessShopPageProps) {
                   }
                 </div>
                 <h3 className="public-listing-title">{listing.title}</h3>
-                <p className="public-listing-price biz-price-usd">{fmtUsd(listing.priceUsdCents)}</p>
+                {listing.promoActive && listing.promoPriceUsdCents != null ? (
+                  <p className="public-listing-price biz-price-usd">
+                    <s className="ks-price-old">{fmtUsd(listing.priceUsdCents)}</s>{' '}
+                    {fmtUsd(listing.promoPriceUsdCents)}
+                    <span className="ks-promo-badge" style={{ marginLeft: 6, fontSize: '0.75rem' }}>PROMO</span>
+                  </p>
+                ) : (
+                  <p className="public-listing-price biz-price-usd">{fmtUsd(listing.priceUsdCents)}</p>
+                )}
               </article>
             ))}
           </div>
@@ -484,7 +495,15 @@ export function BusinessShopPage({ slug }: BusinessShopPageProps) {
                 <div className="business-lux-service-copy">
                   <h3>{svc.title}</h3>
                   <p>{svc.description ?? svc.category}</p>
-                  <strong className="biz-price-usd">{fmtUsd(svc.priceUsdCents)}</strong>
+                  {svc.promoActive && svc.promoPriceUsdCents != null ? (
+                    <strong className="biz-price-usd">
+                      <s className="ks-price-old">{fmtUsd(svc.priceUsdCents)}</s>{' '}
+                      {fmtUsd(svc.promoPriceUsdCents)}
+                      <span className="ks-promo-badge" style={{ marginLeft: 6, fontSize: '0.75rem' }}>PROMO</span>
+                    </strong>
+                  ) : (
+                    <strong className="biz-price-usd">{fmtUsd(svc.priceUsdCents)}</strong>
+                  )}
                 </div>
               </article>
             ))}

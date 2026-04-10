@@ -59,6 +59,7 @@ export type ExplorerArticlePreview = {
   coverImage: string;
   promoLabel?: string;
   originalPriceLabel?: string;
+  promoExpiresAt?: string | null;
   media: ExplorerArticleMedia[];
   ownerId?: string;
   isNegotiable?: boolean;

@@ -227,6 +227,9 @@ export const getPublicBusinessPage = async (slug: string) => {
           imageUrl: true,
           mediaUrls: true,
           createdAt: true,
+          promoActive: true,
+          promoPriceUsdCents: true,
+          promoExpiresAt: true,
         },
       },
       _count: {

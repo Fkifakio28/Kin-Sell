@@ -89,6 +89,7 @@ export type PublicListing = {
   isNegotiable: boolean;
   promoActive?: boolean;
   promoPriceUsdCents?: number | null;
+  promoExpiresAt?: string | null;
   createdAt: string;
   owner: {
     userId: string;
@@ -119,6 +120,7 @@ export type ListingSearchResponse = {
     isNegotiable: boolean;
     promoActive?: boolean;
     promoPriceUsdCents?: number | null;
+    promoExpiresAt?: string | null;
     createdAt: string;
     distanceKm: number | null;
     owner: {

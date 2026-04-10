@@ -12,6 +12,7 @@ import { useAuth } from '../../app/providers/AuthProvider';
 import { useLocaleCurrency } from '../../app/providers/LocaleCurrencyProvider';
 import { useMarketPreference } from '../../app/providers/MarketPreferenceProvider';
 import { NegotiatePopup } from '../negotiations/NegotiatePopup';
+import { getUrgencyLabel } from '../../shared/promo/promo-engine';
 import { useLockedCategories, isCategoryLocked } from '../../hooks/useLockedCategories';
 import { AdBanner } from '../../components/AdBanner';
 import MapView from '../../components/MapView';
@@ -367,6 +368,7 @@ function ExplorerPageMobile() {
           isBoosted: !!(item as any).isBoosted,
           promoLabel: item.promoActive && item.promoPriceUsdCents != null ? formatPriceLabelFromUsdCents(item.promoPriceUsdCents) : undefined,
           originalPriceLabel: item.promoActive && item.promoPriceUsdCents != null ? formatPriceLabelFromUsdCents(item.priceUsdCents) : undefined,
+          promoExpiresAt: item.promoActive ? (item as any).promoExpiresAt ?? null : null,
           latitude: item.latitude ?? undefined, longitude: item.longitude ?? undefined,
         });
         if (!cancelled) setLiveArticles([...pRes.results.map(map), ...sRes.results.map(map)]);
@@ -444,6 +446,7 @@ function ExplorerPageMobile() {
                       ) : (
                         <p className="ex-article-price">{article.priceLabel}</p>
                       )}
+                      {article.promoExpiresAt && (() => { const u = getUrgencyLabel(article.promoExpiresAt); return u ? <span className="promo-urgency-label">⏰ {u}</span> : null; })()}
                       <p className="ex-article-publisher"><a href={article.publisherLink} onClick={(e) => { e.preventDefault(); e.stopPropagation(); nav(article.publisherLink); }} style={{ color: 'inherit', textDecoration: 'none' }}>{article.publisherName}</a></p>
                       <div className="ex-article-actions">
                         <button type="button" className="ex-article-act" onClick={() => nav(article.targetPath)}>Voir</button>
@@ -540,6 +543,7 @@ function ExplorerPageMobile() {
                     ) : (
                       <p className="ex-article-price">{article.priceLabel}</p>
                     )}
+                    {article.promoExpiresAt && (() => { const u = getUrgencyLabel(article.promoExpiresAt); return u ? <span className="promo-urgency-label">⏰ {u}</span> : null; })()}
                     <p className="ex-article-publisher">{article.publisherName}</p>
                     <div className="ex-article-actions">
                       <button type="button" className="ex-article-act" onClick={() => nav(article.targetPath)}>Voir</button>

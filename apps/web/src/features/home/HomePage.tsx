@@ -10,6 +10,7 @@ import { useSocket } from "../../hooks/useSocket";
 import { useRealtimeSync } from "../../hooks/useRealtimeSync";
 import { useMarketPreference } from "../../app/providers/MarketPreferenceProvider";
 import { NegotiatePopup } from "../negotiations/NegotiatePopup";
+import { getUrgencyLabel } from "../../shared/promo/promo-engine";
 import { useLockedCategories, isCategoryLocked } from "../../hooks/useLockedCategories";
 import { AdBanner } from "../../components/AdBanner";
 import { SeoMeta } from "../../components/SeoMeta";
@@ -937,6 +938,7 @@ export function HomePage() {
                       ) : (
                         <span className="h-article-price">{formatPriceLabelFromUsdCents(p.priceUsdCents)}</span>
                       )}
+                      {p.promoActive && p.promoExpiresAt && (() => { const u = getUrgencyLabel(p.promoExpiresAt); return u ? <span className="promo-urgency-label">⏰ {u}</span> : null; })()}
                       {p.owner.displayName && (
                         <span className="h-article-seller">
                           {p.owner.avatarUrl ? <img src={resolveMediaUrl(p.owner.avatarUrl)} alt="" className="h-article-seller-avatar" loading="lazy" /> : <span className="h-article-seller-dot" />}
@@ -1033,6 +1035,7 @@ export function HomePage() {
                       ) : (
                         <span className="h-article-price">{formatPriceLabelFromUsdCents(s.priceUsdCents)}</span>
                       )}
+                      {s.promoActive && s.promoExpiresAt && (() => { const u = getUrgencyLabel(s.promoExpiresAt); return u ? <span className="promo-urgency-label">⏰ {u}</span> : null; })()}
                       {s.owner.displayName && (
                         <span className="h-article-seller">
                           {s.owner.avatarUrl ? <img src={resolveMediaUrl(s.owner.avatarUrl)} alt="" className="h-article-seller-avatar" loading="lazy" /> : <span className="h-article-seller-dot" />}

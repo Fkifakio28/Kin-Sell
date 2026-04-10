@@ -310,6 +310,25 @@ export const setPromo = async (
       }
     }
 
+    // ── Conflict detection: reject if any listing already has an active/scheduled ITEM promo ──
+    const existingPromoItems = await prisma.promotionItem.findMany({
+      where: {
+        listingId: { in: foundIds },
+        promotion: {
+          promoType: PromotionType.ITEM,
+          status: { in: [PromotionStatus.ACTIVE, PromotionStatus.SCHEDULED] },
+        },
+      },
+      select: { listingId: true, promotion: { select: { id: true, status: true } } },
+    });
+    if (existingPromoItems.length > 0) {
+      const conflictIds = [...new Set(existingPromoItems.map((pi) => pi.listingId))];
+      throw new HttpError(
+        409,
+        `Conflit : ${conflictIds.length} article(s) ont déjà une promo ITEM active/programmée. Annulez-la d'abord.`
+      );
+    }
+
     const startsAt = options?.startsAt ? new Date(options.startsAt) : new Date();
     const expiresAt = options?.expiresAt ? new Date(options.expiresAt) : null;
     const isScheduled = startsAt > new Date();
@@ -411,6 +430,23 @@ export const setBundlePromo = async (
 
   if (bundlePriceUsdCents >= bundleOriginal) {
     throw new HttpError(400, "Le prix du lot promo doit être inférieur au total normal");
+  }
+
+  // ── Conflict detection: reject if these exact listings already form an active/scheduled BUNDLE promo ──
+  const foundIds = listings.map((l) => l.id);
+  const existingBundlePromos = await prisma.promotion.findMany({
+    where: {
+      promoType: PromotionType.BUNDLE,
+      status: { in: [PromotionStatus.ACTIVE, PromotionStatus.SCHEDULED] },
+      items: { some: { listingId: { in: foundIds } } },
+    },
+    select: { id: true },
+  });
+  if (existingBundlePromos.length > 0) {
+    throw new HttpError(
+      409,
+      `Conflit : un ou plusieurs articles font déjà partie d'un lot promo actif/programmé. Annulez-le d'abord.`
+    );
   }
 
   const startsAt = options?.startsAt ? new Date(options.startsAt) : new Date();
@@ -836,6 +872,7 @@ export const searchListings = async (input: SearchListingsInput) => {
         isBoosted: isBoostVisibleToViewer(row as any, input.city, input.country),
         promoActive: row.promoActive,
         promoPriceUsdCents: row.promoPriceUsdCents,
+        promoExpiresAt: row.promoExpiresAt,
         createdAt: row.createdAt,
         distanceKm,
         owner: {
@@ -888,6 +925,7 @@ export const searchListings = async (input: SearchListingsInput) => {
           isBoosted: isBoostVisibleToViewer(row as any, input.city, input.country),
           promoActive: row.promoActive,
           promoPriceUsdCents: row.promoPriceUsdCents,
+          promoExpiresAt: row.promoExpiresAt,
           createdAt: row.createdAt, distanceKm: null,
           owner: {
             userId: row.ownerUserId,
@@ -929,6 +967,7 @@ export const searchListings = async (input: SearchListingsInput) => {
           isBoosted: isBoostVisibleToViewer(row as any, input.city, input.country),
           promoActive: row.promoActive,
           promoPriceUsdCents: row.promoPriceUsdCents,
+          promoExpiresAt: row.promoExpiresAt,
           createdAt: row.createdAt, distanceKm: null,
           owner: {
             userId: row.ownerUserId,
@@ -1035,6 +1074,7 @@ export const latestListings = async (input: { type?: ListingType; city?: string;
     isBoosted: isBoostVisibleToViewer(row as any, input.city, input.country),
     promoActive: row.promoActive,
     promoPriceUsdCents: row.promoPriceUsdCents,
+    promoExpiresAt: row.promoExpiresAt,
     latitude: row.latitude,
     longitude: row.longitude,
     createdAt: row.createdAt,

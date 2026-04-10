@@ -8,6 +8,7 @@ import {
 } from './explorer-data';
 import type { ExplorerArticlePreview } from './explorer-data';
 import { slugToCategoryInfo, normalizeCategoryToId } from '../../shared/constants/category-registry';
+import { getUrgencyLabel } from '../../shared/promo/promo-engine';
 import { explorer as explorerApi, orders as ordersApi, listings as listingsApi, resolveMediaUrl, type ExplorerShopApi, type ExplorerProfileApi } from '../../lib/api-client';
 import { useHoverPopup, ArticleHoverPopup, ProfileHoverPopup, type ArticleHoverData, type ProfileHoverData } from '../../components/HoverPopup';
 import { useScrollRestore } from '../../utils/useScrollRestore';
@@ -377,6 +378,7 @@ export function ExplorerPageDesktop() {
           isBoosted: !!(item as any).isBoosted,
           promoLabel: item.promoActive && item.promoPriceUsdCents != null ? formatPriceLabelFromUsdCents(item.promoPriceUsdCents) : undefined,
           originalPriceLabel: item.promoActive && item.promoPriceUsdCents != null ? formatPriceLabelFromUsdCents(item.priceUsdCents) : undefined,
+          promoExpiresAt: item.promoActive ? (item as any).promoExpiresAt ?? null : null,
           latitude: item.latitude ?? undefined,
           longitude: item.longitude ?? undefined,
         });
@@ -578,6 +580,7 @@ export function ExplorerPageDesktop() {
                     ) : (
                       <p className="explorer-article-price">{article.priceLabel}</p>
                     )}
+                    {article.promoExpiresAt && (() => { const u = getUrgencyLabel(article.promoExpiresAt); return u ? <span className="promo-urgency-label">⏰ {u}</span> : null; })()}
                     <p className="explorer-article-publisher"><a href={article.publisherLink} onClick={(e) => { e.preventDefault(); e.stopPropagation(); nav(article.publisherLink); }} style={{ color: 'inherit', textDecoration: 'none' }}>{article.publisherName}</a></p>
                     <div className="explorer-article-actions-row">
                       <button type="button" className="explorer-article-action-btn" onClick={() => nav(article.targetPath)}>Voir plus</button>
@@ -714,6 +717,7 @@ export function ExplorerPageDesktop() {
                     ) : (
                       <p className="explorer-article-price">{article.priceLabel}</p>
                     )}
+                    {article.promoExpiresAt && (() => { const u = getUrgencyLabel(article.promoExpiresAt); return u ? <span className="promo-urgency-label">⏰ {u}</span> : null; })()}
                     <p className="explorer-article-publisher"><a href={article.publisherLink} onClick={(e) => { e.preventDefault(); e.stopPropagation(); nav(article.publisherLink); }} style={{ color: 'inherit', textDecoration: 'none' }}>{article.publisherName}</a></p>
                     <div className="explorer-article-actions-row">
                       <button type="button" className="explorer-article-action-btn" onClick={() => nav(article.targetPath)}>Voir plus</button>
