@@ -3546,11 +3546,48 @@ function SoKinPageInner() {
                 <button type="button" className="sk-desktop-outline" onClick={handleOpenCreate}>Créer un post</button>
               </section>
               {/* ── Mon contenu (inline management) ── */}
-              {isLoggedIn && myPublishedPosts.length > 0 && (
+              {isLoggedIn && (myPublishedPosts.length > 0 || myBookmarks.length > 0) && (
                 <section className="sk-desktop-panel sk-desktop-my-content glass-container" aria-label="Mon contenu">
                   <h3>📋 Mon contenu</h3>
-                  <div className="sk-desktop-published-list">
-                    {myPublishedPosts.map((post) => {
+                  {/* Mini-tabs desktop */}
+                  <nav className="sk-desktop-content-tabs" aria-label="Onglets contenu">
+                    <button type="button" className={`sk-desktop-content-tab${contentTab !== 'BOOKMARKS' ? ' sk-desktop-content-tab--active' : ''}`} onClick={() => handleContentTabChange('all')}>
+                      Mes posts <span className="sk-desktop-content-tab-count">{(postCounts.ACTIVE ?? 0) + (postCounts.HIDDEN ?? 0)}</span>
+                    </button>
+                    <button type="button" className={`sk-desktop-content-tab${contentTab === 'BOOKMARKS' ? ' sk-desktop-content-tab--active' : ''}`} onClick={() => handleContentTabChange('BOOKMARKS')}>
+                      🔖 Favoris <span className="sk-desktop-content-tab-count">{postCounts.BOOKMARKS ?? myBookmarks.length}</span>
+                    </button>
+                  </nav>
+
+                  {contentTab === 'BOOKMARKS' ? (
+                    /* ── Vue Favoris desktop ── */
+                    <div className="sk-desktop-published-list">
+                      {loadingBookmarks ? (
+                        <p className="sk-desktop-empty">Chargement…</p>
+                      ) : myBookmarks.length === 0 ? (
+                        <p className="sk-desktop-empty">Aucun favori pour le moment.</p>
+                      ) : (
+                        myBookmarks.map((post) => (
+                          <article key={post.id} className="sk-desktop-published-item sk-desktop-published-item--bookmark">
+                            <button type="button" className="sk-desktop-published-main" onClick={() => void handleOpenPublishedPost(post.id)} title="Voir la publication">
+                              <strong>{post.text?.slice(0, 46) || 'Publication sans texte'}</strong>
+                              <span className="sk-desktop-published-meta">
+                                {post.author?.profile?.displayName ?? 'Utilisateur'} · {new Date(post.createdAt).toLocaleDateString('fr-FR')}
+                              </span>
+                            </button>
+                            <div className="sk-desktop-published-actions">
+                              <button type="button" className="sk-desktop-action-btn sk-desktop-action-btn--danger" title="Retirer des favoris" onClick={() => void handleRemoveBookmark(post.id)} disabled={removingBookmarkId === post.id}>
+                                {removingBookmarkId === post.id ? '⏳' : '🔖'}
+                              </button>
+                            </div>
+                          </article>
+                        ))
+                      )}
+                    </div>
+                  ) : (
+                    /* ── Vue Mes publications desktop ── */
+                    <div className="sk-desktop-published-list">
+                      {myPublishedPosts.map((post) => {
                       const statusConfig: Record<string, { icon: string; label: string }> = {
                         ACTIVE: { icon: '🟢', label: 'Publié' },
                         HIDDEN: { icon: '🟡', label: 'Masqué' },
@@ -3590,7 +3627,8 @@ function SoKinPageInner() {
                         </article>
                       );
                     })}
-                  </div>
+                    </div>
+                  )}
                   <button type="button" className="sk-desktop-outline" onClick={handleOpenCreate}>+ Nouvelle publication</button>
                 </section>
               )}

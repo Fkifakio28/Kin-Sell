@@ -3805,6 +3805,58 @@
   border-color: rgba(255, 130, 130, 0.4);
 }
 
+/* ── Desktop content tabs (Mon contenu) ── */
+.sk-desktop-content-tabs {
+  display: flex;
+  gap: 0.35rem;
+  margin-bottom: 0.5rem;
+}
+
+.sk-desktop-content-tab {
+  flex: 1;
+  padding: 0.35rem 0.5rem;
+  border-radius: var(--radius-sm, 8px);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--color-text-secondary, rgba(255, 255, 255, 0.55));
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.sk-desktop-content-tab:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--color-text-primary, #fff);
+}
+
+.sk-desktop-content-tab--active {
+  background: var(--sk-brand-soft, rgba(124, 92, 255, 0.14));
+  color: var(--color-text-primary, #fff);
+  border-color: var(--sk-brand-glow, rgba(124, 92, 255, 0.25));
+}
+
+.sk-desktop-content-tab-count {
+  opacity: 0.6;
+  font-size: 0.65rem;
+  margin-left: 0.15rem;
+}
+
+.sk-desktop-empty {
+  font-size: 0.8rem;
+  color: var(--color-text-secondary, rgba(255, 255, 255, 0.5));
+  text-align: center;
+  padding: 1rem 0;
+}
+
+.sk-desktop-published-item--bookmark .sk-desktop-published-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
 /* ── Primary button (CTA) ── */
 .sk-desktop-primary {
   width: 100%;
