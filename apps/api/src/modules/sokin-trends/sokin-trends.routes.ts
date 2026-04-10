@@ -1,16 +1,22 @@
 /**
- * So-Kin Trends Routes — Tendances locales, profils suggérés, insights posts
+ * So-Kin Trends Routes — Tendances locales, profils suggérés, insights posts, analytics
  *
  * Endpoints publics (avec auth optionnel pour insights) :
  * - GET /sokin/trends          — Tendances locales (hashtags + sujets)
  * - GET /sokin/trends/profiles — Profils suggérés
  * - GET /sokin/trends/post-insight/:id — Insights d'un post (auteur only)
+ *
+ * Endpoints analytics So-Kin (auth requis) :
+ * - GET /sokin/trends/analytics/post/:id — Performance détaillée d'un post
+ * - GET /sokin/trends/analytics/my       — Insights complets auteur (7d/30d)
+ * - GET /sokin/trends/analytics/global   — Tendances So-Kin globales
  */
 
 import { Router } from "express";
 import { requireAuth, type AuthenticatedRequest } from "../../shared/auth/auth-middleware.js";
 import { asyncHandler } from "../../shared/utils/async-handler.js";
 import { getTrending, getSuggestedProfiles, getPostInsight } from "./sokin-trends.service.js";
+import { getPostPerformance, getAuthorSoKinInsights, getSoKinTrendsInsight } from "../analytics/sokin-analytics.service.js";
 import { HttpError } from "../../shared/errors/http-error.js";
 
 const router = Router();
@@ -61,3 +67,51 @@ router.get(
 );
 
 export default router;
+
+// ═══════════════════════════════════════════════════════
+// ANALYTICS SO-KIN — Insights actionnables
+// ═══════════════════════════════════════════════════════
+
+/**
+ * GET /sokin/trends/analytics/post/:id
+ * Performance détaillée d'un post — réservé à l'auteur
+ */
+router.get(
+  "/analytics/post/:id",
+  requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const postId = req.params.id;
+    if (!postId) throw new HttpError(400, "postId requis");
+    const perf = await getPostPerformance(postId, req.auth!.userId);
+    if (!perf) throw new HttpError(404, "Post introuvable ou non autorisé");
+    res.json(perf);
+  })
+);
+
+/**
+ * GET /sokin/trends/analytics/my
+ * Insights complets auteur — période 7d ou 30d
+ */
+router.get(
+  "/analytics/my",
+  requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const period = (req.query.period as "7d" | "30d") || "7d";
+    if (period !== "7d" && period !== "30d") throw new HttpError(400, "Période invalide (7d ou 30d)");
+    const insights = await getAuthorSoKinInsights(req.auth!.userId, period);
+    res.json(insights);
+  })
+);
+
+/**
+ * GET /sokin/trends/analytics/global
+ * Tendances globales So-Kin — filtrable par ville
+ */
+router.get(
+  "/analytics/global",
+  asyncHandler(async (req, res) => {
+    const city = (req.query.city as string) || undefined;
+    const trends = await getSoKinTrendsInsight(city);
+    res.json(trends);
+  })
+);
