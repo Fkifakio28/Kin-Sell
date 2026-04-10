@@ -7,6 +7,7 @@ import {
   SERVICE_CATEGORIES,
 } from './explorer-data';
 import type { ExplorerArticlePreview } from './explorer-data';
+import { slugToCategoryInfo, normalizeCategoryToId } from '../../shared/constants/category-registry';
 import { explorer as explorerApi, orders as ordersApi, listings as listingsApi, resolveMediaUrl, type ExplorerShopApi, type ExplorerProfileApi } from '../../lib/api-client';
 import { useHoverPopup, ArticleHoverPopup, ProfileHoverPopup, type ArticleHoverData, type ProfileHoverData } from '../../components/HoverPopup';
 import { useScrollRestore } from '../../utils/useScrollRestore';
@@ -23,56 +24,6 @@ import { Header } from '../../components/Header';
 const PREVIEW_PAGE_SIZE = 4;
 const MODAL_PAGE_SIZE = 8;
 
-const CATEGORY_URL_MAP: Record<string, { type: 'product' | 'service'; id: string }> = {
-  telephones: { type: 'product', id: 'phone' },
-  mode: { type: 'product', id: 'clothes' },
-  immobilier: { type: 'product', id: 'realestate' },
-  voitures: { type: 'product', id: 'auto' },
-  pharmacie: { type: 'product', id: 'pharmacy' },
-  'high-tech': { type: 'product', id: 'electronics' },
-  maison: { type: 'product', id: 'furniture' },
-  nourriture: { type: 'product', id: 'food' },
-  jeux: { type: 'product', id: 'games' },
-  animalerie: { type: 'product', id: 'pets' },
-  electromenager: { type: 'product', id: 'appliances' },
-  beaute: { type: 'product', id: 'beauty' },
-  bebe: { type: 'product', id: 'baby' },
-  sports: { type: 'product', id: 'sports' },
-  livres: { type: 'product', id: 'books' },
-  bricolage: { type: 'product', id: 'diy' },
-  cadeaux: { type: 'product', id: 'gifts' },
-  bureau: { type: 'product', id: 'office' },
-  sante: { type: 'product', id: 'health' },
-  location: { type: 'product', id: 'carental' },
-  divers: { type: 'product', id: 'misc' },
-  chauffeurs: { type: 'service', id: 'driver' },
-  nounous: { type: 'service', id: 'daycare' },
-  professeurs: { type: 'service', id: 'teacher' },
-  infirmieres: { type: 'service', id: 'nurse' },
-  menage: { type: 'service', id: 'cleaner' },
-  cuisine: { type: 'service', id: 'cook' },
-  gardiennage: { type: 'service', id: 'security' },
-  developpeur: { type: 'service', id: 'developer' },
-  designer: { type: 'service', id: 'designer' },
-  photographe: { type: 'service', id: 'photographer' },
-  plombier: { type: 'service', id: 'plumber' },
-  electricien: { type: 'service', id: 'electrician' },
-  macon: { type: 'service', id: 'mason' },
-  reparateur: { type: 'service', id: 'repair' },
-  consultant: { type: 'service', id: 'consultant' },
-  marketing: { type: 'service', id: 'marketing' },
-  coach: { type: 'service', id: 'coach' },
-  coiffure: { type: 'service', id: 'beauty' },
-  couture: { type: 'service', id: 'tailor' },
-  evenementiel: { type: 'service', id: 'events' },
-  comptabilite: { type: 'service', id: 'accounting' },
-  admin: { type: 'service', id: 'admin' },
-  livraison: { type: 'service', id: 'delivery' },
-  jardinage: { type: 'service', id: 'gardening' },
-  decoration: { type: 'service', id: 'decoration' },
-  bonne: { type: 'service', id: 'maid' },
-};
-
 export function ExplorerPageDesktop() {
   const { t, formatPriceLabelFromUsdCents } = useLocaleCurrency();
   const { effectiveCountry, getCountryConfig } = useMarketPreference();
@@ -85,11 +36,11 @@ export function ExplorerPageDesktop() {
 
   const [isProducts, setIsProducts] = useState(() => {
     if (urlType === 'services') return false;
-    if (urlCategory && CATEGORY_URL_MAP[urlCategory]?.type === 'service') return false;
+    if (urlCategory && slugToCategoryInfo(urlCategory)?.type === 'service') return false;
     return true;
   });
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(() => {
-    if (urlCategory && CATEGORY_URL_MAP[urlCategory]) return CATEGORY_URL_MAP[urlCategory].id;
+    if (urlCategory) { const info = slugToCategoryInfo(urlCategory); if (info) return info.id; }
     return null;
   });
   const [searchQuery, setSearchQuery] = useState(urlQuery ?? '');
@@ -414,7 +365,7 @@ export function ExplorerPageDesktop() {
           priceLabel: formatPriceLabelFromUsdCents(item.promoActive && item.promoPriceUsdCents != null ? item.promoPriceUsdCents : item.priceUsdCents),
           priceUsdCents: item.priceUsdCents,
           kind: item.type === 'PRODUIT' ? 'product' : 'service',
-          category: item.category,
+          category: normalizeCategoryToId(item.category),
           publisherName: item.owner.displayName,
           publisherType: 'personne',
           publisherLink: item.owner.username ? `/user/${item.owner.username}` : '#',
