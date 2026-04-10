@@ -207,7 +207,10 @@ export const updateMyBusinessAccount = async (ownerUserId: string, payload: Upda
   return fresh!;
 };
 
-export const getPublicBusinessPage = async (slug: string) => {
+export const getPublicBusinessPage = async (slug: string, limit = 20, offset = 0) => {
+  const safeLimit = Math.min(Math.max(1, limit), 50);
+  const safeOffset = Math.max(0, offset);
+
   const business = await prisma.businessAccount.findUnique({
     where: { slug },
     include: {
@@ -215,7 +218,8 @@ export const getPublicBusinessPage = async (slug: string) => {
       listings: {
         where: { isPublished: true, status: "ACTIVE" },
         orderBy: { createdAt: "desc" },
-        take: 50,
+        take: safeLimit,
+        skip: safeOffset,
         select: {
           id: true,
           type: true,
@@ -233,7 +237,7 @@ export const getPublicBusinessPage = async (slug: string) => {
         },
       },
       _count: {
-        select: { sellerOrders: true },
+        select: { sellerOrders: true, listings: { where: { isPublished: true, status: "ACTIVE" } } },
       },
     },
   });

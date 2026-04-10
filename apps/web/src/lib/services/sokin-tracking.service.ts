@@ -55,7 +55,7 @@ async function flush() {
   const batch = buffer.splice(0, MAX_BATCH);
 
   try {
-    const token = localStorage.getItem("token");
+    const token = localStorage.getItem("kin-sell.token");
     await fetch(`${API_BASE}/sokin/track`, {
       method: "POST",
       headers: {

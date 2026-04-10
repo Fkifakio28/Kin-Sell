@@ -3,6 +3,8 @@ import { z } from "zod";
 import { requireAuth, type AuthenticatedRequest } from "../../shared/auth/auth-middleware.js";
 import { asyncHandler } from "../../shared/utils/async-handler.js";
 import { isAcceptedImageInput } from "../../shared/utils/media-storage.js";
+import { rateLimit, RateLimits } from "../../shared/middleware/rate-limit.middleware.js";
+import { scrapeGuard } from "../../shared/middleware/scrape-guard.middleware.js";
 import * as usersService from "./users.service.js";
 
 const updateMeSchema = z.object({
@@ -47,12 +49,12 @@ router.patch("/me", requireAuth, asyncHandler(async (request: AuthenticatedReque
   response.json(result);
 }));
 
-router.get("/public/:username", asyncHandler(async (request, response) => {
+router.get("/public/:username", scrapeGuard(), rateLimit(RateLimits.PUBLIC_SEARCH), asyncHandler(async (request, response) => {
   const result = await usersService.getPublicProfileByUsername(request.params.username);
   response.json(result);
 }));
 
-router.get("/:id/public", asyncHandler(async (request, response) => {
+router.get("/:id/public", scrapeGuard(), rateLimit(RateLimits.PUBLIC_SEARCH), asyncHandler(async (request, response) => {
   const result = await usersService.getPublicProfile(request.params.id);
   response.json(result);
 }));

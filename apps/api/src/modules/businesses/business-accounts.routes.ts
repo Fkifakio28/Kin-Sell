@@ -4,6 +4,7 @@ import { requireAuth, requireRoles, type AuthenticatedRequest } from "../../shar
 import { Role } from "../../types/roles.js";
 import { asyncHandler } from "../../shared/utils/async-handler.js";
 import { isAcceptedImageInput } from "../../shared/utils/media-storage.js";
+import { rateLimit, RateLimits } from "../../shared/middleware/rate-limit.middleware.js";
 import * as businessService from "./business-accounts.service.js";
 
 const createSchema = z.object({
@@ -95,8 +96,11 @@ router.patch(
 
 router.get(
   "/:slug",
+  rateLimit(RateLimits.PUBLIC_SEARCH),
   asyncHandler(async (request, response) => {
-    const result = await businessService.getPublicBusinessPage(request.params.slug);
+    const limit = Math.min(Number(request.query.limit) || 20, 50);
+    const offset = Math.max(Number(request.query.offset) || 0, 0);
+    const result = await businessService.getPublicBusinessPage(request.params.slug, limit, offset);
     response.json(result);
   })
 );

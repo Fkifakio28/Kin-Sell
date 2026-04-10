@@ -2,6 +2,8 @@ import { Router } from "express";
 import { z } from "zod";
 import { requireAuth, type AuthenticatedRequest } from "../../shared/auth/auth-middleware.js";
 import { asyncHandler } from "../../shared/utils/async-handler.js";
+import { rateLimit, RateLimits } from "../../shared/middleware/rate-limit.middleware.js";
+import { scrapeGuard } from "../../shared/middleware/scrape-guard.middleware.js";
 import * as reviewsService from "./reviews.service.js";
 
 const createReviewSchema = z.object({
@@ -41,8 +43,12 @@ router.get(
 // GET /reviews/:userId — avis publics d'un utilisateur
 router.get(
   "/:userId",
+  scrapeGuard(),
+  rateLimit(RateLimits.PUBLIC_SEARCH),
   asyncHandler(async (req, res) => {
-    const result = await reviewsService.getReviewsForUser(req.params.userId);
+    const limit = Math.min(Number(req.query.limit) || 20, 50);
+    const offset = Math.max(Number(req.query.offset) || 0, 0);
+    const result = await reviewsService.getReviewsForUser(req.params.userId, limit, offset);
     res.json(result);
   })
 );

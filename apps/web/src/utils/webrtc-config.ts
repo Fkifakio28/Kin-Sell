@@ -4,22 +4,27 @@
    ═══════════════════════════════════════════════════════════ */
 
 /* ── ICE Servers ── */
-const TURN_USERNAME = import.meta.env.VITE_TURN_USERNAME ?? "e7e6b1bdc41c6b2127249e04";
-const TURN_CREDENTIAL = import.meta.env.VITE_TURN_CREDENTIAL ?? "kfMI+J8bFHMn7gMj";
+const TURN_USERNAME = import.meta.env.VITE_TURN_USERNAME ?? "";
+const TURN_CREDENTIAL = import.meta.env.VITE_TURN_CREDENTIAL ?? "";
 
 export function getIceServers(): RTCIceServer[] {
-  return [
-    // 2 STUN (suffisant pour NAT traversal, pas besoin de 5)
+  const servers: RTCIceServer[] = [
+    // STUN (suffisant pour NAT traversal)
     { urls: "stun:stun.l.google.com:19302" },
     { urls: "stun:stun1.l.google.com:19302" },
-    // TURN UDP (préféré — plus rapide)
-    { urls: "turn:a.relay.metered.ca:80", username: TURN_USERNAME, credential: TURN_CREDENTIAL },
-    // TURN TCP (fallback si UDP bloqué)
-    { urls: "turn:a.relay.metered.ca:80?transport=tcp", username: TURN_USERNAME, credential: TURN_CREDENTIAL },
-    // TURN TLS (fallback pour réseaux restrictifs)
-    { urls: "turn:a.relay.metered.ca:443", username: TURN_USERNAME, credential: TURN_CREDENTIAL },
-    { urls: "turns:a.relay.metered.ca:443?transport=tcp", username: TURN_USERNAME, credential: TURN_CREDENTIAL },
   ];
+
+  // TURN servers only if credentials are configured
+  if (TURN_USERNAME && TURN_CREDENTIAL) {
+    servers.push(
+      { urls: "turn:a.relay.metered.ca:80", username: TURN_USERNAME, credential: TURN_CREDENTIAL },
+      { urls: "turn:a.relay.metered.ca:80?transport=tcp", username: TURN_USERNAME, credential: TURN_CREDENTIAL },
+      { urls: "turn:a.relay.metered.ca:443", username: TURN_USERNAME, credential: TURN_CREDENTIAL },
+      { urls: "turns:a.relay.metered.ca:443?transport=tcp", username: TURN_USERNAME, credential: TURN_CREDENTIAL },
+    );
+  }
+
+  return servers;
 }
 
 export function getRtcConfig(): RTCConfiguration {

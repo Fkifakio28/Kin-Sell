@@ -1,16 +1,24 @@
 import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
 
-export const getReviewsForUser = async (targetId: string) => {
-  const reviews = await prisma.userReview.findMany({
-    where: { targetId },
-    orderBy: { createdAt: "desc" },
-    include: {
-      author: {
-        include: { profile: { select: { displayName: true, avatarUrl: true } } },
+export const getReviewsForUser = async (targetId: string, limit = 20, offset = 0) => {
+  const safeLimit = Math.min(Math.max(1, limit), 50);
+  const safeOffset = Math.max(0, offset);
+
+  const [reviews, totalCount] = await Promise.all([
+    prisma.userReview.findMany({
+      where: { targetId },
+      orderBy: { createdAt: "desc" },
+      take: safeLimit,
+      skip: safeOffset,
+      include: {
+        author: {
+          include: { profile: { select: { displayName: true, avatarUrl: true } } },
+        },
       },
-    },
-  });
+    }),
+    prisma.userReview.count({ where: { targetId } }),
+  ]);
 
   const avg =
     reviews.length > 0

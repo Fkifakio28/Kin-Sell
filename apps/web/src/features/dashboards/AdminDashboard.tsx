@@ -2768,8 +2768,10 @@ export function AdminDashboard() {
     if (!el) return;
     const win = window.open('', '_blank');
     if (!win) return;
+    const safeHtml = el.cloneNode(true) as HTMLElement;
+    safeHtml.querySelectorAll('script,iframe,object,embed,form').forEach(n => n.remove());
     win.document.write('<html><head><title>Détail abonnement — Kin-Sell Admin</title><style>body{font-family:system-ui,sans-serif;padding:24px;color:#0F172A;font-size:13px}table{width:100%;border-collapse:collapse;margin:12px 0}th,td{text-align:left;padding:6px 10px;border-bottom:1px solid #CBD5E1}th{background:#F8FAFC;font-weight:600;font-size:11px;text-transform:uppercase;color:#475569}.badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600}.badge-green{background:#D1FAE5;color:#065F46}.badge-red{background:#FEE2E2;color:#991B1B}.badge-amber{background:#FEF3C7;color:#92400E}.badge-cyan{background:#CFFAFE;color:#155E75}h1{font-size:18px;margin-bottom:4px}h2{font-size:14px;margin:20px 0 8px;color:#0EA5E9;border-bottom:1px solid #CBD5E1;padding-bottom:4px}.meta{color:#475569;font-size:11px}</style></head><body>');
-    win.document.write(el.innerHTML);
+    win.document.write(safeHtml.innerHTML);
     win.document.write('</body></html>');
     win.document.close();
     win.onload = () => { win.print(); };

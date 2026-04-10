@@ -67,6 +67,10 @@ app.use(pinoHttp({ logger, genReqId: genRequestId, autoLogging: { ignore: (req: 
 app.use(express.json({ limit: "2mb" }));
 app.use(cors({ origin: env.CORS_ORIGIN, credentials: true }));
 
+// ── Global scrape guard (block bots/scrapers on all routes) ──
+import { scrapeGuard } from "./shared/middleware/scrape-guard.middleware.js";
+app.use(scrapeGuard());
+
 // ── Cache-Control headers pour réponses API ──
 app.use((req, res, next) => {
   if (req.method === "GET") {

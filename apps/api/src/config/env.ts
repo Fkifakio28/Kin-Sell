@@ -9,11 +9,7 @@ const schema = z.object({
   CORS_ORIGIN: z.string().default("http://localhost:5173"),
   JWT_SECRET: z.string().min(24),
   JWT_EXPIRES_IN: z.string().default("15m"),
-  REFRESH_TOKEN_SECRET: z.string().min(24).default("kinsell-refresh-secret-change-me-in-prod-please")
-    .refine(
-      (val) => process.env.NODE_ENV !== "production" || val !== "kinsell-refresh-secret-change-me-in-prod-please",
-      "REFRESH_TOKEN_SECRET must be changed in production"
-    ),
+  REFRESH_TOKEN_SECRET: z.string().min(24),
   REFRESH_TOKEN_EXPIRES_IN: z.string().default("30d"),
   OTP_TTL_SECONDS: z.coerce.number().min(60).max(900).default(300),
   OTP_MAX_ATTEMPTS: z.coerce.number().min(3).max(10).default(5),

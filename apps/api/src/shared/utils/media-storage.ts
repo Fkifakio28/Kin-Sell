@@ -26,6 +26,11 @@ const ensureUploadsDir = async (folder?: string) => {
   const targetDir = folder
     ? path.join(UPLOADS_DIR, folder.replace(/[^a-zA-Z0-9/_-]+/g, "").replace(/^\/+|\/+$/g, ""))
     : UPLOADS_DIR;
+  // Prevent path traversal: ensure resolved path stays within UPLOADS_DIR
+  const resolved = path.resolve(targetDir);
+  if (!resolved.startsWith(path.resolve(UPLOADS_DIR))) {
+    throw new HttpError(400, "Chemin de dossier invalide.");
+  }
   await fs.mkdir(targetDir, { recursive: true });
   return targetDir;
 };

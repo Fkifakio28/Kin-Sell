@@ -100,7 +100,7 @@ router.post("/login", rateLimit(RateLimits.LOGIN), asyncHandler(async (request, 
   response.json(result);
 }));
 
-router.post("/refresh", asyncHandler(async (request, response) => {
+router.post("/refresh", rateLimit(RateLimits.LOGIN), asyncHandler(async (request, response) => {
   const payload = refreshSchema.parse(request.body);
   const result = await authService.refresh(payload.refreshToken);
   response.json(result);

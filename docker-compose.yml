@@ -9,7 +9,7 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: kinsell
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - kinsell_data:/var/lib/postgresql/data
     healthcheck:
@@ -36,9 +36,9 @@ services:
     image: redis:7-alpine
     container_name: kinsell-redis
     restart: unless-stopped
-    command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru --save ""
+    command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru --save "" --requirepass "${REDIS_PASSWORD:-kinsell-redis-change-me}"
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s

@@ -7,6 +7,45 @@ import { normalizeEmail, slugifyUsername } from "../../shared/utils/identity-nor
 import { Role } from "../../types/roles.js";
 import { logSecurityEvent, checkMultiAccount } from "../security/security.service.js";
 import { sendWelcomeEmail } from "../../shared/email/mailer.js";
+import { getRedis } from "../../shared/db/redis.js";
+import { logger } from "../../shared/logger.js";
+
+const LOGIN_LOCKOUT_MAX = 5;
+const LOGIN_LOCKOUT_WINDOW = 15 * 60; // 15 minutes in seconds
+const LOGIN_LOCKOUT_DURATION = 30 * 60; // 30 minutes lockout
+
+async function checkLoginLockout(email: string): Promise<void> {
+  const redis = getRedis();
+  if (!redis) return;
+  const lockKey = `lockout:${email}`;
+  const locked = await redis.get(lockKey);
+  if (locked) {
+    throw new HttpError(429, "Trop de tentatives. Réessayez dans 30 minutes.");
+  }
+}
+
+async function recordFailedLogin(email: string): Promise<void> {
+  const redis = getRedis();
+  if (!redis) return;
+  const attemptsKey = `login_attempts:${email}`;
+  const attempts = await redis.incr(attemptsKey);
+  if (attempts === 1) {
+    await redis.expire(attemptsKey, LOGIN_LOCKOUT_WINDOW);
+  }
+  if (attempts >= LOGIN_LOCKOUT_MAX) {
+    const lockKey = `lockout:${email}`;
+    await redis.set(lockKey, "1", "EX", LOGIN_LOCKOUT_DURATION);
+    await redis.del(attemptsKey);
+    logger.warn({ email }, "Account locked after too many failed login attempts");
+    throw new HttpError(429, "Trop de tentatives. Réessayez dans 30 minutes.");
+  }
+}
+
+async function clearFailedLogins(email: string): Promise<void> {
+  const redis = getRedis();
+  if (!redis) return;
+  await redis.del(`login_attempts:${email}`);
+}
 
 type RegisterInput = {
   email: string;
@@ -131,23 +170,33 @@ export const register = async (input: RegisterInput) => {
 
 export const login = async (input: LoginInput) => {
   const normalizedEmail = normalizeEmail(input.email);
+
+  // Check lockout before any DB query
+  await checkLoginLockout(normalizedEmail);
+
   const user = await prisma.user.findUnique({
     where: { email: normalizedEmail },
     include: { profile: true }
   });
 
   if (!user) {
+    await recordFailedLogin(normalizedEmail);
     throw new HttpError(401, "Email ou mot de passe invalide");
   }
 
   if (!user.passwordHash) {
-    throw new HttpError(400, "Ce compte utilise une methode externe. Utilisez votre provider ou OTP.");
+    // Generic message — don't reveal that the account uses OAuth
+    throw new HttpError(401, "Email ou mot de passe invalide");
   }
 
   const passwordValid = await verifyPassword(input.password, user.passwordHash);
   if (!passwordValid) {
+    await recordFailedLogin(normalizedEmail);
     throw new HttpError(401, "Email ou mot de passe invalide");
   }
+
+  // Login success — clear failed attempts
+  await clearFailedLogins(normalizedEmail);
 
   if (user.accountStatus === "PENDING_DELETION") {
     throw new HttpError(403, "Ce compte est en cours de suppression");

@@ -86,7 +86,7 @@ const INITIAL_BUSINESS_FORM = {
 export function BusinessDashboard() {
   const navigate = useNavigate();
   const { user, isLoading, isLoggedIn, refreshUser, logout } = useAuth();
-  const { t, formatMoneyFromUsdCents, formatPriceLabelFromUsdCents, currency } = useLocaleCurrency();
+  const { t, formatMoneyFromUsdCents, formatPriceLabelFromUsdCents, currency, convertToUsdCents } = useLocaleCurrency();
   const { on, off } = useSocket();
   const [activeSection, setActiveSection] = useState<BizSection>(() => {
     const stored = sessionStorage.getItem('ud-section');
@@ -1896,7 +1896,9 @@ export function BusinessDashboard() {
                         <input className="ud-input" type="number" required min={0} value={createForm.priceCdf} onChange={e => setCreateForm(f => ({ ...f, priceCdf: e.target.value }))} placeholder="0" />
                       </div>
                       {createForm.priceCdf && parseInt(createForm.priceCdf) > 0 && (
-                        <span className="ud-publish-field-hint">≈ {(parseInt(createForm.priceCdf) / getCurrencyRate(currency)).toFixed(2)} $ USD</span>
+                        <span className="ud-publish-field-hint">
+                          ≈ {formatMoneyFromUsdCents(convertToUsdCents(parseInt(createForm.priceCdf)))}
+                        </span>
                       )}
                     </label>
                     <label className="ud-publish-field">
@@ -2200,7 +2202,9 @@ export function BusinessDashboard() {
                         <input className="ud-input" type="number" required min={0} value={createForm.priceCdf} onChange={e => setCreateForm(f => ({ ...f, priceCdf: e.target.value }))} placeholder="0" />
                       </div>
                       {createForm.priceCdf && parseInt(createForm.priceCdf) > 0 && (
-                        <span className="ud-publish-field-hint">≈ {(parseInt(createForm.priceCdf) / getCurrencyRate(currency)).toFixed(2)} $ USD</span>
+                        <span className="ud-publish-field-hint">
+                          ≈ {formatMoneyFromUsdCents(convertToUsdCents(parseInt(createForm.priceCdf)))}
+                        </span>
                       )}
                     </label>
                     <label className="ud-publish-field">
@@ -3361,7 +3365,7 @@ export function BusinessDashboard() {
                     </div>
                     {myPlan.priceUsdCents > 0 && (
                       <span style={{ fontSize: 13, color: 'var(--color-text-secondary, #aaa)' }}>
-                        {(myPlan.priceUsdCents / 100).toFixed(2)}$/mois
+                        {formatMoneyFromUsdCents(myPlan.priceUsdCents)} {t('pricing.perMonth')}
                       </span>
                     )}
                     <Link to="/pricing" style={{ fontSize: 12, color: '#6f58ff', fontWeight: 600, textDecoration: 'none' }}>
@@ -3416,7 +3420,9 @@ export function BusinessDashboard() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
                       <span style={{ fontSize: 18 }}>🌱</span>
                       <strong style={{ fontSize: 14, color: 'var(--color-text-primary, #fff)' }}>Starter</strong>
-                      <span style={{ fontSize: 11, color: '#6f58ff', marginLeft: 'auto' }}>$2/sem.</span>
+                      <span style={{ fontSize: 11, color: '#6f58ff', marginLeft: 'auto' }}>
+                        {formatMoneyFromUsdCents(STARTER_PRICE_USD_CENTS)} {t('pricing.perWeek')}
+                      </span>
                     </div>
                     <ul style={{ margin: '0 0 10px', padding: '0 0 0 16px', fontSize: 11, color: 'var(--color-text-secondary, #aaa)', lineHeight: 1.8 }}>
                       <li>{t('biz.starterFeat1')}</li>
@@ -3432,7 +3438,9 @@ export function BusinessDashboard() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
                       <span style={{ fontSize: 18 }}>🚀</span>
                       <strong style={{ fontSize: 14, color: 'var(--color-text-primary, #fff)' }}>Pro</strong>
-                      <span style={{ fontSize: 11, color: '#6f58ff', marginLeft: 'auto' }}>$5/sem.</span>
+                      <span style={{ fontSize: 11, color: '#6f58ff', marginLeft: 'auto' }}>
+                        {formatMoneyFromUsdCents(PRO_PRICE_USD_CENTS)} {t('pricing.perWeek')}
+                      </span>
                     </div>
                     <ul style={{ margin: '0 0 10px', padding: '0 0 0 16px', fontSize: 11, color: 'var(--color-text-secondary, #aaa)', lineHeight: 1.8 }}>
                       <li>{t('biz.proFeat1')}</li>
@@ -3448,7 +3456,9 @@ export function BusinessDashboard() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
                       <span style={{ fontSize: 18 }}>👑</span>
                       <strong style={{ fontSize: 14, color: 'var(--color-text-primary, #fff)' }}>Gold</strong>
-                      <span style={{ fontSize: 11, color: '#ffd700', marginLeft: 'auto' }}>$14/mois</span>
+                      <span style={{ fontSize: 11, color: '#ffd700', marginLeft: 'auto' }}>
+                        {formatMoneyFromUsdCents(GOLD_PRICE_USD_CENTS)} {t('pricing.perMonth')}
+                      </span>
                     </div>
                     <ul style={{ margin: '0 0 10px', padding: '0 0 0 16px', fontSize: 11, color: 'var(--color-text-secondary, #aaa)', lineHeight: 1.8 }}>
                       <li>{t('biz.goldFeat1')}</li>

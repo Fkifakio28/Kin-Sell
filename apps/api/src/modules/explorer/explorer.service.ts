@@ -13,10 +13,17 @@ export const getExplorerStats = async () => {
     prisma.businessShop.count({ where: { active: true } })
   ]);
 
+  // Round counts to prevent exact enumeration
+  const roundCount = (n: number) => {
+    if (n <= 10) return n;
+    if (n <= 100) return Math.floor(n / 5) * 5;
+    return Math.floor(n / 10) * 10;
+  };
+
   return {
     categories: distinctCategories.length,
-    publicProfiles,
-    onlineShops
+    publicProfiles: roundCount(publicProfiles),
+    onlineShops: roundCount(onlineShops)
   };
 };
 

@@ -261,7 +261,7 @@ export const PromoCreator: FC<PromoCreatorProps> = ({
                         <span className="promo-input-prefix">{currencySymbol}</span>
                         <input
                           type="text"
-                          inputMode="decimal"
+                          inputMode={currencyUsesDecimals ? "decimal" : "numeric"}
                           placeholder={currencyUsesDecimals ? "0.00" : "0"}
                           value={uniformPriceStr}
                           onChange={(e) => {
@@ -299,10 +299,10 @@ export const PromoCreator: FC<PromoCreatorProps> = ({
                           <span className="promo-original-price">{formatPriceLabelFromUsdCents(article.priceUsdCents)}</span>
                           {!useUniformPrice && (
                             <div className="promo-new-price-wrap">
-                              <span className="promo-input-prefix">$</span>
+                              <span className="promo-input-prefix">{currencySymbol}</span>
                               <input
                                 type="text"
-                                inputMode="decimal"
+                                inputMode={currencyUsesDecimals ? "decimal" : "numeric"}
                                 placeholder={t("promo.pricePlaceholder")}
                                 value={promoPrices[article.id] || ''}
                                 onChange={(e) => setPromoPrice(article.id, e.target.value)}
@@ -332,7 +332,7 @@ export const PromoCreator: FC<PromoCreatorProps> = ({
                       <span className="promo-input-prefix">{currencySymbol}</span>
                       <input
                         type="text"
-                        inputMode="decimal"
+                        inputMode={currencyUsesDecimals ? "decimal" : "numeric"}
                         placeholder={t("promo.bundlePricePlaceholder")}
                         value={bundlePriceStr}
                         onChange={(e) => {

@@ -12,6 +12,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { asyncHandler } from "../../shared/utils/async-handler.js";
+import { rateLimit, RateLimits } from "../../shared/middleware/rate-limit.middleware.js";
 import * as geocodingService from "../../shared/geo/geocoding.service.js";
 
 const router = Router();
@@ -37,6 +38,7 @@ const reverseSchema = z.object({
  */
 router.get(
   "/autocomplete",
+  rateLimit(RateLimits.PUBLIC_SEARCH),
   asyncHandler(async (request, response) => {
     const { input, sessionToken, country } = autocompleteSchema.parse(request.query);
     const predictions = await geocodingService.autocomplete(input, sessionToken, country);
@@ -49,6 +51,7 @@ router.get(
  */
 router.get(
   "/place/:placeId",
+  rateLimit(RateLimits.PUBLIC_SEARCH),
   asyncHandler(async (request, response) => {
     const placeId = request.params.placeId;
     const sessionToken = (request.query.sessionToken as string) || undefined;
@@ -62,6 +65,7 @@ router.get(
  */
 router.get(
   "/place/:placeId/structured",
+  rateLimit(RateLimits.PUBLIC_SEARCH),
   asyncHandler(async (request, response) => {
     const placeId = request.params.placeId;
     const sessionToken = (request.query.sessionToken as string) || undefined;
@@ -75,6 +79,7 @@ router.get(
  */
 router.get(
   "/geocode",
+  rateLimit(RateLimits.PUBLIC_SEARCH),
   asyncHandler(async (request, response) => {
     const { address, region } = geocodeSchema.parse(request.query);
     const result = await geocodingService.geocodeAddress(address, region);
@@ -87,6 +92,7 @@ router.get(
  */
 router.get(
   "/reverse",
+  rateLimit(RateLimits.PUBLIC_SEARCH),
   asyncHandler(async (request, response) => {
     const { lat, lng } = reverseSchema.parse(request.query);
     const result = await geocodingService.reverseGeocode(lat, lng);
@@ -99,6 +105,7 @@ router.get(
  */
 router.get(
   "/reverse-structured",
+  rateLimit(RateLimits.PUBLIC_SEARCH),
   asyncHandler(async (request, response) => {
     const { lat, lng } = reverseSchema.parse(request.query);
     const result = await geocodingService.reverseGeocodeStructured(lat, lng);
