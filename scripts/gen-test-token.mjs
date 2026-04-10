@@ -9,6 +9,20 @@ const runTests = process.argv[3] === '--test';
 const u = await p.user.findFirst({ where: { email } });
 if (!u) { console.log('NO USER'); process.exit(1); }
 
+import { readFileSync } from 'fs';
+import { resolve, dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const envPath = resolve(__dirname, '../apps/api/.env');
+try {
+  const envContent = readFileSync(envPath, 'utf-8');
+  for (const line of envContent.split('\n')) {
+    const m = line.match(/^([A-Z_]+)=["']?(.+?)["']?\s*$/);
+    if (m) process.env[m[1]] = m[2];
+  }
+} catch {}
+
 const secret = process.env.JWT_SECRET || 'dev-secret';
 const token = jwt.sign({ userId: u.id, role: u.role }, secret, { expiresIn: '1h' });
 
