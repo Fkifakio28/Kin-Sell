@@ -247,6 +247,5 @@ export const ar: Record<string, string> = {
   "promo.pricePlaceholder": "سعر العرض",
   "promo.bundlePricePlaceholder": "سعر الحزمة",
   "pricing.perWeek": "/ أسبوع",
-  "pricing.perMonth": "/ شهر",
 };
 
