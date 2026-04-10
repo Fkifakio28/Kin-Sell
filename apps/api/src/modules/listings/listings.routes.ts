@@ -211,15 +211,70 @@ router.patch(
       promoPriceUsdCents: z.number().int().min(0),
       activate: z.boolean().default(true),
       title: z.string().max(120).optional(),
+      promoLabel: z.string().max(60).optional(),
       diffusion: z.enum(["SIMPLE", "BOOSTED"]).optional(),
+      startsAt: z.string().datetime().optional(),
       expiresAt: z.string().datetime().optional(),
     });
-    const { listingIds, promoPriceUsdCents, activate, title, diffusion, expiresAt } = schema.parse(request.body);
+    const { listingIds, promoPriceUsdCents, activate, title, promoLabel, diffusion, startsAt, expiresAt } = schema.parse(request.body);
     const result = await listingsService.setPromo(
       request.auth!.userId, listingIds, promoPriceUsdCents, activate,
-      { title, diffusion: diffusion as any, expiresAt }
+      { title, promoLabel, diffusion: diffusion as any, startsAt, expiresAt }
     );
     response.json(result);
+  })
+);
+
+/* ── Promotion BUNDLE (lot) ── */
+router.post(
+  "/promo/bundle",
+  requireAuth,
+  asyncHandler(async (request: AuthenticatedRequest, response) => {
+    const schema = z.object({
+      listingIds: z.array(z.string()).min(2).max(20),
+      bundlePriceUsdCents: z.number().int().min(1),
+      title: z.string().max(120).optional(),
+      promoLabel: z.string().max(60).optional(),
+      diffusion: z.enum(["SIMPLE", "BOOSTED"]).optional(),
+      startsAt: z.string().datetime().optional(),
+      expiresAt: z.string().datetime().optional(),
+      quantities: z.record(z.string(), z.number().int().min(1)).optional(),
+    });
+    const body = schema.parse(request.body);
+    const result = await listingsService.setBundlePromo(
+      request.auth!.userId, body.listingIds, body.bundlePriceUsdCents,
+      { title: body.title, promoLabel: body.promoLabel, diffusion: body.diffusion as any, startsAt: body.startsAt, expiresAt: body.expiresAt, quantities: body.quantities }
+    );
+    response.json(result);
+  })
+);
+
+/* ── Annuler une promotion ── */
+router.patch(
+  "/promo/:promotionId/cancel",
+  requireAuth,
+  asyncHandler(async (request: AuthenticatedRequest, response) => {
+    const result = await listingsService.cancelPromotion(request.auth!.userId, request.params.promotionId);
+    response.json(result);
+  })
+);
+
+/* ── Détail d'une promotion ── */
+router.get(
+  "/promotions/:promotionId",
+  requireAuth,
+  asyncHandler(async (request: AuthenticatedRequest, response) => {
+    const promo = await listingsService.getPromotionDetail(request.auth!.userId, request.params.promotionId);
+    response.json(promo);
+  })
+);
+
+/* ── Bundles actifs (public) ── */
+router.get(
+  "/bundles/active",
+  asyncHandler(async (_request, response) => {
+    const bundles = await listingsService.getActiveBundles();
+    response.json(bundles);
   })
 );
 

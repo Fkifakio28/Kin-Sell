@@ -10,15 +10,20 @@ export type ListingStatus = "ACTIVE" | "INACTIVE" | "ARCHIVED" | "DELETED";
 export type PromotionSummary = {
   id: string;
   title: string | null;
-  status: "DRAFT" | "ACTIVE" | "PAUSED" | "EXPIRED" | "CANCELLED";
+  promoType: "ITEM" | "BUNDLE";
+  promoLabel: string | null;
+  status: "DRAFT" | "SCHEDULED" | "ACTIVE" | "PAUSED" | "EXPIRED" | "CANCELLED";
   diffusion: "SIMPLE" | "BOOSTED";
   startsAt: string;
   expiresAt: string | null;
+  bundlePriceUsdCents: number | null;
+  bundleOriginalUsdCents: number | null;
   createdAt: string;
   items: Array<{
     id: string;
     originalPriceUsdCents: number;
-    promoPriceUsdCents: number;
+    promoPriceUsdCents: number | null;
+    quantity: number;
     listing: {
       id: string;
       title: string;
@@ -26,6 +31,7 @@ export type PromotionSummary = {
       priceUsdCents: number;
       promoActive: boolean;
       promoPriceUsdCents: number | null;
+      mediaUrls?: string[];
     };
   }>;
 };
@@ -154,10 +160,22 @@ export const listings = {
     mutate<BulkImportResult>("/listings/bulk-import", { method: "POST", body: { items } }, ["/listings"]),
   dbPreview: (config: DbPreviewConfig) =>
     mutate<DbPreviewResult>("/listings/bulk-import/db-preview", { method: "POST", body: config }, []),
-  setPromo: (listingIds: string[], promoPriceUsdCents: number, activate = true, options?: { title?: string; diffusion?: "SIMPLE" | "BOOSTED"; expiresAt?: string }) =>
-    mutate<{ updated: number; listingIds: string[]; promoActive: boolean; promotionId: string | null }>(
+  setPromo: (listingIds: string[], promoPriceUsdCents: number, activate = true, options?: { title?: string; promoLabel?: string; diffusion?: "SIMPLE" | "BOOSTED"; startsAt?: string; expiresAt?: string }) =>
+    mutate<{ updated: number; listingIds: string[]; promoActive: boolean; promotionId: string | null; status: string }>(
       "/listings/promo", { method: "PATCH", body: { listingIds, promoPriceUsdCents, activate, ...options } }, ["/listings"]
     ),
+  setBundlePromo: (listingIds: string[], bundlePriceUsdCents: number, options?: { title?: string; promoLabel?: string; diffusion?: "SIMPLE" | "BOOSTED"; startsAt?: string; expiresAt?: string; quantities?: Record<string, number> }) =>
+    mutate<{ promotionId: string; promoType: "BUNDLE"; bundlePriceUsdCents: number; bundleOriginalUsdCents: number; itemCount: number; status: string }>(
+      "/listings/promo/bundle", { method: "POST", body: { listingIds, bundlePriceUsdCents, ...options } }, ["/listings"]
+    ),
+  cancelPromotion: (promotionId: string) =>
+    mutate<{ cancelled: boolean; promotionId: string }>(
+      `/listings/promo/${encodeURIComponent(promotionId)}/cancel`, { method: "PATCH" }, ["/listings"]
+    ),
+  getPromotionDetail: (promotionId: string) =>
+    request<PromotionSummary>(`/listings/promotions/${encodeURIComponent(promotionId)}`),
+  getActiveBundles: (limit = 10) =>
+    request<PromotionSummary[]>(`/listings/bundles/active`, { params: { limit } as any }),
   getMyPromotions: () =>
     request<PromotionSummary[]>("/listings/promotions"),
   trackView: (listingId: string) =>

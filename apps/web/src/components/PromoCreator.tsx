@@ -1,7 +1,6 @@
 /**
- * PromoCreator — Popup de création de promotion article(s)
- * Permet de définir un prix promo pour un ou plusieurs articles
- * Choix final : Publier la promotion ou Booster la promotion
+ * PromoCreator — Popup de création de promotion article(s) ou lot/bundle
+ * Supports: ITEM promo, BUNDLE promo, scheduling, preview
  */
 
 import { useState, type FC } from 'react';
@@ -18,6 +17,8 @@ type PromoCreatorProps = {
   onBoost: () => void;
 };
 
+type PromoMode = 'ITEM' | 'BUNDLE';
+
 export const PromoCreator: FC<PromoCreatorProps> = ({
   articles,
   resolveMediaUrl,
@@ -27,28 +28,39 @@ export const PromoCreator: FC<PromoCreatorProps> = ({
 }) => {
   const { formatPriceLabelFromUsdCents } = useLocaleCurrency();
 
-  // Individual promo prices per article (USD cents)
+  // Mode: ITEM (individual prices) or BUNDLE (one lot price)
+  const [mode, setMode] = useState<PromoMode>(articles.length >= 2 ? 'BUNDLE' : 'ITEM');
+
+  // ITEM mode state
   const [promoPrices, setPromoPrices] = useState<Record<string, string>>(() => {
     const init: Record<string, string> = {};
     for (const a of articles) {
-      // Default to 80% of original price
       init[a.id] = ((a.priceUsdCents * 0.8) / 100).toFixed(2);
     }
     return init;
   });
   const [useUniformPrice, setUseUniformPrice] = useState(articles.length > 1);
   const [uniformPriceStr, setUniformPriceStr] = useState('');
+
+  // BUNDLE mode state
+  const [bundlePriceStr, setBundlePriceStr] = useState('');
+
+  // Scheduling
+  const [scheduleEnabled, setScheduleEnabled] = useState(false);
+  const [startsAt, setStartsAt] = useState('');
+  const [expiresAt, setExpiresAt] = useState('');
+  const [promoLabel, setPromoLabel] = useState('');
+
   const [step, setStep] = useState<'edit' | 'confirm' | 'done'>('edit');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const setPromoPrice = (id: string, val: string) => {
-    // Allow only numbers and dot
     if (val && !/^\d*\.?\d{0,2}$/.test(val)) return;
     setPromoPrices((prev) => ({ ...prev, [id]: val }));
   };
 
-  // Compute effective promo price in cents for each article
+  // ITEM mode: compute promo price in cents for each article
   const getPromoCents = (articleId: string): number => {
     if (useUniformPrice && uniformPriceStr) {
       return Math.round(parseFloat(uniformPriceStr) * 100) || 0;
@@ -57,21 +69,30 @@ export const PromoCreator: FC<PromoCreatorProps> = ({
     return v ? Math.round(parseFloat(v) * 100) || 0 : 0;
   };
 
-  // Validate all promo prices
+  // BUNDLE mode: compute bundle total
+  const bundleCents = bundlePriceStr ? Math.round(parseFloat(bundlePriceStr) * 100) || 0 : 0;
+  const bundleOriginal = articles.reduce((s, a) => s + a.priceUsdCents, 0);
+
+  // Validation
   const validationErrors: string[] = [];
-  for (const a of articles) {
-    const cents = getPromoCents(a.id);
-    if (cents <= 0) {
-      validationErrors.push(`"${a.title}" : prix promo manquant`);
-    } else if (cents >= a.priceUsdCents) {
-      validationErrors.push(`"${a.title}" : le prix promo doit être inférieur au prix original`);
+  if (mode === 'ITEM') {
+    for (const a of articles) {
+      const cents = getPromoCents(a.id);
+      if (cents <= 0) validationErrors.push(`"${a.title}" : prix promo manquant`);
+      else if (cents >= a.priceUsdCents) validationErrors.push(`"${a.title}" : le prix promo doit être inférieur au prix original`);
     }
+  } else {
+    if (bundleCents <= 0) validationErrors.push('Prix du lot manquant');
+    else if (bundleCents >= bundleOriginal) validationErrors.push('Le prix du lot doit être inférieur au total normal');
+    if (articles.length < 2) validationErrors.push('Un lot nécessite au moins 2 articles');
   }
   const isValid = validationErrors.length === 0;
 
-  // Calculate total savings
-  const totalOriginal = articles.reduce((s, a) => s + a.priceUsdCents, 0);
-  const totalPromo = articles.reduce((s, a) => s + getPromoCents(a.id), 0);
+  // Savings
+  const totalOriginal = bundleOriginal;
+  const totalPromo = mode === 'ITEM'
+    ? articles.reduce((s, a) => s + getPromoCents(a.id), 0)
+    : bundleCents;
   const totalSavingPct = totalOriginal > 0 ? Math.round(((totalOriginal - totalPromo) / totalOriginal) * 100) : 0;
 
   const handleSavePromo = async () => {
@@ -79,12 +100,22 @@ export const PromoCreator: FC<PromoCreatorProps> = ({
     setSaving(true);
     setError(null);
     try {
-      // If uniform price, use it for all
-      if (useUniformPrice && uniformPriceStr) {
+      const schedOpts = {
+        promoLabel: promoLabel || undefined,
+        startsAt: scheduleEnabled && startsAt ? new Date(startsAt).toISOString() : undefined,
+        expiresAt: expiresAt ? new Date(expiresAt).toISOString() : undefined,
+      };
+
+      if (mode === 'BUNDLE') {
+        await listingsApi.setBundlePromo(
+          articles.map((a) => a.id),
+          bundleCents,
+          { ...schedOpts }
+        );
+      } else if (useUniformPrice && uniformPriceStr) {
         const cents = Math.round(parseFloat(uniformPriceStr) * 100);
-        await listingsApi.setPromo(articles.map((a) => a.id), cents, true);
+        await listingsApi.setPromo(articles.map((a) => a.id), cents, true, { ...schedOpts });
       } else {
-        // Group by price for efficiency
         const priceGroups = new Map<number, string[]>();
         for (const a of articles) {
           const cents = getPromoCents(a.id);
@@ -93,7 +124,7 @@ export const PromoCreator: FC<PromoCreatorProps> = ({
           priceGroups.set(cents, group);
         }
         for (const [cents, ids] of priceGroups) {
-          await listingsApi.setPromo(ids, cents, true);
+          await listingsApi.setPromo(ids, cents, true, { ...schedOpts });
         }
       }
       setStep('done');
@@ -105,31 +136,33 @@ export const PromoCreator: FC<PromoCreatorProps> = ({
     }
   };
 
-  // ── Done step: choose publish or boost ──
+  // ── Done step ──
   if (step === 'done') {
     return (
       <div className="promo-overlay" onClick={onClose}>
         <div className="promo-popup promo-popup--done" onClick={(e) => e.stopPropagation()}>
           <div className="promo-done-header">
             <div className="promo-done-check">✓</div>
-            <h3 className="promo-done-title">Promotion créée !</h3>
+            <h3 className="promo-done-title">
+              {mode === 'BUNDLE' ? 'Lot promo créé !' : 'Promotion créée !'}
+            </h3>
             <p className="promo-done-subtitle">
-              {articles.length} article{articles.length > 1 ? 's' : ''} en promotion · Réduction de {totalSavingPct}%
+              {articles.length} article{articles.length > 1 ? 's' : ''}{' '}
+              {mode === 'BUNDLE' ? 'en lot' : 'en promotion'} · Réduction de {totalSavingPct}%
+              {scheduleEnabled && startsAt && ' · Programmée'}
             </p>
           </div>
 
           <div className="promo-done-choices">
-            {/* ── Publier ── */}
             <button type="button" className="promo-done-card promo-done-card--publish" onClick={() => { onPublished(); onClose(); }}>
               <span className="promo-done-card-icon">📢</span>
               <span className="promo-done-card-title">Publier la promotion</span>
               <span className="promo-done-card-desc">
-                Vos prix promo sont immédiatement visibles par les acheteurs
+                {scheduleEnabled ? 'La promotion sera activée automatiquement à l\'heure programmée' : 'Vos prix promo sont immédiatement visibles par les acheteurs'}
               </span>
               <span className="promo-done-card-action">Publier maintenant →</span>
             </button>
 
-            {/* ── Booster ── */}
             <button type="button" className="promo-done-card promo-done-card--boost" onClick={() => { onBoost(); onClose(); }}>
               <span className="promo-done-card-icon">⚡</span>
               <span className="promo-done-card-title">Booster la promotion</span>
@@ -150,9 +183,11 @@ export const PromoCreator: FC<PromoCreatorProps> = ({
         {/* ── Header ── */}
         <div className="promo-header">
           <div className="promo-header-left">
-            <span className="promo-header-icon">🏷️</span>
+            <span className="promo-header-icon">{mode === 'BUNDLE' ? '📦' : '🏷️'}</span>
             <div>
-              <h3 className="promo-title">Créer une promotion</h3>
+              <h3 className="promo-title">
+                {mode === 'BUNDLE' ? 'Créer un lot promo' : 'Créer une promotion'}
+              </h3>
               <p className="promo-subtitle">
                 {articles.length} article{articles.length > 1 ? 's' : ''} sélectionné{articles.length > 1 ? 's' : ''}
               </p>
@@ -165,79 +200,213 @@ export const PromoCreator: FC<PromoCreatorProps> = ({
 
         {step === 'edit' ? (
           <>
-            {/* ── Uniform price toggle (for multi-select) ── */}
-            {articles.length > 1 && (
-              <div className="promo-uniform">
-                <label className="promo-uniform-toggle">
-                  <input
-                    type="checkbox"
-                    checked={useUniformPrice}
-                    onChange={(e) => setUseUniformPrice(e.target.checked)}
-                  />
-                  <span className="promo-uniform-slider" />
-                  <span className="promo-uniform-label">Prix promo identique pour tous</span>
-                </label>
-                {useUniformPrice && (
-                  <div className="promo-uniform-input">
-                    <span className="promo-input-prefix">$</span>
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      placeholder="0.00"
-                      value={uniformPriceStr}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        if (!v || /^\d*\.?\d{0,2}$/.test(v)) setUniformPriceStr(v);
-                      }}
-                      className="promo-price-input"
-                    />
-                  </div>
-                )}
+            {/* ── Mode selector (for 2+ articles) ── */}
+            {articles.length >= 2 && (
+              <div className="promo-mode-selector">
+                <button
+                  type="button"
+                  className={`promo-mode-btn ${mode === 'ITEM' ? 'promo-mode-btn--active' : ''}`}
+                  onClick={() => setMode('ITEM')}
+                >
+                  🏷️ Prix individuel
+                </button>
+                <button
+                  type="button"
+                  className={`promo-mode-btn ${mode === 'BUNDLE' ? 'promo-mode-btn--active' : ''}`}
+                  onClick={() => setMode('BUNDLE')}
+                >
+                  📦 Lot / Bundle
+                </button>
               </div>
             )}
 
-            {/* ── Articles list ── */}
-            <div className="promo-articles">
-              {articles.map((article) => {
-                const promoCents = getPromoCents(article.id);
-                const savings = article.priceUsdCents > 0 && promoCents > 0
-                  ? Math.round(((article.priceUsdCents - promoCents) / article.priceUsdCents) * 100)
-                  : 0;
-                return (
-                  <div key={article.id} className="promo-article-row">
-                    <div className="promo-article-img">
-                      {article.imageUrl ? (
-                        <img src={resolveMediaUrl(article.imageUrl)} alt={article.title} />
-                      ) : (
-                        <span className="promo-article-placeholder">{article.type === 'SERVICE' ? '🛠️' : '📦'}</span>
-                      )}
-                    </div>
-                    <div className="promo-article-info">
-                      <span className="promo-article-name">{article.title}</span>
-                      <span className="promo-article-meta">{article.category} · {article.city}</span>
-                    </div>
-                    <div className="promo-article-prices">
-                      <span className="promo-original-price">{formatPriceLabelFromUsdCents(article.priceUsdCents)}</span>
-                      {!useUniformPrice && (
-                        <div className="promo-new-price-wrap">
-                          <span className="promo-input-prefix">$</span>
-                          <input
-                            type="text"
-                            inputMode="decimal"
-                            placeholder="Prix promo"
-                            value={promoPrices[article.id] || ''}
-                            onChange={(e) => setPromoPrice(article.id, e.target.value)}
-                            className="promo-price-input"
-                          />
-                        </div>
-                      )}
-                      {savings > 0 && (
-                        <span className="promo-discount-badge">-{savings}%</span>
-                      )}
-                    </div>
+            {mode === 'ITEM' ? (
+              <>
+                {/* ── Uniform price toggle ── */}
+                {articles.length > 1 && (
+                  <div className="promo-uniform">
+                    <label className="promo-uniform-toggle">
+                      <input
+                        type="checkbox"
+                        checked={useUniformPrice}
+                        onChange={(e) => setUseUniformPrice(e.target.checked)}
+                      />
+                      <span className="promo-uniform-slider" />
+                      <span className="promo-uniform-label">Prix promo identique pour tous</span>
+                    </label>
+                    {useUniformPrice && (
+                      <div className="promo-uniform-input">
+                        <span className="promo-input-prefix">$</span>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          placeholder="0.00"
+                          value={uniformPriceStr}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            if (!v || /^\d*\.?\d{0,2}$/.test(v)) setUniformPriceStr(v);
+                          }}
+                          className="promo-price-input"
+                        />
+                      </div>
+                    )}
                   </div>
-                );
-              })}
+                )}
+
+                {/* ── Articles list ── */}
+                <div className="promo-articles">
+                  {articles.map((article) => {
+                    const promoCents = getPromoCents(article.id);
+                    const savings = article.priceUsdCents > 0 && promoCents > 0
+                      ? Math.round(((article.priceUsdCents - promoCents) / article.priceUsdCents) * 100)
+                      : 0;
+                    return (
+                      <div key={article.id} className="promo-article-row">
+                        <div className="promo-article-img">
+                          {article.imageUrl ? (
+                            <img src={resolveMediaUrl(article.imageUrl)} alt={article.title} />
+                          ) : (
+                            <span className="promo-article-placeholder">{article.type === 'SERVICE' ? '🛠️' : '📦'}</span>
+                          )}
+                        </div>
+                        <div className="promo-article-info">
+                          <span className="promo-article-name">{article.title}</span>
+                          <span className="promo-article-meta">{article.category} · {article.city}</span>
+                        </div>
+                        <div className="promo-article-prices">
+                          <span className="promo-original-price">{formatPriceLabelFromUsdCents(article.priceUsdCents)}</span>
+                          {!useUniformPrice && (
+                            <div className="promo-new-price-wrap">
+                              <span className="promo-input-prefix">$</span>
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                placeholder="Prix promo"
+                                value={promoPrices[article.id] || ''}
+                                onChange={(e) => setPromoPrice(article.id, e.target.value)}
+                                className="promo-price-input"
+                              />
+                            </div>
+                          )}
+                          {savings > 0 && <span className="promo-discount-badge">-{savings}%</span>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            ) : (
+              <>
+                {/* ── BUNDLE mode ── */}
+                <div className="promo-bundle-section">
+                  <div className="promo-bundle-total-row">
+                    <span className="promo-bundle-total-label">Total normal</span>
+                    <span className="promo-original-price">{formatPriceLabelFromUsdCents(bundleOriginal)}</span>
+                  </div>
+
+                  <div className="promo-bundle-price-input">
+                    <label className="promo-bundle-price-label">Prix du lot promo</label>
+                    <div className="promo-new-price-wrap">
+                      <span className="promo-input-prefix">$</span>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="Prix du lot"
+                        value={bundlePriceStr}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          if (!v || /^\d*\.?\d{0,2}$/.test(v)) setBundlePriceStr(v);
+                        }}
+                        className="promo-price-input promo-price-input--large"
+                      />
+                    </div>
+                    {bundleCents > 0 && bundleCents < bundleOriginal && (
+                      <span className="promo-discount-badge promo-discount-badge--big">
+                        -{Math.round(((bundleOriginal - bundleCents) / bundleOriginal) * 100)}% sur le lot
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="promo-bundle-label-input">
+                    <label className="promo-bundle-price-label">Label personnalisé (optionnel)</label>
+                    <input
+                      type="text"
+                      placeholder="ex: Offre Duo, Pack Rentrée…"
+                      value={promoLabel}
+                      onChange={(e) => setPromoLabel(e.target.value)}
+                      className="promo-text-input"
+                      maxLength={60}
+                    />
+                  </div>
+
+                  {/* ── Articles included ── */}
+                  <div className="promo-articles promo-articles--bundle">
+                    {articles.map((article) => (
+                      <div key={article.id} className="promo-article-row promo-article-row--compact">
+                        <div className="promo-article-img">
+                          {article.imageUrl ? (
+                            <img src={resolveMediaUrl(article.imageUrl)} alt={article.title} />
+                          ) : (
+                            <span className="promo-article-placeholder">📦</span>
+                          )}
+                        </div>
+                        <div className="promo-article-info">
+                          <span className="promo-article-name">{article.title}</span>
+                        </div>
+                        <span className="promo-original-price">{formatPriceLabelFromUsdCents(article.priceUsdCents)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* ── Scheduling section ── */}
+            <div className="promo-schedule-section">
+              <label className="promo-uniform-toggle">
+                <input
+                  type="checkbox"
+                  checked={scheduleEnabled}
+                  onChange={(e) => setScheduleEnabled(e.target.checked)}
+                />
+                <span className="promo-uniform-slider" />
+                <span className="promo-uniform-label">Programmer la promotion</span>
+              </label>
+              {scheduleEnabled && (
+                <div className="promo-schedule-fields">
+                  <div className="promo-schedule-field">
+                    <label>Début</label>
+                    <input
+                      type="datetime-local"
+                      value={startsAt}
+                      onChange={(e) => setStartsAt(e.target.value)}
+                      className="promo-datetime-input"
+                    />
+                  </div>
+                  <div className="promo-schedule-field">
+                    <label>Fin (optionnel)</label>
+                    <input
+                      type="datetime-local"
+                      value={expiresAt}
+                      onChange={(e) => setExpiresAt(e.target.value)}
+                      className="promo-datetime-input"
+                    />
+                  </div>
+                </div>
+              )}
+              {!scheduleEnabled && (
+                <div className="promo-schedule-fields">
+                  <div className="promo-schedule-field">
+                    <label>Fin (optionnel)</label>
+                    <input
+                      type="datetime-local"
+                      value={expiresAt}
+                      onChange={(e) => setExpiresAt(e.target.value)}
+                      className="promo-datetime-input"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* ── Error ── */}
@@ -259,9 +428,12 @@ export const PromoCreator: FC<PromoCreatorProps> = ({
           <>
             {/* ── STEP 2: Confirm ── */}
             <div className="promo-confirm">
+              {mode === 'BUNDLE' && (
+                <div className="promo-confirm-badge">📦 LOT PROMO</div>
+              )}
               <div className="promo-confirm-summary">
                 <div className="promo-confirm-row">
-                  <span>Articles en promotion</span>
+                  <span>Articles {mode === 'BUNDLE' ? 'dans le lot' : 'en promotion'}</span>
                   <strong>{articles.length}</strong>
                 </div>
                 <div className="promo-confirm-row">
@@ -269,13 +441,25 @@ export const PromoCreator: FC<PromoCreatorProps> = ({
                   <span className="promo-original-price">{formatPriceLabelFromUsdCents(totalOriginal)}</span>
                 </div>
                 <div className="promo-confirm-row">
-                  <span>Prix total promo</span>
+                  <span>{mode === 'BUNDLE' ? 'Prix du lot' : 'Prix total promo'}</span>
                   <strong className="promo-new-total">{formatPriceLabelFromUsdCents(totalPromo)}</strong>
                 </div>
                 <div className="promo-confirm-row promo-confirm-row--saving">
-                  <span>Réduction moyenne</span>
+                  <span>Réduction</span>
                   <span className="promo-saving-badge">-{totalSavingPct}%</span>
                 </div>
+                {scheduleEnabled && startsAt && (
+                  <div className="promo-confirm-row">
+                    <span>Programmée pour</span>
+                    <strong>{new Date(startsAt).toLocaleString('fr-FR')}</strong>
+                  </div>
+                )}
+                {expiresAt && (
+                  <div className="promo-confirm-row">
+                    <span>Expire le</span>
+                    <strong>{new Date(expiresAt).toLocaleString('fr-FR')}</strong>
+                  </div>
+                )}
               </div>
 
               {/* ── Recap articles ── */}
@@ -284,8 +468,12 @@ export const PromoCreator: FC<PromoCreatorProps> = ({
                   <div key={a.id} className="promo-confirm-article">
                     <span className="promo-confirm-article-name">{a.title}</span>
                     <span className="promo-original-price promo-confirm-orig">{formatPriceLabelFromUsdCents(a.priceUsdCents)}</span>
-                    <span className="promo-confirm-arrow">→</span>
-                    <strong className="promo-new-total">{formatPriceLabelFromUsdCents(getPromoCents(a.id))}</strong>
+                    {mode === 'ITEM' && (
+                      <>
+                        <span className="promo-confirm-arrow">→</span>
+                        <strong className="promo-new-total">{formatPriceLabelFromUsdCents(getPromoCents(a.id))}</strong>
+                      </>
+                    )}
                   </div>
                 ))}
               </div>
@@ -302,7 +490,7 @@ export const PromoCreator: FC<PromoCreatorProps> = ({
                   disabled={saving}
                   onClick={() => void handleSavePromo()}
                 >
-                  {saving ? 'Enregistrement…' : 'Confirmer la promotion ✓'}
+                  {saving ? 'Enregistrement…' : mode === 'BUNDLE' ? 'Créer le lot ✓' : 'Confirmer la promotion ✓'}
                 </button>
               </div>
             </div>

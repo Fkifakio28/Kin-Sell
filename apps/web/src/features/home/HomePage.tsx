@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../app/providers/AuthProvider";
 import { useLocaleCurrency } from "../../app/providers/LocaleCurrencyProvider";
 import { getDashboardPath } from "../../utils/role-routing";
-import { listings as listingsApi, orders as ordersApi, explorer as explorerApi, sokin as sokinApi, blog as blogApi, messaging, users as usersApi, resolveMediaUrl, ApiError, type PublicListing, type CartSummary, type OrderSummary, type ExplorerShopApi, type ExplorerProfileApi, type SoKinApiFeedPost, type SoKinApiComment, type PublicBlogPost } from "../../lib/api-client";
+import { listings as listingsApi, orders as ordersApi, explorer as explorerApi, sokin as sokinApi, blog as blogApi, messaging, users as usersApi, resolveMediaUrl, ApiError, type PublicListing, type CartSummary, type OrderSummary, type ExplorerShopApi, type ExplorerProfileApi, type SoKinApiFeedPost, type SoKinApiComment, type PublicBlogPost, type PromotionSummary } from "../../lib/api-client";
 import { useHoverPopup, ArticleHoverPopup, type ArticleHoverData } from "../../components/HoverPopup";
 import { useScrollRestore } from "../../utils/useScrollRestore";
 import { useSocket } from "../../hooks/useSocket";
@@ -70,6 +70,7 @@ export function HomePage() {
   const [liveProducts, setLiveProducts] = useState<PublicListing[]>([]);
   const [liveServices, setLiveServices] = useState<PublicListing[]>([]);
   const [isLoadingArticles, setIsLoadingArticles] = useState(true);
+  const [activeBundles, setActiveBundles] = useState<PromotionSummary[]>([]);
   const [trendingShops, setTrendingShops] = useState<ExplorerShopApi[]>([]);
   const [trendingProfiles, setTrendingProfiles] = useState<ExplorerProfileApi[]>([]);
   const [sokinFeed, setSokinFeed] = useState<SoKinApiFeedPost[]>([]);
@@ -307,13 +308,15 @@ export function HomePage() {
     const load = async () => {
       setIsLoadingArticles(true);
       try {
-        const [products, services] = await Promise.all([
+        const [products, services, bundles] = await Promise.all([
           loadType('PRODUIT', 8),
           loadType('SERVICE', 8),
+          listingsApi.getActiveBundles(4).catch(() => [] as PromotionSummary[]),
         ]);
         if (!cancelled) {
           setLiveProducts(products);
           setLiveServices(services);
+          setActiveBundles(bundles);
         }
       } catch { /* API indisponible — afficher état vide */ }
       finally { if (!cancelled) setIsLoadingArticles(false); }
@@ -957,6 +960,47 @@ export function HomePage() {
               )}
             </div>
           </section>
+
+          {/* Lots / Bundles promo */}
+          {activeBundles.length > 0 && (
+            <section className="h-articles h-reveal glass-container">
+              <div className="h-articles-head">
+                <p className="h-section-title">📦 Offres lots promo</p>
+              </div>
+              <div className="h-bundles-grid">
+                {activeBundles.map((b) => {
+                  const savings = b.bundleOriginalUsdCents && b.bundlePriceUsdCents
+                    ? Math.round(((b.bundleOriginalUsdCents - b.bundlePriceUsdCents) / b.bundleOriginalUsdCents) * 100)
+                    : 0;
+                  return (
+                    <div key={b.id} className="h-bundle-card glass-card">
+                      <div className="h-bundle-ribbon">
+                        <span>{b.promoLabel || (b.items.length === 2 ? 'Offre Duo' : b.items.length === 3 ? 'Pack Trio' : 'Pack Promo')}</span>
+                        {savings > 0 && <span className="h-bundle-savings">-{savings}%</span>}
+                      </div>
+                      <div className="h-bundle-images">
+                        {b.items.slice(0, 3).map((item, i) => (
+                          <div key={i} className="h-bundle-thumb">
+                            {item.listing?.imageUrl ? (
+                              <img src={resolveMediaUrl(item.listing.imageUrl)} alt="" loading="lazy" />
+                            ) : <span>📦</span>}
+                          </div>
+                        ))}
+                        <span className="h-bundle-count">{b.items.length} articles</span>
+                      </div>
+                      <div className="h-bundle-body">
+                        {b.title && <strong className="h-bundle-title">{b.title}</strong>}
+                        <div className="h-bundle-pricing">
+                          <s className="ks-price-old">{formatPriceLabelFromUsdCents(b.bundleOriginalUsdCents ?? 0)}</s>
+                          <span className="h-bundle-price">{formatPriceLabelFromUsdCents(b.bundlePriceUsdCents ?? 0)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
 
           {/* Articles Services — 4×2 grid, scrollable inside glass */}
           <section className="h-articles h-reveal glass-container">

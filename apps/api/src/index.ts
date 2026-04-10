@@ -253,6 +253,25 @@ httpServer.listen(env.API_PORT, async () => {
   // ── IA Autonomie Scheduler ──
   startAiAutonomyScheduler();
   logger.info("[IA] Agents initialisés — scheduler autonome activé");
+
+  // ── Promo Scheduler: activate scheduled + expire ended (every 5 min) ──
+  const runPromoScheduler = async () => {
+    try {
+      const { activateScheduledPromos, expireEndedPromos } = await import("./modules/listings/listings.service.js");
+      const [activated, expired] = await Promise.all([
+        activateScheduledPromos(),
+        expireEndedPromos(),
+      ]);
+      if (activated.activated > 0 || expired.expired > 0) {
+        logger.info(`[Promo] Scheduler: ${activated.activated} activées, ${expired.expired} expirées`);
+      }
+    } catch (err: unknown) {
+      logger.error(`[Promo] Scheduler error: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+  setTimeout(() => { void runPromoScheduler(); }, 30_000);
+  setInterval(() => { void runPromoScheduler(); }, 5 * 60 * 1000);
+  logger.info("[Promo] Scheduler démarré (toutes les 5 min)");
 });
 
 // ── Graceful shutdown ──

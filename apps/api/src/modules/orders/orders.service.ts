@@ -264,7 +264,7 @@ export const getBuyerCart = async (userId: string) => {
 export const addCartItem = async (userId: string, payload: CartItemPayload) => {
   const listing = await prisma.listing.findUnique({
     where: { id: payload.listingId },
-    select: { id: true, ownerUserId: true, isPublished: true, priceUsdCents: true }
+    select: { id: true, ownerUserId: true, isPublished: true, priceUsdCents: true, promoActive: true, promoPriceUsdCents: true }
   });
 
   if (!listing || !listing.isPublished) {
@@ -277,7 +277,11 @@ export const addCartItem = async (userId: string, payload: CartItemPayload) => {
 
   const cartId = await getOpenCartId(userId);
   const quantity = Math.max(1, payload.quantity);
-  const unitPrice = payload.unitPriceUsdCents ?? listing.priceUsdCents;
+  // Use promo price if active, otherwise base price
+  const effectivePrice = listing.promoActive && listing.promoPriceUsdCents != null
+    ? listing.promoPriceUsdCents
+    : listing.priceUsdCents;
+  const unitPrice = payload.unitPriceUsdCents ?? effectivePrice;
 
   const existing = await prisma.cartItem.findUnique({
     where: {

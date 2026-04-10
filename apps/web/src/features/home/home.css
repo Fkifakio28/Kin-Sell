@@ -1567,3 +1567,89 @@
   padding: 6px 10px;
   font-size: 0.75rem;
 }
+
+/* ═══════════════════════════
+   Bundles section on Home
+   ═══════════════════════════ */
+.h-bundles-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1rem;
+  padding: 0.75rem 1rem 1rem;
+}
+.h-bundle-card {
+  border-radius: 14px;
+  overflow: hidden;
+  transition: transform 0.2s, box-shadow 0.2s;
+  cursor: pointer;
+}
+.h-bundle-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.25);
+}
+.h-bundle-ribbon {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.4rem 0.75rem;
+  background: linear-gradient(90deg, var(--color-primary, #6f58ff), rgba(111, 88, 255, 0.65));
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #fff;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.h-bundle-savings {
+  background: rgba(255, 50, 80, 0.9);
+  padding: 0.1rem 0.4rem;
+  border-radius: 5px;
+  font-size: 0.7rem;
+}
+.h-bundle-images {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.6rem 0.75rem 0.4rem;
+}
+.h-bundle-thumb {
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1.5px solid rgba(111, 88, 255, 0.25);
+  background: rgba(18, 11, 43, 0.5);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+}
+.h-bundle-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.h-bundle-count {
+  margin-left: auto;
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.45);
+}
+.h-bundle-body {
+  padding: 0.35rem 0.75rem 0.6rem;
+}
+.h-bundle-title {
+  font-size: 0.85rem;
+  color: #fff;
+  display: block;
+  margin-bottom: 0.25rem;
+}
+.h-bundle-pricing {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+}
+.h-bundle-price {
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: var(--color-primary, #6f58ff);
+}

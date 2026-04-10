@@ -84,15 +84,16 @@ export async function getAdTargetingAdvice(
     // Baser les suggestions sur l'annonce ciblée
     const listing = await prisma.listing.findUnique({
       where: { id: listingId },
-      select: { category: true, city: true, priceUsdCents: true, type: true },
+      select: { category: true, city: true, priceUsdCents: true, type: true, promoActive: true, promoPriceUsdCents: true },
     });
     if (!listing) throw new HttpError(404, "Annonce introuvable");
 
+    const effectivePrice = listing.promoActive && listing.promoPriceUsdCents != null ? listing.promoPriceUsdCents : listing.priceUsdCents;
     suggestedCategories = [listing.category];
     suggestedCities = [listing.city];
     priceRange = {
-      min: Math.round(listing.priceUsdCents * 0.5),
-      max: Math.round(listing.priceUsdCents * 2),
+      min: Math.round(effectivePrice * 0.5),
+      max: Math.round(effectivePrice * 2),
     };
   } else {
     // Baser sur les annonces actives du vendeur

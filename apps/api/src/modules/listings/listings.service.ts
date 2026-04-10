@@ -1,9 +1,10 @@
-import { ListingStatus, PromotionStatus, PromotionDiffusion } from "@prisma/client";
+import { ListingStatus, PromotionStatus, PromotionDiffusion, PromotionType } from "@prisma/client";
 import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
 import { Role } from "../../types/roles.js";
 import { normalizeImageInput, normalizeImageInputs } from "../../shared/utils/media-storage.js";
 import { resolveCountryCode, resolveCountryTerms, getSameRegionCountries } from "../../shared/geo/country-aliases.js";
+import { resolvePromoStatus } from "../../shared/promo/promo-engine.js";
 
 /** Optimized include for listing search — only fields needed for cards */
 const listingSearchInclude = {
@@ -287,40 +288,45 @@ export const getMyListing = async (userId: string, listingId: string) => {
   return listing;
 };
 
-/* ── Set promo on one or more listings ── */
+/* ── Set promo on one or more listings (ITEM promo) ── */
 export const setPromo = async (
   userId: string,
   listingIds: string[],
   promoPriceUsdCents: number,
   activate: boolean,
-  options?: { title?: string; diffusion?: PromotionDiffusion; expiresAt?: string }
+  options?: { title?: string; promoLabel?: string; diffusion?: PromotionDiffusion; startsAt?: string; expiresAt?: string }
 ) => {
-  // Verify all listings belong to the user
   const listings = await prisma.listing.findMany({
     where: { id: { in: listingIds }, ownerUserId: userId },
     select: { id: true, priceUsdCents: true, status: true, businessId: true },
   });
-  if (listings.length === 0) throw new HttpError(404, "Aucun article trouv\u00e9");
+  if (listings.length === 0) throw new HttpError(404, "Aucun article trouvé");
   const foundIds = listings.map((l) => l.id);
 
   if (activate) {
-    // Validate promo price is less than original for each
     for (const listing of listings) {
       if (promoPriceUsdCents >= listing.priceUsdCents) {
-        throw new HttpError(400, `Le prix promo doit \u00eatre inf\u00e9rieur au prix original pour "${listing.id}"`);
+        throw new HttpError(400, `Le prix promo doit être inférieur au prix original pour "${listing.id}"`);
       }
     }
 
-    // Create Promotion group + items in a transaction
+    const startsAt = options?.startsAt ? new Date(options.startsAt) : new Date();
+    const expiresAt = options?.expiresAt ? new Date(options.expiresAt) : null;
+    const isScheduled = startsAt > new Date();
+    const status = isScheduled ? PromotionStatus.SCHEDULED : PromotionStatus.ACTIVE;
+
     const promotion = await prisma.$transaction(async (tx) => {
       const promo = await tx.promotion.create({
         data: {
           ownerUserId: userId,
           businessId: listings[0].businessId ?? undefined,
+          promoType: PromotionType.ITEM,
           title: options?.title ?? null,
-          status: PromotionStatus.ACTIVE,
+          promoLabel: options?.promoLabel ?? null,
+          status,
           diffusion: options?.diffusion ?? PromotionDiffusion.SIMPLE,
-          expiresAt: options?.expiresAt ? new Date(options.expiresAt) : null,
+          startsAt,
+          expiresAt,
           items: {
             create: listings.map((l) => ({
               listingId: l.id,
@@ -331,23 +337,23 @@ export const setPromo = async (
         },
       });
 
-      // Update denormalized fields on Listing for fast queries
-      await tx.listing.updateMany({
-        where: { id: { in: foundIds } },
-        data: {
-          promoActive: true,
-          promoPriceUsdCents,
-          promoExpiresAt: options?.expiresAt ? new Date(options.expiresAt) : null,
-          promotionId: promo.id,
-        },
-      });
+      if (!isScheduled) {
+        await tx.listing.updateMany({
+          where: { id: { in: foundIds } },
+          data: {
+            promoActive: true,
+            promoPriceUsdCents,
+            promoExpiresAt: expiresAt,
+            promotionId: promo.id,
+          },
+        });
+      }
 
       return promo;
     });
 
-    return { updated: foundIds.length, listingIds: foundIds, promoActive: true, promotionId: promotion.id };
+    return { updated: foundIds.length, listingIds: foundIds, promoActive: !isScheduled, promotionId: promotion.id, status };
   } else {
-    // Cancel: clear promo on listings + cancel linked promotions
     await prisma.$transaction(async (tx) => {
       const promoItems = await tx.promotionItem.findMany({
         where: { listingId: { in: foundIds } },
@@ -356,7 +362,7 @@ export const setPromo = async (
       const promoIds = [...new Set(promoItems.map((pi) => pi.promotionId))];
       if (promoIds.length > 0) {
         await tx.promotion.updateMany({
-          where: { id: { in: promoIds }, status: PromotionStatus.ACTIVE },
+          where: { id: { in: promoIds }, status: { in: [PromotionStatus.ACTIVE, PromotionStatus.SCHEDULED] } },
           data: { status: PromotionStatus.CANCELLED },
         });
       }
@@ -372,8 +378,189 @@ export const setPromo = async (
       });
     });
 
-    return { updated: foundIds.length, listingIds: foundIds, promoActive: false, promotionId: null };
+    return { updated: foundIds.length, listingIds: foundIds, promoActive: false, promotionId: null, status: "CANCELLED" };
   }
+};
+
+/* ── Set BUNDLE promo (lot) ── */
+export const setBundlePromo = async (
+  userId: string,
+  listingIds: string[],
+  bundlePriceUsdCents: number,
+  options?: {
+    title?: string;
+    promoLabel?: string;
+    diffusion?: PromotionDiffusion;
+    startsAt?: string;
+    expiresAt?: string;
+    quantities?: Record<string, number>;
+  }
+) => {
+  if (listingIds.length < 2) throw new HttpError(400, "Un lot doit contenir au moins 2 articles");
+
+  const listings = await prisma.listing.findMany({
+    where: { id: { in: listingIds }, ownerUserId: userId },
+    select: { id: true, priceUsdCents: true, status: true, businessId: true },
+  });
+  if (listings.length < 2) throw new HttpError(404, "Pas assez d'articles trouvés");
+
+  const bundleOriginal = listings.reduce((sum, l) => {
+    const qty = options?.quantities?.[l.id] ?? 1;
+    return sum + l.priceUsdCents * qty;
+  }, 0);
+
+  if (bundlePriceUsdCents >= bundleOriginal) {
+    throw new HttpError(400, "Le prix du lot promo doit être inférieur au total normal");
+  }
+
+  const startsAt = options?.startsAt ? new Date(options.startsAt) : new Date();
+  const expiresAt = options?.expiresAt ? new Date(options.expiresAt) : null;
+  const isScheduled = startsAt > new Date();
+  const status = isScheduled ? PromotionStatus.SCHEDULED : PromotionStatus.ACTIVE;
+
+  const promotion = await prisma.$transaction(async (tx) => {
+    const promo = await tx.promotion.create({
+      data: {
+        ownerUserId: userId,
+        businessId: listings[0].businessId ?? undefined,
+        promoType: PromotionType.BUNDLE,
+        title: options?.title ?? null,
+        promoLabel: options?.promoLabel ?? null,
+        status,
+        diffusion: options?.diffusion ?? PromotionDiffusion.SIMPLE,
+        startsAt,
+        expiresAt,
+        bundlePriceUsdCents,
+        bundleOriginalUsdCents: bundleOriginal,
+        items: {
+          create: listings.map((l) => ({
+            listingId: l.id,
+            originalPriceUsdCents: l.priceUsdCents,
+            promoPriceUsdCents: null,
+            quantity: options?.quantities?.[l.id] ?? 1,
+          })),
+        },
+      },
+    });
+    return promo;
+  });
+
+  return {
+    promotionId: promotion.id,
+    promoType: "BUNDLE" as const,
+    bundlePriceUsdCents,
+    bundleOriginalUsdCents: bundleOriginal,
+    itemCount: listings.length,
+    status,
+  };
+};
+
+/* ── Cancel a promotion (ITEM or BUNDLE) ── */
+export const cancelPromotion = async (userId: string, promotionId: string) => {
+  const promo = await prisma.promotion.findFirst({
+    where: { id: promotionId, ownerUserId: userId },
+    include: { items: { select: { listingId: true } } },
+  });
+  if (!promo) throw new HttpError(404, "Promotion introuvable");
+  if (promo.status === "CANCELLED" || promo.status === "EXPIRED") {
+    throw new HttpError(400, "Cette promotion est déjà terminée");
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.promotion.update({
+      where: { id: promotionId },
+      data: { status: PromotionStatus.CANCELLED },
+    });
+
+    if (promo.promoType === "ITEM") {
+      const listingIds = promo.items.map((i) => i.listingId);
+      await tx.listing.updateMany({
+        where: { id: { in: listingIds }, promotionId },
+        data: {
+          promoActive: false,
+          promoPriceUsdCents: null,
+          promoExpiresAt: null,
+          promotionId: null,
+        },
+      });
+    }
+  });
+
+  return { cancelled: true, promotionId };
+};
+
+/* ── Activate scheduled promotions (cron-callable) ── */
+export const activateScheduledPromos = async () => {
+  const now = new Date();
+  const scheduled = await prisma.promotion.findMany({
+    where: { status: PromotionStatus.SCHEDULED, startsAt: { lte: now } },
+    include: { items: { select: { listingId: true, promoPriceUsdCents: true } } },
+  });
+
+  let activated = 0;
+  for (const promo of scheduled) {
+    await prisma.$transaction(async (tx) => {
+      await tx.promotion.update({
+        where: { id: promo.id },
+        data: { status: PromotionStatus.ACTIVE },
+      });
+
+      if (promo.promoType === "ITEM") {
+        for (const item of promo.items) {
+          if (item.promoPriceUsdCents != null) {
+            await tx.listing.update({
+              where: { id: item.listingId },
+              data: {
+                promoActive: true,
+                promoPriceUsdCents: item.promoPriceUsdCents,
+                promoExpiresAt: promo.expiresAt,
+                promotionId: promo.id,
+              },
+            });
+          }
+        }
+      }
+    });
+    activated++;
+  }
+  return { activated };
+};
+
+/* ── Expire ended promotions (cron-callable) ── */
+export const expireEndedPromos = async () => {
+  const now = new Date();
+  const expired = await prisma.promotion.findMany({
+    where: {
+      status: { in: [PromotionStatus.ACTIVE, PromotionStatus.SCHEDULED] },
+      expiresAt: { lte: now },
+    },
+    include: { items: { select: { listingId: true } } },
+  });
+
+  let expiredCount = 0;
+  for (const promo of expired) {
+    await prisma.$transaction(async (tx) => {
+      await tx.promotion.update({
+        where: { id: promo.id },
+        data: { status: PromotionStatus.EXPIRED },
+      });
+
+      if (promo.promoType === "ITEM") {
+        const listingIds = promo.items.map((i) => i.listingId);
+        await tx.listing.updateMany({
+          where: { id: { in: listingIds }, promotionId: promo.id },
+          data: {
+            promoActive: false,
+            promoPriceUsdCents: null,
+            promoExpiresAt: null,
+            promotionId: null,
+          },
+        });
+      }
+    });
+    expiredCount++;
+  }
+  return { expired: expiredCount };
 };
 
 /* ── Get promotions for a user ── */
@@ -393,6 +580,46 @@ export const getMyPromotions = async (userId: string) => {
     take: 50,
   });
   return promotions;
+};
+
+/* ── Get single promotion detail ── */
+export const getPromotionDetail = async (userId: string, promotionId: string) => {
+  const promo = await prisma.promotion.findFirst({
+    where: { id: promotionId, ownerUserId: userId },
+    include: {
+      items: {
+        include: {
+          listing: {
+            select: { id: true, title: true, imageUrl: true, priceUsdCents: true, promoActive: true, promoPriceUsdCents: true, mediaUrls: true },
+          },
+        },
+      },
+    },
+  });
+  if (!promo) throw new HttpError(404, "Promotion introuvable");
+  return promo;
+};
+
+/* ── Get active bundle promos (public, for explorer/home) ── */
+export const getActiveBundles = async (limit = 10) => {
+  const bundles = await prisma.promotion.findMany({
+    where: { promoType: PromotionType.BUNDLE, status: PromotionStatus.ACTIVE },
+    include: {
+      items: {
+        include: {
+          listing: {
+            select: { id: true, title: true, imageUrl: true, priceUsdCents: true, mediaUrls: true, city: true, country: true },
+          },
+        },
+      },
+      ownerUser: {
+        select: { id: true, profile: { select: { displayName: true, username: true, avatarUrl: true } } },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+    take: limit,
+  });
+  return bundles;
 };
 
 /* ── Update listing ── */
