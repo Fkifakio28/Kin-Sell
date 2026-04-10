@@ -17,6 +17,7 @@ export type SoKinApiPost = {
   likes: number;
   comments: number;
   shares: number;
+  repostOfId: string | null;
   status: 'ACTIVE' | 'HIDDEN' | 'ARCHIVED' | 'FLAGGED' | 'DELETED';
   createdAt: string;
   updatedAt: string;
@@ -38,6 +39,7 @@ export type SoKinApiFeedPost = SoKinApiPost & {
   };
   reactionCounts: Partial<Record<SoKinReactionType, number>>;
   myReaction: SoKinReactionType | null;
+  repostOf?: SoKinApiFeedPost | null;
 };
 
 export type SoKinApiComment = {
@@ -72,7 +74,7 @@ export type SoKinPublicUser = {
   verificationStatus: string;
 };
 
-export type SoKinContentTab = 'all' | 'ACTIVE' | 'HIDDEN' | 'ARCHIVED' | 'DELETED';
+export type SoKinContentTab = 'all' | 'ACTIVE' | 'HIDDEN' | 'ARCHIVED' | 'DELETED' | 'BOOKMARKS';
 
 export const sokin = {
   myPosts: (params?: { status?: SoKinContentTab }) =>
@@ -89,6 +91,8 @@ export const sokin = {
     mutate<{ post: SoKinApiPost }>(`/sokin/posts/${encodeURIComponent(id)}/toggle`, { method: 'PATCH' }, ['/sokin/posts']),
   deletePost: (id: string) =>
     mutate<{ success: boolean }>(`/sokin/posts/${encodeURIComponent(id)}`, { method: 'DELETE' }, ['/sokin/posts']),
+  updatePost: (id: string, body: { text?: string; mediaUrls?: string[]; postType?: SoKinPostType; subject?: string | null; location?: string | null; tags?: string[]; hashtags?: string[] }) =>
+    mutate<{ post: SoKinApiPost }>(`/sokin/posts/${encodeURIComponent(id)}`, { method: 'PATCH', body }, ['/sokin/posts']),
   publicFeed: (params?: { limit?: number; offset?: number; cursor?: string; city?: string; country?: string; types?: string[] }) =>
     request<{ posts: SoKinApiFeedPost[] }>('/sokin/posts', {
       params: {
@@ -140,6 +144,12 @@ export const sokin = {
   report: (id: string, body: { reason: SoKinReportReason; details?: string }) =>
     mutate<{ report: { id: string } }>(
       `/sokin/posts/${encodeURIComponent(id)}/report`, { method: 'POST', body }, []
+    ),
+
+  /** Reposter une publication */
+  repost: (id: string, body?: { comment?: string }) =>
+    mutate<SoKinApiFeedPost>(
+      `/sokin/posts/${encodeURIComponent(id)}/repost`, { method: 'POST', body: body ?? {} }, ['/sokin/posts']
     ),
 
   /** État social sur plusieurs posts (réactions + bookmarks) */

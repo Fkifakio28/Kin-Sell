@@ -1477,3 +1477,38 @@
     font-size: 0.72rem;
   }
 }
+
+/* ═══════════ SO-KIN MOBILE FEED — cards identiques à So-Kin ═══════════ */
+.h-sokin-mobile-feed {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .h-sokin-mobile-feed {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    margin-top: 0.5rem;
+  }
+  .h-sokin-mobile-header {
+    padding: 0.5rem 0.7rem;
+  }
+  .h-sokin-mobile-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+  .h-sokin-mobile-cards .sk-card {
+    border-radius: 0;
+  }
+  .h-sokin-mobile-feed .h-sokin-cta {
+    margin: 0.5rem 0.7rem;
+  }
+  /* Masquer l'ancien widget So-Kin sur mobile */
+  .h-right .h-sokin-box {
+    display: none;
+  }
+  .h-right .h-sokin-links {
+    display: none;
+  }
+}

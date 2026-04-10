@@ -187,16 +187,20 @@ export const archiveSoKinPost = async (authorId: string, postId: string) => {
  * Compteurs par statut pour l'utilisateur
  */
 export const getMyPostCounts = async (authorId: string) => {
-  const groups = await prisma.soKinPost.groupBy({
-    by: ["status"],
-    where: { authorId },
-    _count: { status: true },
-  });
+  const [groups, bookmarkCount] = await Promise.all([
+    prisma.soKinPost.groupBy({
+      by: ["status"],
+      where: { authorId },
+      _count: { status: true },
+    }),
+    prisma.soKinBookmark.count({ where: { userId: authorId } }),
+  ]);
   const counts: Record<string, number> = {
     ACTIVE: 0,
     HIDDEN: 0,
     ARCHIVED: 0,
     DELETED: 0,
+    BOOKMARKS: bookmarkCount,
   };
   for (const g of groups) {
     counts[g.status] = g._count.status;
@@ -276,6 +280,11 @@ export const getPublicFeed = async (
           profile: true,
         },
       },
+      repostOf: {
+        include: {
+          author: { include: { profile: true } },
+        },
+      },
     },
     orderBy: { createdAt: "desc" as const },
     take: limit,
@@ -305,6 +314,11 @@ export const getPublicPostById = async (postId: string, viewerUserId?: string) =
       author: {
         include: {
           profile: true,
+        },
+      },
+      repostOf: {
+        include: {
+          author: { include: { profile: true } },
         },
       },
     },
@@ -409,4 +423,141 @@ export const createPostComment = async (
   });
 
   return created;
+};
+
+/**
+ * Met à jour une publication existante (édition in-place)
+ * Seul l'auteur peut modifier. Seules les publications ACTIVE ou HIDDEN sont éditables.
+ */
+export const updateSoKinPost = async (
+  authorId: string,
+  postId: string,
+  data: {
+    text?: string;
+    subject?: string | null;
+    postType?: string;
+    mediaUrls?: string[];
+    location?: string | null;
+    tags?: string[];
+    hashtags?: string[];
+  }
+) => {
+  const post = await prisma.soKinPost.findUnique({ where: { id: postId } });
+
+  if (!post || post.status === "DELETED") {
+    throw new HttpError(404, "Publication introuvable");
+  }
+  if (post.authorId !== authorId) {
+    throw new HttpError(403, "Non autorisé");
+  }
+  if (post.status !== "ACTIVE" && post.status !== "HIDDEN") {
+    throw new HttpError(400, "Seules les publications actives ou masquées peuvent être modifiées");
+  }
+  if (post.repostOfId) {
+    throw new HttpError(400, "Un repost ne peut pas être modifié");
+  }
+
+  // Construire le payload de mise à jour
+  const updatePayload: Record<string, unknown> = {};
+
+  if (data.text !== undefined) updatePayload.text = data.text;
+  if (data.subject !== undefined) updatePayload.subject = data.subject;
+  if (data.postType !== undefined) updatePayload.postType = data.postType as any;
+  if (data.location !== undefined) updatePayload.location = data.location;
+  if (data.tags !== undefined) updatePayload.tags = data.tags;
+  if (data.hashtags !== undefined) updatePayload.hashtags = data.hashtags;
+
+  if (data.mediaUrls !== undefined) {
+    const normalized = normalizeMediaUrls(data.mediaUrls);
+    const effectiveType = (data.postType || post.postType) as string;
+    validatePostMediaUrls(normalized, effectiveType);
+    updatePayload.mediaUrls = normalized;
+  }
+
+  // Valider contenu final (texte OU média)
+  const finalText = data.text !== undefined ? data.text : post.text;
+  const finalMedia = data.mediaUrls !== undefined
+    ? normalizeMediaUrls(data.mediaUrls)
+    : (post.mediaUrls as string[]);
+  validatePostContent(finalText, finalMedia);
+
+  // Valider média requis pour le type final
+  const finalType = (data.postType || post.postType) as string;
+  if (MEDIA_REQUIRED_TYPES.includes(finalType) && finalMedia.length < 1) {
+    throw new HttpError(400, "Ce type de publication nécessite au moins 1 média");
+  }
+
+  const updated = await prisma.soKinPost.update({
+    where: { id: postId },
+    data: { ...updatePayload, updatedAt: new Date() },
+    include: {
+      author: { include: { profile: true } },
+    },
+  });
+
+  return updated;
+};
+
+/**
+ * Reposte une publication existante.
+ * Crée un nouveau post lié à l'original via repostOfId
+ * et incrémente le compteur shares de l'original.
+ */
+export const repostSoKinPost = async (
+  userId: string,
+  originalPostId: string,
+  comment?: string
+) => {
+  const original = await prisma.soKinPost.findUnique({
+    where: { id: originalPostId },
+    select: { id: true, status: true, authorId: true },
+  });
+
+  if (!original || original.status !== "ACTIVE") {
+    throw new HttpError(404, "Publication introuvable");
+  }
+
+  // Empêcher de reposter son propre post
+  if (original.authorId === userId) {
+    throw new HttpError(400, "Vous ne pouvez pas reposter votre propre publication");
+  }
+
+  // Empêcher de reposter deux fois le même post
+  const existing = await prisma.soKinPost.findFirst({
+    where: { authorId: userId, repostOfId: originalPostId, status: { not: "DELETED" } },
+  });
+  if (existing) {
+    throw new HttpError(409, "Vous avez déjà reposté cette publication");
+  }
+
+  const repost = await prisma.$transaction(async (tx) => {
+    const newPost = await tx.soKinPost.create({
+      data: {
+        authorId: userId,
+        postType: "SHOWCASE",
+        text: comment?.trim() || "",
+        mediaUrls: [],
+        tags: [],
+        hashtags: [],
+        status: "ACTIVE",
+        visibility: "PUBLIC",
+        repostOfId: originalPostId,
+      },
+      include: {
+        author: { include: { profile: true } },
+        repostOf: {
+          include: { author: { include: { profile: true } } },
+        },
+      },
+    });
+
+    await tx.soKinPost.update({
+      where: { id: originalPostId },
+      data: { shares: { increment: 1 } },
+    });
+
+    return newPost;
+  });
+
+  return repost;
 };

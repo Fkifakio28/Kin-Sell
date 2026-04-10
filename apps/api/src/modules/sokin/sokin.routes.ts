@@ -22,11 +22,13 @@ import {
   deleteSoKinPost,
   toggleSoKinPost,
   archiveSoKinPost,
+  updateSoKinPost,
   getMyPostCounts,
   getPublicFeed,
   getPublicPostById,
   getPostComments,
   createPostComment,
+  repostSoKinPost,
 } from "./sokin.service.js";
 import {
   toggleReaction,
@@ -309,6 +311,63 @@ router.patch(
   })
 );
 
+/* ─── Édition de publication ─── */
+
+const updatePostSchema = z.object({
+  postType: z.enum(SOKIN_POST_TYPES).optional(),
+  subject: z.string().max(120).nullable().optional(),
+  text: z.string().max(500).optional(),
+  mediaUrls: z
+    .array(z.string().trim().min(1).max(2000))
+    .max(5, "Maximum 5 médias par publication")
+    .refine((list) => list.filter((url) => isVideoMediaUrl(url)).length <= 2, {
+      message: "Maximum 2 vidéos par publication",
+    })
+    .optional(),
+  location: z.string().max(100).nullable().optional(),
+  tags: z.array(z.string()).optional(),
+  hashtags: z.array(z.string()).optional(),
+});
+
+/**
+ * PATCH /posts/:id
+ * Modifier une publication existante (auteur uniquement, ACTIVE/HIDDEN)
+ */
+router.patch(
+  "/posts/:id",
+  requireAuth,
+  rateLimit(RateLimits.SOKIN_POST),
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const data = updatePostSchema.parse(req.body);
+
+    // ContentGuard si le texte change
+    if (data.text !== undefined) {
+      const { analyzePost } = await import("./content-guard.service.js");
+      const guard = await analyzePost(data.text, [], req.auth!.userId);
+      if (guard.verdict === "BLOCK") {
+        res.status(422).json({
+          error: guard.warningMessage ?? "Modification refusée par le système de modération.",
+          triggers: guard.triggers,
+          score: guard.score,
+        });
+        return;
+      }
+    }
+
+    const post = await updateSoKinPost(req.auth!.userId, req.params.id, data);
+
+    emitToAll("sokin:post-updated", {
+      type: "SOKIN_POST_UPDATED",
+      postId: post.id,
+      authorId: post.authorId,
+      updatedAt: new Date().toISOString(),
+      sourceUserId: req.auth!.userId,
+    });
+
+    res.json({ post });
+  })
+);
+
 /**
  * DELETE /posts/:id
  * Supprime une annonce
@@ -376,6 +435,35 @@ router.post(
     const { reason, details } = reportSchema.parse(req.body);
     const report = await reportPost(req.auth!.userId, req.params.id, reason, details);
     res.status(201).json({ report });
+  })
+);
+
+const repostSchema = z.object({
+  comment: z.string().max(300).optional(),
+});
+
+/**
+ * POST /posts/:id/repost
+ * Reposter une publication (avec commentaire optionnel)
+ */
+router.post(
+  "/posts/:id/repost",
+  requireAuth,
+  rateLimit(RateLimits.SOKIN_POST),
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const { comment } = repostSchema.parse(req.body);
+    const repost = await repostSoKinPost(req.auth!.userId, req.params.id, comment);
+
+    emitToAll("sokin:post-created", {
+      type: "SOKIN_REPOST_CREATED",
+      postId: repost.id,
+      originalPostId: req.params.id,
+      authorId: repost.authorId,
+      createdAt: repost.createdAt.toISOString(),
+      sourceUserId: req.auth!.userId,
+    });
+
+    res.status(201).json(repost);
   })
 );
 

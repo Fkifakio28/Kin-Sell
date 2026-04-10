@@ -1362,10 +1362,13 @@ model SoKinPost {
   moderatedAt     DateTime?
   moderationNote  String?
   scheduledAt     DateTime?
+  repostOfId      String?
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 
   author       User            @relation("SoKinPosts", fields: [authorId], references: [id], onDelete: Cascade)
+  repostOf     SoKinPost?      @relation("SoKinReposts", fields: [repostOfId], references: [id], onDelete: SetNull)
+  reposts      SoKinPost[]     @relation("SoKinReposts")
   reactions    SoKinReaction[]
   bookmarks    SoKinBookmark[]
   reports      SoKinReport[]
@@ -1376,6 +1379,7 @@ model SoKinPost {
   @@index([createdAt])
   @@index([status, createdAt])
   @@index([postType])
+  @@index([repostOfId])
 }
 
 model SoKinComment {

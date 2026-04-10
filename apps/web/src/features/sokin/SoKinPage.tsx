@@ -34,14 +34,16 @@ import {
   type SoKinApiPost,
   type SoKinPostType,
   type SoKinReactionType,
+  type SoKinReportReason,
   type SoKinContentTab,
 } from '../../lib/api-client';
 import { ApiError } from '../../lib/api-core';
+import { SoKinToastProvider, useSoKinToast } from '../../components/feedback/SoKinToast';
 import { AdBanner } from '../../components/AdBanner';
 import { SeoMeta } from '../../components/SeoMeta';
 import { buildSoKinFeedItems } from './ad-cadence';
 import { observePostView, trackSoKinEvent, flushTracking } from '../../lib/services/sokin-tracking.service';
-import { sokinTrends, sokinAnalytics, type TrendingTopic, type TrendingHashtag, type SuggestedProfile, type PostInsight } from '../../lib/services/sokin-analytics.service';
+import { sokinTrends, sokinAnalytics, type TrendingTopic, type TrendingHashtag, type SuggestedProfile, type PostInsight, type PostInsightCard, type AuthorTip, type SmartFeedBlocks, type SoKinAccessInfo, type SoKinTier, type ScoredPost } from '../../lib/services/sokin-analytics.service';
 import './sokin.css';
 
 /* ─────────────────────────────────────────────────────── */
@@ -63,6 +65,7 @@ type SoKinPostRef = {
 type SoKinPublishPayload = {
   text: string;
   mediaFiles: File[];
+  existingMediaUrls?: string[];
   postType: SoKinPostType;
   subject?: string;
   location?: string;
@@ -85,6 +88,14 @@ const POST_TYPE_META: Record<SoKinPostType, { label: string; icon: string; place
   UPDATE:     { label: 'Actualité',  icon: '🔄', placeholder: 'Quoi de neuf ?…' },
   REVIEW:     { label: 'Avis',       icon: '📝', placeholder: 'Partagez votre avis sur un produit ou service…' },
   TREND:      { label: 'Tendance',   icon: '🔥', placeholder: "Qu'est-ce qui buzze à Kinshasa ?…" },
+};
+
+/** Badge visuel du tier premium */
+const TIER_BADGE: Record<string, { label: string; cls: string }> = {
+  FREE: { label: 'FREE', cls: 'sk-tier-badge--free' },
+  ANALYTICS: { label: 'PRO', cls: 'sk-tier-badge--pro' },
+  ADS: { label: 'PRO+', cls: 'sk-tier-badge--pro' },
+  ADMIN: { label: 'ADMIN', cls: 'sk-tier-badge--admin' },
 };
 
 type HeaderNotification = {
@@ -155,9 +166,9 @@ function readSoKinCreateDraft(): SoKinCreateDraft {
 /** Onglets de feed */
 type FeedTab = 'pour-toi' | 'suivis' | 'local' | 'ventes';
 
-const FEED_TABS: { key: FeedTab; label: string; icon: string }[] = [
+const FEED_TABS: { key: FeedTab; label: string; icon: string; soon?: boolean }[] = [
   { key: 'pour-toi', label: 'Pour toi',  icon: '✨' },
-  { key: 'suivis',   label: 'Suivis',    icon: '👥' },
+  { key: 'suivis',   label: 'Suivis',    icon: '👥', soon: true },
   { key: 'local',    label: 'Local',     icon: '📍' },
   { key: 'ventes',   label: 'Ventes',    icon: '🏷️' },
 ];
@@ -625,6 +636,17 @@ function CommentsDrawer({
 /** Types commerciaux : bloc CTA commerce affiché */
 const COMMERCIAL_TYPES = ['SELLING', 'PROMO', 'SHOWCASE'] as const;
 
+const REPORT_REASONS: { value: SoKinReportReason; label: string; icon: string }[] = [
+  { value: 'SPAM', label: 'Spam', icon: '🚫' },
+  { value: 'HARASSMENT', label: 'Harcèlement', icon: '😤' },
+  { value: 'HATE_SPEECH', label: 'Discours haineux', icon: '🗯️' },
+  { value: 'VIOLENCE', label: 'Violence', icon: '⚠️' },
+  { value: 'NUDITY', label: 'Nudité', icon: '🔞' },
+  { value: 'SCAM', label: 'Arnaque', icon: '💸' },
+  { value: 'MISINFORMATION', label: 'Désinformation', icon: '📰' },
+  { value: 'OTHER', label: 'Autre', icon: '❓' },
+];
+
 function AnnounceCard({
   post,
   t,
@@ -638,6 +660,11 @@ function AnnounceCard({
   onLoadInsight,
   isAuthor,
   feedSource,
+  onRepost,
+  onToggle,
+  initialReaction,
+  initialSaved,
+  onScoring,
 }: {
   post: SoKinApiFeedPost;
   t: (k: string) => string;
@@ -647,19 +674,30 @@ function AnnounceCard({
   onOpenComments: () => void;
   onContact: () => void;
   isContacting: boolean;
-  postInsight?: PostInsight | null;
+  postInsight?: PostInsight | PostInsightCard | null;
   onLoadInsight?: () => void;
   isAuthor?: boolean;
   feedSource?: string;
+  onRepost?: (post: SoKinApiFeedPost) => void;
+  onToggle?: (postId: string) => void;
+  initialReaction?: SoKinReactionType | null;
+  initialSaved?: boolean;
+  onScoring?: (postId: string) => void;
 }) {
   const navigate = useNavigate();
   const cardRef = useRef<HTMLElement>(null);
-  const [myReaction, setMyReaction] = useState<SoKinReactionType | null>(null);
+  const cardToast = useSoKinToast();
+  const [myReaction, setMyReaction] = useState<SoKinReactionType | null>(initialReaction ?? null);
   const [likeCount, setLikeCount] = useState(post.likes ?? 0);
-  const [saved, setSaved] = useState(false);
+  const [saved, setSaved] = useState(initialSaved ?? false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [reacting, setReacting] = useState(false);
   const [insightExpanded, setInsightExpanded] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportSending, setReportSending] = useState(false);
+  const [reportDone, setReportDone] = useState(false);
+  const [toggling, setToggling] = useState(false);
+  const [localStatus, setLocalStatus] = useState(post.status);
 
   // ── Tracking : observer les vues de post ──
   useEffect(() => {
@@ -727,13 +765,21 @@ function AnnounceCard({
     setSaved(!wasSaved);
     try {
       await sokinApi.bookmark(post.id);
+      cardToast.success(wasSaved ? 'Retiré des favoris' : 'Ajouté aux favoris');
     } catch {
       setSaved(wasSaved);
     }
-  }, [isLoggedIn, saved, post.id]);
+  }, [isLoggedIn, saved, post.id, cardToast]);
 
   return (
-    <article ref={cardRef} className={`sk-card${isCommercialType ? ' sk-card--commercial' : ''}`}>
+    <article ref={cardRef} className={`sk-card${isCommercialType ? ' sk-card--commercial' : ''}${localStatus === 'HIDDEN' ? ' sk-card--hidden' : ''}`}>
+
+      {/* ═══ BANDEAU MASQUÉ — visible seulement pour l'auteur ═══ */}
+      {isAuthor && localStatus === 'HIDDEN' && (
+        <div className="sk-card-hidden-banner">
+          🟡 Publication masquée — seul vous pouvez la voir
+        </div>
+      )}
 
       {/* ═══ L1. HEADER : avatar + nom + handle + temps + badge + menu ═══ */}
       <header className="sk-card-header">
@@ -788,18 +834,111 @@ function AnnounceCard({
               <button type="button" role="menuitem" onClick={() => { handleSave(); setMenuOpen(false); }}>
                 <IconBookmark filled={saved} /> {saved ? 'Retiré des favoris' : 'Sauvegarder'}
               </button>
-              <button type="button" role="menuitem" onClick={() => {
-                if (isLoggedIn) {
-                  sokinApi.report(post.id, { reason: 'SPAM' }).catch(() => {});
-                }
-                setMenuOpen(false);
-              }}>
-                🚩 Signaler
-              </button>
+              {isAuthor && onToggle && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={toggling}
+                  onClick={async () => {
+                    setMenuOpen(false);
+                    setToggling(true);
+                    const wasActive = localStatus === 'ACTIVE';
+                    setLocalStatus(wasActive ? 'HIDDEN' : 'ACTIVE');
+                    try {
+                      onToggle(post.id);
+                    } catch {
+                      setLocalStatus(wasActive ? 'ACTIVE' : 'HIDDEN');
+                    } finally {
+                      setToggling(false);
+                    }
+                  }}
+                >
+                  {toggling ? '⏳' : localStatus === 'ACTIVE' ? '⏸️ Masquer' : '▶️ Réafficher'}
+                </button>
+              )}
+              {isAuthor && onScoring && (
+                <button type="button" role="menuitem" onClick={() => {
+                  setMenuOpen(false);
+                  onScoring(post.id);
+                }}>
+                  📊 Scoring détaillé
+                </button>
+              )}
+              {!isAuthor && (
+                <button type="button" role="menuitem" onClick={() => {
+                  setMenuOpen(false);
+                  if (!isLoggedIn) return;
+                  setReportOpen(true);
+                }}>
+                  🚩 Signaler
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* ── Modal signalement ── */}
+          {reportOpen && (
+            <div className="sk-report-overlay" onClick={() => { if (!reportSending) setReportOpen(false); }} role="dialog" aria-modal="true" aria-label="Signaler la publication">
+              <div className="sk-report-modal glass-container" onClick={(e) => e.stopPropagation()}>
+                {reportDone ? (
+                  <div className="sk-report-done">
+                    <span className="sk-report-done-icon">✅</span>
+                    <p>Merci pour votre signalement.</p>
+                    <p className="sk-report-done-sub">Notre équipe examinera cette publication.</p>
+                    <button type="button" className="sk-report-done-btn" onClick={() => { setReportOpen(false); setReportDone(false); }}>Fermer</button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="sk-report-header">
+                      <h3>🚩 Signaler la publication</h3>
+                      <button type="button" className="sk-report-close" onClick={() => setReportOpen(false)} aria-label="Fermer">✕</button>
+                    </div>
+                    <p className="sk-report-subtitle">Pourquoi signalez-vous ce contenu ?</p>
+                    <div className="sk-report-reasons">
+                      {REPORT_REASONS.map((r) => (
+                        <button
+                          key={r.value}
+                          type="button"
+                          className="sk-report-reason-btn"
+                          disabled={reportSending}
+                          onClick={async () => {
+                            setReportSending(true);
+                            try {
+                              await sokinApi.report(post.id, { reason: r.value });
+                              setReportDone(true);
+                              cardToast.success('Signalement envoyé');
+                            } catch (err: any) {
+                              const msg = err?.message ?? '';
+                              if (msg.includes('409') || msg.includes('déjà')) {
+                                setReportDone(true);
+                              }
+                            } finally {
+                              setReportSending(false);
+                            }
+                          }}
+                        >
+                          <span>{r.icon}</span>
+                          <span>{r.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
           )}
         </div>
       </header>
+
+      {/* ═══ REPOST ATTRIBUTION — affiche l'auteur original ═══ */}
+      {(post as any).repostOf && (
+        <div className="sk-repost-attr">
+          <span className="sk-repost-attr-icon">🔄</span>
+          <span className="sk-repost-attr-text">
+            Reposté de <strong>{(post as any).repostOf.author?.profile?.displayName ?? 'Utilisateur'}</strong>
+          </span>
+        </div>
+      )}
 
       {/* ═══ L2. CONTENU : sujet + texte + hashtags + tags ═══ */}
       {postSubject && (
@@ -834,6 +973,42 @@ function AnnounceCard({
         <MediaCollage items={mediaItems} onItemClick={onMediaClick} />
       )}
 
+      {/* ═══ ORIGINAL POST EMBARQUÉ (si repost) ═══ */}
+      {(post as any).repostOf && (() => {
+        const orig = (post as any).repostOf as SoKinApiFeedPost;
+        const origProfile = orig.author?.profile;
+        const origName = origProfile?.displayName ?? 'Utilisateur';
+        const origHandle = origProfile?.username?.replace(/^@/, '') ?? orig.author?.id?.slice(0, 8) ?? '';
+        const origMediaItems = categorizeMedia(orig.mediaUrls ?? []);
+
+        return (
+          <div className="sk-repost-embed">
+            <div className="sk-repost-embed-header">
+              {origProfile?.avatarUrl ? (
+                <img src={resolveMediaUrl(origProfile.avatarUrl)} alt={origName} className="sk-repost-embed-avatar" />
+              ) : (
+                <span className="sk-repost-embed-avatar-empty">{origName.charAt(0).toUpperCase()}</span>
+              )}
+              <div>
+                <strong>{origName}</strong>
+                <span className="sk-repost-embed-handle"> @{origHandle}</span>
+                <span className="sk-repost-embed-time"> · {relTime(orig.createdAt, t)}</span>
+              </div>
+            </div>
+            {orig.text && <p className="sk-repost-embed-text">{orig.text.length > 200 ? orig.text.slice(0, 200) + '…' : orig.text}</p>}
+            {origMediaItems.length > 0 && (
+              <div className="sk-repost-embed-media">
+                {origMediaItems[0].type === 'image' ? (
+                  <img src={resolveMediaUrl(origMediaItems[0].url)} alt="" className="sk-repost-embed-img" loading="lazy" />
+                ) : (
+                  <video src={resolveMediaUrl(origMediaItems[0].url)} className="sk-repost-embed-img" muted playsInline />
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
       {/* ═══ L4. COMPTEURS + BARRE SOCIALE ═══ */}
       <div className="sk-card-counters">
         {likeCount > 0 && (
@@ -854,10 +1029,16 @@ function AnnounceCard({
         )}
       </div>
 
-      {/* ═══ INSIGHTS AUTEUR — discret, visible seulement pour l'auteur ═══ */}
+      {/* ═══ INSIGHTS AUTEUR — enrichi, visible seulement pour l'auteur ═══ */}
       {isAuthor && (
         <div className="sk-card-insights">
-          {postInsight ? (
+          {postInsight ? (() => {
+            const isCard = 'potential' in postInsight;
+            const score = isCard ? (postInsight as PostInsightCard).potential.score : (postInsight as PostInsight).potentialScore;
+            const level = score >= 60 ? 'high' : score >= 30 ? 'mid' : 'low';
+            const statusLabel = score >= 60 ? '✓ Bon' : score >= 30 ? '⚡ Moyen' : '↗ À améliorer';
+            const views = isCard ? (postInsight as PostInsightCard).reach.views : (postInsight as PostInsight).views;
+            return (
             <>
               <button
                 type="button"
@@ -865,37 +1046,141 @@ function AnnounceCard({
                 onClick={() => setInsightExpanded(!insightExpanded)}
                 aria-expanded={insightExpanded}
               >
-                <span className="sk-insight-score" data-score={postInsight.potentialScore >= 60 ? 'high' : postInsight.potentialScore >= 30 ? 'mid' : 'low'}>
-                  {postInsight.potentialScore}
+                <span className="sk-insight-score" data-score={level}>
+                  {score}
                 </span>
-                <span className="sk-insight-label">Potentiel</span>
-                <span className="sk-insight-views">{postInsight.views} vues</span>
+                <span className="sk-insight-status" data-status={level}>
+                  {isCard ? (postInsight as PostInsightCard).potential.label || statusLabel : statusLabel}
+                </span>
+                <span className="sk-insight-views">👁️ {views}</span>
                 <span className="sk-insight-arrow">{insightExpanded ? '\u25B2' : '\u25BC'}</span>
               </button>
               {insightExpanded && (
                 <div className="sk-card-insights-detail">
-                  <div className="sk-insight-row">
-                    <span>Engagement</span>
-                    <span className="sk-insight-value">{postInsight.engagementRate}%</span>
-                  </div>
-                  {postInsight.tip && (
-                    <p className="sk-insight-tip">{postInsight.tip}</p>
+                  {isCard ? (() => {
+                    const c = postInsight as PostInsightCard;
+                    return (
+                      <>
+                        <div className="sk-insight-metrics">
+                          <div className="sk-insight-metric">
+                            <span className="sk-insight-metric-label">Portée</span>
+                            <span className="sk-insight-metric-value">{c.reach.views.toLocaleString()}</span>
+                          </div>
+                          <div className="sk-insight-metric">
+                            <span className="sk-insight-metric-label">Engagement</span>
+                            <span className="sk-insight-metric-value">{c.engagement.rate}%</span>
+                          </div>
+                          <div className="sk-insight-metric">
+                            <span className="sk-insight-metric-label">Potentiel</span>
+                            <span className="sk-insight-metric-value">{c.potential.level}</span>
+                          </div>
+                        </div>
+                        <div className="sk-insight-bar-wrap">
+                          <div
+                            className="sk-insight-bar"
+                            data-score={level}
+                            style={{ width: `${Math.min(c.potential.score, 100)}%` }}
+                          />
+                        </div>
+                        {/* Détail enrichi */}
+                        <div className="sk-insight-breakdown">
+                          <div className="sk-insight-breakdown-row">
+                            <span>💬 Commentaires</span>
+                            <span>{c.comments.total}</span>
+                          </div>
+                          <div className="sk-insight-breakdown-row">
+                            <span>🔁 Reposts</span>
+                            <span>{c.reposts.total}</span>
+                          </div>
+                          <div className="sk-insight-breakdown-row">
+                            <span>🔖 Sauvegardes</span>
+                            <span>{c.saves.total}</span>
+                          </div>
+                          <div className="sk-insight-breakdown-row">
+                            <span>❤️ Likes</span>
+                            <span>{c.engagement.likes}</span>
+                          </div>
+                        </div>
+                        {/* Champs premium */}
+                        {(c.localInterest || c.clicks || c.dmOpens) && (
+                          <div className="sk-insight-premium">
+                            <span className="sk-insight-premium-badge">⭐ Premium</span>
+                            {c.localInterest && (
+                              <div className="sk-insight-breakdown-row">
+                                <span>📍 {c.localInterest.city}</span>
+                                <span>{c.localInterest.viewsFromCity} vues</span>
+                              </div>
+                            )}
+                            {c.clicks && (
+                              <div className="sk-insight-breakdown-row">
+                                <span>🔗 Clics</span>
+                                <span>{c.clicks.listings + c.clicks.profiles + c.clicks.contacts}</span>
+                              </div>
+                            )}
+                            {c.dmOpens && (
+                              <div className="sk-insight-breakdown-row">
+                                <span>✉️ DM ouverts</span>
+                                <span>{c.dmOpens.total}</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        {/* Suggestion */}
+                        <div className="sk-insight-suggestion">
+                          <strong>{c.suggestion.title}</strong>
+                          <p>{c.suggestion.message}</p>
+                        </div>
+                      </>
+                    );
+                  })() : (
+                    <>
+                      <div className="sk-insight-metrics">
+                        <div className="sk-insight-metric">
+                          <span className="sk-insight-metric-label">Portée</span>
+                          <span className="sk-insight-metric-value">{(postInsight as PostInsight).views.toLocaleString()}</span>
+                        </div>
+                        <div className="sk-insight-metric">
+                          <span className="sk-insight-metric-label">Engagement</span>
+                          <span className="sk-insight-metric-value">{(postInsight as PostInsight).engagementRate}%</span>
+                        </div>
+                        <div className="sk-insight-metric">
+                          <span className="sk-insight-metric-label">Potentiel</span>
+                          <span className="sk-insight-metric-value">{(postInsight as PostInsight).potentialScore}/100</span>
+                        </div>
+                      </div>
+                      <div className="sk-insight-bar-wrap">
+                        <div
+                          className="sk-insight-bar"
+                          data-score={level}
+                          style={{ width: `${Math.min((postInsight as PostInsight).potentialScore, 100)}%` }}
+                        />
+                      </div>
+                      {(postInsight as PostInsight).tip && (
+                        <p className="sk-insight-tip">💡 {(postInsight as PostInsight).tip}</p>
+                      )}
+                      {(postInsight as PostInsight).boostSuggested && (
+                        <button type="button" className="sk-insight-boost-cta">
+                          🚀 Booster ce post
+                        </button>
+                      )}
+                    </>
                   )}
-                  {postInsight.boostSuggested && (
-                    <button type="button" className="sk-insight-boost-cta">
-                      Booster ce post
+                  {onScoring && (
+                    <button type="button" className="sk-insight-scoring-cta" onClick={() => onScoring(post.id)}>
+                      📊 Voir le scoring détaillé
                     </button>
                   )}
                 </div>
               )}
             </>
-          ) : (
+            );
+          })() : (
             <button
               type="button"
               className="sk-card-insights-toggle sk-card-insights-toggle--load"
               onClick={onLoadInsight}
             >
-              <span className="sk-insight-label">Voir les insights</span>
+              <span className="sk-insight-label">📊 Voir les insights</span>
             </button>
           )}
         </div>
@@ -928,6 +1213,7 @@ function AnnounceCard({
           type="button"
           className="sk-social-btn sk-social-btn--repost"
           aria-label="Reposter"
+          onClick={() => onRepost?.(post)}
         >
           <span className="sk-social-icon"><IconRepost /></span>
           <span>Reposter</span>
@@ -1036,6 +1322,160 @@ function FeedSkeletons() {
 }
 
 /* ─────────────────────────────────────────────────────── */
+/* SCORING DRAWER — scoring détaillé post (premium)        */
+/* ─────────────────────────────────────────────────────── */
+
+const SCORE_COLORS: Record<string, string> = {
+  social: '#6f58ff',
+  business: '#00c896',
+  boost: '#ff8c42',
+};
+
+function scoreTier(v: number): string {
+  if (v >= 70) return 'high';
+  if (v >= 40) return 'mid';
+  return 'low';
+}
+
+function ScoreRing({ value, max, color, label }: { value: number; max: number; color: string; label: string }) {
+  const pct = Math.min(value / max, 1);
+  const r = 38;
+  const circ = 2 * Math.PI * r;
+  const offset = circ * (1 - pct);
+  return (
+    <div className="sk-scoring-ring-wrap">
+      <svg className="sk-scoring-ring" viewBox="0 0 88 88" width="88" height="88">
+        <circle cx="44" cy="44" r={r} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="7" />
+        <circle
+          cx="44" cy="44" r={r} fill="none" stroke={color} strokeWidth="7"
+          strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={offset}
+          style={{ transition: 'stroke-dashoffset 0.8s ease' }}
+          transform="rotate(-90 44 44)"
+        />
+      </svg>
+      <span className="sk-scoring-ring-value">{value}</span>
+      <span className="sk-scoring-ring-label">{label}</span>
+    </div>
+  );
+}
+
+function BreakdownBar({ label, value, max }: { label: string; value: number; max: number }) {
+  const pct = max > 0 ? Math.min((value / max) * 100, 100) : 0;
+  return (
+    <div className="sk-scoring-bar-row">
+      <span className="sk-scoring-bar-label">{label}</span>
+      <div className="sk-scoring-bar-track">
+        <div className="sk-scoring-bar-fill" style={{ width: `${pct}%` }} />
+      </div>
+      <span className="sk-scoring-bar-val">{value}/{max}</span>
+    </div>
+  );
+}
+
+function ScoringDrawer({ data, loading, onClose }: { data: ScoredPost | null; loading: boolean; onClose: () => void }) {
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', handleKey);
+    return () => document.removeEventListener('keydown', handleKey);
+  }, [onClose]);
+
+  return (
+    <div className="sk-scoring-overlay" onClick={onClose} role="dialog" aria-modal="true" aria-label="Scoring détaillé">
+      <aside className="sk-scoring-drawer glass-container" onClick={(e) => e.stopPropagation()}>
+        <div className="sk-scoring-header">
+          <h3>📊 Scoring détaillé</h3>
+          <button type="button" className="sk-scoring-close" onClick={onClose} aria-label="Fermer">✕</button>
+        </div>
+
+        {loading && (
+          <div className="sk-scoring-loading">
+            <div className="sk-scoring-spinner" />
+            <p>Analyse en cours…</p>
+          </div>
+        )}
+
+        {!loading && !data && (
+          <div className="sk-scoring-empty">
+            <p>😕 Scoring indisponible pour ce post.</p>
+            <p className="sk-scoring-empty-sub">Cette fonctionnalité est réservée aux abonnés Analytics.</p>
+          </div>
+        )}
+
+        {!loading && data && (
+          <>
+            {/* ── Score rings ── */}
+            <div className="sk-scoring-rings">
+              <ScoreRing value={data.socialScore} max={100} color={SCORE_COLORS.social} label="Social" />
+              <ScoreRing value={data.businessScore} max={100} color={SCORE_COLORS.business} label="Business" />
+              <ScoreRing value={data.boostScore} max={100} color={SCORE_COLORS.boost} label="Boost" />
+            </div>
+
+            {/* ── Social breakdown ── */}
+            <details className="sk-scoring-section" open>
+              <summary className="sk-scoring-section-title">
+                <span className="sk-scoring-section-dot" style={{ background: SCORE_COLORS.social }} />
+                Social — <span data-tier={scoreTier(data.socialScore)}>{data.socialScore}/100</span>
+              </summary>
+              <div className="sk-scoring-bars">
+                <BreakdownBar label="Réactions" value={data.breakdown.social.reactionsPoints} max={20} />
+                <BreakdownBar label="Commentaires" value={data.breakdown.social.commentsPoints} max={15} />
+                <BreakdownBar label="Réponses" value={data.breakdown.social.repliesPoints} max={10} />
+                <BreakdownBar label="Partages" value={data.breakdown.social.sharesPoints} max={15} />
+                <BreakdownBar label="Sauvegardes" value={data.breakdown.social.bookmarksPoints} max={10} />
+                <BreakdownBar label="Vélocité" value={data.breakdown.social.velocityPoints} max={15} />
+                <BreakdownBar label="Clics profil" value={data.breakdown.social.profileClicksPoints} max={5} />
+                <BreakdownBar label="Intérêt local" value={data.breakdown.social.localInterestPoints} max={10} />
+              </div>
+            </details>
+
+            {/* ── Business breakdown ── */}
+            <details className="sk-scoring-section">
+              <summary className="sk-scoring-section-title">
+                <span className="sk-scoring-section-dot" style={{ background: SCORE_COLORS.business }} />
+                Business — <span data-tier={scoreTier(data.businessScore)}>{data.businessScore}/100</span>
+              </summary>
+              <div className="sk-scoring-bars">
+                <BreakdownBar label="Clics annonce" value={data.breakdown.business.listingClicksPoints} max={25} />
+                <BreakdownBar label="Clics contact" value={data.breakdown.business.contactClicksPoints} max={20} />
+                <BreakdownBar label="DMs ouverts" value={data.breakdown.business.dmOpensPoints} max={20} />
+                <BreakdownBar label="Nature du post" value={data.breakdown.business.postNaturePoints} max={15} />
+                <BreakdownBar label="Demande locale" value={data.breakdown.business.localDemandPoints} max={10} />
+                <BreakdownBar label="Profil auteur" value={data.breakdown.business.authorProfilePoints} max={10} />
+              </div>
+            </details>
+
+            {/* ── Boost breakdown ── */}
+            <details className="sk-scoring-section">
+              <summary className="sk-scoring-section-title">
+                <span className="sk-scoring-section-dot" style={{ background: SCORE_COLORS.boost }} />
+                Boost — <span data-tier={scoreTier(data.boostScore)}>{data.boostScore}/100</span>
+              </summary>
+              <div className="sk-scoring-bars">
+                <BreakdownBar label="Poids social" value={data.breakdown.boost.socialWeight} max={30} />
+                <BreakdownBar label="Poids business" value={data.breakdown.boost.businessWeight} max={30} />
+                <BreakdownBar label="Qualité contenu" value={data.breakdown.boost.contentQualityPoints} max={20} />
+                <BreakdownBar label="Portée géo" value={data.breakdown.boost.geoReachPoints} max={10} />
+                <BreakdownBar label="Type de post" value={data.breakdown.boost.postTypePoints} max={10} />
+              </div>
+            </details>
+
+            {/* ── Légende pédagogique ── */}
+            <div className="sk-scoring-legend">
+              <p className="sk-scoring-legend-title">Comment lire ce score ?</p>
+              <div className="sk-scoring-legend-items">
+                <span className="sk-scoring-legend-item" data-tier="high">70+ Excellent</span>
+                <span className="sk-scoring-legend-item" data-tier="mid">40-69 Moyen</span>
+                <span className="sk-scoring-legend-item" data-tier="low">&lt;40 À améliorer</span>
+              </div>
+            </div>
+          </>
+        )}
+      </aside>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────── */
 /* ANNOUNCES FEED — fil infini                             */
 /* ─────────────────────────────────────────────────────── */
 
@@ -1056,6 +1496,13 @@ function AnnouncesFeed({
   postInsightsCache,
   onLoadInsight,
   feedSource,
+  advisorTips,
+  dismissedTipIds,
+  onDismissTip,
+  onRepost,
+  onToggle,
+  socialState,
+  onScoring,
 }: {
   posts: SoKinApiFeedPost[];
   hasMore: boolean;
@@ -1070,9 +1517,16 @@ function AnnouncesFeed({
   contactingPostId: string | null;
   immersiveDesktop?: boolean;
   currentUserId?: string;
-  postInsightsCache?: Record<string, PostInsight>;
+  postInsightsCache?: Record<string, PostInsight | PostInsightCard>;
   onLoadInsight?: (postId: string) => void;
   feedSource?: string;
+  advisorTips?: AuthorTip[];
+  dismissedTipIds?: Set<string>;
+  onDismissTip?: (tipId: string) => void;
+  onRepost?: (post: SoKinApiFeedPost) => void;
+  onToggle?: (postId: string) => void;
+  socialState?: { reactions: Record<string, SoKinReactionType>; bookmarks: Set<string> };
+  onScoring?: (postId: string) => void;
 }) {
   const feedItems = useMemo(() => buildSoKinFeedItems(posts, 4), [posts]);
   const [resolvedAdsBySlot, setResolvedAdsBySlot] = useState<Record<string, string | null>>({});
@@ -1120,6 +1574,11 @@ function AnnouncesFeed({
           postInsight={postInsightsCache?.[post.id] ?? null}
           onLoadInsight={onLoadInsight ? () => onLoadInsight(post.id) : undefined}
           feedSource={feedSource}
+          onRepost={onRepost}
+          onToggle={onToggle}
+          initialReaction={socialState?.reactions[post.id] ?? null}
+          initialSaved={socialState?.bookmarks.has(post.id) ?? false}
+          onScoring={onScoring}
         />
       );
 
@@ -1154,6 +1613,41 @@ function AnnouncesFeed({
       />
     );
   });
+
+  // ── Injeter les tips IA entre les posts (max 2, positions 3 et 8) ──
+  const visibleTips = (advisorTips ?? []).filter((t) => !(dismissedTipIds ?? new Set()).has(t.id));
+  const tipSlots = [3, 8]; // après le 3e et le 8e item
+  let injected = 0;
+  for (let i = 0; i < tipSlots.length && injected < visibleTips.length; i++) {
+    const pos = tipSlots[i] + injected; // adjust for already-inserted
+    if (pos < items.length) {
+      const tip = visibleTips[injected];
+      items.splice(pos, 0, (
+        <div key={`tip-${tip.id}`} className="sk-tip-card">
+          <div className="sk-tip-card-header">
+            <span className="sk-tip-card-icon">🤖</span>
+            <span className="sk-tip-card-label">Conseil IA</span>
+            {onDismissTip && (
+              <button
+                type="button"
+                className="sk-tip-card-close"
+                onClick={() => onDismissTip(tip.id)}
+                aria-label="Fermer"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+          <h3 className="sk-tip-card-title">{tip.title}</h3>
+          <p className="sk-tip-card-msg">{tip.message}</p>
+          {tip.actionType && (
+            <span className="sk-tip-card-action">{tip.actionType === 'open_boost_dialog' ? '🚀 Booster' : '💡 Appliquer'}</span>
+          )}
+        </div>
+      ));
+      injected++;
+    }
+  }
 
   return (
     <section className={`sk-feed${immersiveDesktop ? ' sk-feed--immersive' : ''}`} aria-label="Fil d'annonces So-Kin">
@@ -1659,6 +2153,7 @@ function CreateAnnounceScreen({
   cityLabel,
   country,
   initialPostType = 'SHOWCASE',
+  editingPost,
 }: {
   onClose: () => void;
   onPublish: (data: SoKinPublishPayload) => void;
@@ -1670,32 +2165,39 @@ function CreateAnnounceScreen({
   cityLabel: string;
   country: string;
   initialPostType?: SoKinPostType;
+  editingPost?: SoKinApiPost | null;
 }) {
-  const initialDraft = useMemo(() => readSoKinCreateDraft(), []);
-  const [postType, setPostType] = useState<SoKinPostType>(initialDraft.postType ?? initialPostType);
-  const [subject, setSubject] = useState(initialDraft.subject ?? '');
-  const [text, setText] = useState(initialDraft.text ?? '');
+  const isEditMode = Boolean(editingPost);
+  const initialDraft = useMemo(() => (editingPost ? null : readSoKinCreateDraft()), [editingPost]);
+  const [postType, setPostType] = useState<SoKinPostType>(editingPost?.postType ?? initialDraft?.postType ?? initialPostType);
+  const [subject, setSubject] = useState(editingPost?.subject ?? initialDraft?.subject ?? '');
+  const [text, setText] = useState(editingPost?.text ?? initialDraft?.text ?? '');
   const [mediaFiles, setMediaFiles] = useState<File[]>([]);
+  const [existingMediaUrls, setExistingMediaUrls] = useState<string[]>(editingPost?.mediaUrls ?? []);
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [localError, setLocalError] = useState<string | null>(null);
   const [mode, setMode] = useState<'edit' | 'editor' | 'preview'>('edit');
-  const [showRestoreInfo, setShowRestoreInfo] = useState(() => text.trim().length > 0);
-  const [location, setLocation] = useState(initialDraft.location ?? '');
+  const [showRestoreInfo, setShowRestoreInfo] = useState(() => !isEditMode && text.trim().length > 0);
+  const [location, setLocation] = useState(editingPost?.location ?? initialDraft?.location ?? '');
   const [locationStatus, setLocationStatus] = useState<'idle' | 'loading' | 'ok' | 'denied' | 'error'>('idle');
 
   const [tagInput, setTagInput] = useState('');
   const [tagSuggestions, setTagSuggestions] = useState<Array<{ key: string; label: string; handle: string; avatarUrl: string | null }>>([]);
-  const [selectedTags, setSelectedTags] = useState<string[]>((initialDraft.tags ?? []).map((v) => (v.startsWith('@') ? v : `@${v}`)));
+  const [selectedTags, setSelectedTags] = useState<string[]>(
+    (editingPost?.tags ?? initialDraft?.tags ?? []).map((v) => (v.startsWith('@') ? v : `@${v}`))
+  );
   const [isSearchingTags, setIsSearchingTags] = useState(false);
   const [tagSearchNonce, setTagSearchNonce] = useState(0);
 
   const [articleInput, setArticleInput] = useState('');
   const [articleSuggestions, setArticleSuggestions] = useState<Array<{ id: string; label: string }>>([]);
-  const [selectedArticles, setSelectedArticles] = useState<string[]>((initialDraft.hashtags ?? []).map((v) => (v.startsWith('#') ? v : `#${v}`)));
+  const [selectedArticles, setSelectedArticles] = useState<string[]>(
+    (editingPost?.hashtags ?? initialDraft?.hashtags ?? []).map((v) => (v.startsWith('#') ? v : `#${v}`))
+  );
   const [isSearchingArticles, setIsSearchingArticles] = useState(false);
   const [articleSearchNonce, setArticleSearchNonce] = useState(0);
 
-  const [scheduledAt, setScheduledAt] = useState(initialDraft.scheduledAt ?? '');
+  const [scheduledAt, setScheduledAt] = useState(initialDraft?.scheduledAt ?? '');
   const [editorDraft, setEditorDraft] = useState<SoKinEditorDraftState | null>(null);
   const [editorBaseline, setEditorBaseline] = useState<SoKinEditorDraftState | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -1703,9 +2205,10 @@ function CreateAnnounceScreen({
 
   const mediaRequired = MEDIA_REQUIRED_TYPES.includes(postType);
   const typeMeta = POST_TYPE_META[postType];
-  const canPreview = text.trim().length > 0 || mediaFiles.length > 0;
+  const totalMediaCount = mediaFiles.length + existingMediaUrls.length;
+  const canPreview = text.trim().length > 0 || totalMediaCount > 0;
   const hasText = text.trim().length > 0;
-  const hasMedia = mediaFiles.length > 0;
+  const hasMedia = totalMediaCount > 0;
   const canPublish = (hasText || hasMedia) && (!mediaRequired || hasMedia);
   const imageCount = mediaFiles.filter((f) => !f.type.startsWith('video/')).length;
   const videoCount = mediaFiles.filter((f) => f.type.startsWith('video/')).length;
@@ -1740,8 +2243,9 @@ function CreateAnnounceScreen({
   }, []);
 
   const validateMediaSelection = (files: File[]) => {
-    if (mediaRequired && files.length < 1) return 'Ajoutez au moins 1 média pour ce type de publication.';
-    if (files.length > 5) return 'Maximum 5 médias par publication.';
+    const total = files.length + existingMediaUrls.length;
+    if (mediaRequired && total < 1) return 'Ajoutez au moins 1 média pour ce type de publication.';
+    if (total > 5) return 'Maximum 5 médias par publication.';
     const vc = files.filter((f) => f.type.startsWith('video/')).length;
     if (vc > 2) return 'Maximum 2 vidéos par publication.';
     return null;
@@ -1762,8 +2266,9 @@ function CreateAnnounceScreen({
     };
   }, []);
 
-  // Autosave minimal du brouillon local (texte)
+  // Autosave minimal du brouillon local (texte) — skip en mode édition
   useEffect(() => {
+    if (isEditMode) return;
     try {
       const hasAnyDraft =
         text.trim().length > 0 ||
@@ -1899,23 +2404,24 @@ function CreateAnnounceScreen({
 
   const requestClose = useCallback(() => {
     if (isPublishing) return;
-    if (hasUnsavedInput) {
+    if (hasUnsavedInput && !isEditMode) {
       const confirmed = window.confirm('Vous avez un brouillon en cours. Quitter sans publier ?');
       if (!confirmed) return;
     }
     onClose();
-  }, [hasUnsavedInput, isPublishing, onClose]);
+  }, [hasUnsavedInput, isPublishing, isEditMode, onClose]);
 
   const addFiles = (fileList: FileList) => {
     setLocalError(null);
     const current = [...mediaFiles];
+    const existingCount = existingMediaUrls.length;
     let videoCount = current.filter((f) => f.type.startsWith('video/')).length;
     const toAdd: File[] = [];
     let droppedVideos = 0;
     let droppedOverflow = 0;
 
     for (const f of Array.from(fileList)) {
-      if (current.length + toAdd.length >= 5) {
+      if (existingCount + current.length + toAdd.length >= 5) {
         droppedOverflow++;
         continue;
       }
@@ -2089,7 +2595,7 @@ function CreateAnnounceScreen({
 
   const submit = () => {
     setLocalError(null);
-    if (!text.trim() && mediaFiles.length === 0) {
+    if (!text.trim() && mediaFiles.length === 0 && existingMediaUrls.length === 0) {
       setLocalError('Ajoutez du texte ou au moins 1 média.');
       setMode('edit');
       return;
@@ -2100,34 +2606,37 @@ function CreateAnnounceScreen({
       setMode('edit');
       return;
     }
-    const scheduleError = validateSchedule(scheduledAt);
-    if (scheduleError) {
-      setLocalError(scheduleError);
-      setMode('editor');
-      return;
+    if (!isEditMode) {
+      const scheduleError = validateSchedule(scheduledAt);
+      if (scheduleError) {
+        setLocalError(scheduleError);
+        setMode('editor');
+        return;
+      }
     }
 
     onPublish({
       text,
       mediaFiles,
+      existingMediaUrls,
       postType,
       subject: subject.trim() || undefined,
       location: location.trim() || undefined,
       tags: selectedTags.map((v) => v.replace(/^@/, '')),
       hashtags: selectedArticles.map((v) => v.replace(/^#/, '')),
-      scheduledAt: scheduledAt ? new Date(scheduledAt).toISOString() : undefined,
+      scheduledAt: !isEditMode && scheduledAt ? new Date(scheduledAt).toISOString() : undefined,
     });
   };
 
   return (
-    <section className="sk-create-screen" role="dialog" aria-modal="true" aria-label="Créer une annonce">
+    <section className="sk-create-screen" role="dialog" aria-modal="true" aria-label={isEditMode ? 'Modifier une annonce' : 'Créer une annonce'}>
       <header className="sk-create-screen-head">
         {mode === 'edit' ? (
           <>
             <button type="button" className="sk-btn sk-btn--outline" onClick={requestClose} disabled={isPublishing}>Retour</button>
             <div className="sk-studio-head-title">
               <strong>Studio So-Kin</strong>
-              <span>Créer</span>
+              <span>{isEditMode ? 'Modifier' : 'Créer'}</span>
             </div>
             <div className="sk-studio-head-spacer" aria-hidden="true" />
           </>
@@ -2142,7 +2651,7 @@ function CreateAnnounceScreen({
             <button type="button" className="sk-btn sk-btn--outline" onClick={openEditor} disabled={isPublishing}>Éditer</button>
             <strong>Prévisualisation</strong>
             <button type="button" className="sk-btn sk-btn--primary" onClick={submit} disabled={!canPublish || isPublishing}>
-              {isPublishing ? 'Publication…' : 'Publier'}
+              {isPublishing ? (isEditMode ? 'Modification…' : 'Publication…') : (isEditMode ? '✏️ Modifier' : 'Publier')}
             </button>
           </>
         )}
@@ -2235,7 +2744,7 @@ function CreateAnnounceScreen({
                   type="button"
                   className="sk-studio-media-btn"
                   onClick={() => fileRef.current?.click()}
-                  disabled={mediaFiles.length >= 5 || isPublishing}
+                  disabled={totalMediaCount >= 5 || isPublishing}
                   aria-label="Ajouter un média"
                   title="Ajouter un média"
                 >
@@ -2260,15 +2769,32 @@ function CreateAnnounceScreen({
                   onClick={openPreview}
                   disabled={!canPreview || isPublishing}
                 >
-                  Envoyer
+                  {isEditMode ? 'Aperçu & Modifier' : 'Envoyer'}
                 </button>
               </div>
             </article>
 
-            {mediaFiles.length > 0 && (
+            {(existingMediaUrls.length > 0 || mediaFiles.length > 0) && (
               <div className="sk-modal-previews">
+                {existingMediaUrls.map((url, i) => (
+                  <div key={`existing-${i}`} className="sk-modal-preview-item">
+                    {/\.(mp4|webm|mov|ogg)(\?.*)?$/i.test(url) ? (
+                      <video src={url} className="sk-modal-preview-thumb" muted playsInline />
+                    ) : (
+                      <img src={url} alt="" className="sk-modal-preview-thumb" />
+                    )}
+                    <button
+                      type="button"
+                      className="sk-modal-preview-remove"
+                      onClick={() => setExistingMediaUrls((prev) => prev.filter((_, j) => j !== i))}
+                      aria-label="Retirer ce média"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
                 {mediaFiles.map((f, i) => (
-                  <div key={i} className="sk-modal-preview-item">
+                  <div key={`new-${i}`} className="sk-modal-preview-item">
                     {f.type.startsWith('video/') ? (
                       <video src={previewUrls[i]} className="sk-modal-preview-thumb" muted playsInline />
                     ) : (
@@ -2288,7 +2814,7 @@ function CreateAnnounceScreen({
             )}
 
             <div className="sk-modal-media-row">
-              <span className="sk-modal-media-hint">Médias: {mediaFiles.length}/5 {mediaRequired ? '(obligatoire)' : '(optionnel)'}</span>
+              <span className="sk-modal-media-hint">Médias: {totalMediaCount}/5 {mediaRequired ? '(obligatoire)' : '(optionnel)'}</span>
               <span className="sk-modal-media-hint">Jusqu'à 5 médias, dont 2 vidéos max</span>
               <span className="sk-media-counter" aria-live="polite">
                 {imageCount} image{imageCount > 1 ? 's' : ''} / {videoCount} vidéo{videoCount > 1 ? 's' : ''}
@@ -2525,12 +3051,21 @@ function CreateAnnounceScreen({
 /* ─────────────────────────────────────────────────────── */
 
 export function SoKinPage() {
+  return (
+    <SoKinToastProvider>
+      <SoKinPageInner />
+    </SoKinToastProvider>
+  );
+}
+
+function SoKinPageInner() {
   const navigate = useNavigate();
   const { isLoggedIn, user, logout } = useAuth();
   const { t } = useLocaleCurrency();
   const { effectiveCountry, getCountryConfig } = useMarketPreference();
   const { on, off } = useSocket();
   const isMobile = useIsMobile(1023);
+  const toast = useSoKinToast();
 
   // ── State — TOUS les hooks avant tout return conditionnel ──
   const scrollDir = useScrollDirection();
@@ -2543,16 +3078,23 @@ export function SoKinPage() {
   const sentinelRef = useRef<HTMLDivElement>(null);
 
   const [showCreateScreen, setShowCreateScreen] = useState(false);
+  const [editingPost, setEditingPost] = useState<SoKinApiPost | null>(null);
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
   const [overlayUiLock, setOverlayUiLock] = useState(false);
   const [myPublishedPosts, setMyPublishedPosts] = useState<SoKinApiPost[]>([]);
   const [loadingMyPublishedPosts, setLoadingMyPublishedPosts] = useState(false);
   const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
+  const [deleteConfirmPostId, setDeleteConfirmPostId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleteSuccess, setDeleteSuccess] = useState(false);
   const [togglingPostId, setTogglingPostId] = useState<string | null>(null);
   const [contentTab, setContentTab] = useState<SoKinContentTab>('all');
-  const [postCounts, setPostCounts] = useState<Record<string, number>>({ ACTIVE: 0, HIDDEN: 0, ARCHIVED: 0, DELETED: 0 });
+  const [postCounts, setPostCounts] = useState<Record<string, number>>({ ACTIVE: 0, HIDDEN: 0, ARCHIVED: 0, DELETED: 0, BOOKMARKS: 0 });
   const [archivingPostId, setArchivingPostId] = useState<string | null>(null);
+  const [myBookmarks, setMyBookmarks] = useState<SoKinApiFeedPost[]>([]);
+  const [loadingBookmarks, setLoadingBookmarks] = useState(false);
+  const [removingBookmarkId, setRemovingBookmarkId] = useState<string | null>(null);
   const [feedTab, setFeedTab] = useState<FeedTab>('pour-toi');
 
   // Viewer (géré au niveau page : un seul à la fois)
@@ -2582,7 +3124,15 @@ export function SoKinPage() {
   const [trendingTopics, setTrendingTopics] = useState<TrendingTopic[]>([]);
   const [trendingHashtags, setTrendingHashtags] = useState<TrendingHashtag[]>([]);
   const [suggestedProfiles, setSuggestedProfiles] = useState<SuggestedProfile[]>([]);
-  const [postInsightsCache, setPostInsightsCache] = useState<Record<string, PostInsight>>({});
+  const [postInsightsCache, setPostInsightsCache] = useState<Record<string, PostInsight | PostInsightCard>>({});
+  const [advisorTips, setAdvisorTips] = useState<AuthorTip[]>([]);
+  const [dismissedTipIds, setDismissedTipIds] = useState<Set<string>>(new Set());
+  const [smartBlocks, setSmartBlocks] = useState<SmartFeedBlocks | null>(null);
+  const [socialStateMap, setSocialStateMap] = useState<{ reactions: Record<string, SoKinReactionType>; bookmarks: Set<string> }>({ reactions: {}, bookmarks: new Set() });
+  const [accessInfo, setAccessInfo] = useState<SoKinAccessInfo | null>(null);
+  const [scoringDrawerPostId, setScoringDrawerPostId] = useState<string | null>(null);
+  const [scoringData, setScoringData] = useState<ScoredPost | null>(null);
+  const [scoringLoading, setScoringLoading] = useState(false);
 
   const city = user?.profile?.city ?? getCountryConfig(effectiveCountry).defaultCity;
   const country = effectiveCountry;
@@ -2605,10 +3155,25 @@ export function SoKinPage() {
         const currentOffset = reset ? 0 : offsetRef.current;
         const feedParams: { limit: number; offset: number; city?: string; types?: string[] } = { limit, offset: currentOffset };
         if (feedTab === 'local') feedParams.city = city;
-        if (feedTab === 'suivis') feedParams.city = city; // TODO: filtrer par utilisateurs suivis quand le système Follow sera connecté
+        // 'suivis' tab is disabled in UI — no feed branch needed
         if (feedTab === 'ventes') feedParams.types = VENTES_TYPES;
         const data = await sokinApi.publicFeed(feedParams);
         const incoming = data.posts;
+
+        // ── Batch social-state: réactions + bookmarks en 1 appel ──
+        if (isLoggedIn && incoming.length > 0) {
+          try {
+            const ids = incoming.map((p) => p.id);
+            const state = await sokinApi.socialState(ids);
+            setSocialStateMap((prev) => {
+              const nextReactions = { ...prev.reactions, ...state.reactions };
+              const nextBookmarks = new Set(prev.bookmarks);
+              for (const id of state.bookmarks) nextBookmarks.add(id);
+              return { reactions: nextReactions, bookmarks: nextBookmarks };
+            });
+          } catch { /* graceful — cards fall back to default */ }
+        }
+
         if (reset) {
           setPosts(incoming);
           offsetRef.current = incoming.length;
@@ -2629,7 +3194,7 @@ export function SoKinPage() {
         loadingRef.current = false;
       }
     },
-    [hasMore, feedTab, city]
+    [hasMore, feedTab, city, isLoggedIn]
   );
 
   const loadMyPublishedPosts = useCallback(async (tab?: SoKinContentTab) => {
@@ -2637,9 +3202,29 @@ export function SoKinPage() {
       setMyPublishedPosts([]);
       return;
     }
+    const filterTab = tab ?? contentTab;
+
+    // ── Onglet Favoris : chargement séparé ──
+    if (filterTab === 'BOOKMARKS') {
+      setLoadingBookmarks(true);
+      try {
+        const data = await sokinApi.myBookmarks({ limit: 50 });
+        setMyBookmarks(data.posts ?? []);
+      } catch {
+        setMyBookmarks([]);
+      } finally {
+        setLoadingBookmarks(false);
+      }
+      // On charge aussi les compteurs
+      try {
+        const countsData = await sokinApi.myCounts();
+        setPostCounts({ ACTIVE: 0, HIDDEN: 0, ARCHIVED: 0, DELETED: 0, BOOKMARKS: 0, ...countsData.counts });
+      } catch { /* noop */ }
+      return;
+    }
+
     setLoadingMyPublishedPosts(true);
     try {
-      const filterTab = tab ?? contentTab;
       const [postsData, countsData] = await Promise.all([
         sokinApi.myPosts({ status: filterTab === 'all' ? undefined : filterTab }),
         sokinApi.myCounts().catch(() => ({ counts: {} })),
@@ -2648,7 +3233,7 @@ export function SoKinPage() {
       // Si onglet 'all', on exclut DELETED pour ne pas polluer la vue par défaut
       setMyPublishedPosts(filterTab === 'all' ? posts.filter((p) => p.status !== 'DELETED') : posts);
       setPostCounts({
-        ACTIVE: 0, HIDDEN: 0, ARCHIVED: 0, DELETED: 0,
+        ACTIVE: 0, HIDDEN: 0, ARCHIVED: 0, DELETED: 0, BOOKMARKS: 0,
         ...countsData.counts,
       });
     } catch {
@@ -2734,14 +3319,16 @@ export function SoKinPage() {
     let cancelled = false;
     const loadTrends = async () => {
       try {
-        const [trendsData, profilesData] = await Promise.all([
+        const [trendsData, profilesData, smartData] = await Promise.all([
           sokinTrends.trending({ city, limit: 8 }).catch(() => ({ topics: [], hashtags: [] })),
           sokinTrends.suggestedProfiles({ city, limit: 5 }).catch(() => ({ profiles: [] })),
+          sokinTrends.smartFeed({ city }).catch(() => null),
         ]);
         if (cancelled) return;
         setTrendingTopics(trendsData.topics ?? []);
         setTrendingHashtags(trendsData.hashtags ?? []);
         setSuggestedProfiles(profilesData.profiles ?? []);
+        if (smartData) setSmartBlocks(smartData);
       } catch {
         // silencieux
       }
@@ -2750,14 +3337,71 @@ export function SoKinPage() {
     return () => { cancelled = true; };
   }, [city]);
 
+  // ── Chargement des tips IA Ads (auteur connecté) ──
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    let cancelled = false;
+    sokinTrends.advisorTips(3).then((res) => {
+      if (!cancelled) setAdvisorTips(res.tips ?? []);
+    }).catch(() => { /* silencieux — pas de tips si erreur ou pas premium */ });
+    return () => { cancelled = true; };
+  }, [isLoggedIn]);
+
+  // ── Chargement de l'accès So-Kin (tier + features + upsells) ──
+  useEffect(() => {
+    if (!isLoggedIn) { setAccessInfo(null); return; }
+    let cancelled = false;
+    sokinTrends.access().then((data) => {
+      if (!cancelled) setAccessInfo(data);
+    }).catch(() => { /* silencieux — FREE par défaut */ });
+    return () => { cancelled = true; };
+  }, [isLoggedIn]);
+
+  const handleDismissTip = useCallback((tipId: string) => {
+    setDismissedTipIds((prev) => new Set(prev).add(tipId));
+  }, []);
+
+  // ── Repost ──
+  const [repostTarget, setRepostTarget] = useState<SoKinApiFeedPost | null>(null);
+  const [repostComment, setRepostComment] = useState('');
+  const [reposting, setReposting] = useState(false);
+
+  const handleOpenRepost = useCallback((post: SoKinApiFeedPost) => {
+    if (!isLoggedIn) { navigate('/login'); return; }
+    setRepostTarget(post);
+    setRepostComment('');
+  }, [isLoggedIn, navigate]);
+
+  const handleConfirmRepost = useCallback(async () => {
+    if (!repostTarget || reposting) return;
+    setReposting(true);
+    try {
+      const repost = await sokinApi.repost(repostTarget.id, { comment: repostComment.trim() || undefined });
+      setPosts((prev) => [repost, ...prev]);
+      setRepostTarget(null);
+      setRepostComment('');
+      toast.success('Repost publié');
+    } catch (err: any) {
+      const msg = err?.message || 'Erreur lors du repost';
+      toast.error(msg);
+    } finally {
+      setReposting(false);
+    }
+  }, [repostTarget, reposting, repostComment, toast]);
+
   // ── Post insight pour l'auteur (chargement à la demande) ──
   const loadPostInsight = useCallback(async (postId: string) => {
     if (postInsightsCache[postId] || !isLoggedIn) return;
     try {
-      const insight = await sokinTrends.postInsight(postId);
-      setPostInsightsCache((prev) => ({ ...prev, [postId]: insight }));
+      const card = await sokinTrends.postInsightCard(postId);
+      setPostInsightsCache((prev) => ({ ...prev, [postId]: card }));
     } catch {
-      // silencieux — pas d'insights si erreur
+      try {
+        const insight = await sokinTrends.postInsight(postId);
+        setPostInsightsCache((prev) => ({ ...prev, [postId]: insight }));
+      } catch {
+        // silencieux — pas d'insights si erreur
+      }
     }
   }, [postInsightsCache, isLoggedIn]);
 
@@ -3006,6 +3650,7 @@ export function SoKinPage() {
 
   const handleCloseCreate = useCallback(() => {
     setShowCreateScreen(false);
+    setEditingPost(null);
   }, []);
 
   const openAccountArticles = useCallback(() => {
@@ -3033,18 +3678,46 @@ export function SoKinPage() {
     }
   }, [posts, openAccountArticles]);
 
-  const handleDeletePublishedPost = useCallback(async (postId: string) => {
+  const handleDeletePublishedPost = useCallback((postId: string) => {
     if (deletingPostId) return;
-    const confirmed = window.confirm('Supprimer cette annonce publiée ?');
-    if (!confirmed) return;
-    setDeletingPostId(postId);
+    setDeleteError(null);
+    setDeleteSuccess(false);
+    setDeleteConfirmPostId(postId);
+  }, [deletingPostId]);
+
+  const confirmDeletePost = useCallback(async () => {
+    if (!deleteConfirmPostId || deletingPostId) return;
+    setDeletingPostId(deleteConfirmPostId);
+    setDeleteError(null);
     try {
-      await sokinApi.deletePost(postId);
-      setMyPublishedPosts((prev) => prev.filter((item) => item.id !== postId));
-      setPosts((prev) => prev.filter((item) => item.id !== postId));
+      await sokinApi.deletePost(deleteConfirmPostId);
+      setMyPublishedPosts((prev) => prev.filter((item) => item.id !== deleteConfirmPostId));
+      setPosts((prev) => prev.filter((item) => item.id !== deleteConfirmPostId));
+      setPostCounts((prev) => ({
+        ...prev,
+        ACTIVE: Math.max(0, (prev.ACTIVE ?? 0) - 1),
+        DELETED: (prev.DELETED ?? 0) + 1,
+      }));
+      setDeleteSuccess(true);
+      toast.success('Publication supprimée');
+      setTimeout(() => {
+        setDeleteConfirmPostId(null);
+        setDeleteSuccess(false);
+      }, 1200);
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : 'Erreur lors de la suppression';
+      setDeleteError(errMsg);
+      toast.error(errMsg);
     } finally {
       setDeletingPostId(null);
     }
+  }, [deleteConfirmPostId, deletingPostId, toast]);
+
+  const cancelDelete = useCallback(() => {
+    if (deletingPostId) return;
+    setDeleteConfirmPostId(null);
+    setDeleteError(null);
+    setDeleteSuccess(false);
   }, [deletingPostId]);
 
   const handleTogglePublishedPost = useCallback(async (postId: string) => {
@@ -3057,22 +3730,47 @@ export function SoKinPage() {
       if (updated.status === 'HIDDEN') {
         setPosts((prev) => prev.filter((item) => item.id !== postId));
       }
+      toast.success(updated.status === 'HIDDEN' ? 'Publication masquée' : 'Publication visible');
     } catch {
-      // no-op
+      toast.error('Erreur lors du changement de visibilité');
     } finally {
       setTogglingPostId(null);
     }
-  }, [togglingPostId]);
+  }, [togglingPostId, toast]);
+
+  /** Toggle depuis le feed — garde la carte visible pour l'auteur avec le bandeau */
+  const handleToggleFromFeed = useCallback(async (postId: string) => {
+    try {
+      const data = await sokinApi.togglePost(postId);
+      const updated = data.post;
+      setPosts((prev) => prev.map((p) => (p.id === postId ? { ...p, status: updated.status } : p)));
+      setMyPublishedPosts((prev) => prev.map((p) => (p.id === postId ? { ...p, status: updated.status } : p)));
+      toast.success(updated.status === 'HIDDEN' ? 'Publication masquée' : 'Publication visible');
+    } catch {
+      toast.error('Erreur lors du changement de visibilité');
+    }
+  }, [toast]);
+
+  const handleOpenScoring = useCallback(async (postId: string) => {
+    setScoringDrawerPostId(postId);
+    setScoringData(null);
+    setScoringLoading(true);
+    try {
+      const data = await sokinTrends.scoringDetail(postId);
+      setScoringData(data);
+    } catch {
+      // scoring unavailable
+    } finally {
+      setScoringLoading(false);
+    }
+  }, []);
 
   const handleEditPublishedPost = useCallback((postId: string) => {
-    try {
-      sessionStorage.setItem('ud-section', 'articles');
-      sessionStorage.setItem('ud-edit-sokin-post-id', postId);
-    } catch {
-      // no-op
-    }
-    navigate(dashboardPath || '/account');
-  }, [dashboardPath, navigate]);
+    const post = myPublishedPosts.find((p) => p.id === postId);
+    if (!post) return;
+    setEditingPost(post);
+    setShowCreateScreen(true);
+  }, [myPublishedPosts]);
 
   const handleArchivePublishedPost = useCallback(async (postId: string) => {
     if (archivingPostId) return;
@@ -3094,34 +3792,79 @@ export function SoKinPage() {
         }
         return next;
       });
+      toast.success(updated.status === 'ARCHIVED' ? 'Publication archivée' : 'Publication restaurée');
     } catch {
-      // no-op
+      toast.error('Erreur lors de l\'archivage');
     } finally {
       setArchivingPostId(null);
     }
-  }, [archivingPostId]);
+  }, [archivingPostId, toast]);
 
   const handleContentTabChange = useCallback((tab: SoKinContentTab) => {
     setContentTab(tab);
     void loadMyPublishedPosts(tab);
   }, [loadMyPublishedPosts]);
 
+  const handleRemoveBookmark = useCallback(async (postId: string) => {
+    if (removingBookmarkId) return;
+    setRemovingBookmarkId(postId);
+    try {
+      await sokinApi.bookmark(postId);
+      setMyBookmarks((prev) => prev.filter((p) => p.id !== postId));
+      toast.success('Retiré des favoris');
+    } catch {
+      toast.error('Erreur');
+    } finally {
+      setRemovingBookmarkId(null);
+    }
+  }, [removingBookmarkId]);
+
   const handlePublish = async (data: SoKinPublishPayload) => {
     if (isPublishing || !isLoggedIn) return;
     setIsPublishing(true);
     setPublishError(null);
     try {
-      if (!data.text.trim()) {
+      // Upload nouveaux fichiers média
+      const newMediaUrls = await Promise.all(
+        data.mediaFiles.map((f) => prepareMediaUrl(f))
+      );
+      const allMediaUrls = [...(data.existingMediaUrls ?? []), ...newMediaUrls];
+
+      // ── Mode édition ──
+      if (editingPost) {
+        const resp = await sokinApi.updatePost(editingPost.id, {
+          text: data.text,
+          mediaUrls: allMediaUrls,
+          postType: data.postType,
+          subject: data.subject,
+          location: data.location,
+          tags: data.tags,
+          hashtags: data.hashtags,
+        });
+
+        if (!resp?.post?.id) {
+          throw new Error('Modification non confirmée par le serveur.');
+        }
+
+        // Mettre à jour les listes locales
+        const updatedPost = resp.post;
+        setMyPublishedPosts((prev) => prev.map((p) => (p.id === updatedPost.id ? updatedPost : p)));
+        setPosts((prev) => prev.map((item) => (item.id === updatedPost.id ? { ...item, ...updatedPost } : item)));
+
+        setShowCreateScreen(false);
+        setEditingPost(null);
+        toast.success('Publication modifiée');
+        return;
+      }
+
+      // ── Mode création ──
+      if (!data.text.trim() && allMediaUrls.length === 0) {
         throw new Error('Le texte de la publication est obligatoire.');
       }
 
-      const mediaUrls = await Promise.all(
-        data.mediaFiles.map((f) => prepareMediaUrl(f))
-      );
-
       const created = await sokinApi.createPost({
         text: data.text,
-        mediaUrls,
+        mediaUrls: allMediaUrls,
         postType: data.postType,
         subject: data.subject,
         location: data.location,
@@ -3210,6 +3953,11 @@ export function SoKinPage() {
               </button>
               <div className="sk-topbar-center">
                 <span className="sk-topbar-title">So-Kin</span>
+                {isLoggedIn && accessInfo && (
+                  <span className={`sk-tier-badge ${TIER_BADGE[accessInfo.tier]?.cls ?? 'sk-tier-badge--free'}`}>
+                    {TIER_BADGE[accessInfo.tier]?.label ?? 'FREE'}
+                  </span>
+                )}
               </div>
               <div className="sk-topbar-end">
                 {isLoggedIn && (
@@ -3231,11 +3979,13 @@ export function SoKinPage() {
                 <button
                   key={tab.key}
                   type="button"
-                  className={`sk-feed-tab${feedTab === tab.key ? ' sk-feed-tab--active' : ''}`}
-                  onClick={() => setFeedTab(tab.key)}
+                  className={`sk-feed-tab${feedTab === tab.key ? ' sk-feed-tab--active' : ''}${tab.soon ? ' sk-feed-tab--soon' : ''}`}
+                  onClick={() => { if (!tab.soon) setFeedTab(tab.key); }}
+                  aria-disabled={tab.soon || undefined}
                 >
                   <span className="sk-feed-tab-icon">{tab.icon}</span>
                   <span>{tab.label}</span>
+                  {tab.soon && <span className="sk-feed-tab-badge">Bientôt</span>}
                 </button>
               ))}
             </nav>
@@ -3246,6 +3996,101 @@ export function SoKinPage() {
               displayName={displayName}
               onCreatePost={handleOpenCreate}
             />
+
+            {/* ── Smart Feed Blocks — Mobile carrousel ── */}
+            {smartBlocks && (
+              <div className="sk-smart-mobile">
+                {/* Tendances */}
+                {smartBlocks.trendingTopics.length > 0 && (
+                  <section className="sk-smart-block glass-container" aria-label="Tendances">
+                    <h4 className="sk-smart-block-title">🔥 Tendances</h4>
+                    <div className="sk-smart-scroll">
+                      {smartBlocks.trendingTopics.slice(0, 6).map((t) => (
+                        <div key={t.topic} className="sk-smart-chip sk-smart-chip--trend">
+                          <span className="sk-smart-chip-label">{t.label}</span>
+                          <span className="sk-smart-chip-meta">
+                            {t.momentum === 'UP' ? '📈' : t.momentum === 'EMERGING' ? '✨' : '📊'} {t.posts7d} posts
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                )}
+
+                {/* Hashtags chauds */}
+                {smartBlocks.hotHashtags.length > 0 && (
+                  <section className="sk-smart-block glass-container" aria-label="Hashtags">
+                    <h4 className="sk-smart-block-title">🏷️ Hashtags chauds</h4>
+                    <div className="sk-smart-scroll">
+                      {smartBlocks.hotHashtags.slice(0, 8).map((h) => (
+                        <span key={h.hashtag} className={`sk-smart-hashtag sk-smart-hashtag--${h.velocity.toLowerCase()}`}>
+                          #{h.hashtag}
+                          {h.velocity === 'RISING' && <span className="sk-smart-velocity">🚀</span>}
+                          {h.velocity === 'NEW' && <span className="sk-smart-velocity">✨</span>}
+                        </span>
+                      ))}
+                    </div>
+                  </section>
+                )}
+
+                {/* Formats gagnants */}
+                {smartBlocks.winningFormats.length > 0 && (
+                  <section className="sk-smart-block glass-container" aria-label="Formats gagnants">
+                    <h4 className="sk-smart-block-title">🏆 Formats gagnants</h4>
+                    <div className="sk-smart-scroll">
+                      {smartBlocks.winningFormats.slice(0, 4).map((f) => (
+                        <div key={f.postType} className="sk-smart-chip sk-smart-chip--format">
+                          <span className="sk-smart-chip-label">{f.label}</span>
+                          <span className="sk-smart-chip-meta">
+                            {f.trend === 'HOT' ? '🔥' : f.trend === 'STABLE' ? '📊' : '❄️'} {f.avgViews} vues moy.
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                )}
+
+                {/* Idées de publication */}
+                {smartBlocks.publishIdeas.length > 0 && (
+                  <section className="sk-smart-block glass-container" aria-label="Idées">
+                    <h4 className="sk-smart-block-title">💡 Idées pour vous</h4>
+                    <div className="sk-smart-scroll">
+                      {smartBlocks.publishIdeas.slice(0, 3).map((idea) => (
+                        <div key={idea.id} className="sk-smart-idea">
+                          <span className="sk-smart-idea-title">{idea.title}</span>
+                          <span className="sk-smart-idea-reason">{idea.reason}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                )}
+              </div>
+            )}
+
+            {/* ── Premium upsell teaser (mobile, FREE only) ── */}
+            {isLoggedIn && accessInfo && accessInfo.tier === 'FREE' && accessInfo.upsells.length > 0 && (
+              <div className="sk-premium-teaser glass-container">
+                <div className="sk-premium-teaser-head">
+                  <span className="sk-premium-teaser-icon">✨</span>
+                  <strong>Débloquez plus avec So-Kin Pro</strong>
+                </div>
+                <div className="sk-premium-teaser-features">
+                  <span className="sk-premium-teaser-feat">📊 Analytics détaillés</span>
+                  <span className="sk-premium-teaser-feat">🤖 Conseils IA</span>
+                  <span className="sk-premium-teaser-feat">🏆 Formats gagnants</span>
+                </div>
+                <div className="sk-premium-teaser-preview">
+                  <div className="sk-premium-blur-card">
+                    <span>📈 Engagement: ██.█%</span>
+                    <span>👁️ Vues: ████</span>
+                    <span>🎯 Score: ██/100</span>
+                  </div>
+                </div>
+                <button type="button" className="sk-premium-teaser-cta" onClick={() => navigate('/forfaits')}>
+                  {accessInfo.upsells[0]?.ctaLabel ?? 'Voir les forfaits'} →
+                </button>
+              </div>
+            )}
 
             {/* ── Feed social pleine largeur ── */}
             <AnnouncesFeed
@@ -3264,6 +4109,13 @@ export function SoKinPage() {
               postInsightsCache={postInsightsCache}
               onLoadInsight={loadPostInsight}
               feedSource={feedTab}
+              advisorTips={advisorTips}
+              dismissedTipIds={dismissedTipIds}
+              onDismissTip={handleDismissTip}
+              onRepost={handleOpenRepost}
+              onToggle={handleToggleFromFeed}
+              socialState={socialStateMap}
+              onScoring={handleOpenScoring}
             />
           </div>
 
@@ -3304,6 +4156,7 @@ export function SoKinPage() {
                     ['HIDDEN', 'Masqués', postCounts.HIDDEN],
                     ['ARCHIVED', 'Archivés', postCounts.ARCHIVED],
                     ['DELETED', 'Supprimés', postCounts.DELETED],
+                    ['BOOKMARKS', '🔖 Favoris', postCounts.BOOKMARKS ?? myBookmarks.length],
                   ] as [SoKinContentTab, string, number][]).map(([key, label, count]) => (
                     <button
                       key={key}
@@ -3317,7 +4170,46 @@ export function SoKinPage() {
                 </nav>
 
                 <div className="sk-mobile-manage-body">
-                  {loadingMyPublishedPosts ? (
+                  {contentTab === 'BOOKMARKS' ? (
+                    /* ── Vue Favoris ── */
+                    loadingBookmarks ? (
+                      <p className="sk-mobile-manage-empty">Chargement…</p>
+                    ) : myBookmarks.length === 0 ? (
+                      <p className="sk-mobile-manage-empty">Aucun favori pour le moment.</p>
+                    ) : (
+                      myBookmarks.map((post) => (
+                        <article key={post.id} className="sk-mobile-manage-item sk-mobile-manage-item--bookmark">
+                          <button type="button" className="sk-mobile-manage-main" onClick={() => { setShowMobileManage(false); void handleOpenPublishedPost(post.id); }}>
+                            {post.author?.profile?.avatarUrl && (
+                              <img src={resolveMediaUrl(post.author.profile.avatarUrl)} alt="" className="sk-bookmark-avatar" />
+                            )}
+                            <div className="sk-bookmark-info">
+                              <strong>{post.text?.slice(0, 60) || 'Publication sans texte'}</strong>
+                              <span className="sk-bookmark-meta">
+                                {post.author?.profile?.displayName ?? 'Utilisateur'} · {new Date(post.createdAt).toLocaleDateString('fr-FR')}
+                              </span>
+                            </div>
+                          </button>
+                          <div className="sk-mobile-manage-stats">
+                            <span title="Likes">❤️ {post.likes ?? 0}</span>
+                            <span title="Commentaires">💬 {post.comments ?? 0}</span>
+                          </div>
+                          <div className="sk-mobile-manage-actions">
+                            <button
+                              type="button"
+                              className="sk-mobile-manage-btn sk-mobile-manage-btn--bookmark-remove"
+                              onClick={() => void handleRemoveBookmark(post.id)}
+                              disabled={removingBookmarkId === post.id}
+                            >
+                              {removingBookmarkId === post.id ? '⏳' : '🔖 Retirer'}
+                            </button>
+                          </div>
+                        </article>
+                      ))
+                    )
+                  ) : (
+                    /* ── Vue Mes publications ── */
+                    loadingMyPublishedPosts ? (
                     <p className="sk-mobile-manage-empty">Chargement…</p>
                   ) : myPublishedPosts.length === 0 ? (
                     <p className="sk-mobile-manage-empty">Aucune publication dans cette catégorie.</p>
@@ -3362,7 +4254,7 @@ export function SoKinPage() {
                         </article>
                       );
                     })
-                  )}
+                  ))}
                 </div>
                 <footer className="sk-mobile-manage-footer">
                   <button type="button" className="sk-mobile-manage-new" onClick={() => { setShowMobileManage(false); handleOpenCreate(); }}>+ Nouvelle publication</button>
@@ -3457,8 +4349,8 @@ export function SoKinPage() {
                 <button type="button" className="sk-desktop-nav-item" onClick={() => setFeedTab('pour-toi')}>
                   <span className="sk-desktop-nav-icon">✨</span><span className="sk-desktop-nav-label">Pour toi</span>
                 </button>
-                <button type="button" className="sk-desktop-nav-item" onClick={() => setFeedTab('suivis')}>
-                  <span className="sk-desktop-nav-icon">👥</span><span className="sk-desktop-nav-label">Suivis</span>
+                <button type="button" className="sk-desktop-nav-item sk-desktop-nav-item--soon" aria-disabled>
+                  <span className="sk-desktop-nav-icon">👥</span><span className="sk-desktop-nav-label">Suivis</span><span className="sk-feed-tab-badge">Bientôt</span>
                 </button>
                 <button type="button" className="sk-desktop-nav-item" onClick={() => navigate('/explorer')}>
                   <span className="sk-desktop-nav-icon">🔍</span><span className="sk-desktop-nav-label">Explorer</span>
@@ -3471,8 +4363,11 @@ export function SoKinPage() {
                 </button>
                 {isLoggedIn && (
                   <>
+                    <button type="button" className="sk-desktop-nav-item" onClick={() => navigate('/sokin/bookmarks')}>
+                      <span className="sk-desktop-nav-icon">🔖</span><span className="sk-desktop-nav-label">Enregistrés</span>
+                    </button>
                     <button type="button" className="sk-desktop-nav-item" onClick={async () => { setShowMobileManage(true); await loadMyPublishedPosts(); }}>
-                      <span className="sk-desktop-nav-icon">🔖</span><span className="sk-desktop-nav-label">Signets</span>
+                      <span className="sk-desktop-nav-icon">📋</span><span className="sk-desktop-nav-label">Mon contenu</span>
                     </button>
                     <button type="button" className="sk-desktop-nav-item" onClick={() => navigate('/messaging')}>
                       <span className="sk-desktop-nav-icon">💬</span><span className="sk-desktop-nav-label">Messages</span>
@@ -3480,6 +4375,18 @@ export function SoKinPage() {
                     <button type="button" className="sk-desktop-nav-item" onClick={() => navigate(dashboardPath)}>
                       <span className="sk-desktop-nav-icon">👤</span><span className="sk-desktop-nav-label">Profil</span>
                     </button>
+                    {accessInfo && (
+                      <div className="sk-desktop-tier-row">
+                        <span className={`sk-tier-badge ${TIER_BADGE[accessInfo.tier]?.cls ?? 'sk-tier-badge--free'}`}>
+                          {TIER_BADGE[accessInfo.tier]?.label ?? 'FREE'}
+                        </span>
+                        {accessInfo.tier === 'FREE' && (
+                          <button type="button" className="sk-desktop-upgrade-link" onClick={() => navigate('/forfaits')}>
+                            Passer Pro ✨
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </>
                 )}
               </nav>
@@ -3505,11 +4412,13 @@ export function SoKinPage() {
                   <button
                     key={tab.key}
                     type="button"
-                    className={`sk-feed-tab${feedTab === tab.key ? ' sk-feed-tab--active' : ''}`}
-                    onClick={() => setFeedTab(tab.key)}
+                    className={`sk-feed-tab${feedTab === tab.key ? ' sk-feed-tab--active' : ''}${tab.soon ? ' sk-feed-tab--soon' : ''}`}
+                    onClick={() => { if (!tab.soon) setFeedTab(tab.key); }}
+                    aria-disabled={tab.soon || undefined}
                   >
                     <span className="sk-feed-tab-icon">{tab.icon}</span>
                     <span>{tab.label}</span>
+                    {tab.soon && <span className="sk-feed-tab-badge">Bientôt</span>}
                   </button>
                 ))}
               </nav>
@@ -3542,6 +4451,13 @@ export function SoKinPage() {
                 postInsightsCache={postInsightsCache}
                 onLoadInsight={loadPostInsight}
                 feedSource={feedTab}
+                advisorTips={advisorTips}
+                dismissedTipIds={dismissedTipIds}
+                onDismissTip={handleDismissTip}
+                onRepost={handleOpenRepost}
+                onToggle={handleToggleFromFeed}
+                socialState={socialStateMap}
+                onScoring={handleOpenScoring}
               />
             </main>
 
@@ -3623,6 +4539,73 @@ export function SoKinPage() {
                   )}
                 </div>
               </section>
+
+              {/* ── Smart: Formats gagnants ── */}
+              {smartBlocks && smartBlocks.winningFormats.length > 0 && (
+                <section className="sk-desktop-panel sk-desktop-smart glass-container" aria-label="Formats gagnants">
+                  <h3>🏆 Formats gagnants</h3>
+                  <ul className="sk-desktop-smart-list">
+                    {smartBlocks.winningFormats.slice(0, 4).map((f) => (
+                      <li key={f.postType} className="sk-desktop-smart-item">
+                        <span className="sk-desktop-smart-label">{f.label}</span>
+                        <span className={`sk-desktop-smart-badge sk-desktop-smart-badge--${f.trend.toLowerCase()}`}>
+                          {f.trend === 'HOT' ? '🔥 Hot' : f.trend === 'STABLE' ? '📊 Stable' : '❄️ Cool'}
+                        </span>
+                        <span className="sk-desktop-smart-meta">{f.avgViews} vues · {f.avgEngagement}% eng.</span>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+
+              {/* ── Smart: Idées de publication ── */}
+              {smartBlocks && smartBlocks.publishIdeas.length > 0 && (
+                <section className="sk-desktop-panel sk-desktop-smart glass-container" aria-label="Idées de publication">
+                  <h3>💡 Idées pour vous</h3>
+                  <ul className="sk-desktop-smart-list">
+                    {smartBlocks.publishIdeas.slice(0, 3).map((idea) => (
+                      <li key={idea.id} className="sk-desktop-smart-idea">
+                        <strong className="sk-desktop-smart-idea-title">{idea.title}</strong>
+                        <span className="sk-desktop-smart-idea-reason">{idea.reason}</span>
+                        <button type="button" className="sk-desktop-smart-idea-action" onClick={handleOpenCreate}>{idea.actionLabel}</button>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+
+              {/* ── Smart: Opportunités boost ── */}
+              {smartBlocks && smartBlocks.boostOpportunities.length > 0 && (
+                <section className="sk-desktop-panel sk-desktop-smart glass-container" aria-label="Boost">
+                  <h3>🚀 Boost recommandé</h3>
+                  <ul className="sk-desktop-smart-list">
+                    {smartBlocks.boostOpportunities.slice(0, 2).map((b) => (
+                      <li key={b.postId} className="sk-desktop-smart-boost">
+                        <span className="sk-desktop-smart-boost-reason">{b.reason}</span>
+                        <span className="sk-desktop-smart-boost-score">Score {b.boostScore}/100</span>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+
+              {/* ── Premium upsell sidebar (FREE only) ── */}
+              {isLoggedIn && accessInfo && accessInfo.tier === 'FREE' && (
+                <section className="sk-desktop-panel sk-desktop-premium-upsell glass-container" aria-label="Débloquer premium">
+                  <h3>✨ Débloquer So-Kin Pro</h3>
+                  <p className="sk-desktop-premium-desc">Accédez aux analytics avancés, conseils IA et bien plus.</p>
+                  <div className="sk-desktop-premium-preview">
+                    <div className="sk-desktop-premium-blur-row">📊 Engagement: ██.█%</div>
+                    <div className="sk-desktop-premium-blur-row">👁️ Vues 7j: ████</div>
+                    <div className="sk-desktop-premium-blur-row">🎯 Score: ██/100</div>
+                  </div>
+                  {accessInfo.upsells.map((u, i) => (
+                    <button key={i} type="button" className="sk-desktop-premium-cta" onClick={() => navigate(u.ctaRoute)}>
+                      {u.ctaLabel} →
+                    </button>
+                  ))}
+                </section>
+              )}
 
               {/* ── Bloc business discret ── */}
               <section className="sk-desktop-panel sk-desktop-commercial sk-desktop-commercial--discreet glass-container" aria-label="Kin-Sell Business">
@@ -3733,11 +4716,96 @@ export function SoKinPage() {
           userIdentifier={user?.profile?.username ? `@${user.profile.username.replace('@', '')}` : `ID ${user?.id?.slice(0, 8) ?? 'invité'}`}
           cityLabel={city}
           country={country}
+          editingPost={editingPost}
         />
       )}
 
       {viewerItem && (
         <MediaViewer item={viewerItem} onClose={() => setViewerItem(null)} />
+      )}
+
+      {/* ═══ MODAL REPOST ═══ */}
+      {repostTarget && (
+        <div className="sk-repost-overlay" onClick={() => setRepostTarget(null)} role="dialog" aria-modal="true" aria-label="Reposter">
+          <div className="sk-repost-modal glass-container" onClick={(e) => e.stopPropagation()}>
+            <div className="sk-repost-header">
+              <h3>🔄 Reposter</h3>
+              <button type="button" className="sk-repost-close" onClick={() => setRepostTarget(null)} aria-label="Fermer">✕</button>
+            </div>
+            <textarea
+              className="sk-repost-comment"
+              placeholder="Ajouter un commentaire (optionnel)…"
+              maxLength={300}
+              value={repostComment}
+              onChange={(e) => setRepostComment(e.target.value)}
+              rows={3}
+            />
+            <div className="sk-repost-preview">
+              <div className="sk-repost-preview-header">
+                <strong>{repostTarget.author.profile?.displayName ?? 'Utilisateur'}</strong>
+                <span className="sk-repost-preview-handle">
+                  @{repostTarget.author.profile?.username ?? repostTarget.author.id.slice(0, 8)}
+                </span>
+              </div>
+              <p className="sk-repost-preview-text">
+                {repostTarget.text.length > 120 ? repostTarget.text.slice(0, 120) + '…' : repostTarget.text}
+              </p>
+              {repostTarget.mediaUrls.length > 0 && (
+                <img
+                  className="sk-repost-preview-thumb"
+                  src={resolveMediaUrl(repostTarget.mediaUrls[0])}
+                  alt=""
+                  loading="lazy"
+                />
+              )}
+            </div>
+            <button
+              type="button"
+              className="sk-repost-confirm"
+              onClick={handleConfirmRepost}
+              disabled={reposting}
+              aria-busy={reposting}
+            >
+              {reposting ? '⏳ Repost en cours…' : '🔄 Reposter'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ DELETE CONFIRM MODAL ═══ */}
+      {deleteConfirmPostId && (
+        <div className="sk-delete-overlay" onClick={cancelDelete} role="dialog" aria-modal="true" aria-label="Confirmer la suppression">
+          <div className="sk-delete-modal glass-container" onClick={(e) => e.stopPropagation()}>
+            {deleteSuccess ? (
+              <div className="sk-delete-success">
+                <span className="sk-delete-success-icon" aria-hidden="true">✓</span>
+                <p>Publication supprimée</p>
+              </div>
+            ) : (
+              <>
+                <div className="sk-delete-icon" aria-hidden="true">🗑️</div>
+                <h3 className="sk-delete-title">Supprimer cette publication ?</h3>
+                <p className="sk-delete-desc">Cette action est irréversible. La publication sera définitivement retirée.</p>
+                {deleteError && <p className="sk-delete-error" role="alert">{deleteError}</p>}
+                <div className="sk-delete-actions">
+                  <button type="button" className="sk-btn sk-btn--outline sk-delete-cancel" onClick={cancelDelete} disabled={Boolean(deletingPostId)}>Annuler</button>
+                  <button type="button" className="sk-btn sk-delete-confirm" onClick={() => void confirmDeletePost()} disabled={Boolean(deletingPostId)}>
+                    {deletingPostId ? 'Suppression…' : 'Supprimer'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ═══ SCORING DRAWER ═══ */}
+      {scoringDrawerPostId && (
+        <ScoringDrawer
+          data={scoringData}
+          loading={scoringLoading}
+          onClose={() => { setScoringDrawerPostId(null); setScoringData(null); }}
+        />
       )}
     </>
   );

@@ -18,5 +18,7 @@ export const routes = {
   userPublic: (username: string) => `/user/${username}`,
   businessPublic: (slug: string) => `/business/${slug}`,
   listingDetails: (id: string) => `/listing/${id}`,
-  soKin: "/sokin"
+  soKin: "/sokin",
+  soKinBookmarks: "/sokin/bookmarks",
+  soKinDashboard: "/sokin/dashboard"
 };
