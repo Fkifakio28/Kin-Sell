@@ -509,12 +509,12 @@ export function HomePage() {
     return () => observer.disconnect();
   }, []);
 
-  // So-Kin auto-rotate
+  // So-Kin auto-rotate (single-card slider, 2 min)
   useEffect(() => {
-    if (sokinFeed.length === 0) return;
+    if (sokinFeed.length <= 1) return;
     const timer = setInterval(() => {
       setSokinIndex((prev) => (prev + 1) % sokinFeed.length);
-    }, 4000);
+    }, 120_000);
     return () => clearInterval(timer);
   }, [sokinFeed.length]);
 
@@ -1015,22 +1015,33 @@ export function HomePage() {
               </div>
             ) : (
               <SoKinToastProvider>
-                <div className="h-sokin-real-feed">
-                  {sokinFeed.slice(0, 4).map((post) => (
-                    <AnnounceCard
-                      key={post.id}
-                      post={post}
-                      t={t}
-                      isLoggedIn={isLoggedIn}
-                      onMediaClick={(item) => setViewerItem(item)}
-                      isCommentsOpen={openCommentsPostId === post.id}
-                      onOpenComments={() => handleOpenComments(post.id)}
-                      onContact={() => void handleSokinContact(post)}
-                      isContacting={contactingPostId === post.id}
-                      feedSource="home"
-                    />
-                  ))}
+                <div className="h-sokin-real-feed h-sokin-slider">
+                  {(() => {
+                    const post = sokinFeed[sokinIndex % sokinFeed.length];
+                    return (
+                      <div className="h-sokin-slide" key={post.id}>
+                        <AnnounceCard
+                          post={post}
+                          t={t}
+                          isLoggedIn={isLoggedIn}
+                          onMediaClick={(item) => setViewerItem(item)}
+                          isCommentsOpen={openCommentsPostId === post.id}
+                          onOpenComments={() => handleOpenComments(post.id)}
+                          onContact={() => void handleSokinContact(post)}
+                          isContacting={contactingPostId === post.id}
+                          feedSource="home"
+                        />
+                      </div>
+                    );
+                  })()}
                 </div>
+                {sokinFeed.length > 1 && (
+                  <div className="h-sokin-slider-dots">
+                    {sokinFeed.slice(0, 8).map((_, i) => (
+                      <button key={i} type="button" className={`h-sokin-dot${i === sokinIndex % sokinFeed.length ? ' active' : ''}`} onClick={() => setSokinIndex(i)} aria-label={`Post ${i + 1}`} />
+                    ))}
+                  </div>
+                )}
               </SoKinToastProvider>
             )}
 

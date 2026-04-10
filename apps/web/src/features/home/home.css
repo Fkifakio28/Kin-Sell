@@ -1491,23 +1491,51 @@
   }
 }
 
-/* ═══════════ SO-KIN REAL FEED dans h-sokin-box ═══════════ */
+/* ═══════════ SO-KIN REAL FEED — single-card slider ═══════════ */
 .h-sokin-real-feed {
   display: flex;
   flex-direction: column;
   gap: 0;
 }
 .h-sokin-real-feed .sk-card {
-  border-radius: 0;
+  border-radius: 10px;
   margin: 0 -0.65rem;
   width: calc(100% + 1.3rem);
 }
-.h-sokin-real-feed .sk-card:first-child {
-  border-radius: 10px 10px 0 0;
-}
-.h-sokin-real-feed .sk-card:last-child {
-  border-radius: 0 0 10px 10px;
-}
 .h-sokin-box {
   overflow: hidden;
+}
+
+/* Slide animation */
+.h-sokin-slide {
+  animation: h-sokin-slide-in 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes h-sokin-slide-in {
+  from { opacity: 0; transform: translateX(24px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* Dot indicators */
+.h-sokin-slider-dots {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  padding: 0.5rem 0 0.2rem;
+}
+.h-sokin-slider-dots .h-sokin-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.18);
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.2s, transform 0.2s;
+}
+.h-sokin-slider-dots .h-sokin-dot.active {
+  background: var(--color-primary, #6f58ff);
+  transform: scale(1.25);
+}
+.h-sokin-slider-dots .h-sokin-dot:hover:not(.active) {
+  background: rgba(255, 255, 255, 0.35);
 }
