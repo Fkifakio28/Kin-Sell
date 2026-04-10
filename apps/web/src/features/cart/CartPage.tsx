@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../app/providers/AuthProvider";
 import { useLocaleCurrency } from "../../app/providers/LocaleCurrencyProvider";
-import { orders, negotiations, billing, orderAi, resolveMediaUrl, type CartSummary, type NegotiationSummary, type BillingPlanSummary, type CheckoutAdvice, type OrderSummary, type OrderStatus, ApiError } from "../../lib/api-client";
+import { orders, negotiations, billing, orderAi, resolveMediaUrl, type CartSummary, type NegotiationSummary, type NegotiationStatus, type BillingPlanSummary, type CheckoutAdvice, type OrderSummary, type OrderStatus, ApiError } from "../../lib/api-client";
 import { useSocket } from "../../hooks/useSocket";
 import { useRealtimeSync } from "../../hooks/useRealtimeSync";
 import { NegotiationRespondPopup } from "../negotiations/NegotiationRespondPopup";
@@ -62,6 +62,13 @@ export function CartPage() {
   const [buyerOrdersFilter, setBuyerOrdersFilter] = useState<OrderStatus | "">("");
   const [buyerOrdersLoading, setBuyerOrdersLoading] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<OrderSummary | null>(null);
+
+  /* ── Buyer negotiation history ── */
+  const [buyerNegos, setBuyerNegos] = useState<NegotiationSummary[]>([]);
+  const [buyerNegosFilter, setBuyerNegosFilter] = useState<NegotiationStatus | "">("");
+  const [buyerNegosLoading, setBuyerNegosLoading] = useState(false);
+  const [selectedNego, setSelectedNego] = useState<NegotiationSummary | null>(null);
+  const [historyTab, setHistoryTab] = useState<"orders" | "negotiations">("orders");
 
   /* ── Buyer delivery confirmation state ── */
   const [buyerConfirmOrderId, setBuyerConfirmOrderId] = useState<string | null>(null);
@@ -142,6 +149,49 @@ export function CartPage() {
     void loadBuyerOrders();
   }, [loadBuyerOrders]);
 
+  /* ── Fetch buyer negotiations ── */
+  const loadBuyerNegos = useCallback(async () => {
+    if (!isLoggedIn) return;
+    setBuyerNegosLoading(true);
+    try {
+      const data = await negotiations.buyerList({ limit: 50 });
+      const sixtyDaysAgo = Date.now() - 60 * 24 * 60 * 60 * 1000;
+      setBuyerNegos(data.negotiations.filter((n) => new Date(n.createdAt).getTime() >= sixtyDaysAgo));
+    } catch {
+      setBuyerNegos([]);
+    } finally {
+      setBuyerNegosLoading(false);
+    }
+  }, [isLoggedIn]);
+
+  useEffect(() => {
+    void loadBuyerNegos();
+  }, [loadBuyerNegos]);
+
+  const filteredBuyerNegos = useMemo(() => {
+    if (!buyerNegosFilter) return buyerNegos;
+    return buyerNegos.filter((n) => n.status === buyerNegosFilter);
+  }, [buyerNegos, buyerNegosFilter]);
+
+  const NEGO_STATUS_LABEL: Record<string, string> = {
+    PENDING: "⏳ En attente",
+    COUNTERED: "🔄 Contre-offre",
+    ACCEPTED: "✅ Accepté",
+    REFUSED: "❌ Refusé",
+    EXPIRED: "⏰ Expiré",
+  };
+  const NEGO_ACTIVE_STATUSES: NegotiationStatus[] = ["PENDING", "COUNTERED"];
+
+  const activeNegos = useMemo(
+    () => buyerNegos.filter((n) => NEGO_ACTIVE_STATUSES.includes(n.status)),
+    [buyerNegos]
+  );
+  const resolvedNegos = useMemo(() => {
+    const base = buyerNegos.filter((n) => !NEGO_ACTIVE_STATUSES.includes(n.status));
+    if (!buyerNegosFilter) return base;
+    return base.filter((n) => n.status === buyerNegosFilter);
+  }, [buyerNegos, buyerNegosFilter]);
+
   const filteredBuyerOrders = useMemo(() => {
     if (!buyerOrdersFilter) return buyerOrders;
     return buyerOrders.filter((o) => o.status === buyerOrdersFilter);
@@ -178,6 +228,16 @@ export function CartPage() {
       case 'CANCELED': return 'cart-status-badge cart-status-badge--danger';
       case 'SHIPPED': case 'PROCESSING': return 'cart-status-badge cart-status-badge--warning';
       default: return 'cart-status-badge';
+    }
+  };
+
+  const negoBadgeClass = (status: string) => {
+    switch (status) {
+      case 'ACCEPTED': return 'cart-status-badge cart-status-badge--success';
+      case 'REFUSED': return 'cart-status-badge cart-status-badge--danger';
+      case 'EXPIRED': return 'cart-status-badge cart-status-badge--danger';
+      case 'COUNTERED': return 'cart-status-badge cart-status-badge--info';
+      default: return 'cart-status-badge cart-status-badge--warning';
     }
   };
 
@@ -221,13 +281,14 @@ export function CartPage() {
         }
       }
       void reloadCart();
+      void loadBuyerNegos();
     };
 
     on('negotiation:updated', handleNegotiationUpdated);
     return () => {
       off('negotiation:updated', handleNegotiationUpdated);
     };
-  }, [isLoggedIn, user, on, off, reloadCart, respondNeg?.id]);
+  }, [isLoggedIn, user, on, off, reloadCart, loadBuyerNegos, respondNeg?.id]);
 
   /* ── Fetch billing plan ── */
   useEffect(() => {
@@ -947,74 +1008,259 @@ export function CartPage() {
         </div>
       )}
 
-      {/* ── Buyer order history (DELIVERED + CANCELED only) ── */}
+      {/* ── Historique complet: onglets Commandes + Marchandages ── */}
       {isLoggedIn && (
         <div className="cart-history glass-container">
           <div className="cart-history-head">
-            <h3 className="cart-history-title">📋 {t('cart.orderHistoryTitle')}</h3>
-            <span className="cart-history-hint">30 {t('cart.lastDays')}</span>
-            <select
-              className="cart-history-filter"
-              value={buyerOrdersFilter}
-              onChange={(e) => setBuyerOrdersFilter(e.target.value as OrderStatus | "")}
-            >
-              <option value="">{t('cart.allStatuses')}</option>
-              <option value="DELIVERED">📬 {t('order.status.delivered')}</option>
-              <option value="CANCELED">❌ {t('order.status.canceled')}</option>
-            </select>
+            <div className="cart-history-tabs">
+              <button
+                type="button"
+                className={`cart-history-tab ${historyTab === 'orders' ? 'cart-history-tab--active' : ''}`}
+                onClick={() => setHistoryTab('orders')}
+              >
+                📋 Commandes
+              </button>
+              <button
+                type="button"
+                className={`cart-history-tab ${historyTab === 'negotiations' ? 'cart-history-tab--active' : ''}`}
+                onClick={() => setHistoryTab('negotiations')}
+              >
+                🤝 Marchandages {activeNegos.length > 0 && <span className="cart-history-tab-badge">{activeNegos.length}</span>}
+              </button>
+            </div>
+
+            {historyTab === 'orders' && (
+              <select
+                className="cart-history-filter"
+                value={buyerOrdersFilter}
+                onChange={(e) => setBuyerOrdersFilter(e.target.value as OrderStatus | "")}
+              >
+                <option value="">Tous les statuts</option>
+                <option value="DELIVERED">📬 Livrée</option>
+                <option value="CANCELED">❌ Annulée</option>
+              </select>
+            )}
+            {historyTab === 'negotiations' && (
+              <select
+                className="cart-history-filter"
+                value={buyerNegosFilter}
+                onChange={(e) => setBuyerNegosFilter(e.target.value as NegotiationStatus | "")}
+              >
+                <option value="">Tous les statuts</option>
+                <option value="ACCEPTED">✅ Accepté</option>
+                <option value="REFUSED">❌ Refusé</option>
+                <option value="EXPIRED">⏰ Expiré</option>
+                <option value="COUNTERED">🔄 Contre-offre</option>
+                <option value="PENDING">⏳ En attente</option>
+              </select>
+            )}
           </div>
 
-          {buyerOrdersLoading ? (
-            <div className="cart-history-loading">
-              <span className="cart-spinner" />
-              <span>Chargement…</span>
-            </div>
-          ) : historyOrders.length === 0 ? (
-            <div className="cart-history-empty">
-              <span style={{ fontSize: '1.8rem' }}>📭</span>
-              <p>{t('cart.noHistoryOrders')}</p>
-            </div>
-          ) : (
-            <div className="cart-history-list">
-              {historyOrders.map((order) => (
-                <div
-                  key={order.id}
-                  className="cart-history-card glass-card"
-                  onClick={() => setSelectedOrder(selectedOrder?.id === order.id ? null : order)}
-                  style={{ cursor: 'pointer' }}
-                >
-                  <div className="cart-history-card-head">
-                    <span className="cart-history-card-id">#{order.id.slice(0, 8).toUpperCase()}</span>
-                    <span className={statusBadgeClass(order.status)}>{statusLabel(order.status)}</span>
-                  </div>
-                  <div className="cart-history-card-body">
-                    <span className="cart-history-card-amount">{formatMoneyFromUsdCents(order.totalUsdCents)}</span>
-                    <span className="cart-history-card-meta">
-                      {order.itemsCount} article{order.itemsCount > 1 ? 's' : ''} · {new Date(order.createdAt).toLocaleDateString('fr-FR')}
-                    </span>
-                  </div>
-
-                  {selectedOrder?.id === order.id && (
-                    <div className="cart-history-card-detail">
-                      {order.items.map((item) => (
-                        <div key={item.id} className="cart-history-item">
-                          {item.imageUrl ? (
-                            <img src={resolveMediaUrl(item.imageUrl)} alt={item.title} className="cart-history-item-img" />
-                          ) : (
-                            <span className="cart-history-item-ph">{item.listingType === 'SERVICE' ? '🛠' : '📦'}</span>
-                          )}
-                          <div className="cart-history-item-info">
-                            <strong>{item.title}</strong>
-                            <span>{item.category} · x{item.quantity}</span>
-                          </div>
-                          <span className="cart-history-item-price">{formatMoneyFromUsdCents(item.lineTotalUsdCents)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+          {/* ── Onglet Commandes ── */}
+          {historyTab === 'orders' && (
+            <>
+              {buyerOrdersLoading ? (
+                <div className="cart-history-loading">
+                  <span className="cart-spinner" />
+                  <span>Chargement…</span>
                 </div>
-              ))}
-            </div>
+              ) : historyOrders.length === 0 ? (
+                <div className="cart-history-empty">
+                  <span style={{ fontSize: '1.8rem' }}>📭</span>
+                  <p>Aucune commande terminée récente</p>
+                </div>
+              ) : (
+                <div className="cart-history-list">
+                  {historyOrders.map((order) => (
+                    <div
+                      key={order.id}
+                      className="cart-history-card glass-card"
+                      onClick={() => setSelectedOrder(selectedOrder?.id === order.id ? null : order)}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      <div className="cart-history-card-head">
+                        <span className="cart-history-card-id">#{order.id.slice(0, 8).toUpperCase()}</span>
+                        <span className={statusBadgeClass(order.status)}>{statusLabel(order.status)}</span>
+                      </div>
+                      <div className="cart-history-card-body">
+                        <span className="cart-history-card-amount">{formatMoneyFromUsdCents(order.totalUsdCents)}</span>
+                        <span className="cart-history-card-meta">
+                          {order.itemsCount} article{order.itemsCount > 1 ? 's' : ''} · {new Date(order.createdAt).toLocaleDateString('fr-FR')}
+                        </span>
+                      </div>
+                      {order.seller && (
+                        <div className="cart-history-card-seller">
+                          Vendeur : {order.seller.businessPublicName ?? order.seller.displayName}
+                        </div>
+                      )}
+                      {order.notes && (
+                        <div className="cart-history-card-notes">{order.notes}</div>
+                      )}
+
+                      {selectedOrder?.id === order.id && (
+                        <div className="cart-history-card-detail">
+                          {order.items.map((item) => (
+                            <div key={item.id} className="cart-history-item">
+                              {item.imageUrl ? (
+                                <img src={resolveMediaUrl(item.imageUrl)} alt={item.title} className="cart-history-item-img" />
+                              ) : (
+                                <span className="cart-history-item-ph">{item.listingType === 'SERVICE' ? '🛠' : '📦'}</span>
+                              )}
+                              <div className="cart-history-item-info">
+                                <strong>{item.title}</strong>
+                                <span>{item.category} · x{item.quantity}</span>
+                              </div>
+                              <span className="cart-history-item-price">{formatMoneyFromUsdCents(item.lineTotalUsdCents)}</span>
+                            </div>
+                          ))}
+                          <div className="cart-history-card-dates">
+                            <span>Créée : {new Date(order.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                            {order.deliveredAt && <span>Livrée : {new Date(order.deliveredAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>}
+                            {order.canceledAt && <span>Annulée : {new Date(order.canceledAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+
+          {/* ── Onglet Marchandages ── */}
+          {historyTab === 'negotiations' && (
+            <>
+              {buyerNegosLoading ? (
+                <div className="cart-history-loading">
+                  <span className="cart-spinner" />
+                  <span>Chargement…</span>
+                </div>
+              ) : filteredBuyerNegos.length === 0 ? (
+                <div className="cart-history-empty">
+                  <span style={{ fontSize: '1.8rem' }}>🤝</span>
+                  <p>Aucun marchandage trouvé</p>
+                </div>
+              ) : (
+                <div className="cart-history-list">
+                  {filteredBuyerNegos.map((nego) => {
+                    const lastOffer = nego.offers[nego.offers.length - 1];
+                    const isActive = NEGO_ACTIVE_STATUSES.includes(nego.status);
+                    return (
+                      <div
+                        key={nego.id}
+                        className={`cart-history-card glass-card ${isActive ? 'cart-history-card--active-nego' : ''}`}
+                        onClick={() => setSelectedNego(selectedNego?.id === nego.id ? null : nego)}
+                        style={{ cursor: 'pointer' }}
+                      >
+                        <div className="cart-history-card-head">
+                          <span className="cart-history-card-id">#{nego.id.slice(0, 8).toUpperCase()}</span>
+                          <span className={negoBadgeClass(nego.status)}>{NEGO_STATUS_LABEL[nego.status] ?? nego.status}</span>
+                        </div>
+                        <div className="cart-history-card-body">
+                          <div className="cart-nego-prices">
+                            <span className="cart-nego-original">{formatMoneyFromUsdCents(nego.originalPriceUsdCents)}</span>
+                            <span className="cart-nego-arrow">→</span>
+                            <span className="cart-nego-final">
+                              {nego.finalPriceUsdCents != null
+                                ? formatMoneyFromUsdCents(nego.finalPriceUsdCents)
+                                : lastOffer
+                                  ? formatMoneyFromUsdCents(lastOffer.priceUsdCents)
+                                  : '—'}
+                            </span>
+                          </div>
+                          <span className="cart-history-card-meta">
+                            x{nego.quantity} · {new Date(nego.createdAt).toLocaleDateString('fr-FR')}
+                          </span>
+                        </div>
+
+                        {/* Listing info */}
+                        {nego.listing && (
+                          <div className="cart-nego-listing">
+                            {nego.listing.imageUrl ? (
+                              <img src={resolveMediaUrl(nego.listing.imageUrl)} alt={nego.listing.title} className="cart-nego-listing-img" />
+                            ) : (
+                              <span className="cart-nego-listing-ph">{nego.listing.type === 'SERVICE' ? '🛠' : '📦'}</span>
+                            )}
+                            <span className="cart-nego-listing-title">{nego.listing.title}</span>
+                          </div>
+                        )}
+
+                        {/* Seller & next action */}
+                        <div className="cart-nego-meta-row">
+                          <span>Vendeur : {nego.seller.displayName}</span>
+                          {isActive && nego.status === 'COUNTERED' && (
+                            <span className="cart-nego-next-action">→ Répondre à la contre-offre</span>
+                          )}
+                          {isActive && nego.status === 'PENDING' && (
+                            <span className="cart-nego-next-action">→ En attente de réponse du vendeur</span>
+                          )}
+                        </div>
+
+                        {/* Expanded detail: offers timeline */}
+                        {selectedNego?.id === nego.id && (
+                          <div className="cart-history-card-detail">
+                            <div className="cart-nego-timeline">
+                              {nego.offers.map((offer, idx) => (
+                                <div key={offer.id} className={`cart-nego-timeline-item ${offer.fromUserId === nego.buyerUserId ? 'cart-nego-timeline--buyer' : 'cart-nego-timeline--seller'}`}>
+                                  <div className="cart-nego-timeline-dot" />
+                                  <div className="cart-nego-timeline-content">
+                                    <div className="cart-nego-timeline-head">
+                                      <strong>{offer.fromDisplayName}</strong>
+                                      <span>{formatMoneyFromUsdCents(offer.priceUsdCents)}</span>
+                                    </div>
+                                    {offer.message && <p className="cart-nego-timeline-msg">« {offer.message} »</p>}
+                                    <span className="cart-nego-timeline-date">
+                                      {new Date(offer.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                                      {idx === 0 && ' · Marchandage créé'}
+                                    </span>
+                                  </div>
+                                </div>
+                              ))}
+                              {/* Final resolution event */}
+                              {nego.resolvedAt && (
+                                <div className={`cart-nego-timeline-item cart-nego-timeline--event cart-nego-timeline--${nego.status.toLowerCase()}`}>
+                                  <div className="cart-nego-timeline-dot" />
+                                  <div className="cart-nego-timeline-content">
+                                    <strong>{NEGO_STATUS_LABEL[nego.status]}</strong>
+                                    <span className="cart-nego-timeline-date">
+                                      {new Date(nego.resolvedAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                                    </span>
+                                  </div>
+                                </div>
+                              )}
+                              {/* Expiry info for active */}
+                              {isActive && (
+                                <div className="cart-nego-timeline-item cart-nego-timeline--event">
+                                  <div className="cart-nego-timeline-dot" />
+                                  <div className="cart-nego-timeline-content">
+                                    <span className="cart-nego-timeline-date">
+                                      Expire : {new Date(nego.expiresAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                                    </span>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Action buttons for active negotiations */}
+                            {isActive && nego.status === 'COUNTERED' && (
+                              <div className="cart-nego-actions" onClick={(e) => e.stopPropagation()}>
+                                <button
+                                  type="button"
+                                  className="cart-neg-action-btn"
+                                  onClick={() => void handleViewNegotiation(nego.id)}
+                                >
+                                  🔄 Répondre
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </>
           )}
         </div>
       )}

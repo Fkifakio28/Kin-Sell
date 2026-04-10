@@ -1499,3 +1499,274 @@
     animation: none;
   }
 }
+
+/* ── History tabs ── */
+.cart-history-tabs {
+  display: flex;
+  gap: 4px;
+  flex: 1;
+}
+
+.cart-history-tab {
+  padding: 6px 14px;
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cart-history-tab:hover {
+  background: rgba(111, 88, 255, 0.08);
+  color: var(--color-text);
+}
+
+.cart-history-tab--active {
+  background: rgba(111, 88, 255, 0.15);
+  color: var(--color-text);
+  border-color: rgba(111, 88, 255, 0.4);
+}
+
+.cart-history-tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: rgba(111, 88, 255, 0.35);
+  color: var(--color-text);
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+/* ── Order card seller & notes ── */
+.cart-history-card-seller {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  margin-top: 4px;
+}
+
+.cart-history-card-notes {
+  font-size: 0.72rem;
+  color: var(--color-text-tertiary);
+  font-style: italic;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cart-history-card-dates {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--glass-border);
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+}
+
+/* ── Active negotiation card highlight ── */
+.cart-history-card--active-nego {
+  border-left: 3px solid var(--color-accent, #6f58ff);
+}
+
+/* ── Negotiation price display ── */
+.cart-nego-prices {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cart-nego-original {
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+  text-decoration: line-through;
+}
+
+.cart-nego-arrow {
+  font-size: 0.78rem;
+  color: var(--color-text-tertiary);
+}
+
+.cart-nego-final {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+/* ── Negotiation listing preview in history card ── */
+.cart-nego-listing {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.cart-nego-listing-img {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  object-fit: cover;
+}
+
+.cart-nego-listing-ph {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: var(--glass-bg);
+  font-size: 1rem;
+}
+
+.cart-nego-listing-title {
+  font-size: 0.8rem;
+  color: var(--color-text);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+}
+
+/* ── Negotiation meta row ── */
+.cart-nego-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 4px;
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+}
+
+.cart-nego-next-action {
+  color: var(--color-primary-hover, #b9a6ff);
+  font-weight: 600;
+}
+
+/* ── Negotiation offers timeline ── */
+.cart-nego-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  position: relative;
+  padding-left: 18px;
+}
+
+.cart-nego-timeline::before {
+  content: '';
+  position: absolute;
+  left: 7px;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  background: var(--glass-border);
+}
+
+.cart-nego-timeline-item {
+  display: flex;
+  gap: 10px;
+  padding: 6px 0;
+  position: relative;
+}
+
+.cart-nego-timeline-dot {
+  position: absolute;
+  left: -14px;
+  top: 12px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--glass-border);
+  border: 2px solid var(--color-bg, #120b2b);
+}
+
+.cart-nego-timeline--buyer .cart-nego-timeline-dot {
+  background: rgba(111, 88, 255, 0.7);
+}
+
+.cart-nego-timeline--seller .cart-nego-timeline-dot {
+  background: rgba(255, 193, 7, 0.7);
+}
+
+.cart-nego-timeline--accepted .cart-nego-timeline-dot {
+  background: #2ecc71;
+}
+
+.cart-nego-timeline--refused .cart-nego-timeline-dot {
+  background: #ef5350;
+}
+
+.cart-nego-timeline--expired .cart-nego-timeline-dot {
+  background: var(--color-text-tertiary);
+}
+
+.cart-nego-timeline-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.cart-nego-timeline-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.82rem;
+}
+
+.cart-nego-timeline-head strong {
+  color: var(--color-text);
+}
+
+.cart-nego-timeline-head span {
+  font-weight: 700;
+  color: var(--color-primary-hover, #b9a6ff);
+}
+
+.cart-nego-timeline-msg {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+.cart-nego-timeline-date {
+  font-size: 0.68rem;
+  color: var(--color-text-tertiary);
+}
+
+/* ── Negotiation action buttons in history ── */
+.cart-nego-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--glass-border);
+}
+
+@media (max-width: 600px) {
+  .cart-history-tabs {
+    width: 100%;
+  }
+  .cart-history-tab {
+    flex: 1;
+    justify-content: center;
+    font-size: 0.78rem;
+    padding: 6px 8px;
+  }
+}
