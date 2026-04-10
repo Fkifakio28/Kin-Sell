@@ -417,7 +417,13 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 0 12px;
+  padding: 0;
+}
+
+/* AnnounceCard dans le feed mobile */
+.hm-sokin-feed .sk-card {
+  border-radius: 0;
+  margin: 0;
 }
 
 .hm-sentinel {

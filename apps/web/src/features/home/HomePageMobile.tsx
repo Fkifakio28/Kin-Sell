@@ -1,4 +1,4 @@
-﻿/**
+/**
  * HomePageMobile — Refonte complète mobile/tablette Kin-Sell v2
  *
  * Structure :
@@ -24,9 +24,12 @@ import {
   sokin as sokinApi,
   orders as ordersApi,
   messaging,
+  users as usersApi,
   resolveMediaUrl,
+  ApiError,
   type PublicListing,
   type SoKinApiFeedPost,
+  type SoKinApiComment,
   type CartSummary,
 } from "../../lib/api-client";
 import { NegotiatePopup } from "../negotiations/NegotiatePopup";
@@ -37,6 +40,10 @@ import {
   isCategoryLocked,
 } from "../../hooks/useLockedCategories";
 import { useSocket } from "../../hooks/useSocket";
+import { SoKinToastProvider } from "../../components/feedback/SoKinToast";
+import { AnnounceCard, type MediaItem } from "../sokin/AnnounceCard";
+import { MediaViewer, CommentsDrawer, type CommentProfileState, type MissingPublicProfile } from "../sokin/SoKinShared";
+import "../sokin/sokin.css";
 import "./home-mobile.css";
 
 /* ────────────── Static data ────────────── */
@@ -777,7 +784,7 @@ function MarketCard({
   );
 }
 
-/* ────────────── Bloc 3: Fil So-Kin (vertical, lettre) ────────────── */
+/* ────────────── Bloc 3: Fil So-Kin (vertical, AnnounceCard) ────────────── */
 
 function SoKinFeed({
   t,
@@ -803,7 +810,7 @@ function SoKinFeed({
   const [posts, setPosts] = useState<SoKinApiFeedPost[]>([]);
   const [loading, setLoading] = useState(true);
   const { on, off } = useSocket();
-  const { isLoggedIn } = useAuth();
+  const { isLoggedIn, user } = useAuth();
   const [reinjectedTab, setReinjectedTab] = useState<"PRODUIT" | "SERVICE">("PRODUIT");
   const [reinjectedListings, setReinjectedListings] = useState<PublicListing[]>([]);
   const [reinjectedLoading, setReinjectedLoading] = useState(false);
@@ -814,6 +821,136 @@ function SoKinFeed({
   const navigate = useNavigate();
   const touchStart = useRef<{ x: number; y: number } | null>(null);
 
+  /* ── So-Kin interaction state ── */
+  const [viewerItem, setViewerItem] = useState<MediaItem | null>(null);
+  const [openCommentsPostId, setOpenCommentsPostId] = useState<string | null>(null);
+  const [commentsByPost, setCommentsByPost] = useState<Record<string, SoKinApiComment[]>>({});
+  const [loadingCommentsPostId, setLoadingCommentsPostId] = useState<string | null>(null);
+  const [submittingCommentPostId, setSubmittingCommentPostId] = useState<string | null>(null);
+  const [commentDraft, setCommentDraft] = useState('');
+  const [replyToComment, setReplyToComment] = useState<SoKinApiComment | null>(null);
+  const [commentSort, setCommentSort] = useState<'recent' | 'relevant'>('recent');
+  const [commentProfileState, setCommentProfileState] = useState<CommentProfileState>({ status: 'idle', profile: null, message: null });
+  const [contactingPostId, setContactingPostId] = useState<string | null>(null);
+
+  /* ── So-Kin handlers ── */
+  const clearCommentsComposer = useCallback(() => {
+    setReplyToComment(null);
+    setCommentProfileState({ status: 'idle', profile: null, message: null });
+    setCommentDraft('');
+  }, []);
+
+  const loadComments = useCallback(async (postId: string, sort: 'recent' | 'relevant' = 'recent') => {
+    setLoadingCommentsPostId(postId);
+    try {
+      const data = await sokinApi.postComments(postId, { limit: 100, sort });
+      setCommentsByPost((prev) => ({ ...prev, [postId]: data.comments ?? [] }));
+    } catch {
+      setCommentsByPost((prev) => ({ ...prev, [postId]: [] }));
+    } finally {
+      setLoadingCommentsPostId((prev) => (prev === postId ? null : prev));
+    }
+  }, []);
+
+  const handleOpenComments = useCallback((postId: string) => {
+    setOpenCommentsPostId(postId);
+    setCommentSort('recent');
+    clearCommentsComposer();
+    void loadComments(postId, 'recent');
+  }, [clearCommentsComposer, loadComments]);
+
+  const handleCloseComments = useCallback(() => {
+    setOpenCommentsPostId(null);
+    clearCommentsComposer();
+  }, [clearCommentsComposer]);
+
+  const handleCommentSortChange = useCallback((newSort: 'recent' | 'relevant') => {
+    setCommentSort(newSort);
+    if (openCommentsPostId) void loadComments(openCommentsPostId, newSort);
+  }, [openCommentsPostId, loadComments]);
+
+  const handlePrepareReply = useCallback((comment: SoKinApiComment) => {
+    const targetName = comment.author.profile?.displayName ?? 'Utilisateur';
+    const mention = `@${targetName}`;
+    setReplyToComment(comment);
+    setCommentDraft((prev) => {
+      const trimmed = prev.trim();
+      if (trimmed.startsWith(mention)) return prev;
+      if (!trimmed) return `${mention} `;
+      return `${mention} ${trimmed}`;
+    });
+  }, []);
+
+  const handleOpenCommentProfile = useCallback(async (comment: SoKinApiComment) => {
+    const profilePreview: MissingPublicProfile = {
+      avatarUrl: comment.author.profile?.avatarUrl ?? null,
+      displayName: comment.author.profile?.displayName ?? 'Utilisateur',
+      identifier: comment.author.profile?.username ? `@${comment.author.profile.username.replace('@', '')}` : comment.author.id,
+    };
+    const normalizeUsername = (value?: string | null) => (value ?? '').replace('@', '').trim();
+    const getErrorStatus = (error: unknown) => (error instanceof ApiError ? error.status : undefined);
+    const openResolvedProfile = (username: string) => {
+      setCommentProfileState({ status: 'success', profile: profilePreview, message: null });
+      navigate(`/user/${username}`);
+    };
+    setCommentProfileState({ status: 'loading', profile: profilePreview, message: 'Chargement du profil public…' });
+    const directUsername = normalizeUsername(comment.author.profile?.username);
+    if (directUsername) {
+      try { await usersApi.publicProfile(directUsername); openResolvedProfile(directUsername); return; }
+      catch (error) { if (getErrorStatus(error) !== 404) { setCommentProfileState({ status: 'error', profile: profilePreview, message: 'Erreur technique: impossible d\'ouvrir le profil public pour le moment.' }); return; } }
+    }
+    try {
+      const payload = (await usersApi.publicProfileById(comment.author.id)) as { username?: string | null };
+      const resolved = normalizeUsername(payload?.username);
+      if (resolved) { openResolvedProfile(resolved); return; }
+      setCommentProfileState({ status: 'not-available', profile: profilePreview, message: 'L\'utilisateur ou l\'entreprise n\'a pas de profil public ou de boutique en ligne.' });
+    } catch (error) {
+      if (getErrorStatus(error) === 404) { setCommentProfileState({ status: 'not-available', profile: profilePreview, message: 'L\'utilisateur ou l\'entreprise n\'a pas de profil public ou de boutique en ligne.' }); return; }
+      setCommentProfileState({ status: 'error', profile: profilePreview, message: 'Erreur technique: impossible d\'ouvrir le profil public pour le moment.' });
+    }
+  }, [navigate]);
+
+  const handleSubmitComment = useCallback(async () => {
+    if (!openCommentsPostId) return;
+    if (!isLoggedIn) { navigate('/login'); return; }
+    const content = commentDraft.trim();
+    if (!content) return;
+    setSubmittingCommentPostId(openCommentsPostId);
+    try {
+      const payload = await sokinApi.createComment(openCommentsPostId, { content, parentCommentId: replyToComment?.id });
+      const created = payload.comment;
+      setCommentsByPost((prev) => ({ ...prev, [openCommentsPostId]: [created, ...(prev[openCommentsPostId] ?? [])] }));
+      setPosts((prev) => prev.map((p) => p.id === openCommentsPostId ? { ...p, comments: (p.comments ?? 0) + 1 } : p));
+      setCommentDraft('');
+      setReplyToComment(null);
+    } catch { /* conserver le draft */ }
+    finally { setSubmittingCommentPostId((prev) => (prev === openCommentsPostId ? null : prev)); }
+  }, [openCommentsPostId, isLoggedIn, navigate, commentDraft, replyToComment]);
+
+  const handleSokinContact = useCallback(async (post: SoKinApiFeedPost) => {
+    if (!isLoggedIn) { navigate('/login'); return; }
+    if (!user?.id || post.author.id === user.id) return;
+    if (contactingPostId) return;
+    setContactingPostId(post.id);
+    try {
+      const { conversation } = await messaging.createDM(post.author.id);
+      const mainMedia = post.mediaUrls?.[0] ? resolveMediaUrl(post.mediaUrls[0]) : null;
+      const textPreview = (post.text ?? '').replace(/\s+/g, ' ').trim().slice(0, 120);
+      navigate(`/messaging/${conversation.id}`, {
+        state: {
+          sokinPost: {
+            id: post.id, text: textPreview, mediaUrl: mainMedia,
+            authorName: post.author.profile?.displayName ?? 'Utilisateur',
+            authorId: post.author.id,
+            authorHandle: post.author.profile?.username ?? post.author.id,
+          },
+        },
+      });
+    } catch { navigate('/messaging'); }
+    finally { setContactingPostId(null); }
+  }, [isLoggedIn, user?.id, contactingPostId, navigate]);
+
+  /* ── Feed loading ── */
   const loadFeed = useCallback(
     async (reset = false) => {
       if (loadingRef.current && !reset) return;
@@ -834,10 +971,7 @@ function SoKinFeed({
             const ids = new Set(prev.map((p) => p.id));
             const fresh = res.posts.filter((p) => !ids.has(p.id));
             offsetRef.current += fresh.length;
-            return [
-              ...prev,
-              ...fresh,
-            ];
+            return [...prev, ...fresh];
           });
           setHasMore(res.posts.length >= limit);
         }
@@ -858,22 +992,16 @@ function SoKinFeed({
   }, []);
 
   useEffect(() => {
-    const handleCreated = () => {
-      void loadFeed(true);
-    };
+    const handleCreated = () => { void loadFeed(true); };
     on("sokin:post-created", handleCreated);
-    return () => {
-      off("sokin:post-created", handleCreated);
-    };
+    return () => { off("sokin:post-created", handleCreated); };
   }, [on, off, loadFeed]);
 
   useEffect(() => {
     if (!sentinelRef.current || !hasMore) return;
     const obs = new IntersectionObserver(
       ([entry]) => {
-        if (entry.isIntersecting && !loadingRef.current) {
-          void loadFeed();
-        }
+        if (entry.isIntersecting && !loadingRef.current) void loadFeed();
       },
       { rootMargin: "200px" },
     );
@@ -882,31 +1010,19 @@ function SoKinFeed({
   }, [hasMore, loadFeed]);
 
   useEffect(() => {
-    if (posts.length < 10) {
-      setReinjectedListings([]);
-      return;
-    }
+    if (posts.length < 10) { setReinjectedListings([]); return; }
     let cancelled = false;
     setReinjectedLoading(true);
     (async () => {
       try {
         let results = await listingsApi.latest({ type: reinjectedTab, limit: 10, city: cityHint, country: countryHint });
-        if (results.length === 0 && countryHint) {
-          results = await listingsApi.latest({ type: reinjectedTab, limit: 10, country: countryHint });
-        }
-        if (results.length === 0) {
-          results = await listingsApi.latest({ type: reinjectedTab, limit: 10 });
-        }
+        if (results.length === 0 && countryHint) results = await listingsApi.latest({ type: reinjectedTab, limit: 10, country: countryHint });
+        if (results.length === 0) results = await listingsApi.latest({ type: reinjectedTab, limit: 10 });
         if (!cancelled) setReinjectedListings(results);
-      } catch {
-        if (!cancelled) setReinjectedListings([]);
-      } finally {
-        if (!cancelled) setReinjectedLoading(false);
-      }
+      } catch { if (!cancelled) setReinjectedListings([]); }
+      finally { if (!cancelled) setReinjectedLoading(false); }
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [posts.length, reinjectedTab, cityHint, countryHint]);
 
   const handleSwipeStart = (event: React.TouchEvent<HTMLDivElement>) => {
@@ -920,38 +1036,23 @@ function SoKinFeed({
     const dx = touch.clientX - touchStart.current.x;
     const dy = touch.clientY - touchStart.current.y;
     touchStart.current = null;
-
-    if (dx < -72 && Math.abs(dx) > Math.abs(dy) * 1.25) {
-      void navigate("/sokin");
-    }
-  };
-
-  const openInSoKin = (postId: string) => {
-    try {
-      sessionStorage.setItem("ks-home-open-comments-post-id", postId);
-    } catch {
-      // no-op
-    }
-    void navigate("/sokin");
+    if (dx < -72 && Math.abs(dx) > Math.abs(dy) * 1.25) void navigate("/sokin");
   };
 
   const renderReinjectedListings = () => {
     if (posts.length < 10) return null;
     if (reinjectedLoading) return null;
     if (reinjectedListings.length === 0) return null;
-
     return (
       <section className="hm-section hm-listings hm-listings--reinjected" aria-label="Annonces récentes">
         <div className="hm-section-row">
           <h2 className="hm-section-title">🏪 Annonces récentes</h2>
           <Link to={`/explorer?type=${reinjectedTab === "PRODUIT" ? "produits" : "services"}`} className="hm-see-all">Voir tout →</Link>
         </div>
-
         <div className="hm-tabs">
           <button className={"hm-tab" + (reinjectedTab === "PRODUIT" ? " hm-tab--active" : "")} onClick={() => setReinjectedTab("PRODUIT")}>Produits</button>
           <button className={"hm-tab" + (reinjectedTab === "SERVICE" ? " hm-tab--active" : "")} onClick={() => setReinjectedTab("SERVICE")}>Services</button>
         </div>
-
         <div className="hm-hscroll">
           {reinjectedListings.map((l) => (
             <MarketCard
@@ -975,11 +1076,17 @@ function SoKinFeed({
     const elements: React.ReactNode[] = [];
     posts.forEach((post, idx) => {
       elements.push(
-        <SoKinPostCard
+        <AnnounceCard
           key={post.id}
           post={post}
           t={t}
-          onOpenComments={() => openInSoKin(post.id)}
+          isLoggedIn={isLoggedIn}
+          onMediaClick={(item) => setViewerItem(item)}
+          isCommentsOpen={openCommentsPostId === post.id}
+          onOpenComments={() => handleOpenComments(post.id)}
+          onContact={() => void handleSokinContact(post)}
+          isContacting={contactingPostId === post.id}
+          feedSource="home"
         />,
       );
       if (idx === 9) {
@@ -996,196 +1103,61 @@ function SoKinFeed({
   };
 
   return (
-    <section className="hm-section hm-sokin" aria-label={t("home.sokinFeed")}>
-      <div className="hm-section-row">
-        <h2 className="hm-section-title">{"\uD83D\uDCE2 So-Kin"}</h2>
-        <Link to="/sokin" className="hm-see-all">
-          Voir tout →
-        </Link>
-      </div>
-
-      <div className="hm-sokin-feed" onTouchStart={handleSwipeStart} onTouchEnd={handleSwipeEnd}>
-        {loading && posts.length === 0 ? (
-          [1, 2, 3].map((i) => <div key={i} className="hm-letter-skeleton" />)
-        ) : posts.length === 0 ? (
-          <div className="hm-letter">
-            <div className="hm-letter-head">
-              <div className="hm-letter-avatar">
-                <span>K</span>
-              </div>
-              <div className="hm-letter-author">
-                <p className="hm-letter-name">So-Kin</p>
-                <p className="hm-letter-city">{t("home.networkLabel")}</p>
-              </div>
-            </div>
-            <div className="hm-letter-body">
-              <p>{t("home.noSokinPosts")}</p>
-            </div>
-            <Link to="/sokin" className="hm-see-all">
-              {t("home.publishOnSokin") + " \u2192"}
-            </Link>
-          </div>
-        ) : (
-          renderItems()
-        )}
-        {hasMore && <div ref={sentinelRef} className="hm-sentinel" />}
-      </div>
-    </section>
-  );
-}
-
-/* ────────────── So-Kin Post Card (lettre) ────────────── */
-
-function SoKinPostCard({
-  post,
-  t,
-  onOpenComments,
-}: {
-  post: SoKinApiFeedPost;
-  t: (k: string) => string;
-  onOpenComments: () => void;
-}) {
-  const { isLoggedIn, user } = useAuth();
-  const navigate = useNavigate();
-  const profile = post.author?.profile;
-  const name = profile?.displayName ?? t("home.defaultUser");
-  const handle = (profile?.username ?? post.author.id).replace("@", "");
-  const city = profile?.city;
-  const initial = name.charAt(0).toUpperCase();
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const [paused, setPaused] = useState(false);
-  const tapTimeout = useRef<ReturnType<typeof setTimeout>>();
-
-  const isVideo = (url: string) => /\.(mp4|webm|mov|ogg)(\?|$)/i.test(url);
-
-  const handleContact = async () => {
-    if (!isLoggedIn) {
-      void navigate("/login");
-      return;
-    }
-    if (!user?.id || post.author.id === user.id) return;
-    try {
-      const { conversation } = await messaging.createDM(post.author.id);
-      void navigate(`/messaging/${conversation.id}`);
-    } catch {
-      void navigate("/messaging");
-    }
-  };
-
-  const handleMediaTap = () => {
-    if (tapTimeout.current) {
-      clearTimeout(tapTimeout.current);
-      tapTimeout.current = undefined;
-    } else {
-      tapTimeout.current = setTimeout(() => {
-        tapTimeout.current = undefined;
-        if (videoRef.current) {
-          if (videoRef.current.paused) {
-            videoRef.current.play();
-            setPaused(false);
-          } else {
-            videoRef.current.pause();
-            setPaused(true);
-          }
-        }
-      }, 250);
-    }
-  };
-
-  return (
-    <article className="hm-letter">
-      {/* En-tete */}
-      <div className="hm-letter-head">
-        <Link
-          to={profile?.username ? "/user/" + profile.username : "/sokin"}
-          className="hm-letter-avatar"
-        >
-          {profile?.avatarUrl ? (
-            <img src={resolveMediaUrl(profile.avatarUrl)} alt={name} />
-          ) : (
-            <span>{initial}</span>
-          )}
-        </Link>
-        <div className="hm-letter-author">
-          <p className="hm-letter-name">{name}</p>
-          <p className="hm-letter-city">ID: {handle}</p>
-          {city && <p className="hm-letter-city">{"\uD83D\uDCCD " + city}</p>}
+    <>
+      <section className="hm-section hm-sokin" aria-label={t("home.sokinFeed")}>
+        <div className="hm-section-row">
+          <h2 className="hm-section-title">{"\uD83D\uDCE2 So-Kin"}</h2>
+          <Link to="/sokin" className="hm-see-all">Voir tout →</Link>
         </div>
-        <div className="hm-letter-actions-top">
-          <button
-            className="hm-letter-icon-btn"
-            aria-label={t("home.contact")}
-            onClick={() => void handleContact()}
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-            </svg>
-          </button>
-        </div>
-      </div>
 
-      {/* Corps */}
-      <div className="hm-letter-body" onClick={handleMediaTap}>
-        {post.text && <p className="hm-letter-text">{post.text}</p>}
-        {post.mediaUrls && post.mediaUrls.length > 0 && (
-          <div className="hm-letter-media">
-            {post.mediaUrls.map((url, i) => {
-              if (isVideo(url)) {
-                return (
-                  <div key={i} className="hm-letter-video-wrap">
-                    <video
-                      ref={videoRef}
-                      src={resolveMediaUrl(url)}
-                      className="hm-letter-video"
-                      autoPlay
-                      muted
-                      loop
-                      playsInline
-                      preload="metadata"
-                    />
-                    {paused && (
-                      <div className="hm-letter-video-paused">
-                        &#x25B6;
-                      </div>
-                    )}
+        <SoKinToastProvider>
+          <div className="hm-sokin-feed" onTouchStart={handleSwipeStart} onTouchEnd={handleSwipeEnd}>
+            {loading && posts.length === 0 ? (
+              [1, 2, 3].map((i) => <div key={i} className="hm-letter-skeleton" />)
+            ) : posts.length === 0 ? (
+              <div className="hm-letter">
+                <div className="hm-letter-head">
+                  <div className="hm-letter-avatar"><span>K</span></div>
+                  <div className="hm-letter-author">
+                    <p className="hm-letter-name">So-Kin</p>
+                    <p className="hm-letter-city">{t("home.networkLabel")}</p>
                   </div>
-                );
-              }
-              return (
-                <img
-                  key={i}
-                  src={resolveMediaUrl(url)}
-                  alt={"Media " + (i + 1)}
-                  className="hm-letter-img"
-                  loading="lazy"
-                />
-              );
-            })}
+                </div>
+                <div className="hm-letter-body">
+                  <p>{t("home.noSokinPosts")}</p>
+                </div>
+                <Link to="/sokin" className="hm-see-all">{t("home.publishOnSokin") + " \u2192"}</Link>
+              </div>
+            ) : (
+              renderItems()
+            )}
+            {hasMore && <div ref={sentinelRef} className="hm-sentinel" />}
           </div>
-        )}
-      </div>
+        </SoKinToastProvider>
+      </section>
 
-      {/* Pied */}
-      <div className="hm-letter-foot">
-        <div className="hm-letter-foot-left">
-          <button className="hm-letter-react-btn" onClick={onOpenComments}>
-            💬 {post.comments ?? 0} réponses
-          </button>
-        </div>
-        <div className="hm-letter-foot-right">
-          <Link
-            to="/sokin"
-            className="hm-letter-react-btn"
-            aria-label={t("home.writeOnSokin")}
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-            </svg>
-          </Link>
-        </div>
-      </div>
-    </article>
+      {/* So-Kin overlays */}
+      {viewerItem && <MediaViewer item={viewerItem} onClose={() => setViewerItem(null)} />}
+      <CommentsDrawer
+        post={posts.find((p) => p.id === openCommentsPostId) ?? null}
+        open={Boolean(openCommentsPostId)}
+        isLoggedIn={isLoggedIn}
+        comments={openCommentsPostId ? (commentsByPost[openCommentsPostId] ?? []) : []}
+        loading={loadingCommentsPostId === openCommentsPostId}
+        draft={commentDraft}
+        submitting={submittingCommentPostId === openCommentsPostId}
+        replyTo={replyToComment}
+        profileState={commentProfileState}
+        sort={commentSort}
+        onClose={handleCloseComments}
+        onDraftChange={setCommentDraft}
+        onSubmit={handleSubmitComment}
+        onPrepareReply={handlePrepareReply}
+        onOpenProfile={handleOpenCommentProfile}
+        onCloseProfileState={() => setCommentProfileState({ status: 'idle', profile: null, message: null })}
+        onSortChange={handleCommentSortChange}
+      />
+    </>
   );
 }
 
