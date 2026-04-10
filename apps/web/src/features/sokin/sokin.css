@@ -6038,3 +6038,29 @@
 .sk-sub-bnav-spacer {
   height: calc(62px + env(safe-area-inset-bottom, 0));
 }
+
+/* ═══════════════════════════════════════════════
+   LIGHT THEME — So-Kin
+   ═══════════════════════════════════════════════ */
+:root[data-theme="light"] .sk-page {
+  background: linear-gradient(180deg, var(--sk-bg-start) 0%, var(--sk-bg-mid) 45%, var(--sk-bg-end) 100%);
+}
+:root[data-theme="light"] .sk-topbar {
+  background: var(--sk-surface-1);
+}
+:root[data-theme="light"] .sk-media-item {
+  background: rgba(244, 239, 255, 0.65);
+}
+:root[data-theme="light"] .sk-media-play-icon {
+  color: var(--color-text-primary);
+}
+:root[data-theme="light"] .sk-viewer-overlay {
+  background: rgba(0, 0, 0, 0.85);
+}
+:root[data-theme="light"] .sk-desktop-shell::before {
+  background: radial-gradient(circle, rgba(98, 71, 236, 0.06), transparent 70%);
+}
+:root[data-theme="light"] .sk-bnav {
+  background: rgba(244, 239, 255, 0.92);
+  border-top-color: rgba(94, 72, 194, 0.12);
+}

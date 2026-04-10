@@ -103,3 +103,12 @@
     padding: 1rem;
   }
 }
+
+/* LIGHT THEME — Blog */
+:root[data-theme="light"] .blog-page {
+  background: var(--color-dark-blue);
+}
+:root[data-theme="light"] .blog-card {
+  background: var(--glass-bg);
+  border-color: var(--glass-border);
+}

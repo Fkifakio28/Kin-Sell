@@ -24,7 +24,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    setThemeState("dark");
+    // Respect OS preference when no user choice is stored
+    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    setThemeState(prefersDark ? "dark" : "light");
   }, []);
 
   useEffect(() => {

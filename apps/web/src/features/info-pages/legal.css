@@ -368,3 +368,18 @@
   .legal-hero { padding: 1.5rem 0.75rem 1rem; }
   .legal-hero-title { font-size: 1.5rem; }
 }
+
+/* LIGHT THEME — Legal */
+:root[data-theme="light"] .legal {
+  background: var(--color-dark-blue);
+}
+:root[data-theme="light"] .legal-hero {
+  background: linear-gradient(135deg, rgba(244, 239, 255, 0.95) 0%, rgba(234, 226, 255, 0.9) 100%);
+}
+:root[data-theme="light"] .legal-hero-glow {
+  opacity: 0.1;
+}
+:root[data-theme="light"] .legal-section {
+  background: var(--glass-bg);
+  border-color: var(--glass-border);
+}

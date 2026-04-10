@@ -1194,3 +1194,40 @@
   .ex-shop-card { border-radius: 12px; }
   .ex-shop-body { padding: 8px; gap: 2px; }
 }
+
+/* ═══════════════════════════════════════════════
+   LIGHT THEME — Explorer Mobile
+   ═══════════════════════════════════════════════ */
+:root[data-theme="light"] .ex-topbar {
+  background: rgba(244, 239, 255, 0.88);
+}
+:root[data-theme="light"] .ex-drawer-overlay {
+  background: rgba(200, 210, 230, 0.45);
+}
+:root[data-theme="light"] .ex-drawer {
+  background: rgba(244, 239, 255, 0.98);
+}
+:root[data-theme="light"] .ex-search-overlay {
+  background: rgba(244, 239, 255, 0.97);
+}
+:root[data-theme="light"] .ex-search-bar {
+  background: rgba(255, 255, 255, 0.7);
+  color: var(--color-text-primary);
+}
+:root[data-theme="light"] .ex-search-bar::placeholder {
+  color: var(--color-text-tertiary);
+}
+:root[data-theme="light"] .ex-article-fb {
+  color: #16a34a;
+}
+:root[data-theme="light"] .ex-modal-backdrop {
+  background: rgba(200, 210, 230, 0.7);
+}
+:root[data-theme="light"] .ex-modal-panel {
+  background: rgba(255, 255, 255, 0.96);
+  border-color: rgba(94, 72, 194, 0.15);
+}
+:root[data-theme="light"] .ex-bnav {
+  background: rgba(244, 239, 255, 0.92);
+  border-top-color: rgba(94, 72, 194, 0.12);
+}

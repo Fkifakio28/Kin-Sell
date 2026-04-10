@@ -1770,3 +1770,29 @@
     padding: 6px 8px;
   }
 }
+
+/* ═══════════════════════════════════════════════
+   LIGHT THEME — Cart / Checkout
+   ═══════════════════════════════════════════════ */
+:root[data-theme="light"] .cart-checkout-modal {
+  background: rgba(200, 210, 230, 0.55);
+}
+:root[data-theme="light"] .cart-card {
+  background: var(--glass-bg);
+  border-color: var(--glass-border);
+}
+:root[data-theme="light"] .cart-remove-btn {
+  background: rgba(217, 72, 72, 0.08);
+}
+:root[data-theme="light"] .cart-remove-btn:hover {
+  background: rgba(217, 72, 72, 0.14);
+}
+:root[data-theme="light"] .cart-input {
+  background: rgba(255, 255, 255, 0.6);
+  border-color: rgba(94, 72, 194, 0.15);
+  color: var(--color-text-primary);
+}
+:root[data-theme="light"] .cart-input:focus {
+  background: rgba(255, 255, 255, 0.85);
+  border-color: var(--color-primary);
+}

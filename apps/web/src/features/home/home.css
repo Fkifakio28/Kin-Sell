@@ -1548,6 +1548,39 @@
   gap: 0;
   padding: 8px 4px;
 }
+
+/* ═══════════════════════════════════════════════
+   LIGHT THEME — Home Desktop
+   ═══════════════════════════════════════════════ */
+:root[data-theme="light"] .h-popup-overlay {
+  background: rgba(200, 210, 230, 0.5);
+}
+:root[data-theme="light"] .h-article-cat {
+  background: rgba(0, 0, 0, 0.35);
+}
+:root[data-theme="light"] .h-article-feedback {
+  color: #16a34a;
+}
+:root[data-theme="light"] .h-article-card--svc .h-article-price {
+  color: var(--color-primary);
+}
+:root[data-theme="light"] .h-notif-dropdown {
+  background: #f0f4fa;
+  border-color: rgba(94, 72, 194, 0.15);
+  box-shadow: 0 12px 40px rgba(54, 35, 129, 0.12);
+}
+:root[data-theme="light"] .h-notif-dropdown-count {
+  background: var(--color-primary);
+}
+:root[data-theme="light"] .h-section-title {
+  color: var(--color-text-primary);
+}
+:root[data-theme="light"] .h-hero-visual::after {
+  background: linear-gradient(to right, var(--color-dark-blue) 0%, transparent 100%);
+}
+:root[data-theme="light"] .h-hero {
+  background: linear-gradient(135deg, var(--color-dark-blue) 0%, var(--color-dark-blue-light) 100%);
+}
 .h-sokin-real-feed .sk-social-icon svg {
   width: 18px;
   height: 18px;

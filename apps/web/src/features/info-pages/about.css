@@ -360,3 +360,21 @@
   .about-hero-title { font-size: 1.5rem; }
   .about-hero-subtitle { font-size: 0.88rem; }
 }
+
+/* LIGHT THEME — About */
+:root[data-theme="light"] .about {
+  background: var(--color-dark-blue);
+}
+:root[data-theme="light"] .about-hero {
+  background: linear-gradient(135deg, rgba(244, 239, 255, 0.95) 0%, rgba(234, 226, 255, 0.9) 100%);
+}
+:root[data-theme="light"] .about-hero-glow {
+  opacity: 0.1;
+}
+:root[data-theme="light"] .about-block {
+  background: var(--glass-bg);
+  border-color: var(--glass-border);
+}
+:root[data-theme="light"] .about-block-number {
+  color: var(--color-primary);
+}

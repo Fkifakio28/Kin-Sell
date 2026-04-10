@@ -812,3 +812,20 @@
   .up-report-float { bottom: 32px; right: 32px; }
   .up-report-btn { width: 48px; height: 48px; }
 }
+
+/* ═══════════════════════════════════════════════
+   LIGHT THEME — Public Profile
+   ═══════════════════════════════════════════════ */
+:root[data-theme="light"] .up-hero {
+  background: linear-gradient(135deg, rgba(244, 239, 255, 0.9) 0%, rgba(234, 226, 255, 0.85) 100%);
+}
+:root[data-theme="light"] .up-card {
+  background: var(--glass-bg);
+  border-color: var(--glass-border);
+}
+:root[data-theme="light"] .up-section-title {
+  color: var(--color-text-primary);
+}
+:root[data-theme="light"] .up-stat-value {
+  color: var(--color-primary);
+}
