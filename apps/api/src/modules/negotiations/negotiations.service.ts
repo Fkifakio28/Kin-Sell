@@ -241,6 +241,7 @@ export const respondToNegotiation = async (userId: string, negotiationId: string
 
   if (payload.action === "ACCEPT") {
     const acceptedPrice = lastOffer?.priceUsdCents ?? negotiation.originalPriceUsdCents;
+    const isBundle = !!negotiation.bundleId;
 
     const updated = await prisma.negotiation.update({
       where: { id: negotiationId },
@@ -260,86 +261,182 @@ export const respondToNegotiation = async (userId: string, negotiationId: string
       include: negotiationInclude
     });
 
-    // Mettre à jour le prix dans le panier avec le prix final
-    await prisma.cartItem.updateMany({
-      where: { negotiationId: negotiationId },
-      data: { unitPriceUsdCents: acceptedPrice }
-    });
-
     // ── Auto-création de commande à partir de la négo acceptée ──
     try {
-      const cartItem = await prisma.cartItem.findFirst({
-        where: { negotiationId: negotiationId },
-        include: {
-          cart: true,
-          listing: { select: { id: true, title: true, type: true, category: true, city: true, ownerUserId: true, businessId: true } },
-        },
-      });
-
-      if (cartItem) {
-        const validationCode = randomBytes(3).toString("hex").toUpperCase();
-        const lineTotalUsdCents = acceptedPrice * negotiation.quantity;
-        const order = await prisma.order.create({
-          data: {
-            buyerUserId: negotiation.buyerUserId,
-            sellerUserId: cartItem.listing.ownerUserId,
-            sellerBusinessId: cartItem.listing.businessId,
-            status: OrderStatus.PENDING,
-            totalUsdCents: lineTotalUsdCents,
-            validationCode,
-            notes: `Commande auto — marchandage #${negotiationId.slice(-6)} accepté`,
-            items: {
-              create: {
-                listingId: cartItem.listing.id,
-                listingType: cartItem.listing.type,
-                title: cartItem.listing.title,
-                category: cartItem.listing.category,
-                city: cartItem.listing.city ?? "—",
-                quantity: negotiation.quantity,
-                unitPriceUsdCents: acceptedPrice,
-                lineTotalUsdCents,
-              },
-            },
+      if (isBundle) {
+        // ── BUNDLE: charger TOUS les items du panier liés à cette négo ──
+        const cartItems = await prisma.cartItem.findMany({
+          where: { negotiationId: negotiationId },
+          include: {
+            cart: true,
+            listing: { select: { id: true, title: true, type: true, category: true, city: true, ownerUserId: true, businessId: true, priceUsdCents: true } },
           },
         });
 
-        // Retirer l'article du panier (il est maintenant commandé)
-        await prisma.cartItem.delete({ where: { id: cartItem.id } });
-
-        // Push notification à l'acheteur (seulement si offline)
-        if (!isUserOnline(negotiation.buyerUserId)) {
-          void sendPushToUser(negotiation.buyerUserId, {
-            title: "✅ Marchandage accepté !",
-            body: `Votre offre pour "${cartItem.listing.title}" a été acceptée. Commande #${order.id.slice(-6)} créée.`,
-            tag: `nego-accepted-${negotiationId}`,
-            data: { type: "order", orderId: order.id, negotiationId },
+        if (cartItems.length > 0) {
+          // Allocation proportionnelle du prix bundle par item
+          const totalOriginal = cartItems.reduce((s, ci) => s + ci.listing.priceUsdCents * ci.quantity, 0);
+          let allocated = 0;
+          const allocatedItems = cartItems.map((ci, idx) => {
+            let itemPrice: number;
+            if (idx === cartItems.length - 1) {
+              // Dernier item reçoit le reste pour éviter l'erreur d'arrondi
+              itemPrice = acceptedPrice - allocated;
+            } else {
+              const ratio = totalOriginal > 0
+                ? (ci.listing.priceUsdCents * ci.quantity) / totalOriginal
+                : 1 / cartItems.length;
+              itemPrice = Math.round(acceptedPrice * ratio);
+            }
+            allocated += itemPrice;
+            const unitPrice = Math.round(itemPrice / ci.quantity);
+            return { ...ci, allocatedTotal: itemPrice, allocatedUnit: unitPrice };
           });
-        }
 
-        // Push notification au vendeur (seulement si offline)
-        if (!isUserOnline(cartItem.listing.ownerUserId)) {
-          void sendPushToUser(cartItem.listing.ownerUserId, {
-            title: "🛒 Commande créée automatiquement",
-            body: `Commande #${order.id.slice(-6)} créée suite au marchandage accepté.`,
-            tag: `order-${order.id}`,
-            data: { type: "order", orderId: order.id },
+          // Mettre à jour les prix unitaires dans le panier (prix alloué, pas le total bundle)
+          for (const ai of allocatedItems) {
+            await prisma.cartItem.update({
+              where: { id: ai.id },
+              data: { unitPriceUsdCents: ai.allocatedUnit },
+            });
+          }
+
+          const validationCode = randomBytes(3).toString("hex").toUpperCase();
+          const order = await prisma.order.create({
+            data: {
+              buyerUserId: negotiation.buyerUserId,
+              sellerUserId: cartItems[0].listing.ownerUserId,
+              sellerBusinessId: cartItems[0].listing.businessId,
+              status: OrderStatus.PENDING,
+              totalUsdCents: acceptedPrice,
+              validationCode,
+              notes: `Commande auto — lot #${negotiationId.slice(-6)} accepté (${cartItems.length} articles)`,
+              items: {
+                create: allocatedItems.map((ai) => ({
+                  listingId: ai.listing.id,
+                  listingType: ai.listing.type,
+                  title: ai.listing.title,
+                  category: ai.listing.category,
+                  city: ai.listing.city ?? "—",
+                  quantity: ai.quantity,
+                  unitPriceUsdCents: ai.allocatedUnit,
+                  lineTotalUsdCents: ai.allocatedTotal,
+                })),
+              },
+            },
           });
-        }
 
-        // Socket: emit order:created to both buyer and seller
-        const orderCreatedPayload = {
-          type: "ORDER_CREATED" as const,
-          orderId: order.id,
-          buyerUserId: negotiation.buyerUserId,
-          sellerUserId: cartItem.listing.ownerUserId,
-          itemsCount: 1,
-          totalUsdCents: lineTotalUsdCents,
-          fromNegotiation: true,
-          negotiationId,
-          createdAt: new Date().toISOString(),
-        };
-        emitToUser(negotiation.buyerUserId, "order:created", orderCreatedPayload);
-        emitToUser(cartItem.listing.ownerUserId, "order:created", orderCreatedPayload);
+          // Retirer TOUS les articles du panier
+          await prisma.cartItem.deleteMany({
+            where: { id: { in: cartItems.map((ci) => ci.id) } },
+          });
+
+          // Notifications
+          if (!isUserOnline(negotiation.buyerUserId)) {
+            void sendPushToUser(negotiation.buyerUserId, {
+              title: "✅ Lot accepté !",
+              body: `Votre offre groupée pour ${cartItems.length} articles a été acceptée. Commande #${order.id.slice(-6)} créée.`,
+              tag: `nego-accepted-${negotiationId}`,
+              data: { type: "order", orderId: order.id, negotiationId },
+            });
+          }
+          if (!isUserOnline(cartItems[0].listing.ownerUserId)) {
+            void sendPushToUser(cartItems[0].listing.ownerUserId, {
+              title: "🛒 Commande lot créée",
+              body: `Commande #${order.id.slice(-6)} créée — ${cartItems.length} articles, marchandage lot accepté.`,
+              tag: `order-${order.id}`,
+              data: { type: "order", orderId: order.id },
+            });
+          }
+          const orderCreatedPayload = {
+            type: "ORDER_CREATED" as const,
+            orderId: order.id,
+            buyerUserId: negotiation.buyerUserId,
+            sellerUserId: cartItems[0].listing.ownerUserId,
+            itemsCount: cartItems.length,
+            totalUsdCents: acceptedPrice,
+            fromNegotiation: true,
+            negotiationId,
+            createdAt: new Date().toISOString(),
+          };
+          emitToUser(negotiation.buyerUserId, "order:created", orderCreatedPayload);
+          emitToUser(cartItems[0].listing.ownerUserId, "order:created", orderCreatedPayload);
+        }
+      } else {
+        // ── SINGLE ITEM ──
+        // Mettre à jour le prix dans le panier avec le prix final
+        await prisma.cartItem.updateMany({
+          where: { negotiationId: negotiationId },
+          data: { unitPriceUsdCents: acceptedPrice }
+        });
+
+        const cartItem = await prisma.cartItem.findFirst({
+          where: { negotiationId: negotiationId },
+          include: {
+            cart: true,
+            listing: { select: { id: true, title: true, type: true, category: true, city: true, ownerUserId: true, businessId: true } },
+          },
+        });
+
+        if (cartItem) {
+          const validationCode = randomBytes(3).toString("hex").toUpperCase();
+          const lineTotalUsdCents = acceptedPrice * negotiation.quantity;
+          const order = await prisma.order.create({
+            data: {
+              buyerUserId: negotiation.buyerUserId,
+              sellerUserId: cartItem.listing.ownerUserId,
+              sellerBusinessId: cartItem.listing.businessId,
+              status: OrderStatus.PENDING,
+              totalUsdCents: lineTotalUsdCents,
+              validationCode,
+              notes: `Commande auto — marchandage #${negotiationId.slice(-6)} accepté`,
+              items: {
+                create: {
+                  listingId: cartItem.listing.id,
+                  listingType: cartItem.listing.type,
+                  title: cartItem.listing.title,
+                  category: cartItem.listing.category,
+                  city: cartItem.listing.city ?? "—",
+                  quantity: negotiation.quantity,
+                  unitPriceUsdCents: acceptedPrice,
+                  lineTotalUsdCents,
+                },
+              },
+            },
+          });
+
+          await prisma.cartItem.delete({ where: { id: cartItem.id } });
+
+          if (!isUserOnline(negotiation.buyerUserId)) {
+            void sendPushToUser(negotiation.buyerUserId, {
+              title: "✅ Marchandage accepté !",
+              body: `Votre offre pour "${cartItem.listing.title}" a été acceptée. Commande #${order.id.slice(-6)} créée.`,
+              tag: `nego-accepted-${negotiationId}`,
+              data: { type: "order", orderId: order.id, negotiationId },
+            });
+          }
+          if (!isUserOnline(cartItem.listing.ownerUserId)) {
+            void sendPushToUser(cartItem.listing.ownerUserId, {
+              title: "🛒 Commande créée automatiquement",
+              body: `Commande #${order.id.slice(-6)} créée suite au marchandage accepté.`,
+              tag: `order-${order.id}`,
+              data: { type: "order", orderId: order.id },
+            });
+          }
+          const orderCreatedPayload = {
+            type: "ORDER_CREATED" as const,
+            orderId: order.id,
+            buyerUserId: negotiation.buyerUserId,
+            sellerUserId: cartItem.listing.ownerUserId,
+            itemsCount: 1,
+            totalUsdCents: lineTotalUsdCents,
+            fromNegotiation: true,
+            negotiationId,
+            createdAt: new Date().toISOString(),
+          };
+          emitToUser(negotiation.buyerUserId, "order:created", orderCreatedPayload);
+          emitToUser(cartItem.listing.ownerUserId, "order:created", orderCreatedPayload);
+        }
       }
     } catch {
       // Silently continue — the negotiation is still accepted even if auto-order fails
@@ -366,11 +463,25 @@ export const respondToNegotiation = async (userId: string, negotiationId: string
       include: negotiationInclude
     });
 
-    // Décrocher la négo du panier et restaurer le prix original
-    await prisma.cartItem.updateMany({
-      where: { negotiationId: negotiationId },
-      data: { negotiationId: null, unitPriceUsdCents: negotiation.originalPriceUsdCents }
-    });
+    // Décrocher la négo du panier et restaurer les prix originaux
+    if (negotiation.bundleId) {
+      // Bundle: restaurer le vrai prix unitaire de chaque item
+      const cartItems = await prisma.cartItem.findMany({
+        where: { negotiationId: negotiationId },
+        include: { listing: { select: { priceUsdCents: true } } },
+      });
+      for (const ci of cartItems) {
+        await prisma.cartItem.update({
+          where: { id: ci.id },
+          data: { negotiationId: null, unitPriceUsdCents: ci.listing.priceUsdCents },
+        });
+      }
+    } else {
+      await prisma.cartItem.updateMany({
+        where: { negotiationId: negotiationId },
+        data: { negotiationId: null, unitPriceUsdCents: negotiation.originalPriceUsdCents }
+      });
+    }
 
     return mapNegotiation(updated);
   }
@@ -398,10 +509,35 @@ export const respondToNegotiation = async (userId: string, negotiationId: string
     });
 
     // Mettre à jour le prix dans le panier du buyer
-    await prisma.cartItem.updateMany({
-      where: { negotiationId: negotiationId },
-      data: { unitPriceUsdCents: payload.counterPriceUsdCents }
-    });
+    if (negotiation.bundleId) {
+      // Bundle: allocation proportionnelle du nouveau prix
+      const cartItems = await prisma.cartItem.findMany({
+        where: { negotiationId: negotiationId },
+        include: { listing: { select: { priceUsdCents: true } } },
+      });
+      const totalOriginal = cartItems.reduce((s, ci) => s + ci.listing.priceUsdCents * ci.quantity, 0);
+      let allocated = 0;
+      for (let i = 0; i < cartItems.length; i++) {
+        const ci = cartItems[i];
+        let itemTotal: number;
+        if (i === cartItems.length - 1) {
+          itemTotal = payload.counterPriceUsdCents - allocated;
+        } else {
+          const ratio = totalOriginal > 0 ? (ci.listing.priceUsdCents * ci.quantity) / totalOriginal : 1 / cartItems.length;
+          itemTotal = Math.round(payload.counterPriceUsdCents * ratio);
+        }
+        allocated += itemTotal;
+        await prisma.cartItem.update({
+          where: { id: ci.id },
+          data: { unitPriceUsdCents: Math.round(itemTotal / ci.quantity) },
+        });
+      }
+    } else {
+      await prisma.cartItem.updateMany({
+        where: { negotiationId: negotiationId },
+        data: { unitPriceUsdCents: payload.counterPriceUsdCents }
+      });
+    }
 
     return mapNegotiation(updated);
   }
@@ -755,11 +891,26 @@ export const createBundleNegotiation = async (buyerUserId: string, payload: Crea
   const listingIds = payload.items.map((i) => i.listingId);
   const listings = await prisma.listing.findMany({
     where: { id: { in: listingIds }, isPublished: true },
-    select: { id: true, ownerUserId: true, priceUsdCents: true, title: true }
+    select: { id: true, ownerUserId: true, priceUsdCents: true, title: true, isNegotiable: true, category: true }
   });
 
   if (listings.length !== listingIds.length) {
     throw new HttpError(404, "Un ou plusieurs articles sont introuvables ou non publiés");
+  }
+
+  // Vérifier que TOUS les articles sont négociables
+  const nonNegotiable = listings.filter((l) => !l.isNegotiable);
+  if (nonNegotiable.length > 0) {
+    throw new HttpError(400, `Article(s) non négociable(s) : ${nonNegotiable.map((l) => l.title).join(", ")}`);
+  }
+
+  // Vérifier les catégories verrouillées
+  const categories = [...new Set(listings.map((l) => l.category.toLowerCase()))];
+  const lockedCats = await prisma.categoryNegotiationRule.findMany({
+    where: { category: { in: categories }, negotiationLocked: true },
+  });
+  if (lockedCats.length > 0) {
+    throw new HttpError(400, `Catégorie(s) verrouillée(s) : ${lockedCats.map((c) => c.category).join(", ")}`);
   }
 
   // Vérifier que tous les articles appartiennent au même vendeur

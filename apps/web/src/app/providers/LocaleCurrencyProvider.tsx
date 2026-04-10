@@ -9,10 +9,14 @@ type LocaleCurrencyContextValue = {
   setLanguage: (lang: AppLanguage) => void;
   currency: AppCurrency;
   setCurrency: (currency: AppCurrency) => void;
+  currencySymbol: string;
+  currencyUsesDecimals: boolean;
   t: (key: string) => string;
   formatMoneyFromUsdCents: (usdCents: number) => string;
   formatDate: (isoDate: string | Date) => string;
   formatPriceLabelFromUsdCents: (usdCents: number) => string;
+  convertFromUsdCents: (usdCents: number) => number;
+  convertToUsdCents: (amount: number) => number;
 };
 
 /* ── Taux de conversion par défaut (fallback si API indisponible) ── */
@@ -87,6 +91,13 @@ export function LocaleCurrencyProvider({ children }: { children: React.ReactNode
     loadDict(language).then(setActiveDict);
   }, [language]);
 
+  // Apply lang/dir on the document for full-page translation consistency
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    document.documentElement.lang = language;
+    document.documentElement.dir = language === "ar" ? "rtl" : "ltr";
+  }, [language]);
+
   // Fetch taux dynamiques depuis l'API au montage
   useEffect(() => {
     if (fetchedRef.current) return;
@@ -145,6 +156,18 @@ export function LocaleCurrencyProvider({ children }: { children: React.ReactNode
     };
 
     const getRate = (code: string): number => rates[code] ?? DEFAULT_RATES[code] ?? 1;
+    const currencyUsesDecimals = currency === "USD" || currency === "EUR" || currency === "MAD";
+    const currencySymbolMap: Record<AppCurrency, string> = {
+      CDF: "FC",
+      USD: "$",
+      EUR: "€",
+      XAF: "XAF",
+      AOA: "Kz",
+      XOF: "XOF",
+      GNF: "GNF",
+      MAD: "MAD",
+    };
+    const currencySymbol = currencySymbolMap[currency] ?? currency;
 
     const formatMoneyFromUsdCents = (usdCents: number): string => {
       const usd = usdCents / 100;
@@ -184,9 +207,25 @@ export function LocaleCurrencyProvider({ children }: { children: React.ReactNode
       return formatMoneyFromUsdCents(usdCents);
     };
 
+    const convertFromUsdCents = (usdCents: number): number => {
+      const usd = usdCents / 100;
+      if (currency === "USD") return usd;
+      return usd * getRate(currency);
+    };
+
+    const convertToUsdCents = (amount: number): number => {
+      if (!Number.isFinite(amount)) return 0;
+      if (currency === "USD") return Math.round(amount * 100);
+      const rate = getRate(currency);
+      if (!rate) return Math.round(amount * 100);
+      return Math.round((amount / rate) * 100);
+    };
+
     return {
-      language, setLanguage, currency, setCurrency, t,
-      formatMoneyFromUsdCents, formatDate, formatPriceLabelFromUsdCents,
+      language, setLanguage, currency, setCurrency,
+      currencySymbol, currencyUsesDecimals,
+      t, formatMoneyFromUsdCents, formatDate, formatPriceLabelFromUsdCents,
+      convertFromUsdCents, convertToUsdCents,
     };
   }, [currency, language, rates, activeDict]);
 

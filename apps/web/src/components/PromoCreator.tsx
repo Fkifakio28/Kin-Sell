@@ -26,7 +26,27 @@ export const PromoCreator: FC<PromoCreatorProps> = ({
   onPublished,
   onBoost,
 }) => {
-  const { formatPriceLabelFromUsdCents } = useLocaleCurrency();
+  const {
+    t,
+    currencySymbol,
+    currencyUsesDecimals,
+    convertFromUsdCents,
+    convertToUsdCents,
+    formatPriceLabelFromUsdCents,
+  } = useLocaleCurrency();
+
+  const inputRegex = currencyUsesDecimals ? /^\d*(?:[.,]\d{0,2})?$/ : /^\d*$/;
+  const normalizeInput = (val: string) => val.replace(',', '.');
+  const parseInput = (val: string) => {
+    const normalized = normalizeInput(val);
+    const num = Number.parseFloat(normalized);
+    return Number.isFinite(num) ? num : 0;
+  };
+  const formatInputValue = (amount: number) => {
+    if (!Number.isFinite(amount)) return '';
+    if (currencyUsesDecimals) return amount.toFixed(2);
+    return String(Math.round(amount));
+  };
 
   // Mode: ITEM (individual prices) or BUNDLE (one lot price)
   const [mode, setMode] = useState<PromoMode>(articles.length >= 2 ? 'BUNDLE' : 'ITEM');
@@ -35,7 +55,9 @@ export const PromoCreator: FC<PromoCreatorProps> = ({
   const [promoPrices, setPromoPrices] = useState<Record<string, string>>(() => {
     const init: Record<string, string> = {};
     for (const a of articles) {
-      init[a.id] = ((a.priceUsdCents * 0.8) / 100).toFixed(2);
+      const defaultPromoUsdCents = Math.round(a.priceUsdCents * 0.8);
+      const defaultPromoAmount = convertFromUsdCents(defaultPromoUsdCents);
+      init[a.id] = formatInputValue(defaultPromoAmount);
     }
     return init;
   });
@@ -56,21 +78,21 @@ export const PromoCreator: FC<PromoCreatorProps> = ({
   const [error, setError] = useState<string | null>(null);
 
   const setPromoPrice = (id: string, val: string) => {
-    if (val && !/^\d*\.?\d{0,2}$/.test(val)) return;
+    if (val && !inputRegex.test(val)) return;
     setPromoPrices((prev) => ({ ...prev, [id]: val }));
   };
 
   // ITEM mode: compute promo price in cents for each article
   const getPromoCents = (articleId: string): number => {
     if (useUniformPrice && uniformPriceStr) {
-      return Math.round(parseFloat(uniformPriceStr) * 100) || 0;
+      return convertToUsdCents(parseInput(uniformPriceStr));
     }
     const v = promoPrices[articleId];
-    return v ? Math.round(parseFloat(v) * 100) || 0 : 0;
+    return v ? convertToUsdCents(parseInput(v)) : 0;
   };
 
   // BUNDLE mode: compute bundle total
-  const bundleCents = bundlePriceStr ? Math.round(parseFloat(bundlePriceStr) * 100) || 0 : 0;
+  const bundleCents = bundlePriceStr ? convertToUsdCents(parseInput(bundlePriceStr)) : 0;
   const bundleOriginal = articles.reduce((s, a) => s + a.priceUsdCents, 0);
 
   // Validation
@@ -236,15 +258,15 @@ export const PromoCreator: FC<PromoCreatorProps> = ({
                     </label>
                     {useUniformPrice && (
                       <div className="promo-uniform-input">
-                        <span className="promo-input-prefix">$</span>
+                        <span className="promo-input-prefix">{currencySymbol}</span>
                         <input
                           type="text"
                           inputMode="decimal"
-                          placeholder="0.00"
+                          placeholder={currencyUsesDecimals ? "0.00" : "0"}
                           value={uniformPriceStr}
                           onChange={(e) => {
                             const v = e.target.value;
-                            if (!v || /^\d*\.?\d{0,2}$/.test(v)) setUniformPriceStr(v);
+                            if (!v || inputRegex.test(v)) setUniformPriceStr(v);
                           }}
                           className="promo-price-input"
                         />
@@ -281,7 +303,7 @@ export const PromoCreator: FC<PromoCreatorProps> = ({
                               <input
                                 type="text"
                                 inputMode="decimal"
-                                placeholder="Prix promo"
+                                placeholder={t("promo.pricePlaceholder")}
                                 value={promoPrices[article.id] || ''}
                                 onChange={(e) => setPromoPrice(article.id, e.target.value)}
                                 className="promo-price-input"
@@ -307,15 +329,15 @@ export const PromoCreator: FC<PromoCreatorProps> = ({
                   <div className="promo-bundle-price-input">
                     <label className="promo-bundle-price-label">Prix du lot promo</label>
                     <div className="promo-new-price-wrap">
-                      <span className="promo-input-prefix">$</span>
+                      <span className="promo-input-prefix">{currencySymbol}</span>
                       <input
                         type="text"
                         inputMode="decimal"
-                        placeholder="Prix du lot"
+                        placeholder={t("promo.bundlePricePlaceholder")}
                         value={bundlePriceStr}
                         onChange={(e) => {
                           const v = e.target.value;
-                          if (!v || /^\d*\.?\d{0,2}$/.test(v)) setBundlePriceStr(v);
+                          if (!v || inputRegex.test(v)) setBundlePriceStr(v);
                         }}
                         className="promo-price-input promo-price-input--large"
                       />

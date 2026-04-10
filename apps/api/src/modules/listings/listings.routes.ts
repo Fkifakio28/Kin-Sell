@@ -450,11 +450,16 @@ router.post(
 router.post(
   "/:id/contact",
   requireAuth,
+  requireNoRestriction("MESSAGE_LIMIT"),
+  rateLimit(RateLimits.MESSAGE),
   asyncHandler(async (request: AuthenticatedRequest, response) => {
     const { prisma } = await import("../../shared/db/prisma.js");
     const listing = await prisma.listing.findUnique({
       where: { id: request.params.id },
-      select: { id: true, title: true, ownerUserId: true, priceUsdCents: true },
+      select: {
+        id: true, title: true, ownerUserId: true, priceUsdCents: true,
+        promoActive: true, promoPriceUsdCents: true, promoExpiresAt: true,
+      },
     });
     if (!listing) {
       response.status(404).json({ error: "Annonce introuvable" });
@@ -468,12 +473,33 @@ router.post(
     // Créer ou récupérer la conversation DM
     const conversation = await getOrCreateDMConversation(request.auth!.userId, listing.ownerUserId);
 
-    // Envoyer un message initial automatique avec le contexte du listing
-    const initialMessage = `📦 Bonjour ! Je suis intéressé(e) par votre annonce "${listing.title}" (${(listing.priceUsdCents / 100).toFixed(2)} $).`;
-    await sendMessage(conversation.id, request.auth!.userId, {
-      content: initialMessage,
-      type: "TEXT" as any,
+    // Anti-doublon: vérifier si un message de contact pour cette annonce a déjà été envoyé récemment (1h)
+    const oneHourAgo = new Date(Date.now() - 3600_000);
+    const recentDuplicate = await prisma.message.findFirst({
+      where: {
+        conversationId: conversation.id,
+        senderId: request.auth!.userId,
+        createdAt: { gt: oneHourAgo },
+        content: { contains: listing.title },
+      },
+      select: { id: true },
     });
+
+    if (!recentDuplicate) {
+      // Prix effectif = promo si active et non expirée
+      const promoValid = listing.promoActive && listing.promoPriceUsdCents != null
+        && (!listing.promoExpiresAt || new Date(listing.promoExpiresAt) > new Date());
+      const effectivePrice = promoValid ? listing.promoPriceUsdCents! : listing.priceUsdCents;
+      const priceLabel = promoValid
+        ? `${(effectivePrice / 100).toFixed(2)} $ (promo)`
+        : `${(effectivePrice / 100).toFixed(2)} $`;
+
+      const initialMessage = `📦 Bonjour ! Je suis intéressé(e) par votre annonce "${listing.title}" (${priceLabel}).`;
+      await sendMessage(conversation.id, request.auth!.userId, {
+        content: initialMessage,
+        type: "TEXT" as any,
+      });
+    }
 
     response.json({
       conversationId: conversation.id,

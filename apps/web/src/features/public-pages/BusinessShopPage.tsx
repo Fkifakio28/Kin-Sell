@@ -398,7 +398,7 @@ export function BusinessShopPage({ slug }: BusinessShopPageProps) {
               <button type="button" className="business-lux-cta primary" onClick={handleFollow} disabled={followBusy}>
                 {isFollowingState ? '✓ Suivi' : 'Suivre'}{followersCount > 0 ? ` (${followersCount})` : ''}
               </button>
-              <a href={`/messages?contact=${encodeURIComponent(business.publicName)}`} className="business-lux-cta">Contacter</a>
+              <button type="button" className="business-lux-cta" onClick={() => { if (!isLoggedIn) { navigate('/login'); return; } navigate(`/messaging?newDm=${business.ownerUserId}`); }}>Contacter</button>
               <button type="button" className="business-lux-cta" onClick={handleShare}>Partager</button>
             </div>
           </div>
@@ -632,7 +632,7 @@ export function BusinessShopPage({ slug }: BusinessShopPageProps) {
           <article className="business-lux-contact-card">
             <p>Contact</p>
             <h3>Contact via Kin-Sell</h3>
-            <a href={`/messaging`} className="biz-contact-link">💬 Ouvrir la conversation</a>
+            <button type="button" className="biz-contact-link" onClick={() => { if (!isLoggedIn) { navigate('/login'); return; } navigate(`/messaging?newDm=${business.ownerUserId}`); }}>💬 Ouvrir la conversation</button>
             {business.shop?.contactPhone && (
               <p className="biz-contact-detail">📞 <a href={`tel:${business.shop.contactPhone}`}>{business.shop.contactPhone}</a></p>
             )}

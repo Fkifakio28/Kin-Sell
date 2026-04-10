@@ -49,6 +49,9 @@ import { useListingSelection } from '../../hooks/useListingSelection';
 const USD_TO_CDF = USD_TO_CDF_RATE;
 const CURRENCY_SYMBOLS: Record<string, string> = { CDF: 'FC', USD: '$', EUR: '€', XAF: 'XAF', AOA: 'Kz', XOF: 'XOF', GNF: 'GNF', MAD: 'MAD' };
 const getCurrencyRate = (c: string) => c === 'USD' ? 1 : (DEFAULT_CURRENCY_RATES[c] ?? DEFAULT_CURRENCY_RATES.CDF);
+const STARTER_PRICE_USD_CENTS = 200;
+const PRO_PRICE_USD_CENTS = 500;
+const GOLD_PRICE_USD_CENTS = 1400;
 
 function deriveTier(planCode?: string | null): AbonnementTier {
   if (!planCode) return 'based';

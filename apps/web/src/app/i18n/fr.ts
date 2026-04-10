@@ -1679,4 +1679,8 @@ export const fr: Record<string, string> = {
     "user.deliveryPlaceholder": "Ex: Avenue ..., Commune ..., Ville ...",
     "user.maintenancePlaceholder": "Lieu principal de suivi / entretien",
     "user.executionPlaceholder": "Lieu où le service sera effectué",
+    "promo.pricePlaceholder": "Prix promo",
+    "promo.bundlePricePlaceholder": "Prix du lot",
+    "pricing.perWeek": "/ sem.",
+    "pricing.perMonth": "/ mois",
 };

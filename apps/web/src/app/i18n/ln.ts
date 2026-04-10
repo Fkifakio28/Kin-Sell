@@ -1666,4 +1666,8 @@ export const ln: Record<string, string> = {
     "user.deliveryPlaceholder": "Ndakisa: Avenue ..., Commune ..., Engumba ...",
     "user.maintenancePlaceholder": "Esika ya suivi / entretien",
     "user.executionPlaceholder": "Esika oyo service ekosalema",
+    "promo.pricePlaceholder": "Motuya ya promo",
+    "promo.bundlePricePlaceholder": "Motuya ya paket",
+    "pricing.perWeek": "/ poso",
+    "pricing.perMonth": "/ sanza",
 };

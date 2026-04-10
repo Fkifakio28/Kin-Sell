@@ -244,5 +244,9 @@ export const ar: Record<string, string> = {
   "zone.discoveryLocal": "محلي أولاً",
   "zone.discoveryAll": "كل شيء",
   "zone.discoveryLocalOnly": "محلي فقط",
+  "promo.pricePlaceholder": "سعر العرض",
+  "promo.bundlePricePlaceholder": "سعر الحزمة",
+  "pricing.perWeek": "/ أسبوع",
+  "pricing.perMonth": "/ شهر",
 };
 

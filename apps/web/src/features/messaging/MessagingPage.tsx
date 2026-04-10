@@ -300,6 +300,7 @@ export function MessagingPage() {
   const [blockedConvIds, setBlockedConvIds] = useState<Set<string>>(new Set());
 
   const pendingSoKinPinRef = useRef<{ conversationId: string; post: SoKinPostRef } | null>(null);
+  const newDmHandledRef = useRef<string | null>(null);
   const pinRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pinFallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const messagesRef = useRef<ChatMessage[]>([]);
@@ -525,6 +526,34 @@ export function MessagingPage() {
 
     navigate(location.pathname + location.search, { replace: true, state: null });
   }, [location.pathname, location.search, location.state, navigate, urlConvId]);
+
+  /* ── Handle ?newDm=<userId> — create or open DM automatically ── */
+  useEffect(() => {
+    if (!isLoggedIn || loadingConvs) return;
+    const params = new URLSearchParams(location.search);
+    const targetUserId = params.get("newDm");
+    if (!targetUserId || targetUserId === user?.id) return;
+    // Prevent duplicate calls for the same target
+    if (newDmHandledRef.current === targetUserId) return;
+    newDmHandledRef.current = targetUserId;
+
+    (async () => {
+      try {
+        const { conversation } = await messaging.createDM(targetUserId);
+        // Merge into list if not already present
+        setConversations((prev) => {
+          if (prev.some((c) => c.id === conversation.id)) return prev;
+          return [conversation, ...prev];
+        });
+        setActiveConv(conversation);
+      } catch {
+        // Fallback: just go to messaging list
+      }
+      // Clean URL
+      navigate("/messaging", { replace: true });
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoggedIn, loadingConvs, location.search]);
 
   /* ── Auto-select conversation from URL or pending call ── */
   useEffect(() => {
