@@ -95,7 +95,8 @@ export const createSoKinPost = async (
   hashtags?: string[],
   scheduledAt?: Date,
   postType: string = "SHOWCASE",
-  subject?: string
+  subject?: string,
+  backgroundStyle?: string
 ) => {
   const normalizedMediaUrls = normalizeMediaUrls(mediaUrls);
   validatePostContent(text, normalizedMediaUrls);
@@ -112,6 +113,7 @@ export const createSoKinPost = async (
       tags: tags || [],
       hashtags: hashtags || [],
       scheduledAt,
+      backgroundStyle: backgroundStyle || null,
       status: "ACTIVE",
       visibility: "PUBLIC",
     },
@@ -440,6 +442,7 @@ export const updateSoKinPost = async (
     location?: string | null;
     tags?: string[];
     hashtags?: string[];
+    backgroundStyle?: string | null;
   }
 ) => {
   const post = await prisma.soKinPost.findUnique({ where: { id: postId } });
@@ -466,6 +469,7 @@ export const updateSoKinPost = async (
   if (data.location !== undefined) updatePayload.location = data.location;
   if (data.tags !== undefined) updatePayload.tags = data.tags;
   if (data.hashtags !== undefined) updatePayload.hashtags = data.hashtags;
+  if (data.backgroundStyle !== undefined) updatePayload.backgroundStyle = data.backgroundStyle;
 
   if (data.mediaUrls !== undefined) {
     const normalized = normalizeMediaUrls(data.mediaUrls);

@@ -629,7 +629,7 @@ export function HomePage() {
 
         {/* Actions */}
         <div className="h-actions glass-container">
-          <button type="button" className="h-action-btn ks-help-btn" onClick={() => setIsInfoOpen(true)} aria-label={t('home.info')} title={t('home.info')}>
+          <button type="button" className="ks-help-btn" onClick={() => setIsInfoOpen(true)} aria-label={t('home.info')} title={t('home.info')}>
             <span>?</span>
           </button>
           {isLoggedIn ? (

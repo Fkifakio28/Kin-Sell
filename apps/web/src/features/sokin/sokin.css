@@ -4059,6 +4059,48 @@
   margin-top: 10px;
 }
 
+/* ── Sélecteur de fond pour publications texte seul ── */
+.sk-bg-selector {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+}
+
+.sk-bg-selector-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-text-secondary, #aaa);
+  white-space: nowrap;
+}
+
+.sk-bg-selector-swatches {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.sk-bg-swatch {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  flex-shrink: 0;
+}
+
+.sk-bg-swatch:hover {
+  transform: scale(1.15);
+  box-shadow: 0 0 8px rgba(111, 88, 255, 0.3);
+}
+
+.sk-bg-swatch--active {
+  border-color: #fff;
+  box-shadow: 0 0 0 2px rgba(111, 88, 255, 0.6);
+  transform: scale(1.1);
+}
+
 /* ── Responsive desktop ── */
 @media (max-width: 1279px) {
   .sk-desktop-grid {

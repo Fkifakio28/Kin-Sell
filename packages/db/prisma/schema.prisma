@@ -1363,6 +1363,7 @@ model SoKinPost {
   moderationNote  String?
   scheduledAt     DateTime?
   repostOfId      String?
+  backgroundStyle String?                     // fond personnalisé pour posts texte-seul
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 

@@ -18,6 +18,7 @@ export type SoKinApiPost = {
   comments: number;
   shares: number;
   repostOfId: string | null;
+  backgroundStyle: string | null;
   status: 'ACTIVE' | 'HIDDEN' | 'ARCHIVED' | 'FLAGGED' | 'DELETED';
   createdAt: string;
   updatedAt: string;
@@ -83,7 +84,7 @@ export const sokin = {
     }),
   myCounts: () =>
     request<{ counts: Record<string, number> }>('/sokin/posts/counts'),
-  createPost: (body: { text: string; mediaUrls?: string[]; location?: string; tags?: string[]; hashtags?: string[]; scheduledAt?: string; postType?: SoKinPostType; subject?: string }) =>
+  createPost: (body: { text: string; mediaUrls?: string[]; location?: string; tags?: string[]; hashtags?: string[]; scheduledAt?: string; postType?: SoKinPostType; subject?: string; backgroundStyle?: string }) =>
     mutate<SoKinApiPost>('/sokin/posts', { method: 'POST', body }, ['/sokin/posts']),
   archivePost: (id: string) =>
     mutate<SoKinApiPost>(`/sokin/posts/${encodeURIComponent(id)}/archive`, { method: 'PATCH' }, ['/sokin/posts']),
@@ -91,7 +92,7 @@ export const sokin = {
     mutate<{ post: SoKinApiPost }>(`/sokin/posts/${encodeURIComponent(id)}/toggle`, { method: 'PATCH' }, ['/sokin/posts']),
   deletePost: (id: string) =>
     mutate<{ success: boolean }>(`/sokin/posts/${encodeURIComponent(id)}`, { method: 'DELETE' }, ['/sokin/posts']),
-  updatePost: (id: string, body: { text?: string; mediaUrls?: string[]; postType?: SoKinPostType; subject?: string | null; location?: string | null; tags?: string[]; hashtags?: string[] }) =>
+  updatePost: (id: string, body: { text?: string; mediaUrls?: string[]; postType?: SoKinPostType; subject?: string | null; location?: string | null; tags?: string[]; hashtags?: string[]; backgroundStyle?: string | null }) =>
     mutate<{ post: SoKinApiPost }>(`/sokin/posts/${encodeURIComponent(id)}`, { method: 'PATCH', body }, ['/sokin/posts']),
   publicFeed: (params?: { limit?: number; offset?: number; cursor?: string; city?: string; country?: string; types?: string[] }) =>
     request<{ posts: SoKinApiFeedPost[] }>('/sokin/posts', {

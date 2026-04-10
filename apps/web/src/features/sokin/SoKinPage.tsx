@@ -62,6 +62,7 @@ import {
   IconMoreHoriz,
 } from './AnnounceCard';
 import { MediaViewer, CommentsDrawer, type CommentProfileState, type MissingPublicProfile } from './SoKinShared';
+import { SOKIN_POST_BACKGROUNDS, DEFAULT_BG_ID } from './sokin-backgrounds';
 import './sokin.css';
 
 /* ─────────────────────────────────────────────────────── */
@@ -88,6 +89,7 @@ type SoKinPublishPayload = {
   tags?: string[];
   hashtags?: string[];
   scheduledAt?: string;
+  backgroundStyle?: string;
 };
 
 /** Types visuels qui exigent au moins 1 média */
@@ -635,6 +637,7 @@ function DesktopStudioComposer({
   const [selectedArticles, setSelectedArticles] = useState<string[]>([]);
 
   const [scheduledAt, setScheduledAt] = useState('');
+  const [backgroundStyle, setBackgroundStyle] = useState<string>(DEFAULT_BG_ID);
 
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -643,6 +646,7 @@ function DesktopStudioComposer({
   const canPreview = text.trim().length > 0 || mediaFiles.length > 0;
   const hasText = text.trim().length > 0;
   const hasMedia = mediaFiles.length > 0;
+  const showBgSelector = hasText && !hasMedia && !mediaRequired;
   const canPublish = (hasText || hasMedia) && (!mediaRequired || hasMedia);
 
   useEffect(() => {
@@ -837,6 +841,7 @@ function DesktopStudioComposer({
       tags: selectedTags.map((v) => v.replace(/^@/, '')),
       hashtags: selectedArticles.map((v) => v.replace(/^#/, '')),
       scheduledAt: scheduledAt ? new Date(scheduledAt).toISOString() : undefined,
+      backgroundStyle: showBgSelector ? backgroundStyle : undefined,
     });
   };
 
@@ -906,6 +911,26 @@ function DesktopStudioComposer({
           onChange={(e) => setText(e.target.value)}
           rows={7}
         />
+
+        {/* ── Sélecteur de fond (texte seul) ── */}
+        {showBgSelector && (
+          <div className="sk-bg-selector" aria-label="Choisir un fond">
+            <span className="sk-bg-selector-label">Fond</span>
+            <div className="sk-bg-selector-swatches">
+              {SOKIN_POST_BACKGROUNDS.map((bg) => (
+                <button
+                  key={bg.id}
+                  type="button"
+                  className={`sk-bg-swatch${backgroundStyle === bg.id ? ' sk-bg-swatch--active' : ''}`}
+                  style={{ background: bg.css }}
+                  onClick={() => setBackgroundStyle(bg.id)}
+                  aria-label={bg.id}
+                  title={bg.id}
+                />
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="sk-studio-actions">
           <button type="button" className="sk-btn sk-btn--outline" onClick={() => fileRef.current?.click()} disabled={isPublishing || mediaFiles.length >= 5}>🖼️</button>
@@ -1131,6 +1156,7 @@ function CreateAnnounceScreen({
   const [articleSearchNonce, setArticleSearchNonce] = useState(0);
 
   const [scheduledAt, setScheduledAt] = useState(initialDraft?.scheduledAt ?? '');
+  const [backgroundStyle, setBackgroundStyle] = useState<string>(editingPost?.backgroundStyle ?? DEFAULT_BG_ID);
   const [editorDraft, setEditorDraft] = useState<SoKinEditorDraftState | null>(null);
   const [editorBaseline, setEditorBaseline] = useState<SoKinEditorDraftState | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -1142,6 +1168,7 @@ function CreateAnnounceScreen({
   const canPreview = text.trim().length > 0 || totalMediaCount > 0;
   const hasText = text.trim().length > 0;
   const hasMedia = totalMediaCount > 0;
+  const showBgSelector = hasText && !hasMedia && !mediaRequired;
   const canPublish = (hasText || hasMedia) && (!mediaRequired || hasMedia);
   const imageCount = mediaFiles.filter((f) => !f.type.startsWith('video/')).length;
   const videoCount = mediaFiles.filter((f) => f.type.startsWith('video/')).length;
@@ -1558,6 +1585,7 @@ function CreateAnnounceScreen({
       tags: selectedTags.map((v) => v.replace(/^@/, '')),
       hashtags: selectedArticles.map((v) => v.replace(/^#/, '')),
       scheduledAt: !isEditMode && scheduledAt ? new Date(scheduledAt).toISOString() : undefined,
+      backgroundStyle: showBgSelector ? backgroundStyle : undefined,
     });
   };
 
@@ -1686,6 +1714,26 @@ function CreateAnnounceScreen({
               </div>
 
               <span className="sk-modal-char-count">{text.length}/500</span>
+
+              {/* ── Sélecteur de fond (texte seul) ── */}
+              {showBgSelector && (
+                <div className="sk-bg-selector" aria-label="Choisir un fond">
+                  <span className="sk-bg-selector-label">Fond</span>
+                  <div className="sk-bg-selector-swatches">
+                    {SOKIN_POST_BACKGROUNDS.map((bg) => (
+                      <button
+                        key={bg.id}
+                        type="button"
+                        className={`sk-bg-swatch${backgroundStyle === bg.id ? ' sk-bg-swatch--active' : ''}`}
+                        style={{ background: bg.css }}
+                        onClick={() => setBackgroundStyle(bg.id)}
+                        aria-label={bg.id}
+                        title={bg.id}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div className="sk-studio-actions">
                 <button
@@ -2773,6 +2821,7 @@ function SoKinPageInner() {
           location: data.location,
           tags: data.tags,
           hashtags: data.hashtags,
+          backgroundStyle: data.backgroundStyle ?? null,
         });
 
         if (!resp?.post?.id) {
@@ -2804,6 +2853,7 @@ function SoKinPageInner() {
         tags: data.tags,
         hashtags: data.hashtags,
         scheduledAt: data.scheduledAt,
+        backgroundStyle: data.backgroundStyle,
       });
 
       if (!created?.id) {
@@ -3229,7 +3279,7 @@ function SoKinPageInner() {
 
             {/* Actions */}
             <div className="sk-desktop-topbar-actions glass-container">
-              <button type="button" className="sk-desktop-head-icon ks-help-btn" onClick={() => setDesktopHelpOpen(true)} aria-label="Aide">
+              <button type="button" className="ks-help-btn" onClick={() => setDesktopHelpOpen(true)} aria-label="Aide">
                 <span>?</span>
               </button>
               <button type="button" className="sk-desktop-head-icon sk-desktop-head-icon--notif" onClick={() => setDesktopNotifOpen((prev) => !prev)} aria-label="Notifications">

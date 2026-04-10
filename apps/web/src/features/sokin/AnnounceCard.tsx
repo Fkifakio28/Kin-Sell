@@ -16,6 +16,7 @@ import {
 } from '../../lib/api-client';
 import { useSoKinToast } from '../../components/feedback/SoKinToast';
 import { observePostView, trackSoKinEvent } from '../../lib/services/sokin-tracking.service';
+import { resolveBackgroundCss } from './sokin-backgrounds';
 import type { PostInsight, PostInsightCard } from '../../lib/services/sokin-analytics.service';
 
 /* ─────────────────────────────────────────────────────── */
@@ -522,7 +523,7 @@ export function AnnounceCard({
         mediaItems.length > 0
           ? <p className="sk-card-text">{post.text}</p>
           : (
-            <div className="sk-card-text-only" style={{ background: `linear-gradient(135deg, #000, ${['#1c133b', '#2b1649', '#321f58', '#161616'][post.id.charCodeAt(0) % 4]})` }}>
+            <div className="sk-card-text-only" style={{ background: resolveBackgroundCss((post as any).backgroundStyle) }}>
               <p className="sk-card-text sk-card-text--centered">{post.text}</p>
             </div>
           )

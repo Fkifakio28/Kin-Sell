@@ -69,6 +69,7 @@ const createPostSchema = z.object({
   tags: z.array(z.string()).default([]).optional(),
   hashtags: z.array(z.string()).default([]).optional(),
   scheduledAt: z.string().datetime().optional(),
+  backgroundStyle: z.string().max(100).optional(),
 }).refine((data) => {
   // Règle 1 : les types visuels exigent au moins 1 média
   if ((MEDIA_REQUIRED_TYPES as readonly string[]).includes(data.postType) && data.mediaUrls.length < 1) {
@@ -227,7 +228,7 @@ router.post(
   requireAuth,
   rateLimit(RateLimits.SOKIN_POST),
   asyncHandler(async (req: AuthenticatedRequest, res) => {
-    const { postType, subject, text, mediaUrls = [], location, scheduledAt, tags = [], hashtags = [] } = createPostSchema.parse(req.body);
+    const { postType, subject, text, mediaUrls = [], location, scheduledAt, tags = [], hashtags = [], backgroundStyle } = createPostSchema.parse(req.body);
 
     // ContentGuard: modération IA avant publication
     const { analyzePost } = await import("./content-guard.service.js");
@@ -250,7 +251,8 @@ router.post(
       hashtags,
       scheduledAt ? new Date(scheduledAt) : undefined,
       postType,
-      subject
+      subject,
+      backgroundStyle
     );
 
     emitToAll("sokin:post-created", {
@@ -327,6 +329,7 @@ const updatePostSchema = z.object({
   location: z.string().max(100).nullable().optional(),
   tags: z.array(z.string()).optional(),
   hashtags: z.array(z.string()).optional(),
+  backgroundStyle: z.string().max(100).nullable().optional(),
 });
 
 /**
