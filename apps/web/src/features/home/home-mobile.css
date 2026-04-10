@@ -113,7 +113,7 @@
 /* ─── Sections ─── */
 
 .hm-section {
-  padding: 7px 0;
+  padding: 4px 0;
 }
 
 .hm-section-title {
@@ -122,7 +122,7 @@
   font-weight: 700;
   color: var(--color-text);
   padding: 0 12px;
-  margin: 0 0 8px;
+  margin: 0 0 5px;
 }
 
 .hm-section-row {
@@ -265,7 +265,7 @@
 .hm-tabs {
   display: flex;
   gap: 6px;
-  padding: 0 12px 4px;
+  padding: 0 12px 2px;
 }
 
 .hm-tab {
@@ -372,7 +372,7 @@
 }
 
 .hm-market-card-body {
-  padding: 10px 12px;
+  padding: 8px 12px;
 }
 
 .hm-market-card-title {
@@ -416,7 +416,7 @@
 .hm-sokin-feed {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
   padding: 0 12px;
 }
 
@@ -440,7 +440,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 12px 2px;
+  padding: 5px 12px 1px;
 }
 
 .hm-letter-avatar {
@@ -589,7 +589,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 2px 12px 4px;
+  padding: 1px 12px 3px;
 }
 
 .hm-letter-foot-left,
