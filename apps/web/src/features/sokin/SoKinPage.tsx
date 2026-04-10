@@ -3543,14 +3543,14 @@ function SoKinPageInner() {
               {/* ── Bloc business discret ── */}
               <section className="sk-desktop-panel sk-desktop-commercial sk-desktop-commercial--discreet glass-container" aria-label="Kin-Sell Business">
                 <p className="sk-desktop-commercial-line">📦 Boostez votre visibilité sur So-Kin</p>
-                <button type="button" className="sk-desktop-outline" onClick={openAccountArticles}>Créer un post</button>
+                <button type="button" className="sk-desktop-outline" onClick={handleOpenCreate}>Créer un post</button>
               </section>
-              {/* ── Mon contenu (collapsed) ── */}
+              {/* ── Mon contenu (inline management) ── */}
               {isLoggedIn && myPublishedPosts.length > 0 && (
                 <section className="sk-desktop-panel sk-desktop-my-content glass-container" aria-label="Mon contenu">
                   <h3>📋 Mon contenu</h3>
                   <div className="sk-desktop-published-list">
-                    {myPublishedPosts.slice(0, 3).map((post) => {
+                    {myPublishedPosts.map((post) => {
                       const statusConfig: Record<string, { icon: string; label: string }> = {
                         ACTIVE: { icon: '🟢', label: 'Publié' },
                         HIDDEN: { icon: '🟡', label: 'Masqué' },
@@ -3571,11 +3571,27 @@ function SoKinPageInner() {
                               {sc.icon} {sc.label} · {new Date(post.createdAt).toLocaleDateString('fr-FR')}
                             </span>
                           </button>
+                          {post.status !== 'DELETED' && (
+                            <div className="sk-desktop-published-actions">
+                              <button type="button" className="sk-desktop-action-btn" title="Modifier" onClick={() => handleEditPublishedPost(post.id)}>✏️</button>
+                              {post.status !== 'ARCHIVED' && (
+                                <button type="button" className="sk-desktop-action-btn" title={post.status === 'ACTIVE' ? 'Masquer' : 'Publier'} onClick={() => void handleTogglePublishedPost(post.id)} disabled={togglingPostId === post.id}>
+                                  {togglingPostId === post.id ? '⏳' : post.status === 'ACTIVE' ? '⏸️' : '▶️'}
+                                </button>
+                              )}
+                              <button type="button" className="sk-desktop-action-btn" title={post.status === 'ARCHIVED' ? 'Désarchiver' : 'Archiver'} onClick={() => void handleArchivePublishedPost(post.id)} disabled={archivingPostId === post.id}>
+                                {archivingPostId === post.id ? '⏳' : post.status === 'ARCHIVED' ? '📤' : '📦'}
+                              </button>
+                              <button type="button" className="sk-desktop-action-btn sk-desktop-action-btn--danger" title="Supprimer" onClick={() => void handleDeletePublishedPost(post.id)} disabled={deletingPostId === post.id}>
+                                {deletingPostId === post.id ? '⏳' : '🗑️'}
+                              </button>
+                            </div>
+                          )}
                         </article>
                       );
                     })}
                   </div>
-                  <button type="button" className="sk-desktop-outline" onClick={openAccountArticles}>Gérer tout</button>
+                  <button type="button" className="sk-desktop-outline" onClick={handleOpenCreate}>+ Nouvelle publication</button>
                 </section>
               )}
             </aside>

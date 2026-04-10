@@ -3757,18 +3757,52 @@
   transform: translateY(-1px);
 }
 
-/* ── Mon contenu collapsed (right sidebar) ── */
+/* ── Mon contenu inline management (right sidebar) ── */
 .sk-desktop-my-content .sk-desktop-published-list {
   gap: 0.35rem;
+  max-height: 340px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(124, 92, 255, 0.25) transparent;
 }
 
 .sk-desktop-my-content .sk-desktop-published-item {
-  padding: 0.3rem 0;
+  padding: 0.35rem 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.04);
 }
 
 .sk-desktop-my-content .sk-desktop-published-actions {
-  display: none;
+  display: flex;
+  gap: 0.25rem;
+  margin-top: 0.25rem;
+}
+
+.sk-desktop-action-btn {
+  background: var(--glass-bg, rgba(20, 24, 43, 0.5));
+  border: 1px solid var(--glass-border, rgba(180, 160, 255, 0.15));
+  border-radius: var(--radius-sm, 8px);
+  padding: 0.2rem 0.45rem;
+  font-size: 0.72rem;
+  cursor: pointer;
+  color: var(--color-text-secondary, rgba(255, 255, 255, 0.75));
+  transition: background 0.15s, border-color 0.15s, transform 0.15s;
+  line-height: 1;
+}
+
+.sk-desktop-action-btn:hover {
+  background: var(--sk-brand-soft, rgba(124, 92, 255, 0.14));
+  border-color: var(--sk-brand-glow, rgba(124, 92, 255, 0.3));
+  transform: translateY(-1px);
+}
+
+.sk-desktop-action-btn:disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.sk-desktop-action-btn--danger:hover {
+  background: rgba(255, 95, 95, 0.12);
+  border-color: rgba(255, 130, 130, 0.4);
 }
 
 /* ── Primary button (CTA) ── */
