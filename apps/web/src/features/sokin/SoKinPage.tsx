@@ -2818,6 +2818,8 @@ function SoKinPageInner() {
 
       setShowCreateScreen(false);
 
+      toast.success('Publication créée');
+
       try {
         const full = await sokinApi.publicPost(created.id);
         setPosts((prev) => [full.post, ...prev.filter((item) => item.id !== full.post.id)]);
