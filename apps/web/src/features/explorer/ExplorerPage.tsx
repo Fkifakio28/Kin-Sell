@@ -223,10 +223,10 @@ function ExplorerPageMobile() {
   const { effectiveCountry, getCountryConfig } = useMarketPreference();
   const lockedCats = useLockedCategories();
   const defaultCity = getCountryConfig(effectiveCountry).defaultCity;
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const urlType = searchParams.get('type');
   const urlCategory = searchParams.get('category');
-  const urlQuery = searchParams.get('q') || searchParams.get('query') || '';
+  const urlQuery = searchParams.get('q') || searchParams.get('query') || searchParams.get('search') || '';
 
   /* ── Shell state ── */
   const scrollDir = useScrollDirection();
@@ -345,7 +345,17 @@ function ExplorerPageMobile() {
     return () => { ctrl.abort(); };
   }, [defaultCity, effectiveCountry]);
 
-  useEffect(() => { const t = setTimeout(() => setDebouncedQuery(searchQuery), 300); return () => clearTimeout(t); }, [searchQuery]);
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setDebouncedQuery(searchQuery);
+      const next = new URLSearchParams(searchParams);
+      next.delete('query');
+      next.delete('search');
+      if (searchQuery.trim()) { next.set('q', searchQuery.trim()); } else { next.delete('q'); }
+      setSearchParams(next, { replace: true });
+    }, 300);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
 
   useEffect(() => {
     let cancelled = false;

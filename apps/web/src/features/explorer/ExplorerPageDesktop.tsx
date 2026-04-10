@@ -33,7 +33,7 @@ export function ExplorerPageDesktop() {
   const [searchParams, setSearchParams] = useSearchParams();
   const urlType = searchParams.get('type');
   const urlCategory = searchParams.get('category');
-  const urlQuery = searchParams.get('q') || searchParams.get('query') || '';
+  const urlQuery = searchParams.get('q') || searchParams.get('query') || searchParams.get('search') || '';
 
   const [isProducts, setIsProducts] = useState(() => {
     if (urlType === 'services') return false;
@@ -331,6 +331,12 @@ export function ExplorerPageDesktop() {
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedQuery(searchQuery);
+      // Sync URL with canonical param
+      const next = new URLSearchParams(searchParams);
+      next.delete('query');
+      next.delete('search');
+      if (searchQuery.trim()) { next.set('q', searchQuery.trim()); } else { next.delete('q'); }
+      setSearchParams(next, { replace: true });
     }, 300);
 
     return () => clearTimeout(timer);

@@ -2006,7 +2006,7 @@ export function UserDashboard() {
       {/* ── Mobile Search Bar ── */}
       {mobileSearchOpen && (
         <div className="dash-mobile-searchbar">
-          <form onSubmit={(e) => { e.preventDefault(); if (mobileSearchQuery.trim()) { navigate(`/explorer?search=${encodeURIComponent(mobileSearchQuery.trim())}`); } }}>
+          <form onSubmit={(e) => { e.preventDefault(); if (mobileSearchQuery.trim()) { navigate(`/explorer?q=${encodeURIComponent(mobileSearchQuery.trim())}`); setMobileSearchOpen(false); } }}>
             <input
               type="text"
               className="dash-mobile-search-input"

@@ -612,9 +612,9 @@ export function HomePage() {
 
         {/* Search */}
         <form className="h-search glass-container" onSubmit={handleSearch}>
-          <span className="h-search-icon" aria-hidden="true">
+          <button type="submit" className="h-search-icon" aria-label="Rechercher" style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          </span>
+          </button>
           <input
             type="text"
             value={searchQuery}
