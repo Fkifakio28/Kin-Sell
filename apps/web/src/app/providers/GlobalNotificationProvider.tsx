@@ -342,16 +342,39 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
       playMessageSound();
     };
 
-    const handleNegotiationUpdated = (data: { action: string; negotiationId: string; sourceUserId: string }) => {
+    const handleNegotiationUpdated = (data: { action: string; negotiationId: string; sourceUserId: string; respondAction?: string; respondedByDisplayName?: string; listingTitle?: string; counterPriceUsdCents?: number | null }) => {
       if (data.sourceUserId === user?.id) return;
-      const actionLabels: Record<string, string> = { CREATED: "Nouvelle offre", RESPONDED: "Réponse reçue", CANCELED: "Annulée", JOINED: "Nouveau membre", BUNDLE_CREATED: "Offre lot" };
-      const label = actionLabels[data.action] ?? data.action;
+      const who = data.respondedByDisplayName ?? "Quelqu'un";
+      const article = data.listingTitle ? ` pour « ${data.listingTitle} »` : "";
+      let label: string;
+      let icon = "🤝";
+      if (data.action === "RESPONDED" && data.respondAction) {
+        switch (data.respondAction) {
+          case "ACCEPT":
+            label = `${who} a accepté votre offre${article} ✅`;
+            icon = "✅";
+            break;
+          case "REFUSE":
+            label = `${who} a refusé votre offre${article}`;
+            icon = "❌";
+            break;
+          case "COUNTER":
+            label = `${who} a fait une contre-offre${article} 🔄`;
+            icon = "🔄";
+            break;
+          default:
+            label = "Réponse reçue";
+        }
+      } else {
+        const actionLabels: Record<string, string> = { CREATED: "Nouvelle offre", RESPONDED: "Réponse reçue", CANCELED: "Annulée", JOINED: "Nouveau membre", BUNDLE_CREATED: "Offre lot" };
+        label = actionLabels[data.action] ?? data.action;
+      }
       const toast: MessageToast = {
         id: `nego-${data.negotiationId}-${Date.now()}`,
         kind: "negotiation",
-        title: "🤝 " + label,
+        title: icon + " " + label,
         content: `Marchandage #${data.negotiationId.slice(-6)} — ${label}`,
-        icon: "🤝",
+        icon,
         targetUrl: "/account?tab=commandes",
         timestamp: Date.now(),
       };

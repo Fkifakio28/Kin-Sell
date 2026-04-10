@@ -38,6 +38,8 @@ export function CartPage() {
   const [cancellingNeg, setCancellingNeg] = useState<string | null>(null);
   const [bundleTarget, setBundleTarget] = useState<{ sellerId: string; sellerName: string; listings: BundleListingItem[] } | null>(null);
   const [negotiateItem, setNegotiateItem] = useState<{ id: string; title: string; imageUrl: string | null; type: string; priceUsdCents: number; ownerDisplayName: string } | null>(null);
+  const [negContextMsg, setNegContextMsg] = useState<Record<string, string>>({});
+  const [negPriceFlash, setNegPriceFlash] = useState<Record<string, boolean>>({});
   const [activePlan, setActivePlan] = useState<BillingPlanSummary | null>(null);
   const [checkoutAdviceData, setCheckoutAdviceData] = useState<CheckoutAdvice | null>(null);
   const [adviceLoading, setAdviceLoading] = useState(false);
@@ -190,10 +192,33 @@ export function CartPage() {
       sellerUserId: string;
       sourceUserId: string;
       updatedAt: string;
+      respondAction?: 'ACCEPT' | 'REFUSE' | 'COUNTER';
+      respondedByDisplayName?: string | null;
     }) => {
-      if (payload.buyerUserId !== user.id) return;
+      if (payload.buyerUserId !== user.id && payload.sellerUserId !== user.id) return;
       if (respondNeg?.id === payload.negotiationId && payload.sourceUserId !== user.id) {
         setRespondNeg(null);
+      }
+      // Context messages for refusal/counter/accept
+      if (payload.action === 'RESPONDED' && payload.respondAction && payload.sourceUserId !== user.id) {
+        const who = payload.respondedByDisplayName ?? 'L\'autre partie';
+        const isBuyer = user.id === payload.buyerUserId;
+        let msg = '';
+        if (payload.respondAction === 'REFUSE') {
+          msg = isBuyer
+            ? `${who} a refusé votre offre, l'article est en attente de validation dans le panier`
+            : `${who} a refusé votre offre et mis fin au marchandage, vous pouvez soit valider la commande soit vider le panier`;
+        } else if (payload.respondAction === 'COUNTER') {
+          msg = `${who} a proposé un nouveau prix 🔄`;
+          setNegPriceFlash((p) => ({ ...p, [payload.negotiationId]: true }));
+          setTimeout(() => setNegPriceFlash((p) => ({ ...p, [payload.negotiationId]: false })), 3000);
+        } else if (payload.respondAction === 'ACCEPT') {
+          msg = `${who} a accepté votre offre ✅ Commande créée automatiquement`;
+        }
+        if (msg) {
+          setNegContextMsg((p) => ({ ...p, [payload.negotiationId]: msg }));
+          setTimeout(() => setNegContextMsg((p) => { const n = { ...p }; delete n[payload.negotiationId]; return n; }), 12000);
+        }
       }
       void reloadCart();
     };
@@ -646,6 +671,20 @@ export function CartPage() {
                       {item.negotiationStatus === "ACCEPTED" && t("negotiation.status.accepted")}
                       {item.negotiationStatus === "REFUSED" && t("negotiation.status.refused")}
                       {item.negotiationStatus === "EXPIRED" && t("negotiation.status.expired")}
+                    </div>
+                  )}
+
+                  {/* Animated new price on counter */}
+                  {item.negotiationId && negPriceFlash[item.negotiationId] && (
+                    <div className="cart-neg-price-flash">
+                      Nouveau prix : <strong>{formatMoneyFromUsdCents(item.unitPriceUsdCents)}</strong>
+                    </div>
+                  )}
+
+                  {/* Context message after negotiation response */}
+                  {item.negotiationId && negContextMsg[item.negotiationId] && (
+                    <div className={`cart-neg-context-msg cart-neg-context-msg--${item.negotiationStatus?.toLowerCase() ?? 'info'}`}>
+                      {negContextMsg[item.negotiationId]}
                     </div>
                   )}
 

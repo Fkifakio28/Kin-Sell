@@ -14,7 +14,8 @@ import { requireIa } from "../../shared/billing/subscription-guard.js";
 const emitNegotiationUpdated = (
   data: { id: string; buyerUserId: string; sellerUserId: string; updatedAt: string },
   action: "CREATED" | "RESPONDED" | "CANCELED" | "JOINED" | "BUNDLE_CREATED",
-  sourceUserId: string
+  sourceUserId: string,
+  extra?: Record<string, unknown>
 ) => {
   emitToUsers([data.buyerUserId, data.sellerUserId], "negotiation:updated", {
     type: "NEGOTIATION_UPDATED",
@@ -24,6 +25,7 @@ const emitNegotiationUpdated = (
     sellerUserId: data.sellerUserId,
     sourceUserId,
     updatedAt: data.updatedAt,
+    ...extra,
   });
 };
 
@@ -219,7 +221,14 @@ router.post(
         data: { type: "negotiation", negotiationId: data.id },
       });
     }
-    emitNegotiationUpdated(data, "RESPONDED", request.auth!.userId);
+    emitNegotiationUpdated(data, "RESPONDED", request.auth!.userId, {
+      respondAction: payload.action,
+      counterPriceUsdCents: payload.counterPriceUsdCents ?? null,
+      listingTitle: data.listing?.title ?? null,
+      respondedByDisplayName: data.buyerUserId === request.auth!.userId
+        ? data.buyer?.displayName ?? "Acheteur"
+        : data.seller?.displayName ?? "Vendeur",
+    });
     response.json(data);
   })
 );

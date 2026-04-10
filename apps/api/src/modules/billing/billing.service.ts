@@ -598,7 +598,7 @@ export const adminActivatePlan = async (payload: {
   const refreshed = await findActiveSubscription(payload.userId, scope, businessId);
   return {
     plan: serializePlan(scope, refreshed),
-    message: "Forfait activÃ© manuellement",
+    message: "Forfait active manuellement",
   };
 };
 
@@ -724,3 +724,4 @@ export const capturePaypalPayment = async (userId: string, payload: { orderId: s
     message: "Forfait activé via PayPal"
   };
 };
+

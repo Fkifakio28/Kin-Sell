@@ -53,6 +53,10 @@ type SocketEvents = {
     sellerUserId: string;
     sourceUserId: string;
     updatedAt: string;
+    respondAction?: "ACCEPT" | "REFUSE" | "COUNTER";
+    counterPriceUsdCents?: number | null;
+    listingTitle?: string | null;
+    respondedByDisplayName?: string | null;
   }) => void;
   "negotiation:expired": (data: {
     type: "NEGOTIATION_EXPIRED";

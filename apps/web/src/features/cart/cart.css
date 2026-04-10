@@ -1431,3 +1431,71 @@
     width: 100%;
   }
 }
+
+/* ── Negotiation price flash animation ── */
+.cart-neg-price-flash {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-primary-hover, #b9a6ff);
+  background: rgba(111, 88, 255, 0.12);
+  padding: 6px 10px;
+  border-radius: var(--radius-sm, 8px);
+  border-left: 3px solid var(--color-accent, #6f58ff);
+  margin-top: 4px;
+  animation: cart-neg-price-pulse 0.6s ease 2;
+}
+
+@keyframes cart-neg-price-pulse {
+  0% { transform: scale(1); opacity: 0.6; }
+  50% { transform: scale(1.06); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* ── Negotiation context message ── */
+.cart-neg-context-msg {
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm, 8px);
+  margin-top: 4px;
+  animation: cart-neg-msg-in 0.3s ease;
+}
+
+.cart-neg-context-msg--refused {
+  color: #ffacb5;
+  background: rgba(120, 35, 54, 0.12);
+  border-left: 3px solid #ff6478;
+}
+
+.cart-neg-context-msg--countered {
+  color: var(--color-primary-hover, #b9a6ff);
+  background: rgba(111, 88, 255, 0.08);
+  border-left: 3px solid var(--color-accent, #6f58ff);
+}
+
+.cart-neg-context-msg--accepted {
+  color: #9ef3cb;
+  background: rgba(46, 204, 113, 0.08);
+  border-left: 3px solid #2ecc71;
+}
+
+.cart-neg-context-msg--info {
+  color: var(--color-text-secondary);
+  background: rgba(255, 255, 255, 0.04);
+  border-left: 3px solid var(--color-text-tertiary);
+}
+
+@keyframes cart-neg-msg-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Accessibility: reduce motion ── */
+@media (prefers-reduced-motion: reduce) {
+  .cart-neg-price-flash {
+    animation: none;
+  }
+  .cart-neg-context-msg {
+    animation: none;
+  }
+}
