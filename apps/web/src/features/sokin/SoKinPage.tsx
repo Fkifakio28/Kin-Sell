@@ -3262,9 +3262,9 @@ function SoKinPageInner() {
 
             {/* Search */}
             <div className="sk-desktop-global-search glass-container">
-              <span className="sk-desktop-search-icon" aria-hidden="true">
+              <button type="button" className="sk-desktop-search-icon" onClick={handleDesktopSearch} aria-label="Lancer la recherche" style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-              </span>
+              </button>
               <input
                 type="search"
                 value={desktopSearch}
@@ -3452,7 +3452,9 @@ function SoKinPageInner() {
               {/* ── Recherche rapide ── */}
               <section className="sk-desktop-panel sk-desktop-search-panel glass-container" aria-label="Recherche">
                 <div className="sk-desktop-search-inline">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                  <button type="button" onClick={handleDesktopSearch} aria-label="Lancer la recherche" style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                  </button>
                   <input
                     type="search"
                     value={desktopSearch}

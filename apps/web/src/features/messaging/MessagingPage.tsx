@@ -10,6 +10,7 @@ import {
   type MessageUser,
 } from "../../lib/api-client";
 import { useSocket } from "../../hooks/useSocket";
+import { useScrollDirection } from "../../hooks/useScrollDirection";
 import { useLocaleCurrency } from "../../app/providers/LocaleCurrencyProvider";
 import { createOptimizedAudioRecorder, createUploadFile, prepareMediaUrl } from "../../utils/media-upload";
 import { useGlobalNotification } from "../../app/providers/GlobalNotificationProvider";
@@ -236,11 +237,11 @@ function MgDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
 }
 
 /* ═══ TopBar (list view only) ═══ */
-function MgTopBar({ onMenuOpen, onSearchToggle }: {
-  onMenuOpen: () => void; onSearchToggle: () => void;
+function MgTopBar({ onMenuOpen, onSearchToggle, hidden }: {
+  onMenuOpen: () => void; onSearchToggle: () => void; hidden?: boolean;
 }) {
   return (
-    <header className="mg-topbar">
+    <header className={`mg-topbar${hidden ? ' mg-topbar-hidden' : ''}`}>
       <button className="mg-topbar-btn" onClick={onMenuOpen} aria-label="Menu">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
       </button>
@@ -265,6 +266,7 @@ export function MessagingPage() {
   const location = useLocation();
   const { conversationId: urlConvId } = useParams<{ conversationId?: string }>();
   const locale = language === "en" ? "en-US" : language === "ln" ? "fr-CD" : "fr-FR";
+  const scrollDir = useScrollDirection();
 
   /* ── Core state ── */
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
@@ -1555,6 +1557,7 @@ export function MessagingPage() {
         <MgTopBar
           onMenuOpen={() => setDrawerOpen(true)}
           onSearchToggle={() => setShowSearch(!showSearch)}
+          hidden={scrollDir === 'down'}
         />
 
         {/* Drawer */}
@@ -1698,6 +1701,28 @@ export function MessagingPage() {
           </div>
         )}
       </div>
+
+      {/* ── Mobile FAB Bottom Nav (messaging) ── */}
+      {!activeConv && (
+        <nav className={`mg-fab-bar${scrollDir === 'down' ? ' mg-fab-hidden' : ''}`}>
+          <button type="button" className="mg-fab-item" onClick={() => navigate(getDashboardPath(user?.role))}>
+            <span className="mg-fab-icon">🧩</span>
+            <span className="mg-fab-label">Espace</span>
+          </button>
+          <button type="button" className="mg-fab-item mg-fab-item--home" onClick={() => navigate('/')}>
+            <span className="mg-fab-icon">🏠</span>
+            <span className="mg-fab-label">Home</span>
+          </button>
+          <button type="button" className="mg-fab-item mg-fab-item--active">
+            <span className="mg-fab-icon">💬</span>
+            <span className="mg-fab-label">Messages</span>
+          </button>
+          <button type="button" className="mg-fab-item" onClick={() => navigate('/explorer')}>
+            <span className="mg-fab-icon">🔍</span>
+            <span className="mg-fab-label">Explorer</span>
+          </button>
+        </nav>
+      )}
 
       {/* ══════════════════════════════════════
            VIEW: Conversation (fullscreen)

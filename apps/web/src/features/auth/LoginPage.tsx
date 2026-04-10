@@ -43,6 +43,7 @@ export function LoginPage() {
   // Identifiants classiques
   const [identifier, setIdentifier] = useState(() => localStorage.getItem(rememberedIdentifierKey) ?? "");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(Boolean(localStorage.getItem(rememberedIdentifierKey)));
 
   // OTP Téléphone
@@ -319,16 +320,37 @@ export function LoginPage() {
 
           <div className="auth-field-group">
             <label htmlFor="login-password" className="auth-label">{t("auth.passwordLabel")}</label>
-            <input
-              id="login-password"
-              type="password"
-              className="auth-input"
-              placeholder={t("auth.passwordPlaceholder")}
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              autoComplete="current-password"
-              required
-            />
+            <div className="auth-input-group">
+              <input
+                id="login-password"
+                type={showPassword ? "text" : "password"}
+                className="auth-input auth-input--with-toggle"
+                placeholder={t("auth.passwordPlaceholder")}
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                autoComplete="current-password"
+                required
+              />
+              <button
+                type="button"
+                className="auth-input-toggle"
+                aria-label={showPassword ? t("auth.hidePassword") : t("auth.showPassword")}
+                onClick={() => setShowPassword((v) => !v)}
+              >
+                {showPassword ? (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z" />
+                    <circle cx="12" cy="12" r="3" />
+                    <line x1="4" y1="20" x2="20" y2="4" />
+                  </svg>
+                ) : (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                )}
+              </button>
+            </div>
           </div>
 
           <div className="auth-row auth-row--between">

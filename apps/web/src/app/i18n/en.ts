@@ -74,6 +74,8 @@ export const en: Record<string, string> = {
     "auth.identifierPlaceholder": "Email, @username or Kin-Sell ID",
     "auth.passwordLabel": "Password",
     "auth.passwordPlaceholder": "Your password",
+    "auth.showPassword": "Show password",
+    "auth.hidePassword": "Hide password",
     "auth.rememberMe": "Remember me",
     "auth.forgotPassword": "Forgot password?",
     "auth.forgotPasswordMsg": "Password reset coming in the next backend step.",

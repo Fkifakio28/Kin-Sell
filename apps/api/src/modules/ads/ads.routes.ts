@@ -15,6 +15,7 @@ import {
   type PromotionScope,
 } from './ads-boost.service.js';
 import { rateLimit, RateLimits } from '../../shared/middleware/rate-limit.middleware.js';
+import { scrapeGuard } from '../../shared/middleware/scrape-guard.middleware.js';
 import { runOrchestration } from './kinsell-internal-ads-orchestrator.js';
 import { getRegionalMarketContext } from './regional-market-context.service.js';
 import {
@@ -29,7 +30,10 @@ import { env } from '../../config/env.js';
 const router = Router();
 
 // ── Public: random active banner for a given page (geo-filtered) ────────────
-router.get('/banner', asyncHandler(async (req, res) => {
+router.get('/banner',
+  scrapeGuard(),
+  rateLimit(RateLimits.PUBLIC_AD_BANNER),
+  asyncHandler(async (req, res) => {
   const page = (req.query.page as string) || 'home';
   const viewerCity = (req.query.city as string) || undefined;
   const viewerCountry = (req.query.country as string) || undefined;
@@ -224,7 +228,10 @@ router.post('/orchestrator/run', requireAuth, requireRoles(Role.SUPER_ADMIN), as
 }));
 
 // ── Public: Regional market context for a category ──────────────────────────
-router.get('/market-context', asyncHandler(async (req, res) => {
+router.get('/market-context',
+  scrapeGuard(),
+  rateLimit(RateLimits.PUBLIC_FEED),
+  asyncHandler(async (req, res) => {
   const category = (req.query.category as string) || '';
   const city = (req.query.city as string) || 'Kinshasa';
   if (!category) { res.status(400).json({ error: 'category requis' }); return; }
@@ -233,7 +240,10 @@ router.get('/market-context', asyncHandler(async (req, res) => {
 }));
 
 // ── Public: Pricing multipliers per scope ─────────────────────────────────────
-router.get('/pricing', asyncHandler(async (_req, res) => {
+router.get('/pricing',
+  scrapeGuard(),
+  rateLimit(RateLimits.PUBLIC_FEED),
+  asyncHandler(async (_req, res) => {
   res.json({
     scopes: [
       { scope: 'LOCAL', label: 'Ville uniquement', multiplier: SCOPE_PRICING_MULTIPLIER.LOCAL },
@@ -337,3 +347,5 @@ router.get('/ai-quota', requireAuth, requireRoles(Role.SUPER_ADMIN), asyncHandle
 }));
 
 export default router;
+
+

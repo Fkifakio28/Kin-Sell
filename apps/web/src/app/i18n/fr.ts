@@ -75,6 +75,8 @@ export const fr: Record<string, string> = {
     "auth.identifierPlaceholder": "Email, @pseudo ou ID Kin-Sell",
     "auth.passwordLabel": "Mot de passe",
     "auth.passwordPlaceholder": "Votre mot de passe",
+    "auth.showPassword": "Afficher le mot de passe",
+    "auth.hidePassword": "Masquer le mot de passe",
     "auth.rememberMe": "Se souvenir de moi",
     "auth.forgotPassword": "Mot de passe oublié ?",
     "auth.forgotPasswordMsg": "La réinitialisation de mot de passe arrive à la prochaine étape backend.",

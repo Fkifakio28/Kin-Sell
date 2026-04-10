@@ -677,8 +677,14 @@ export const admin = {
   // ── Subscriptions & AI Trials ──
   aiRecommendationStats: () =>
     request<AdminAiRecommendationStats>("/admin/ai-recommendations/stats"),
-  subscriptions: (params?: { page?: number; limit?: number; status?: string; scope?: string }) =>
+  subscriptions: (params?: { page?: number; limit?: number; status?: string; scope?: string; email?: string; planCode?: string; source?: string; dateFrom?: string; dateTo?: string }) =>
     request<AdminSubscriptionList>("/admin/subscriptions", { params: params as Record<string, string | number | undefined> }),
+  subscriptionKpi: () =>
+    request<AdminSubscriptionKpi>("/admin/subscriptions/kpi"),
+  subscriptionDetail: (id: string) =>
+    request<AdminSubscriptionDetail>("/admin/subscriptions/" + encodeURIComponent(id)),
+  revokeSubscription: (body: { subscriptionId: string; reason: string }) =>
+    request<{ message: string; subscriptionId: string; status: string }>("/admin/subscriptions/revoke", { method: "POST", body }),
   aiTrials: (params?: { page?: number; limit?: number; status?: string }) =>
     request<AdminAiTrialList>("/admin/ai-trials", { params: params as Record<string, string | number | undefined> }),
   activatePlan: (body: { userId: string; planCode: string; durationDays?: number; reason: string; exempt?: boolean }) =>
@@ -691,6 +697,18 @@ export const admin = {
     request<{ plan: unknown; message: string }>("/admin/billing/validate-order", { method: "POST", body }),
   billingFailOrder: (body: { orderId: string; reason?: string }) =>
     request<{ orderId: string; status: string; message: string }>("/admin/billing/fail-order", { method: "POST", body }),
+
+  // ── Kin-Sell Analytique (enrichi) ──
+  analytique: () =>
+    request<AnalytiqueData>("/admin/ia/analytique"),
+  marketIntelligence: (params?: { city?: string; category?: string; period?: string }) =>
+    request<MarketIntelligenceData>("/admin/ia/market-intelligence", { params: params as Record<string, string | number | undefined> }),
+  generateCaseStudy: (body: { category: string; city: string; period?: string; tier?: string }) =>
+    request<CaseStudyData>("/admin/ia/case-study/generate", { method: "POST", body }),
+  exportHistory: () =>
+    request<ExportHistoryItem[]>("/admin/ia/exports"),
+  logExport: (body: { type: string; title: string; tier: string; format: string; size?: string }) =>
+    request<ExportHistoryItem>("/admin/ia/exports", { method: "POST", body }),
 
 };
 
@@ -708,17 +726,23 @@ export type AdminAiRecommendationStats = {
 
 export type AdminSubscriptionItem = {
   id: string;
-  userId: string;
+  userId: string | null;
+  businessId: string | null;
+  scope: string;
   planCode: string;
-  planName: string;
   status: string;
+  billingCycle: string;
   priceUsdCents: number;
+  autoRenew: boolean;
   startsAt: string;
   endsAt: string | null;
   metadata: unknown;
-  user?: { displayName: string; email: string };
-  business?: { publicName: string } | null;
-  addons?: { addonCode: string; label: string; priceUsdCents: number }[];
+  createdAt: string;
+  updatedAt: string;
+  source: string;
+  user?: { displayName: string; email: string; role: string } | null;
+  business?: { publicName: string; slug: string } | null;
+  addons?: { addonCode: string; status: string; priceUsdCents: number; startsAt: string; endsAt: string | null }[];
 };
 export type AdminSubscriptionList = { total: number; page: number; totalPages: number; subscriptions: AdminSubscriptionItem[] };
 
@@ -761,3 +785,116 @@ export type AdminBillingOrderItem = {
 };
 export type AdminBillingOrderList = { items: AdminBillingOrderItem[]; total: number; page: number; limit: number };
 
+// ── KPI & Detail types ──
+export type AdminSubscriptionKpi = {
+  active: number;
+  expired: number;
+  canceled: number;
+  total: number;
+  adminActivated: number;
+  trials: number;
+  trialsActive: number;
+  planDistribution: Record<string, number>;
+};
+
+export type AdminSubscriptionDetail = {
+  subscription: {
+    id: string;
+    userId: string | null;
+    businessId: string | null;
+    scope: string;
+    planCode: string;
+    status: string;
+    billingCycle: string;
+    priceUsdCents: number;
+    autoRenew: boolean;
+    startsAt: string;
+    endsAt: string | null;
+    metadata: unknown;
+    createdAt: string;
+    updatedAt: string;
+    source: string;
+  };
+  user: { id: string; email: string; role: string; status: string; profile?: { displayName: string | null; username: string | null } | null } | null;
+  business: { id: string; publicName: string; slug: string; legalName: string | null } | null;
+  addons: Array<{ addonCode: string; status: string; priceUsdCents: number; startsAt: string; endsAt: string | null }>;
+  auditLogs: Array<{ id: string; action: string; entityType: string; entityId: string; metadata: unknown; createdAt: string; actorUserId: string }>;
+  paymentOrders: Array<{ id: string; planCode: string; amountUsdCents: number; method: string; status: string; transferReference: string; createdAt: string; validatedAt: string | null }>;
+};
+
+// ══════════════════════════════════════════════
+// ANALYTICS TYPES
+// ══════════════════════════════════════════════
+
+export type AnalytiqueData = {
+  users: { total: number; new24h: number; new7d: number };
+  listings: { total: number; active: number; new24h: number; boosted: number; avgPriceUsdCents: number };
+  orders: { total: number; last7d: number; delivered30d: number; revenue7dCents: number; revenue30dCents: number };
+  businesses: number;
+  trendingCategories: Array<{ category: string; count: number }>;
+  topCities: Array<{ city: string; count: number }>;
+  marketCities: Array<{ id: string; city: string; countryCode: string }>;
+  categoryPrices: Array<{ category: string; count: number; avgPrice: number; minPrice: number; maxPrice: number }>;
+  topSellers: Array<{ sellerId: string; sellerName: string; orderCount: number; revenueUsdCents: number }>;
+  recentOrders: Array<{ id: string; status: string; totalUsdCents: number; currency: string; city: string | null; createdAt: string; categories: string[] }>;
+};
+
+export type MarketIntelligenceData = {
+  summary: { totalListings: number; avgPrice: number; minPrice: number; maxPrice: number; period: string };
+  categoryDistribution: Array<{ category: string; count: number; avgPrice: number }>;
+  cityDistribution: Array<{ city: string; count: number; avgPrice: number }>;
+  trends: Array<{ category: string; newListings: number }>;
+  competition: Array<{ category: string; count: number; share: number }>;
+  supplyDemand: Array<{ category: string; city: string; demandScore: number; supplyScore: number; trend: string; avgPrice: number; sampleSize: number }>;
+  opportunities: Array<{ category: string; city: string; demandScore: number; supplyScore: number; opportunityScore: number; avgPrice: number; trend: string }>;
+};
+
+export type CaseStudyData = {
+  id: string;
+  generatedAt: string;
+  tier: string;
+  title: string;
+  market: string;
+  category: string;
+  period: string;
+  executiveSummary: string;
+  marketData: {
+    totalListings: number;
+    newListings: number;
+    avgPriceUsdCents: number;
+    minPriceUsdCents: number;
+    maxPriceUsdCents: number;
+    medianPriceUsdCents: number;
+    sellerCount: number;
+    ordersDelivered: number;
+    revenueUsdCents: number;
+  };
+  analysis: {
+    competitionLevel: string;
+    trendDirection: string;
+    demandScore: number;
+    supplyScore: number;
+    opportunityScore: number;
+  };
+  recommendations: string[];
+  metadata: {
+    market: string;
+    city: string;
+    category: string;
+    dateRange: string;
+    avgPrice: string;
+    trendScore: number;
+    competitionLevel: string;
+    opportunityScore: number;
+  };
+};
+
+export type ExportHistoryItem = {
+  id: string;
+  type: string;
+  title: string;
+  tier: string;
+  format: string;
+  createdAt: string;
+  size: string;
+};

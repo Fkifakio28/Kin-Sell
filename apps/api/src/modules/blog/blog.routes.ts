@@ -2,11 +2,15 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../../shared/db/prisma.js";
 import { asyncHandler } from "../../shared/utils/async-handler.js";
+import { rateLimit, RateLimits } from "../../shared/middleware/rate-limit.middleware.js";
+import { scrapeGuard } from "../../shared/middleware/scrape-guard.middleware.js";
 
 const router = Router();
 
 router.get(
   "/",
+  scrapeGuard(),
+  rateLimit(RateLimits.PUBLIC_FEED),
   asyncHandler(async (req, res) => {
     const params = z.object({
       page: z.coerce.number().int().min(1).optional(),
@@ -65,6 +69,8 @@ router.get(
 // Get single post by slug + increment views
 router.get(
   "/:slug",
+  scrapeGuard(),
+  rateLimit(RateLimits.PUBLIC_FEED),
   asyncHandler(async (req, res) => {
     const post = await prisma.blogPost.findFirst({
       where: { slug: req.params.slug, status: "PUBLISHED" },

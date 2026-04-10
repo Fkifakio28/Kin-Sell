@@ -75,6 +75,8 @@ export const ln: Record<string, string> = {
     "auth.identifierPlaceholder": "Email, @pseudo to ID Kin-Sell",
     "auth.passwordLabel": "Mot de passe",
     "auth.passwordPlaceholder": "Mot de passe na yo",
+    "auth.showPassword": "Monisa mot de passe",
+    "auth.hidePassword": "Bomba mot de passe",
     "auth.rememberMe": "Kobosana ngai te",
     "auth.forgotPassword": "Obosani mot de passe?",
     "auth.forgotPasswordMsg": "Kozongisa mot de passe ekoya na étape ya sima.",

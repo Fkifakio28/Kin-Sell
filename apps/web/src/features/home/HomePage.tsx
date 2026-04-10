@@ -576,7 +576,7 @@ export function HomePage() {
   const handleSearch = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const q = searchQuery.trim();
-    window.location.href = q ? `/explorer?query=${encodeURIComponent(q)}` : "/explorer";
+    navigate(q ? `/explorer?q=${encodeURIComponent(q)}` : "/explorer");
   };
 
   const currentTip = t(TIPS_KEYS[tipIndex]);

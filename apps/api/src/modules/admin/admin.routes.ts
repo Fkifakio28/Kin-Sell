@@ -746,8 +746,23 @@ router.get("/negotiation-rules/locked-categories", asyncHandler(async (req: Auth
 // ══════════════════════════════════════════════
 
 router.get("/ai-recommendations/stats", asyncHandler(async (req: AuthenticatedRequest, res) => {
-  const stats = await aiTrigger.getRecommendationStats();
-  res.json(stats);
+  await checkPermission(req, "SUBSCRIPTIONS");
+  const raw = await aiTrigger.getRecommendationStats();
+  // Flatten to match frontend AdminAiRecommendationStats shape
+  const recs = raw.recommendations;
+  res.json({
+    total: recs.total,
+    active: recs.active,
+    clicked: recs.clicked,
+    accepted: recs.accepted,
+    dismissed: recs.dismissed,
+    byEngine: Object.fromEntries(recs.byEngine.map((e: any) => [e.engine, e.count])),
+    byTrigger: Object.fromEntries(recs.byTrigger.map((t: any) => [t.trigger, t.count])),
+    trials: {
+      total: raw.trials.total,
+      ...Object.fromEntries(raw.trials.byStatus.map((s: any) => [s.status.toLowerCase(), s.count])),
+    },
+  });
 }));
 
 // ── Admin manual plan activation ──
@@ -787,37 +802,239 @@ router.post("/subscriptions/activate", asyncHandler(async (req: AuthenticatedReq
   res.json(result);
 }));
 
-// ── Admin list all subscriptions ──
+// ── Admin list all subscriptions (enhanced) ──
 router.get("/subscriptions", asyncHandler(async (req: AuthenticatedRequest, res) => {
+  await checkPermission(req, "SUBSCRIPTIONS");
   const page = Number(req.query.page) || 1;
   const limit = Math.min(Number(req.query.limit) || 20, 100);
   const status = req.query.status as string | undefined;
   const scope = req.query.scope as string | undefined;
+  const email = req.query.email as string | undefined;
+  const planCode = req.query.planCode as string | undefined;
+  const source = req.query.source as string | undefined; // "paypal" | "admin" | "all"
+  const dateFrom = req.query.dateFrom as string | undefined;
+  const dateTo = req.query.dateTo as string | undefined;
 
   const where: Record<string, unknown> = {};
-  if (status) where.status = status;
-  if (scope) where.scope = scope;
+  if (status && status !== "ALL") where.status = status;
+  if (scope && scope !== "ALL") where.scope = scope;
+  if (planCode && planCode !== "ALL") where.planCode = planCode;
+  if (source === "admin") where.metadata = { path: ["adminActivated"], equals: true };
+  if (dateFrom || dateTo) {
+    const dateFilter: Record<string, Date> = {};
+    if (dateFrom) dateFilter.gte = new Date(dateFrom);
+    if (dateTo) dateFilter.lte = new Date(dateTo);
+    where.createdAt = dateFilter;
+  }
+
+  // Email filter requires a join condition
+  const userFilter = email ? { user: { email: { contains: email, mode: "insensitive" as const } } } : {};
+
+  const finalWhere = { ...where, ...userFilter };
 
   const [items, total] = await Promise.all([
     prisma.subscription.findMany({
-      where,
+      where: finalWhere,
       include: {
         user: { select: { id: true, email: true, role: true, profile: { select: { displayName: true } } } },
-        business: { select: { id: true, publicName: true } },
+        business: { select: { id: true, publicName: true, slug: true } },
         addons: true,
       },
       orderBy: { createdAt: "desc" },
       skip: (page - 1) * limit,
       take: limit,
     }),
-    prisma.subscription.count({ where }),
+    prisma.subscription.count({ where: finalWhere }),
   ]);
 
-  res.json({ items, total, page, limit });
+  // Normalize response shape for frontend
+  const subscriptions = items.map((s) => ({
+    id: s.id,
+    userId: s.userId,
+    businessId: s.businessId,
+    scope: s.scope,
+    planCode: s.planCode,
+    status: s.status,
+    billingCycle: s.billingCycle,
+    priceUsdCents: s.priceUsdCents,
+    autoRenew: s.autoRenew,
+    startsAt: s.startsAt.toISOString(),
+    endsAt: s.endsAt?.toISOString() ?? null,
+    metadata: s.metadata,
+    createdAt: s.createdAt.toISOString(),
+    updatedAt: s.updatedAt.toISOString(),
+    source: (s.metadata as any)?.adminActivated ? "admin" : "paypal",
+    user: s.user ? {
+      displayName: s.user.profile?.displayName ?? s.user.email ?? "—",
+      email: s.user.email,
+      role: s.user.role,
+    } : null,
+    business: s.business ? { publicName: s.business.publicName, slug: s.business.slug } : null,
+    addons: s.addons.map((a) => ({
+      addonCode: a.addonCode,
+      status: a.status,
+      priceUsdCents: a.priceUsdCents,
+      startsAt: a.startsAt.toISOString(),
+      endsAt: a.endsAt?.toISOString() ?? null,
+    })),
+  }));
+
+  res.json({ subscriptions, total, page, limit });
+}));
+
+// ── Admin subscription KPIs ──
+router.get("/subscriptions/kpi", asyncHandler(async (req: AuthenticatedRequest, res) => {
+  await checkPermission(req, "SUBSCRIPTIONS");
+
+  const [active, expired, canceled, allSubs] = await Promise.all([
+    prisma.subscription.count({ where: { status: "ACTIVE" } }),
+    prisma.subscription.count({ where: { status: "EXPIRED" } }),
+    prisma.subscription.count({ where: { status: "CANCELED" } }),
+    prisma.subscription.findMany({
+      select: { metadata: true, status: true, planCode: true },
+    }),
+  ]);
+
+  const adminActivated = allSubs.filter((s) => (s.metadata as any)?.adminActivated === true).length;
+  const trials = await prisma.aiTrial.count();
+  const trialsActive = await prisma.aiTrial.count({ where: { status: "ACTIVE" } });
+
+  // Plan distribution
+  const planCounts: Record<string, number> = {};
+  for (const s of allSubs) {
+    planCounts[s.planCode] = (planCounts[s.planCode] || 0) + 1;
+  }
+
+  res.json({
+    active,
+    expired,
+    canceled,
+    total: allSubs.length,
+    adminActivated,
+    trials,
+    trialsActive,
+    planDistribution: planCounts,
+  });
+}));
+
+// ── Admin subscription detail (with audit trail) ──
+router.get("/subscriptions/:id", asyncHandler(async (req: AuthenticatedRequest, res) => {
+  await checkPermission(req, "SUBSCRIPTIONS");
+
+  const sub = await prisma.subscription.findUnique({
+    where: { id: req.params.id },
+    include: {
+      user: { select: { id: true, email: true, role: true, accountStatus: true, profile: { select: { displayName: true, username: true } } } },
+      business: { select: { id: true, publicName: true, slug: true, legalName: true } },
+      addons: true,
+    },
+  });
+  if (!sub) throw new HttpError(404, "Abonnement introuvable");
+
+  // Audit trail — last 50 entries related to this subscription or its user
+  const auditLogs = await prisma.auditLog.findMany({
+    where: {
+      OR: [
+        { entityType: "Subscription", entityId: sub.id },
+        { entityType: "Subscription", entityId: sub.userId ?? undefined },
+        { action: { in: ["BILLING_ADMIN_ACTIVATE", "BILLING_VALIDATE_ORDER", "BILLING_FAIL_ORDER", "BILLING_SIMULATE_PLAN_CHANGE"] }, entityId: sub.userId ?? sub.businessId ?? undefined },
+      ],
+    },
+    orderBy: { createdAt: "desc" },
+    take: 50,
+    select: {
+      id: true,
+      action: true,
+      entityType: true,
+      entityId: true,
+      metadata: true,
+      createdAt: true,
+      actorUserId: true,
+    },
+  });
+
+  // Related payment orders
+  const paymentOrders = await prisma.paymentOrder.findMany({
+    where: sub.userId ? { userId: sub.userId } : { businessId: sub.businessId },
+    orderBy: { createdAt: "desc" },
+    take: 20,
+    select: {
+      id: true,
+      planCode: true,
+      amountUsdCents: true,
+      method: true,
+      status: true,
+      transferReference: true,
+      createdAt: true,
+      validatedAt: true,
+    },
+  });
+
+  res.json({
+    subscription: {
+      id: sub.id,
+      userId: sub.userId,
+      businessId: sub.businessId,
+      scope: sub.scope,
+      planCode: sub.planCode,
+      status: sub.status,
+      billingCycle: sub.billingCycle,
+      priceUsdCents: sub.priceUsdCents,
+      autoRenew: sub.autoRenew,
+      startsAt: sub.startsAt.toISOString(),
+      endsAt: sub.endsAt?.toISOString() ?? null,
+      metadata: sub.metadata,
+      createdAt: sub.createdAt.toISOString(),
+      updatedAt: sub.updatedAt.toISOString(),
+      source: (sub.metadata as any)?.adminActivated ? "admin" : "paypal",
+    },
+    user: sub.user ? { ...sub.user, status: sub.user.accountStatus } : null,
+    business: sub.business,
+    addons: sub.addons.map((a) => ({
+      addonCode: a.addonCode,
+      status: a.status,
+      priceUsdCents: a.priceUsdCents,
+      startsAt: a.startsAt.toISOString(),
+      endsAt: a.endsAt?.toISOString() ?? null,
+    })),
+    auditLogs,
+    paymentOrders,
+  });
+}));
+
+// ── Admin revoke subscription ──
+router.post("/subscriptions/revoke", asyncHandler(async (req: AuthenticatedRequest, res) => {
+  await checkPermission(req, "SUBSCRIPTIONS");
+  const { subscriptionId, reason } = z.object({
+    subscriptionId: z.string().min(1),
+    reason: z.string().min(1).max(500),
+  }).parse(req.body);
+
+  const sub = await prisma.subscription.findUnique({ where: { id: subscriptionId } });
+  if (!sub) throw new HttpError(404, "Abonnement introuvable");
+  if (sub.status !== "ACTIVE") throw new HttpError(400, "Seul un abonnement actif peut être révoqué");
+
+  await prisma.subscription.update({
+    where: { id: subscriptionId },
+    data: { status: "CANCELED", autoRenew: false },
+  });
+
+  await prisma.auditLog.create({
+    data: {
+      actorUserId: req.auth!.userId,
+      action: "BILLING_ADMIN_REVOKE",
+      entityType: "Subscription",
+      entityId: subscriptionId,
+      metadata: { reason, planCode: sub.planCode, scope: sub.scope },
+    },
+  });
+
+  res.json({ message: "Abonnement révoqué", subscriptionId, status: "CANCELED" });
 }));
 
 // ── Admin list all trials ──
 router.get("/ai-trials", asyncHandler(async (req: AuthenticatedRequest, res) => {
+  await checkPermission(req, "SUBSCRIPTIONS");
   const page = Number(req.query.page) || 1;
   const limit = Math.min(Number(req.query.limit) || 20, 100);
   const status = req.query.status as string | undefined;
@@ -865,7 +1082,7 @@ router.post("/ai-trials/:id/activate", asyncHandler(async (req: AuthenticatedReq
 // IA TABS — Dashboard Admin
 // ════════════════════════════════════════════
 
-// ── Kin-Sell Analytique ──
+// ── Kin-Sell Analytique (enrichi) ──
 router.get("/ia/analytique", asyncHandler(async (req: AuthenticatedRequest, res) => {
   await checkPermission(req, "AI_MANAGEMENT");
   const now = new Date();
@@ -876,10 +1093,17 @@ router.get("/ia/analytique", asyncHandler(async (req: AuthenticatedRequest, res)
   const [
     totalUsers, newUsers24h, newUsers7d,
     totalListings, activeListings, newListings24h,
-    totalOrders, orders7d, revenue7d,
+    totalOrders, orders7d, revenue7d, revenue30d,
     totalBusinesses,
     trendingCategories,
     topCities,
+    avgPrice,
+    boostedListings,
+    deliveredOrders30d,
+    marketCities,
+    categoryPrices,
+    topSellers,
+    recentOrders,
   ] = await Promise.all([
     prisma.user.count(),
     prisma.user.count({ where: { createdAt: { gte: last24h } } }),
@@ -890,19 +1114,219 @@ router.get("/ia/analytique", asyncHandler(async (req: AuthenticatedRequest, res)
     prisma.order.count(),
     prisma.order.count({ where: { createdAt: { gte: last7d } } }),
     prisma.order.aggregate({ _sum: { totalUsdCents: true }, where: { createdAt: { gte: last7d }, status: "DELIVERED" } }),
+    prisma.order.aggregate({ _sum: { totalUsdCents: true }, where: { createdAt: { gte: last30d }, status: "DELIVERED" } }),
     prisma.businessAccount.count(),
     prisma.listing.groupBy({ by: ["category"], where: { createdAt: { gte: last30d }, status: "ACTIVE" }, _count: true, orderBy: { _count: { id: "desc" } }, take: 10 }),
-    prisma.listing.groupBy({ by: ["city"], where: { status: "ACTIVE", city: { not: "" } }, _count: true, orderBy: { _count: { id: "desc" } }, take: 5 }),
+    prisma.listing.groupBy({ by: ["city"], where: { status: "ACTIVE", city: { not: "" } }, _count: true, orderBy: { _count: { id: "desc" } }, take: 10 }),
+    prisma.listing.aggregate({ where: { status: "ACTIVE" }, _avg: { priceUsdCents: true } }),
+    prisma.listing.count({ where: { status: "ACTIVE", isBoosted: true } }),
+    prisma.order.count({ where: { createdAt: { gte: last30d }, status: "DELIVERED" } }),
+    prisma.marketCity.findMany({ where: { isActive: true }, select: { id: true, city: true, countryCode: true }, orderBy: { city: "asc" } }),
+    prisma.listing.groupBy({ by: ["category"], where: { status: "ACTIVE" }, _avg: { priceUsdCents: true }, _min: { priceUsdCents: true }, _max: { priceUsdCents: true }, _count: true, orderBy: { _count: { id: "desc" } }, take: 20 }),
+    prisma.order.groupBy({ by: ["sellerUserId"], where: { createdAt: { gte: last30d }, status: "DELIVERED" }, _count: true, _sum: { totalUsdCents: true }, orderBy: { _count: { id: "desc" } }, take: 10 }),
+    prisma.order.findMany({ where: { createdAt: { gte: last7d } }, orderBy: { createdAt: "desc" }, take: 20, select: { id: true, status: true, totalUsdCents: true, currency: true, deliveryCity: true, createdAt: true, items: { select: { category: true, quantity: true } } } }),
   ]);
+
+  // Fetch seller display names for top sellers
+  const sellerIds = topSellers.map(s => s.sellerUserId);
+  const sellerProfiles = sellerIds.length ? await prisma.user.findMany({
+    where: { id: { in: sellerIds } },
+    select: { id: true, profile: { select: { displayName: true } } },
+  }) : [];
+  const sellerNameMap = new Map(sellerProfiles.map(u => [u.id, u.profile?.displayName ?? "Inconnu"]));
 
   res.json({
     users: { total: totalUsers, new24h: newUsers24h, new7d: newUsers7d },
-    listings: { total: totalListings, active: activeListings, new24h: newListings24h },
-    orders: { total: totalOrders, last7d: orders7d, revenue7dCents: revenue7d._sum.totalUsdCents ?? 0 },
+    listings: { total: totalListings, active: activeListings, new24h: newListings24h, boosted: boostedListings, avgPriceUsdCents: Math.round(avgPrice._avg.priceUsdCents ?? 0) },
+    orders: { total: totalOrders, last7d: orders7d, delivered30d: deliveredOrders30d, revenue7dCents: revenue7d._sum.totalUsdCents ?? 0, revenue30dCents: revenue30d._sum.totalUsdCents ?? 0 },
     businesses: totalBusinesses,
     trendingCategories: trendingCategories.map(c => ({ category: c.category, count: c._count })),
     topCities: topCities.map(c => ({ city: c.city, count: c._count })),
+    marketCities,
+    categoryPrices: categoryPrices.map(c => ({
+      category: c.category,
+      count: c._count,
+      avgPrice: Math.round(c._avg.priceUsdCents ?? 0),
+      minPrice: c._min.priceUsdCents ?? 0,
+      maxPrice: c._max.priceUsdCents ?? 0,
+    })),
+    topSellers: topSellers.map(s => ({
+      sellerId: s.sellerUserId,
+      sellerName: sellerNameMap.get(s.sellerUserId) ?? "Inconnu",
+      orderCount: s._count,
+      revenueUsdCents: s._sum.totalUsdCents ?? 0,
+    })),
+    recentOrders: recentOrders.map(o => ({
+      id: o.id, status: o.status, totalUsdCents: o.totalUsdCents, currency: o.currency,
+      city: o.deliveryCity, createdAt: o.createdAt,
+      categories: [...new Set(o.items.map(i => i.category))],
+    })),
   });
+}));
+
+// ── Market Intelligence Admin ──
+router.get("/ia/market-intelligence", asyncHandler(async (req: AuthenticatedRequest, res) => {
+  await checkPermission(req, "AI_MANAGEMENT");
+  const { city, category, period } = req.query;
+  const now = new Date();
+  const periodDays = period === "90d" ? 90 : period === "30d" ? 30 : period === "7d" ? 7 : 30;
+  const since = new Date(now.getTime() - periodDays * 24 * 60 * 60 * 1000);
+
+  const where: any = { status: "ACTIVE" };
+  if (city && typeof city === "string") where.city = { equals: city, mode: "insensitive" };
+  if (category && typeof category === "string") where.category = { equals: category, mode: "insensitive" };
+
+  const [
+    priceAnalysis,
+    categoryDistribution,
+    cityDistribution,
+    trendData,
+    competitionData,
+    supplyDemand,
+  ] = await Promise.all([
+    prisma.listing.aggregate({ where, _avg: { priceUsdCents: true }, _min: { priceUsdCents: true }, _max: { priceUsdCents: true }, _count: true }),
+    prisma.listing.groupBy({ by: ["category"], where, _count: true, _avg: { priceUsdCents: true }, orderBy: { _count: { id: "desc" } }, take: 15 }),
+    prisma.listing.groupBy({ by: ["city"], where: { ...where, city: { not: "" } }, _count: true, _avg: { priceUsdCents: true }, orderBy: { _count: { id: "desc" } }, take: 10 }),
+    prisma.listing.groupBy({ by: ["category"], where: { ...where, createdAt: { gte: since } }, _count: true, orderBy: { _count: { id: "desc" } }, take: 10 }),
+    prisma.listing.groupBy({ by: ["category"], where, _count: true, orderBy: { _count: { id: "desc" } } }).then(cats => {
+      const total = cats.reduce((s, c) => s + c._count, 0);
+      return cats.slice(0, 10).map(c => ({ category: c.category, count: c._count, share: total > 0 ? Math.round((c._count / total) * 100) : 0 }));
+    }),
+    prisma.marketStats.findMany({
+      where: category ? { category: { equals: category as string, mode: "insensitive" } } : {},
+      orderBy: { updatedAt: "desc" },
+      take: 20,
+      select: { category: true, avgPriceUsdCents: true, demandScore: true, supplyScore: true, trendDirection: true, sampleSize: true, marketCity: { select: { city: true, countryCode: true } } },
+    }),
+  ]);
+
+  // Opportunity scoring heuristic
+  const opportunities = supplyDemand
+    .filter(sd => sd.demandScore > 60 && sd.supplyScore < 40)
+    .map(sd => ({
+      category: sd.category,
+      city: sd.marketCity.city,
+      demandScore: sd.demandScore,
+      supplyScore: sd.supplyScore,
+      opportunityScore: Math.round((sd.demandScore - sd.supplyScore) * 0.8 + sd.demandScore * 0.2),
+      avgPrice: sd.avgPriceUsdCents,
+      trend: sd.trendDirection,
+    }))
+    .sort((a, b) => b.opportunityScore - a.opportunityScore)
+    .slice(0, 10);
+
+  res.json({
+    summary: {
+      totalListings: priceAnalysis._count,
+      avgPrice: Math.round(priceAnalysis._avg.priceUsdCents ?? 0),
+      minPrice: priceAnalysis._min.priceUsdCents ?? 0,
+      maxPrice: priceAnalysis._max.priceUsdCents ?? 0,
+      period: `${periodDays}d`,
+    },
+    categoryDistribution: categoryDistribution.map(c => ({ category: c.category, count: c._count, avgPrice: Math.round(c._avg.priceUsdCents ?? 0) })),
+    cityDistribution: cityDistribution.map(c => ({ city: c.city, count: c._count, avgPrice: Math.round(c._avg.priceUsdCents ?? 0) })),
+    trends: trendData.map(t => ({ category: t.category, newListings: t._count })),
+    competition: competitionData,
+    supplyDemand: supplyDemand.map(sd => ({ category: sd.category, city: sd.marketCity.city, demandScore: sd.demandScore, supplyScore: sd.supplyScore, trend: sd.trendDirection, avgPrice: sd.avgPriceUsdCents, sampleSize: sd.sampleSize })),
+    opportunities,
+  });
+}));
+
+// ── Case Study Studio : Generate from market data ──
+router.post("/ia/case-study/generate", asyncHandler(async (req: AuthenticatedRequest, res) => {
+  await checkPermission(req, "AI_MANAGEMENT");
+  const { category, city, period, tier } = req.body;
+  if (!category || !city) {
+    throw new HttpError(400, "category et city requis");
+  }
+
+  const periodDays = period === "90d" ? 90 : period === "30d" ? 30 : period === "7d" ? 7 : 30;
+  const since = new Date(Date.now() - periodDays * 24 * 60 * 60 * 1000);
+
+  const where: any = { status: "ACTIVE", category: { equals: category, mode: "insensitive" }, city: { equals: city, mode: "insensitive" } };
+
+  const [priceData, listingsCount, newListings, ordersData, sellerCount, marketData] = await Promise.all([
+    prisma.listing.aggregate({ where, _avg: { priceUsdCents: true }, _min: { priceUsdCents: true }, _max: { priceUsdCents: true }, _count: true }),
+    prisma.listing.count({ where }),
+    prisma.listing.count({ where: { ...where, createdAt: { gte: since } } }),
+    prisma.order.aggregate({
+      where: { status: "DELIVERED", createdAt: { gte: since }, items: { some: { category: { equals: category, mode: "insensitive" }, city: { equals: city, mode: "insensitive" } } } },
+      _count: true, _sum: { totalUsdCents: true },
+    }),
+    prisma.listing.groupBy({ by: ["ownerUserId"], where }).then(r => r.length),
+    prisma.marketStats.findFirst({
+      where: { category: { equals: category, mode: "insensitive" }, marketCity: { city: { equals: city, mode: "insensitive" } } },
+      orderBy: { updatedAt: "desc" },
+      select: { demandScore: true, supplyScore: true, trendDirection: true, sampleSize: true, avgPriceUsdCents: true, medianPriceUsdCents: true },
+    }),
+  ]);
+
+  const avgP = Math.round(priceData._avg.priceUsdCents ?? 0);
+  const competitionLevel = sellerCount > 20 ? "Élevée" : sellerCount > 5 ? "Modérée" : "Faible";
+  const opportunityScore = Math.round(((marketData?.demandScore ?? 50) - (marketData?.supplyScore ?? 50)) * 0.6 + (marketData?.demandScore ?? 50) * 0.4);
+
+  const study = {
+    id: `cs-${Date.now()}`,
+    generatedAt: new Date().toISOString(),
+    tier: tier ?? "basic",
+    title: `Étude de Marché — ${category} à ${city}`,
+    market: city,
+    category,
+    period: `${periodDays} jours`,
+    executiveSummary: `Analyse du marché "${category}" à ${city} sur ${periodDays} jours. ${listingsCount} articles actifs, ${newListings} nouvelles publications. Prix moyen: ${(avgP / 100).toFixed(2)} USD. Concurrence: ${competitionLevel}.`,
+    marketData: {
+      totalListings: listingsCount,
+      newListings,
+      avgPriceUsdCents: avgP,
+      minPriceUsdCents: priceData._min.priceUsdCents ?? 0,
+      maxPriceUsdCents: priceData._max.priceUsdCents ?? 0,
+      medianPriceUsdCents: marketData?.medianPriceUsdCents ?? avgP,
+      sellerCount,
+      ordersDelivered: ordersData._count,
+      revenueUsdCents: ordersData._sum.totalUsdCents ?? 0,
+    },
+    analysis: {
+      competitionLevel,
+      trendDirection: marketData?.trendDirection ?? "STABLE",
+      demandScore: marketData?.demandScore ?? 50,
+      supplyScore: marketData?.supplyScore ?? 50,
+      opportunityScore,
+    },
+    recommendations: [
+      opportunityScore > 70 ? `Forte opportunité : la demande dépasse l'offre pour "${category}" à ${city}. Potentiel d'entrée.` : null,
+      sellerCount < 5 ? `Marché peu concurrentiel (${sellerCount} vendeurs). Avantage premier arrivé.` : null,
+      (marketData?.trendDirection ?? "STABLE") === "UP" ? `Tendance haussière : les prix montent. Moment favorable pour vendre.` : null,
+      avgP > 0 ? `Prix recommandé: entre ${((avgP * 0.85) / 100).toFixed(2)} et ${((avgP * 1.15) / 100).toFixed(2)} USD pour rester compétitif.` : null,
+    ].filter(Boolean),
+    metadata: {
+      market: city,
+      city,
+      category,
+      dateRange: `${since.toISOString().split("T")[0]} — ${new Date().toISOString().split("T")[0]}`,
+      avgPrice: (avgP / 100).toFixed(2),
+      trendScore: marketData?.demandScore ?? 50,
+      competitionLevel,
+      opportunityScore,
+    },
+  };
+
+  res.json(study);
+}));
+
+// ── Admin Export History (in-memory for now, extensible to DB) ──
+const exportHistory: Array<{ id: string; type: string; title: string; tier: string; format: string; createdAt: string; size: string }> = [];
+
+router.get("/ia/exports", asyncHandler(async (req: AuthenticatedRequest, res) => {
+  await checkPermission(req, "AI_MANAGEMENT");
+  res.json(exportHistory.slice(-50));
+}));
+
+router.post("/ia/exports", asyncHandler(async (req: AuthenticatedRequest, res) => {
+  await checkPermission(req, "AI_MANAGEMENT");
+  const { type, title, tier, format, size } = req.body;
+  const entry = { id: `exp-${Date.now()}`, type: type ?? "report", title: title ?? "Export", tier: tier ?? "basic", format: format ?? "CSV", createdAt: new Date().toISOString(), size: size ?? "—" };
+  exportHistory.push(entry);
+  res.json(entry);
 }));
 
 // ── IA Marchande ──
@@ -1043,6 +1467,7 @@ router.get("/ia/messages", asyncHandler(async (req: AuthenticatedRequest, res) =
 
 // ── Admin: lister toutes les commandes (avec filtres) ──
 router.get("/billing/orders", asyncHandler(async (req: AuthenticatedRequest, res) => {
+  await checkPermission(req, "SUBSCRIPTIONS");
   const page = Number(req.query.page) || 1;
   const limit = Math.min(Number(req.query.limit) || 20, 100);
   const status = req.query.status as string | undefined;
@@ -1081,6 +1506,7 @@ const adminValidateOrderSchema = z.object({
 });
 
 router.post("/billing/validate-order", asyncHandler(async (req: AuthenticatedRequest, res) => {
+  await checkPermission(req, "SUBSCRIPTIONS");
   const payload = adminValidateOrderSchema.parse(req.body);
   const result = await billingService.adminValidateOrder({
     orderId: payload.orderId,
@@ -1142,6 +1568,7 @@ const adminFailOrderSchema = z.object({
 });
 
 router.post("/billing/fail-order", asyncHandler(async (req: AuthenticatedRequest, res) => {
+  await checkPermission(req, "SUBSCRIPTIONS");
   const { orderId, reason } = adminFailOrderSchema.parse(req.body);
   const order = await prisma.paymentOrder.findUnique({ where: { id: orderId } });
   if (!order) throw new HttpError(404, "Ordre introuvable");

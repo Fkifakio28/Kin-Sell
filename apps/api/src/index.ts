@@ -106,6 +106,27 @@ app.use((_req, res, next) => {
 });
 
 // Serve uploaded files statically
+const uploadAllowedOrigins = String(env.CORS_ORIGIN || "")
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+app.use("/uploads", (req, res, next) => {
+  if (env.NODE_ENV !== "production") { next(); return; }
+  const ref = req.get("referer") || req.get("origin") || "";
+  if (!ref) {
+    res.status(403).end();
+    return;
+  }
+  const host = req.get("host");
+  const selfOrigins = host ? [`https://${host}`, `http://${host}`] : [];
+  const allowedOrigins = [...uploadAllowedOrigins, ...selfOrigins];
+  const isAllowed = allowedOrigins.some((origin) => ref.startsWith(origin));
+  if (!isAllowed) {
+    res.status(403).end();
+    return;
+  }
+  next();
+});
 app.use("/uploads", express.static(path.resolve(process.cwd(), "uploads")));
 
 let _healthCache: { data: unknown; expiresAt: number } | null = null;

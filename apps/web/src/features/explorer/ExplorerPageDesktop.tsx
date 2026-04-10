@@ -33,7 +33,7 @@ export function ExplorerPageDesktop() {
   const [searchParams, setSearchParams] = useSearchParams();
   const urlType = searchParams.get('type');
   const urlCategory = searchParams.get('category');
-  const urlQuery = searchParams.get('query');
+  const urlQuery = searchParams.get('q') || searchParams.get('query') || '';
 
   const [isProducts, setIsProducts] = useState(() => {
     if (urlType === 'services') return false;

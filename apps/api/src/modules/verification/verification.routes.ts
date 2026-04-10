@@ -95,6 +95,18 @@ async function checkVerificationPermission(req: AuthenticatedRequest) {
   }
 }
 
+// GET /verification/admin/kpi — KPI overview (admin)
+router.get(
+  "/admin/kpi",
+  requireAuth,
+  requireRoles(Role.ADMIN, Role.SUPER_ADMIN),
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    await checkVerificationPermission(req);
+    const result = await verificationService.getVerificationKpi();
+    res.json(result);
+  })
+);
+
 // GET /verification/admin/requests — Liste des demandes (admin)
 router.get(
   "/admin/requests",
@@ -103,18 +115,32 @@ router.get(
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     await checkVerificationPermission(req);
 
-    const { status, page, limit } = z
+    const parsed = z
       .object({
         status: z.string().optional(),
         page: z.coerce.number().int().positive().optional(),
         limit: z.coerce.number().int().positive().max(100).optional(),
+        email: z.string().optional(),
+        source: z.string().optional(),
+        accountType: z.enum(["USER", "BUSINESS"]).optional(),
+        minTrustScore: z.coerce.number().int().min(0).max(100).optional(),
+        maxTrustScore: z.coerce.number().int().min(0).max(100).optional(),
+        dateFrom: z.string().optional(),
+        dateTo: z.string().optional(),
       })
       .parse(req.query);
 
     const result = await verificationService.getVerificationRequests({
-      status: status as any,
-      page,
-      limit,
+      status: parsed.status as any,
+      page: parsed.page,
+      limit: parsed.limit,
+      email: parsed.email,
+      source: parsed.source,
+      accountType: parsed.accountType as any,
+      minTrustScore: parsed.minTrustScore,
+      maxTrustScore: parsed.maxTrustScore,
+      dateFrom: parsed.dateFrom,
+      dateTo: parsed.dateTo,
     });
     res.json(result);
   })

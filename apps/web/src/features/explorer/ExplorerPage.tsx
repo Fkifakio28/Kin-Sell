@@ -226,7 +226,7 @@ function ExplorerPageMobile() {
   const [searchParams] = useSearchParams();
   const urlType = searchParams.get('type');
   const urlCategory = searchParams.get('category');
-  const urlQuery = searchParams.get('query') || searchParams.get('q') || '';
+  const urlQuery = searchParams.get('q') || searchParams.get('query') || '';
 
   /* ── Shell state ── */
   const scrollDir = useScrollDirection();

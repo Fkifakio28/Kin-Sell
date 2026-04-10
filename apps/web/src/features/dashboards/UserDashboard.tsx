@@ -52,6 +52,7 @@ import VisibilitySelector from '../../components/VisibilitySelector';
 import type { StructuredLocation, LocationVisibility } from '../../lib/api-client';
 import { extractValidationCodeFromQrPayload } from '../../utils/order-validation';
 import { useSocket } from '../../hooks/useSocket';
+import { useScrollDirection } from '../../hooks/useScrollDirection';
 import { useListingSelection } from '../../hooks/useListingSelection';
 import { PromoBulkBar } from '../../components/PromoBulkBar';
 import { useMarketPreference } from '../../app/providers/MarketPreferenceProvider';
@@ -291,8 +292,8 @@ export function UserDashboard() {
   const [savingSettings, setSavingSettings] = useState(false);
   const [logoutBusy, setLogoutBusy] = useState(false);
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
-  const [barsHidden, setBarsHidden] = useState(false);
-  const lastScrollY = useRef(0);
+  const scrollDir = useScrollDirection();
+  const barsHidden = scrollDir === 'down' && !mobileSidebarOpen;
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [mobileSearchQuery, setMobileSearchQuery] = useState('');
   // Suppression de compte
@@ -1557,19 +1558,7 @@ export function UserDashboard() {
   };
 
   // ── Scroll auto-hide for mobile TopBar + FAB ──
-  useEffect(() => {
-    const onScroll = () => {
-      const y = window.scrollY;
-      if (y > lastScrollY.current && y > 40) {
-        setBarsHidden(true);
-      } else {
-        setBarsHidden(false);
-      }
-      lastScrollY.current = y;
-    };
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
-  }, []);
+  // Uses useScrollDirection() hook (same anti-jitter as BusinessDashboard)
 
   const handleRefresh = async () => {
     setErrorMessage(null);
@@ -4717,10 +4706,6 @@ export function UserDashboard() {
         <button type="button" className={`dash-fab-item${activeSection === 'messages' ? ' dash-fab-item--active' : ''}`} onClick={() => navigate('/messaging')}>
           <span className="dash-fab-icon">💬</span>
           <span className="dash-fab-label">Messages</span>
-        </button>
-        <button type="button" className="dash-fab-item dash-fab-item--logout" onClick={() => setLogoutConfirmOpen(true)}>
-          <span className="dash-fab-icon">🚪</span>
-          <span className="dash-fab-label">Quitter</span>
         </button>
         <button type="button" className={`dash-fab-item${activeSection === 'settings' ? ' dash-fab-item--active' : ''}`} onClick={() => { setActiveSection('settings'); setMobileSidebarOpen(false); }}>
           <span className="dash-fab-icon">⚙️</span>

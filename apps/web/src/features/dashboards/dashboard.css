@@ -8115,12 +8115,6 @@
   .bz-fab-icon--home svg {
     stroke: currentColor;
   }
-  .bz-fab-item--logout .bz-fab-icon svg {
-    stroke: #f87171;
-  }
-  .bz-fab-item--logout {
-    color: #f87171;
-  }
   .bz-fab-label {
     font-size: 9px;
     font-weight: 600;

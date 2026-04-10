@@ -41,12 +41,14 @@ import {
   type AdminAppeal,
   type AdminAiRecommendationStats,
   type AdminSubscriptionItem,
+  type AdminSubscriptionKpi,
+  type AdminSubscriptionDetail,
   type AdminAiTrialItem,
   type AdminBillingOrderItem,
 } from '../../lib/api-client';
-import { verification, type VerificationRequestData, type VerificationListResponse } from '../../lib/services/verification.service';
+import AdminVerificationPanel from './AdminVerificationPanel';
+import AdminAnalyticsPanel from './AdminAnalyticsPanel';
 import { DashboardMessaging } from './DashboardMessaging';
-import { AdBanner } from '../../components/AdBanner';
 import './dashboard.css';
 import './admin-dashboard.css';
 
@@ -272,15 +274,26 @@ export function AdminDashboard() {
 
   // Subscriptions & AI Trials
   const [subStats, setSubStats] = useState<AdminAiRecommendationStats | null>(null);
+  const [subKpi, setSubKpi] = useState<AdminSubscriptionKpi | null>(null);
   const [subList, setSubList] = useState<AdminSubscriptionItem[]>([]);
   const [subTotal, setSubTotal] = useState(0);
   const [subPage, setSubPage] = useState(1);
   const [trialList, setTrialList] = useState<AdminAiTrialItem[]>([]);
   const [trialTotal, setTrialTotal] = useState(0);
   const [trialPage, setTrialPage] = useState(1);
-  const [subSubTab, setSubSubTab] = useState<'stats' | 'subs' | 'trials' | 'orders' | 'activate'>('stats');
+  const [subSubTab, setSubSubTab] = useState<'kpi' | 'subs' | 'trials' | 'orders' | 'activate'>('kpi');
   const [activateForm, setActivateForm] = useState({ userId: '', planCode: 'BOOST', durationDays: 30, reason: '', exempt: false });
   const [activateMsg, setActivateMsg] = useState<string | null>(null);
+  // Subscription filters
+  const [subFilterEmail, setSubFilterEmail] = useState('');
+  const [subFilterStatus, setSubFilterStatus] = useState('ALL');
+  const [subFilterScope, setSubFilterScope] = useState('ALL');
+  const [subFilterPlan, setSubFilterPlan] = useState('ALL');
+  const [subFilterSource, setSubFilterSource] = useState('ALL');
+  // Subscription detail
+  const [subDetail, setSubDetail] = useState<AdminSubscriptionDetail | null>(null);
+  const [subDetailLoading, setSubDetailLoading] = useState(false);
+  const [subActionBusy, setSubActionBusy] = useState<string | null>(null);
 
   // Billing orders admin
   const [orderList, setOrderList] = useState<AdminBillingOrderItem[]>([]);
@@ -544,26 +557,36 @@ export function AdminDashboard() {
           break;
         }
         case 'subscriptions': {
-          const [stats, subs, trials, orders] = await Promise.all([
+          const [kpi, stats, subs, trials, orders] = await Promise.all([
+            admin.subscriptionKpi(),
             admin.aiRecommendationStats(),
-            admin.subscriptions({ page: subPage, limit: 20 }),
+            admin.subscriptions({
+              page: subPage,
+              limit: 20,
+              status: subFilterStatus !== 'ALL' ? subFilterStatus : undefined,
+              scope: subFilterScope !== 'ALL' ? subFilterScope : undefined,
+              planCode: subFilterPlan !== 'ALL' ? subFilterPlan : undefined,
+              source: subFilterSource !== 'ALL' ? subFilterSource : undefined,
+              email: subFilterEmail || undefined,
+            }),
             admin.aiTrials({ page: trialPage, limit: 20 }),
             admin.billingOrders({ page: orderPage, limit: 20, status: orderStatusFilter !== 'ALL' ? orderStatusFilter : undefined }),
           ]);
+          setSubKpi(kpi);
           setSubStats(stats);
-          setSubList(subs.subscriptions);
-          setSubTotal(subs.total);
-          setTrialList(trials.trials);
-          setTrialTotal(trials.total);
-          setOrderList(orders.items);
-          setOrderTotal(orders.total);
+          setSubList(subs.subscriptions ?? []);
+          setSubTotal(subs.total ?? 0);
+          setTrialList(trials.trials ?? []);
+          setTrialTotal(trials.total ?? 0);
+          setOrderList(orders.items ?? []);
+          setOrderTotal(orders.total ?? 0);
           break;
         }
       }
     } catch (e: any) {
       setError(e?.message ?? 'Erreur de chargement');
     }
-  }, [activeSection, usersPage, usersSearch, usersRoleFilter, usersStatusFilter, blogPage, blogStatusFilter, blogCategoryFilter, blogSearch, blogSortBy, txPage, txStatusFilter, reportsPage, reportsStatusFilter, rankPeriod, rankType, auditPage, secEventsPage, fraudPage, fraudFilter, restrictionsPage, restrictionsFilter, mgLogsPage, mgVerdictFilter, aiStatusFilter, aiDomainFilter, aiTypeFilter, feedPage, feedStatusFilter, feedSearch, donationsPage, donationsStatusFilter, donationsTypeFilter, advPage, advStatusFilter, advTypeFilter, advSearch, adminListingsPage, adminListingsStatusFilter, adminListingsTypeFilter, adminListingsSearch, appealsPage, subPage, trialPage, orderPage, orderStatusFilter]);
+  }, [activeSection, usersPage, usersSearch, usersRoleFilter, usersStatusFilter, blogPage, blogStatusFilter, blogCategoryFilter, blogSearch, blogSortBy, txPage, txStatusFilter, reportsPage, reportsStatusFilter, rankPeriod, rankType, auditPage, secEventsPage, fraudPage, fraudFilter, restrictionsPage, restrictionsFilter, mgLogsPage, mgVerdictFilter, aiStatusFilter, aiDomainFilter, aiTypeFilter, feedPage, feedStatusFilter, feedSearch, donationsPage, donationsStatusFilter, donationsTypeFilter, advPage, advStatusFilter, advTypeFilter, advSearch, adminListingsPage, adminListingsStatusFilter, adminListingsTypeFilter, adminListingsSearch, appealsPage, subPage, trialPage, orderPage, orderStatusFilter, subFilterEmail, subFilterStatus, subFilterScope, subFilterPlan, subFilterSource]);
 
   useEffect(() => { if (isLoggedIn) loadSectionData(); }, [loadSectionData, isLoggedIn]);
 
@@ -2637,9 +2660,146 @@ export function AdminDashboard() {
   };
 
   /* ══════════════════════════════════════
-     SUBSCRIPTIONS & AI TRIALS
+     SUBSCRIPTIONS & AI — Admin Center
      ══════════════════════════════════════ */
+
+  // ── Export helpers ──
+  const generateSubsCsv = (rows: AdminSubscriptionItem[]) => {
+    const header = 'Compte,Email,Rôle,Business,Plan,Source,Statut,Prix USD,Début,Fin,Cycle,Mis à jour\n';
+    return header + rows.map(s => [
+      s.user?.displayName ?? '—', s.user?.email ?? '—', s.user?.role ?? '—',
+      s.business?.publicName ?? '—', s.planCode, s.source ?? '—', s.status,
+      (s.priceUsdCents / 100).toFixed(2), s.startsAt?.slice(0, 10) ?? '—',
+      s.endsAt?.slice(0, 10) ?? '—', s.billingCycle ?? '—', s.updatedAt?.slice(0, 10) ?? '—',
+    ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+  };
+
+  const generateSubsXml = (rows: AdminSubscriptionItem[]) => {
+    const esc = (v: string) => v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    let xml = '<?xml version="1.0" encoding="UTF-8"?>\n<subscriptions exported="' + new Date().toISOString() + '" count="' + rows.length + '">\n';
+    for (const s of rows) {
+      xml += '  <subscription id="' + esc(s.id) + '">\n';
+      xml += '    <account>' + esc(s.user?.displayName ?? '—') + '</account>\n';
+      xml += '    <email>' + esc(s.user?.email ?? '—') + '</email>\n';
+      xml += '    <role>' + esc(s.user?.role ?? '—') + '</role>\n';
+      xml += '    <business>' + esc(s.business?.publicName ?? '') + '</business>\n';
+      xml += '    <scope>' + esc(s.scope ?? '—') + '</scope>\n';
+      xml += '    <plan>' + esc(s.planCode) + '</plan>\n';
+      xml += '    <source>' + esc(s.source ?? '—') + '</source>\n';
+      xml += '    <status>' + esc(s.status) + '</status>\n';
+      xml += '    <priceUsd>' + (s.priceUsdCents / 100).toFixed(2) + '</priceUsd>\n';
+      xml += '    <billingCycle>' + esc(s.billingCycle ?? '—') + '</billingCycle>\n';
+      xml += '    <startsAt>' + esc(s.startsAt?.slice(0, 10) ?? '') + '</startsAt>\n';
+      xml += '    <endsAt>' + esc(s.endsAt?.slice(0, 10) ?? '') + '</endsAt>\n';
+      xml += '    <updatedAt>' + esc(s.updatedAt?.slice(0, 10) ?? '') + '</updatedAt>\n';
+      if (s.addons && s.addons.length > 0) {
+        xml += '    <addons>\n';
+        for (const a of s.addons) xml += '      <addon code="' + esc(a.addonCode) + '" status="' + esc(a.status) + '" price="' + (a.priceUsdCents / 100).toFixed(2) + '" />\n';
+        xml += '    </addons>\n';
+      }
+      xml += '  </subscription>\n';
+    }
+    xml += '</subscriptions>';
+    return xml;
+  };
+
+  const generateDetailXml = (d: AdminSubscriptionDetail) => {
+    const esc = (v: string) => v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const s = d.subscription;
+    let xml = '<?xml version="1.0" encoding="UTF-8"?>\n<subscriptionDetail exported="' + new Date().toISOString() + '">\n';
+    xml += '  <subscription id="' + esc(s.id) + '">\n';
+    xml += '    <plan>' + esc(s.planCode) + '</plan>\n';
+    xml += '    <scope>' + esc(s.scope) + '</scope>\n';
+    xml += '    <status>' + esc(s.status) + '</status>\n';
+    xml += '    <source>' + esc(s.source) + '</source>\n';
+    xml += '    <priceUsd>' + (s.priceUsdCents / 100).toFixed(2) + '</priceUsd>\n';
+    xml += '    <billingCycle>' + esc(s.billingCycle) + '</billingCycle>\n';
+    xml += '    <autoRenew>' + s.autoRenew + '</autoRenew>\n';
+    xml += '    <startsAt>' + esc(s.startsAt.slice(0, 10)) + '</startsAt>\n';
+    xml += '    <endsAt>' + esc(s.endsAt?.slice(0, 10) ?? '') + '</endsAt>\n';
+    xml += '    <createdAt>' + esc(s.createdAt.slice(0, 10)) + '</createdAt>\n';
+    xml += '    <updatedAt>' + esc(s.updatedAt.slice(0, 10)) + '</updatedAt>\n';
+    if (s.metadata) xml += '    <metadata>' + esc(JSON.stringify(s.metadata)) + '</metadata>\n';
+    xml += '  </subscription>\n';
+    if (d.user) {
+      xml += '  <user id="' + esc(d.user.id) + '">\n';
+      xml += '    <email>' + esc(d.user.email) + '</email>\n';
+      xml += '    <role>' + esc(d.user.role) + '</role>\n';
+      xml += '    <status>' + esc(d.user.status) + '</status>\n';
+      xml += '    <displayName>' + esc(d.user.profile?.displayName ?? '—') + '</displayName>\n';
+      xml += '  </user>\n';
+    }
+    if (d.business) {
+      xml += '  <business id="' + esc(d.business.id) + '">\n';
+      xml += '    <publicName>' + esc(d.business.publicName) + '</publicName>\n';
+      xml += '    <legalName>' + esc(d.business.legalName ?? '') + '</legalName>\n';
+      xml += '    <slug>' + esc(d.business.slug) + '</slug>\n';
+      xml += '  </business>\n';
+    }
+    if (d.addons.length > 0) {
+      xml += '  <addons>\n';
+      for (const a of d.addons) xml += '    <addon code="' + esc(a.addonCode) + '" status="' + esc(a.status) + '" price="' + (a.priceUsdCents / 100).toFixed(2) + '" start="' + esc(a.startsAt.slice(0, 10)) + '" end="' + esc(a.endsAt?.slice(0, 10) ?? '') + '" />\n';
+      xml += '  </addons>\n';
+    }
+    if (d.auditLogs.length > 0) {
+      xml += '  <auditTrail>\n';
+      for (const log of d.auditLogs) xml += '    <entry action="' + esc(log.action) + '" date="' + esc(log.createdAt.slice(0, 19)) + '" actor="' + esc(log.actorUserId) + '">' + esc(JSON.stringify(log.metadata ?? {})) + '</entry>\n';
+      xml += '  </auditTrail>\n';
+    }
+    if (d.paymentOrders.length > 0) {
+      xml += '  <paymentOrders>\n';
+      for (const po of d.paymentOrders) xml += '    <order id="' + esc(po.id) + '" plan="' + esc(po.planCode) + '" amount="' + (po.amountUsdCents / 100).toFixed(2) + '" method="' + esc(po.method) + '" status="' + esc(po.status) + '" ref="' + esc(po.transferReference) + '" date="' + esc(po.createdAt.slice(0, 10)) + '" />\n';
+      xml += '  </paymentOrders>\n';
+    }
+    xml += '</subscriptionDetail>';
+    return xml;
+  };
+
+  const downloadFile = (content: string, filename: string, mime: string) => {
+    const blob = new Blob([content], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename; a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const printDetailAsPdf = () => {
+    const el = document.getElementById('sub-detail-print');
+    if (!el) return;
+    const win = window.open('', '_blank');
+    if (!win) return;
+    win.document.write('<html><head><title>Détail abonnement — Kin-Sell Admin</title><style>body{font-family:system-ui,sans-serif;padding:24px;color:#0F172A;font-size:13px}table{width:100%;border-collapse:collapse;margin:12px 0}th,td{text-align:left;padding:6px 10px;border-bottom:1px solid #CBD5E1}th{background:#F8FAFC;font-weight:600;font-size:11px;text-transform:uppercase;color:#475569}.badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600}.badge-green{background:#D1FAE5;color:#065F46}.badge-red{background:#FEE2E2;color:#991B1B}.badge-amber{background:#FEF3C7;color:#92400E}.badge-cyan{background:#CFFAFE;color:#155E75}h1{font-size:18px;margin-bottom:4px}h2{font-size:14px;margin:20px 0 8px;color:#0EA5E9;border-bottom:1px solid #CBD5E1;padding-bottom:4px}.meta{color:#475569;font-size:11px}</style></head><body>');
+    win.document.write(el.innerHTML);
+    win.document.write('</body></html>');
+    win.document.close();
+    win.onload = () => { win.print(); };
+  };
+
   const renderSubscriptions = () => {
+    // Admin palette
+    const C = {
+      bg: '#F8FAFC', card: '#FFFFFF', text: '#0F172A', textSec: '#475569',
+      border: '#CBD5E1', accent: '#0EA5E9', success: '#10B981', warn: '#F59E0B', danger: '#EF4444',
+    };
+
+    const sourceBadge = (src: string) => {
+      if (src === 'admin') return { bg: '#FEF3C7', color: '#92400E', label: 'Manuel' };
+      return { bg: '#CFFAFE', color: '#155E75', label: 'PayPal' };
+    };
+    const statusBadge = (st: string) => {
+      if (st === 'ACTIVE') return { bg: '#D1FAE5', color: '#065F46' };
+      if (st === 'EXPIRED') return { bg: '#FEE2E2', color: '#991B1B' };
+      if (st === 'CANCELED') return { bg: '#FEE2E2', color: '#991B1B' };
+      return { bg: '#F1F5F9', color: '#475569' };
+    };
+    const orderStatusBadge = (st: string) => {
+      if (st === 'PAID' || st === 'VALIDATED') return { bg: '#D1FAE5', color: '#065F46' };
+      if (st === 'FAILED') return { bg: '#FEE2E2', color: '#991B1B' };
+      if (st === 'PENDING' || st === 'USER_CONFIRMED') return { bg: '#FEF3C7', color: '#92400E' };
+      if (st === 'CANCELED' || st === 'EXPIRED') return { bg: '#FEE2E2', color: '#991B1B' };
+      return { bg: '#F1F5F9', color: '#475569' };
+    };
+
     const handleActivate = async () => {
       if (!activateForm.userId || !activateForm.reason) return;
       setActivateMsg(null);
@@ -2647,562 +2807,586 @@ export function AdminDashboard() {
         await admin.activatePlan(activateForm);
         setActivateMsg('✅ Forfait activé avec succès');
         setActivateForm({ userId: '', planCode: 'BOOST', durationDays: 30, reason: '', exempt: false });
+        loadSectionData();
       } catch (e: any) {
         setActivateMsg('❌ ' + (e?.message || 'Erreur'));
       }
     };
 
-    return (
-      <div className="ad-section animate-fade-in">
-        <h2 className="ad-section-title">💳 Abonnements & Essais IA</h2>
+    const handleRevoke = async (subId: string) => {
+      const reason = prompt('Raison de la révocation :');
+      if (!reason) return;
+      setSubActionBusy(subId);
+      try {
+        await admin.revokeSubscription({ subscriptionId: subId, reason });
+        loadSectionData();
+      } catch (e: any) {
+        alert('Erreur: ' + (e?.message || 'Erreur'));
+      } finally {
+        setSubActionBusy(null);
+      }
+    };
 
-        {/* Sub tabs */}
-        <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
-          {([
-            { k: 'stats' as const, l: '📊 Stats' },
-            { k: 'subs' as const, l: '💳 Abonnements' },
-            { k: 'orders' as const, l: '📦 Commandes' },
-            { k: 'trials' as const, l: '🎁 Essais IA' },
-            { k: 'activate' as const, l: '🔑 Activer manuellement' },
-          ]).map(st => (
-            <button key={st.k} onClick={() => setSubSubTab(st.k)}
-              style={{ padding: '6px 14px', fontSize: 12, fontWeight: 600, border: 'none', borderRadius: 8,
-                background: subSubTab === st.k ? 'rgba(111,88,255,0.3)' : 'rgba(255,255,255,0.06)',
-                color: subSubTab === st.k ? '#fff' : 'rgba(255,255,255,0.6)', cursor: 'pointer',
-              }}>{st.l}</button>
-          ))}
-        </div>
+    const openDetail = async (id: string) => {
+      setSubDetailLoading(true);
+      try {
+        const detail = await admin.subscriptionDetail(id);
+        setSubDetail(detail);
+      } catch (e: any) {
+        alert('Erreur: ' + (e?.message || 'Erreur'));
+      } finally {
+        setSubDetailLoading(false);
+      }
+    };
 
-        {/* Stats */}
-        {subSubTab === 'stats' && subStats && (
-          <div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 12, marginBottom: 20 }}>
+    const inputStyle: React.CSSProperties = { padding: '7px 10px', borderRadius: 6, border: `1px solid ${C.border}`, background: C.card, color: C.text, fontSize: 12, outline: 'none' };
+    const selectStyle: React.CSSProperties = { ...inputStyle, minWidth: 100 };
+    const tabStyle = (active: boolean): React.CSSProperties => ({
+      padding: '7px 16px', fontSize: 12, fontWeight: 600, border: `1px solid ${active ? C.accent : C.border}`,
+      borderRadius: 6, background: active ? C.accent : C.card, color: active ? '#FFF' : C.textSec,
+      cursor: 'pointer', transition: 'all 160ms ease',
+    });
+
+    // ── Detail modal ──
+    if (subDetail) {
+      const s = subDetail.subscription;
+      const sb = statusBadge(s.status);
+      const src = sourceBadge(s.source);
+      const meta = s.metadata as Record<string, unknown> | null;
+      return (
+        <div className="ad-section animate-fade-in" style={{ background: C.bg, borderRadius: 12, padding: 0 }}>
+          {/* Header */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: `1px solid ${C.border}`, background: C.card, borderRadius: '12px 12px 0 0' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <button onClick={() => setSubDetail(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: C.textSec }}>← Retour</button>
+              <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: C.text }}>Détail abonnement</h2>
+            </div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button onClick={printDetailAsPdf}
+                style={{ padding: '5px 12px', fontSize: 11, fontWeight: 600, border: `1px solid ${C.border}`, borderRadius: 6, background: C.card, color: C.accent, cursor: 'pointer' }}>
+                📄 PDF
+              </button>
+              <button onClick={() => downloadFile(generateDetailXml(subDetail), `subscription-${s.id.slice(0, 8)}.xml`, 'application/xml')}
+                style={{ padding: '5px 12px', fontSize: 11, fontWeight: 600, border: `1px solid ${C.border}`, borderRadius: 6, background: C.card, color: C.accent, cursor: 'pointer' }}>
+                📋 XML
+              </button>
+            </div>
+          </div>
+
+          <div id="sub-detail-print" style={{ padding: 20 }}>
+            <h1 style={{ fontSize: 16, color: C.text, margin: '0 0 4px' }}>Abonnement {s.planCode} — {subDetail.user?.profile?.displayName ?? subDetail.user?.email ?? '—'}</h1>
+            <p className="meta" style={{ color: C.textSec, fontSize: 11, margin: '0 0 16px' }}>ID: {s.id} · Créé le {new Date(s.createdAt).toLocaleDateString('fr-FR')}</p>
+
+            {/* Info grid */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12, marginBottom: 20 }}>
               {[
-                { label: 'Recommandations totales', val: subStats.total },
-                { label: 'Actives', val: subStats.active },
-                { label: 'Cliquées', val: subStats.clicked },
-                { label: 'Acceptées', val: subStats.accepted },
-                { label: 'Ignorées', val: subStats.dismissed },
-              ].map(s => (
-                <div key={s.label} style={{ background: 'rgba(111,88,255,0.06)', borderRadius: 10, padding: 14, textAlign: 'center' }}>
-                  <div style={{ fontSize: 22, fontWeight: 700, color: '#6f58ff' }}>{s.val}</div>
-                  <div style={{ fontSize: 11, color: 'var(--color-text-secondary, #aaa)', marginTop: 4 }}>{s.label}</div>
+                { label: 'Plan', val: s.planCode },
+                { label: 'Scope', val: s.scope },
+                { label: 'Statut', val: s.status, badge: sb },
+                { label: 'Source', val: src.label, badge: src },
+                { label: 'Prix', val: s.priceUsdCents > 0 ? `${(s.priceUsdCents / 100).toFixed(2)} $` : 'Gratuit' },
+                { label: 'Cycle', val: s.billingCycle },
+                { label: 'Auto-renew', val: s.autoRenew ? 'Oui' : 'Non' },
+                { label: 'Début', val: new Date(s.startsAt).toLocaleDateString('fr-FR') },
+                { label: 'Fin', val: s.endsAt ? new Date(s.endsAt).toLocaleDateString('fr-FR') : '—' },
+                { label: 'Mis à jour', val: new Date(s.updatedAt).toLocaleDateString('fr-FR') },
+              ].map(item => (
+                <div key={item.label} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: '10px 14px' }}>
+                  <div style={{ fontSize: 10, color: C.textSec, textTransform: 'uppercase', fontWeight: 600, marginBottom: 4 }}>{item.label}</div>
+                  {'badge' in item && item.badge ? (
+                    <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: 12, fontWeight: 600, background: item.badge.bg, color: item.badge.color }}>{item.val}</span>
+                  ) : (
+                    <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{item.val}</div>
+                  )}
                 </div>
               ))}
             </div>
 
-            <h4 style={{ color: 'var(--color-text-primary, #fff)', marginBottom: 8 }}>Par moteur IA</h4>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
-              {Object.entries(subStats.byEngine).map(([k, v]) => (
-                <span key={k} style={{ padding: '4px 10px', borderRadius: 6, background: 'rgba(111,88,255,0.08)', color: '#6f58ff', fontSize: 12 }}>{k}: {v}</span>
-              ))}
-            </div>
+            {/* User / Business */}
+            {subDetail.user && (
+              <>
+                <h2 style={{ fontSize: 13, color: C.accent, margin: '20px 0 8px', borderBottom: `1px solid ${C.border}`, paddingBottom: 4 }}>Utilisateur</h2>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 10 }}>
+                  {[
+                    { l: 'Email', v: subDetail.user.email },
+                    { l: 'Rôle', v: subDetail.user.role },
+                    { l: 'Statut compte', v: subDetail.user.status },
+                    { l: 'Nom', v: subDetail.user.profile?.displayName ?? '—' },
+                    { l: 'Username', v: subDetail.user.profile?.username ?? '—' },
+                  ].map(f => (
+                    <div key={f.l} style={{ fontSize: 12, color: C.text }}><span style={{ color: C.textSec }}>{f.l}:</span> <strong>{f.v}</strong></div>
+                  ))}
+                </div>
+              </>
+            )}
+            {subDetail.business && (
+              <>
+                <h2 style={{ fontSize: 13, color: C.accent, margin: '20px 0 8px', borderBottom: `1px solid ${C.border}`, paddingBottom: 4 }}>Business</h2>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 10 }}>
+                  {[
+                    { l: 'Nom public', v: subDetail.business.publicName },
+                    { l: 'Nom légal', v: subDetail.business.legalName ?? '—' },
+                    { l: 'Slug', v: subDetail.business.slug },
+                  ].map(f => (
+                    <div key={f.l} style={{ fontSize: 12, color: C.text }}><span style={{ color: C.textSec }}>{f.l}:</span> <strong>{f.v}</strong></div>
+                  ))}
+                </div>
+              </>
+            )}
 
-            <h4 style={{ color: 'var(--color-text-primary, #fff)', marginBottom: 8 }}>Essais IA</h4>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {Object.entries(subStats.trials).map(([k, v]) => (
-                <span key={k} style={{ padding: '4px 10px', borderRadius: 6, background: 'rgba(76,175,80,0.1)', color: '#4caf50', fontSize: 12 }}>{k}: {v}</span>
-              ))}
+            {/* Add-ons (features IA) */}
+            {subDetail.addons.length > 0 && (
+              <>
+                <h2 style={{ fontSize: 13, color: C.accent, margin: '20px 0 8px', borderBottom: `1px solid ${C.border}`, paddingBottom: 4 }}>Features IA débloquées</h2>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                  <thead><tr style={{ background: C.bg }}><th style={{ padding: '6px 10px', textAlign: 'left', borderBottom: `1px solid ${C.border}`, fontSize: 10, color: C.textSec }}>Code</th><th style={{ padding: '6px 10px', textAlign: 'left', borderBottom: `1px solid ${C.border}`, fontSize: 10, color: C.textSec }}>Statut</th><th style={{ padding: '6px 10px', textAlign: 'left', borderBottom: `1px solid ${C.border}`, fontSize: 10, color: C.textSec }}>Prix</th><th style={{ padding: '6px 10px', textAlign: 'left', borderBottom: `1px solid ${C.border}`, fontSize: 10, color: C.textSec }}>Début</th><th style={{ padding: '6px 10px', textAlign: 'left', borderBottom: `1px solid ${C.border}`, fontSize: 10, color: C.textSec }}>Fin</th></tr></thead>
+                  <tbody>
+                    {subDetail.addons.map((a, i) => {
+                      const asb = statusBadge(a.status);
+                      return (
+                        <tr key={i}><td style={{ padding: '6px 10px', borderBottom: `1px solid ${C.border}`, fontWeight: 600 }}>{a.addonCode}</td><td style={{ padding: '6px 10px', borderBottom: `1px solid ${C.border}` }}><span style={{ padding: '2px 6px', borderRadius: 4, fontSize: 10, fontWeight: 600, background: asb.bg, color: asb.color }}>{a.status}</span></td><td style={{ padding: '6px 10px', borderBottom: `1px solid ${C.border}` }}>{(a.priceUsdCents / 100).toFixed(2)} $</td><td style={{ padding: '6px 10px', borderBottom: `1px solid ${C.border}` }}>{new Date(a.startsAt).toLocaleDateString('fr-FR')}</td><td style={{ padding: '6px 10px', borderBottom: `1px solid ${C.border}` }}>{a.endsAt ? new Date(a.endsAt).toLocaleDateString('fr-FR') : '—'}</td></tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </>
+            )}
+
+            {/* Metadata (admin activation info) */}
+            {meta && (meta as any).adminActivated && (
+              <>
+                <h2 style={{ fontSize: 13, color: C.warn, margin: '20px 0 8px', borderBottom: `1px solid ${C.border}`, paddingBottom: 4 }}>Activation manuelle</h2>
+                <div style={{ fontSize: 12, color: C.text, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 10 }}>
+                  <div><span style={{ color: C.textSec }}>Raison:</span> <strong>{(meta as any).reason ?? '—'}</strong></div>
+                  <div><span style={{ color: C.textSec }}>Exempté:</span> <strong>{(meta as any).exempt ? 'Oui' : 'Non'}</strong></div>
+                  <div><span style={{ color: C.textSec }}>Activé par:</span> <strong>{String((meta as any).activatedBy ?? '—').slice(0, 12)}</strong></div>
+                  <div><span style={{ color: C.textSec }}>Date:</span> <strong>{(meta as any).activatedAt ? new Date((meta as any).activatedAt).toLocaleDateString('fr-FR') : '—'}</strong></div>
+                </div>
+              </>
+            )}
+
+            {/* Payment orders */}
+            {subDetail.paymentOrders.length > 0 && (
+              <>
+                <h2 style={{ fontSize: 13, color: C.accent, margin: '20px 0 8px', borderBottom: `1px solid ${C.border}`, paddingBottom: 4 }}>Historique des paiements</h2>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                  <thead><tr style={{ background: C.bg }}><th style={{ padding: '6px 10px', textAlign: 'left', borderBottom: `1px solid ${C.border}`, fontSize: 10, color: C.textSec }}>Plan</th><th style={{ padding: '6px 10px', textAlign: 'left', borderBottom: `1px solid ${C.border}`, fontSize: 10, color: C.textSec }}>Montant</th><th style={{ padding: '6px 10px', textAlign: 'left', borderBottom: `1px solid ${C.border}`, fontSize: 10, color: C.textSec }}>Méthode</th><th style={{ padding: '6px 10px', textAlign: 'left', borderBottom: `1px solid ${C.border}`, fontSize: 10, color: C.textSec }}>Statut</th><th style={{ padding: '6px 10px', textAlign: 'left', borderBottom: `1px solid ${C.border}`, fontSize: 10, color: C.textSec }}>Référence</th><th style={{ padding: '6px 10px', textAlign: 'left', borderBottom: `1px solid ${C.border}`, fontSize: 10, color: C.textSec }}>Date</th></tr></thead>
+                  <tbody>
+                    {subDetail.paymentOrders.map(po => {
+                      const posb = orderStatusBadge(po.status);
+                      return (
+                        <tr key={po.id}><td style={{ padding: '6px 10px', borderBottom: `1px solid ${C.border}`, fontWeight: 600 }}>{po.planCode}</td><td style={{ padding: '6px 10px', borderBottom: `1px solid ${C.border}` }}>{(po.amountUsdCents / 100).toFixed(2)} $</td><td style={{ padding: '6px 10px', borderBottom: `1px solid ${C.border}` }}>{po.method}</td><td style={{ padding: '6px 10px', borderBottom: `1px solid ${C.border}` }}><span style={{ padding: '2px 6px', borderRadius: 4, fontSize: 10, fontWeight: 600, background: posb.bg, color: posb.color }}>{po.status}</span></td><td style={{ padding: '6px 10px', borderBottom: `1px solid ${C.border}`, fontFamily: 'monospace', fontSize: 10 }}>{po.transferReference}</td><td style={{ padding: '6px 10px', borderBottom: `1px solid ${C.border}` }}>{new Date(po.createdAt).toLocaleDateString('fr-FR')}</td></tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </>
+            )}
+
+            {/* Audit trail */}
+            {subDetail.auditLogs.length > 0 && (
+              <>
+                <h2 style={{ fontSize: 13, color: C.accent, margin: '20px 0 8px', borderBottom: `1px solid ${C.border}`, paddingBottom: 4 }}>Journal d'audit</h2>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                  <thead><tr style={{ background: C.bg }}><th style={{ padding: '6px 10px', textAlign: 'left', borderBottom: `1px solid ${C.border}`, fontSize: 10, color: C.textSec }}>Action</th><th style={{ padding: '6px 10px', textAlign: 'left', borderBottom: `1px solid ${C.border}`, fontSize: 10, color: C.textSec }}>Date</th><th style={{ padding: '6px 10px', textAlign: 'left', borderBottom: `1px solid ${C.border}`, fontSize: 10, color: C.textSec }}>Acteur</th><th style={{ padding: '6px 10px', textAlign: 'left', borderBottom: `1px solid ${C.border}`, fontSize: 10, color: C.textSec }}>Détails</th></tr></thead>
+                  <tbody>
+                    {subDetail.auditLogs.map(log => (
+                      <tr key={log.id}>
+                        <td style={{ padding: '6px 10px', borderBottom: `1px solid ${C.border}`, fontWeight: 600, color: C.accent }}>{log.action}</td>
+                        <td style={{ padding: '6px 10px', borderBottom: `1px solid ${C.border}` }}>{new Date(log.createdAt).toLocaleString('fr-FR')}</td>
+                        <td style={{ padding: '6px 10px', borderBottom: `1px solid ${C.border}`, fontFamily: 'monospace', fontSize: 10 }}>{log.actorUserId.slice(0, 12)}</td>
+                        <td style={{ padding: '6px 10px', borderBottom: `1px solid ${C.border}`, fontSize: 10, maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{JSON.stringify(log.metadata ?? {})}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
+            )}
+          </div>
+
+          {/* Actions footer */}
+          {s.status === 'ACTIVE' && (
+            <div style={{ padding: '12px 20px', borderTop: `1px solid ${C.border}`, display: 'flex', gap: 8 }}>
+              <button onClick={() => handleRevoke(s.id)} disabled={subActionBusy === s.id}
+                style={{ padding: '7px 16px', fontSize: 12, fontWeight: 600, border: 'none', borderRadius: 6, background: C.danger, color: '#FFF', cursor: 'pointer', opacity: subActionBusy === s.id ? 0.5 : 1 }}>
+                {subActionBusy === s.id ? '…' : '🚫 Révoquer cet abonnement'}
+              </button>
             </div>
+          )}
+        </div>
+      );
+    }
+
+    // ── Main subscriptions view ──
+    return (
+      <div className="ad-section animate-fade-in" style={{ background: C.bg, borderRadius: 12, padding: 0 }}>
+        {/* Title */}
+        <div style={{ padding: '16px 20px', borderBottom: `1px solid ${C.border}`, background: C.card, borderRadius: '12px 12px 0 0' }}>
+          <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: C.text }}>💳 Abonnements & IA — Centre d'administration</h2>
+        </div>
+
+        {/* KPI Bandeau */}
+        {subKpi && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 10, padding: '16px 20px', borderBottom: `1px solid ${C.border}` }}>
+            {[
+              { label: 'Actifs', val: subKpi.active, color: C.success },
+              { label: 'Expirés', val: subKpi.expired, color: C.danger },
+              { label: 'Annulés', val: subKpi.canceled, color: '#888' },
+              { label: 'Activations admin', val: subKpi.adminActivated, color: C.warn },
+              { label: 'Essais IA', val: subKpi.trials, color: C.accent },
+              { label: 'Essais actifs', val: subKpi.trialsActive, color: C.success },
+              { label: 'Total', val: subKpi.total, color: C.text },
+            ].map(k => (
+              <div key={k.label} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: '12px 14px', textAlign: 'center' }}>
+                <div style={{ fontSize: 22, fontWeight: 700, color: k.color }}>{k.val}</div>
+                <div style={{ fontSize: 10, color: C.textSec, marginTop: 2, fontWeight: 600, textTransform: 'uppercase' }}>{k.label}</div>
+              </div>
+            ))}
           </div>
         )}
 
-        {/* Subscriptions list */}
+        {/* Sub tabs */}
+        <div style={{ display: 'flex', gap: 6, padding: '12px 20px', borderBottom: `1px solid ${C.border}`, flexWrap: 'wrap' }}>
+          {([
+            { k: 'kpi' as const, l: '📊 Vue KPI' },
+            { k: 'subs' as const, l: '💳 Abonnements' },
+            { k: 'orders' as const, l: '📦 Commandes' },
+            { k: 'trials' as const, l: '🧪 Essais IA' },
+            { k: 'activate' as const, l: '🔑 Activer manuellement' },
+          ]).map(st => (
+            <button key={st.k} onClick={() => setSubSubTab(st.k)} style={tabStyle(subSubTab === st.k)}>{st.l}</button>
+          ))}
+        </div>
+
+        <div style={{ padding: 20 }}>
+
+        {/* ── KPI Dashboard ── */}
+        {subSubTab === 'kpi' && (
+          <div>
+            {subKpi && subKpi.planDistribution && (
+              <>
+                <h3 style={{ fontSize: 13, color: C.text, fontWeight: 700, marginBottom: 10 }}>Répartition par plan</h3>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
+                  {Object.entries(subKpi.planDistribution).map(([plan, count]) => (
+                    <div key={plan} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, padding: '8px 14px', textAlign: 'center', minWidth: 90 }}>
+                      <div style={{ fontSize: 18, fontWeight: 700, color: C.accent }}>{count}</div>
+                      <div style={{ fontSize: 10, color: C.textSec, fontWeight: 600 }}>{plan}</div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+            {subStats && (
+              <>
+                <h3 style={{ fontSize: 13, color: C.text, fontWeight: 700, marginBottom: 10 }}>Recommandations IA</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 10, marginBottom: 16 }}>
+                  {[
+                    { label: 'Total', val: subStats.total },
+                    { label: 'Actives', val: subStats.active },
+                    { label: 'Cliquées', val: subStats.clicked },
+                    { label: 'Acceptées', val: subStats.accepted },
+                    { label: 'Ignorées', val: subStats.dismissed },
+                  ].map(s => (
+                    <div key={s.label} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, padding: '10px 12px', textAlign: 'center' }}>
+                      <div style={{ fontSize: 18, fontWeight: 700, color: C.accent }}>{s.val}</div>
+                      <div style={{ fontSize: 10, color: C.textSec, marginTop: 2 }}>{s.label}</div>
+                    </div>
+                  ))}
+                </div>
+
+                <h4 style={{ fontSize: 12, color: C.text, marginBottom: 6 }}>Par moteur IA</h4>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
+                  {Object.entries(subStats.byEngine ?? {}).map(([k, v]) => (
+                    <span key={k} style={{ padding: '3px 10px', borderRadius: 4, background: '#CFFAFE', color: '#155E75', fontSize: 11, fontWeight: 600 }}>{k}: {v as number}</span>
+                  ))}
+                </div>
+
+                <h4 style={{ fontSize: 12, color: C.text, marginBottom: 6 }}>Essais IA</h4>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {Object.entries(subStats.trials ?? {}).map(([k, v]) => (
+                    <span key={k} style={{ padding: '3px 10px', borderRadius: 4, background: '#D1FAE5', color: '#065F46', fontSize: 11, fontWeight: 600 }}>{k}: {v as number}</span>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* ── Subscriptions table ── */}
         {subSubTab === 'subs' && (
           <div>
-            <table className="ad-table" style={{ width: '100%', fontSize: 12 }}>
-              <thead>
-                <tr>
-                  <th>Utilisateur</th>
-                  <th>Forfait</th>
-                  <th>Statut</th>
-                  <th>Prix</th>
-                  <th>Début</th>
-                  <th>Fin</th>
-                </tr>
-              </thead>
-              <tbody>
-                {subList.map(s => (
-                  <tr key={s.id}>
-                    <td>{s.user?.displayName || s.userId}<br/><span style={{ fontSize: 10, color: '#888' }}>{s.user?.email}</span></td>
-                    <td style={{ fontWeight: 600, color: '#6f58ff' }}>{s.planCode}</td>
-                    <td><span style={{ padding: '2px 6px', borderRadius: 4, fontSize: 10, background: s.status === 'ACTIVE' ? 'rgba(76,175,80,0.15)' : 'rgba(255,152,0,0.15)', color: s.status === 'ACTIVE' ? '#4caf50' : '#ff9800' }}>{s.status}</span></td>
-                    <td>{s.priceUsdCents > 0 ? `${(s.priceUsdCents / 100).toFixed(2)}$` : 'Gratuit'}</td>
-                    <td>{new Date(s.startsAt).toLocaleDateString('fr-FR')}</td>
-                    <td>{s.endsAt ? new Date(s.endsAt).toLocaleDateString('fr-FR') : '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {subTotal > 20 && (
-              <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 12 }}>
-                <button disabled={subPage <= 1} onClick={() => setSubPage(p => p - 1)} className="ad-btn ad-btn--sm">◀</button>
-                <span style={{ fontSize: 12, color: '#aaa', alignSelf: 'center' }}>Page {subPage}</span>
-                <button disabled={subList.length < 20} onClick={() => setSubPage(p => p + 1)} className="ad-btn ad-btn--sm">▶</button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Trials list */}
-        {subSubTab === 'trials' && (
-          <div>
-            <table className="ad-table" style={{ width: '100%', fontSize: 12 }}>
-              <thead>
-                <tr>
-                  <th>Utilisateur</th>
-                  <th>Forfait</th>
-                  <th>Moteur</th>
-                  <th>Statut</th>
-                  <th>Raison</th>
-                  <th>Dates</th>
-                </tr>
-              </thead>
-              <tbody>
-                {trialList.map(t => (
-                  <tr key={t.id}>
-                    <td>{t.user?.displayName || t.userId}<br/><span style={{ fontSize: 10, color: '#888' }}>{t.user?.email}</span></td>
-                    <td style={{ fontWeight: 600, color: '#6f58ff' }}>{t.planCode}</td>
-                    <td>{t.sourceEngine}</td>
-                    <td><span style={{ padding: '2px 6px', borderRadius: 4, fontSize: 10,
-                      background: t.status === 'ACTIVE' ? 'rgba(76,175,80,0.15)' : t.status === 'PROPOSED' ? 'rgba(255,152,0,0.15)' : 'rgba(255,255,255,0.06)',
-                      color: t.status === 'ACTIVE' ? '#4caf50' : t.status === 'PROPOSED' ? '#ff9800' : '#888',
-                    }}>{t.status}</span></td>
-                    <td style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.reason}</td>
-                    <td style={{ fontSize: 10 }}>
-                      {t.startsAt ? new Date(t.startsAt).toLocaleDateString('fr-FR') : '—'}
-                      {t.endsAt ? ` → ${new Date(t.endsAt).toLocaleDateString('fr-FR')}` : ''}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {trialTotal > 20 && (
-              <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 12 }}>
-                <button disabled={trialPage <= 1} onClick={() => setTrialPage(p => p - 1)} className="ad-btn ad-btn--sm">◀</button>
-                <span style={{ fontSize: 12, color: '#aaa', alignSelf: 'center' }}>Page {trialPage}</span>
-                <button disabled={trialList.length < 20} onClick={() => setTrialPage(p => p + 1)} className="ad-btn ad-btn--sm">▶</button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Billing orders — commandes de paiement */}
-        {subSubTab === 'orders' && (
-          <div>
-            {orderActionMsg && (
-              <div style={{ padding: '8px 14px', borderRadius: 8, marginBottom: 12, fontSize: 13,
-                background: orderActionMsg.startsWith('✅') ? 'rgba(76,175,80,0.12)' : 'rgba(255,82,82,0.12)',
-                color: orderActionMsg.startsWith('✅') ? '#4caf50' : '#ff5252',
-              }}>{orderActionMsg}</div>
-            )}
-
+            {/* Filters */}
             <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap', alignItems: 'center' }}>
-              <span style={{ fontSize: 12, color: 'var(--color-text-secondary, #aaa)' }}>Filtrer :</span>
-              {['ALL', 'PENDING', 'USER_CONFIRMED', 'PAID', 'FAILED', 'CANCELED', 'EXPIRED'].map(s => (
-                <button key={s} onClick={() => { setOrderStatusFilter(s); setOrderPage(1); }}
-                  style={{ padding: '4px 10px', fontSize: 11, fontWeight: 600, border: 'none', borderRadius: 6,
-                    background: orderStatusFilter === s ? 'rgba(111,88,255,0.3)' : 'rgba(255,255,255,0.06)',
-                    color: orderStatusFilter === s ? '#fff' : 'rgba(255,255,255,0.5)', cursor: 'pointer',
-                  }}>{s === 'ALL' ? 'Tous' : s}</button>
-              ))}
-              <span style={{ marginLeft: 'auto', fontSize: 12, color: '#888' }}>{orderTotal} commande{orderTotal > 1 ? 's' : ''}</span>
+              <input placeholder="Filtrer par email…" value={subFilterEmail} onChange={e => setSubFilterEmail(e.target.value)} style={inputStyle} />
+              <select value={subFilterStatus} onChange={e => { setSubFilterStatus(e.target.value); setSubPage(1); }} style={selectStyle}>
+                <option value="ALL">Tous statuts</option>
+                <option value="ACTIVE">Actif</option>
+                <option value="EXPIRED">Expiré</option>
+                <option value="CANCELED">Annulé</option>
+              </select>
+              <select value={subFilterScope} onChange={e => { setSubFilterScope(e.target.value); setSubPage(1); }} style={selectStyle}>
+                <option value="ALL">Tous scopes</option>
+                <option value="USER">User</option>
+                <option value="BUSINESS">Business</option>
+              </select>
+              <select value={subFilterPlan} onChange={e => { setSubFilterPlan(e.target.value); setSubPage(1); }} style={selectStyle}>
+                <option value="ALL">Tous plans</option>
+                {['FREE', 'BOOST', 'AUTO', 'PRO_VENDOR', 'STARTER', 'BUSINESS', 'SCALE'].map(p => <option key={p} value={p}>{p}</option>)}
+              </select>
+              <select value={subFilterSource} onChange={e => { setSubFilterSource(e.target.value); setSubPage(1); }} style={selectStyle}>
+                <option value="ALL">Toutes sources</option>
+                <option value="paypal">PayPal</option>
+                <option value="admin">Admin (manuel)</option>
+              </select>
+              <span style={{ marginLeft: 'auto', fontSize: 12, color: C.textSec, fontWeight: 600 }}>{subTotal} résultat{subTotal > 1 ? 's' : ''}</span>
             </div>
 
-            <table className="ad-table" style={{ width: '100%', fontSize: 12 }}>
-              <thead>
-                <tr>
-                  <th>Utilisateur</th>
-                  <th>Forfait</th>
-                  <th>Montant</th>
-                  <th>Méthode</th>
-                  <th>Statut</th>
-                  <th>Référence</th>
-                  <th>Date</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {orderList.map(o => {
-                  const userName = o.user?.profile?.displayName || o.user?.email || o.userId || '—';
-                  const bizName = o.business?.publicName;
-                  const canActivate = ['PENDING', 'USER_CONFIRMED'].includes(o.status);
-                  const canFail = ['PENDING', 'USER_CONFIRMED'].includes(o.status);
-                  const statusColor = o.status === 'PAID' || o.status === 'VALIDATED' ? '#4caf50'
-                    : o.status === 'FAILED' ? '#ff5252'
-                    : o.status === 'PENDING' || o.status === 'USER_CONFIRMED' ? '#ff9800'
-                    : '#888';
+            {/* Export buttons */}
+            <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+              <button onClick={() => downloadFile(generateSubsCsv(subList), 'subscriptions.csv', 'text/csv')}
+                style={{ padding: '5px 12px', fontSize: 11, fontWeight: 600, border: `1px solid ${C.border}`, borderRadius: 6, background: C.card, color: C.accent, cursor: 'pointer' }}>
+                📄 Export PDF/CSV
+              </button>
+              <button onClick={() => downloadFile(generateSubsXml(subList), 'subscriptions.xml', 'application/xml')}
+                style={{ padding: '5px 12px', fontSize: 11, fontWeight: 600, border: `1px solid ${C.border}`, borderRadius: 6, background: C.card, color: C.accent, cursor: 'pointer' }}>
+                📋 Export XML
+              </button>
+            </div>
 
-                  return (
-                    <tr key={o.id}>
-                      <td>
-                        {userName}
-                        {bizName && <><br/><span style={{ fontSize: 10, color: '#6f58ff' }}>🏢 {bizName}</span></>}
-                        <br/><span style={{ fontSize: 9, color: '#666' }}>{o.targetScope}</span>
-                      </td>
-                      <td style={{ fontWeight: 600, color: '#6f58ff' }}>{o.planCode}</td>
-                      <td>{(o.amountUsdCents / 100).toFixed(2)}$</td>
-                      <td style={{ fontSize: 10 }}>{o.method}</td>
-                      <td>
-                        <span style={{ padding: '2px 6px', borderRadius: 4, fontSize: 10,
-                          background: `${statusColor}20`, color: statusColor,
-                        }}>{o.status}</span>
-                      </td>
-                      <td style={{ fontSize: 10, fontFamily: 'monospace' }}>{o.transferReference}</td>
-                      <td style={{ fontSize: 10 }}>{new Date(o.createdAt).toLocaleDateString('fr-FR')}</td>
-                      <td>
-                        {(canActivate || canFail) && (
+            {subList.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: 40, color: C.textSec, fontSize: 13 }}>Aucun abonnement trouvé avec ces filtres.</div>
+            ) : (
+              <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, background: C.card }}>
+                <thead>
+                  <tr style={{ background: C.bg }}>
+                    {['Compte', 'Email', 'Rôle', 'Business', 'Plan', 'Features IA', 'Source', 'Statut', 'Début', 'Fin', 'Mis à jour', 'Actions'].map(h => (
+                      <th key={h} style={{ padding: '8px 10px', textAlign: 'left', borderBottom: `2px solid ${C.border}`, fontSize: 10, fontWeight: 700, color: C.textSec, textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {subList.map(s => {
+                    const sb2 = statusBadge(s.status);
+                    const src2 = sourceBadge(s.source ?? 'paypal');
+                    return (
+                      <tr key={s.id} style={{ borderBottom: `1px solid ${C.border}` }}>
+                        <td style={{ padding: '8px 10px', fontWeight: 600, color: C.text }}>{s.user?.displayName ?? '—'}</td>
+                        <td style={{ padding: '8px 10px', color: C.textSec, fontSize: 11 }}>{s.user?.email ?? '—'}</td>
+                        <td style={{ padding: '8px 10px' }}><span style={{ padding: '2px 6px', borderRadius: 4, fontSize: 10, fontWeight: 600, background: '#F1F5F9', color: C.textSec }}>{s.user?.role ?? s.scope}</span></td>
+                        <td style={{ padding: '8px 10px', fontSize: 11, color: C.accent }}>{s.business?.publicName ?? '—'}</td>
+                        <td style={{ padding: '8px 10px', fontWeight: 700, color: C.accent }}>{s.planCode}</td>
+                        <td style={{ padding: '8px 10px', fontSize: 10 }}>{s.addons && s.addons.length > 0 ? s.addons.map(a => a.addonCode).join(', ') : '—'}</td>
+                        <td style={{ padding: '8px 10px' }}><span style={{ padding: '2px 6px', borderRadius: 4, fontSize: 10, fontWeight: 600, background: src2.bg, color: src2.color }}>{src2.label}</span></td>
+                        <td style={{ padding: '8px 10px' }}><span style={{ padding: '2px 6px', borderRadius: 4, fontSize: 10, fontWeight: 600, background: sb2.bg, color: sb2.color }}>{s.status}</span></td>
+                        <td style={{ padding: '8px 10px', fontSize: 11 }}>{new Date(s.startsAt).toLocaleDateString('fr-FR')}</td>
+                        <td style={{ padding: '8px 10px', fontSize: 11 }}>{s.endsAt ? new Date(s.endsAt).toLocaleDateString('fr-FR') : '—'}</td>
+                        <td style={{ padding: '8px 10px', fontSize: 11 }}>{s.updatedAt ? new Date(s.updatedAt).toLocaleDateString('fr-FR') : '—'}</td>
+                        <td style={{ padding: '8px 10px' }}>
                           <div style={{ display: 'flex', gap: 4, flexDirection: 'column' }}>
-                            {canActivate && (
-                              <button
-                                disabled={orderActionBusy !== null}
-                                onClick={async () => {
-                                  const reason = prompt('Raison de l\'activation (optionnel) :') ?? '';
-                                  setOrderActionBusy(o.id);
-                                  setOrderActionMsg(null);
-                                  try {
-                                    await admin.billingValidateOrder({ orderId: o.id, reason });
-                                    setOrderActionMsg(`✅ Forfait ${o.planCode} activé pour ${userName}`);
-                                    loadSectionData();
-                                  } catch (e: any) {
-                                    setOrderActionMsg('❌ ' + (e?.message || 'Erreur'));
-                                  } finally {
-                                    setOrderActionBusy(null);
-                                  }
-                                }}
-                                style={{ padding: '3px 8px', fontSize: 10, fontWeight: 600, border: 'none', borderRadius: 4,
-                                  background: 'rgba(76,175,80,0.2)', color: '#4caf50', cursor: 'pointer',
-                                  opacity: orderActionBusy === o.id ? 0.5 : 1,
-                                }}
-                              >
-                                {orderActionBusy === o.id ? '…' : '✅ Activer'}
-                              </button>
-                            )}
-                            {canFail && (
-                              <button
-                                disabled={orderActionBusy !== null}
-                                onClick={async () => {
-                                  const reason = prompt('Raison du refus :');
-                                  if (!reason) return;
-                                  setOrderActionBusy(o.id);
-                                  setOrderActionMsg(null);
-                                  try {
-                                    await admin.billingFailOrder({ orderId: o.id, reason });
-                                    setOrderActionMsg(`✅ Commande ${o.transferReference} refusée`);
-                                    loadSectionData();
-                                  } catch (e: any) {
-                                    setOrderActionMsg('❌ ' + (e?.message || 'Erreur'));
-                                  } finally {
-                                    setOrderActionBusy(null);
-                                  }
-                                }}
-                                style={{ padding: '3px 8px', fontSize: 10, fontWeight: 600, border: 'none', borderRadius: 4,
-                                  background: 'rgba(255,82,82,0.15)', color: '#ff5252', cursor: 'pointer',
-                                  opacity: orderActionBusy === o.id ? 0.5 : 1,
-                                }}
-                              >
-                                ❌ Refuser
+                            <button onClick={() => openDetail(s.id)} disabled={subDetailLoading}
+                              style={{ padding: '3px 8px', fontSize: 10, fontWeight: 600, border: `1px solid ${C.border}`, borderRadius: 4, background: C.card, color: C.accent, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                              🔍 Détail
+                            </button>
+                            {s.status === 'ACTIVE' && (
+                              <button onClick={() => handleRevoke(s.id)} disabled={subActionBusy === s.id}
+                                style={{ padding: '3px 8px', fontSize: 10, fontWeight: 600, border: 'none', borderRadius: 4, background: '#FEE2E2', color: '#991B1B', cursor: 'pointer', opacity: subActionBusy === s.id ? 0.5 : 1, whiteSpace: 'nowrap' }}>
+                                {subActionBusy === s.id ? '…' : '🚫 Révoquer'}
                               </button>
                             )}
                           </div>
-                        )}
-                        {o.status === 'PAID' || o.status === 'VALIDATED' ? (
-                          <span style={{ fontSize: 10, color: '#4caf50' }}>✅ Activé{o.validatedAt ? ` le ${new Date(o.validatedAt).toLocaleDateString('fr-FR')}` : ''}</span>
-                        ) : null}
-                        {o.status === 'FAILED' && o.depositorNote ? (
-                          <span style={{ fontSize: 9, color: '#888', display: 'block', marginTop: 2 }}>{o.depositorNote}</span>
-                        ) : null}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-
-            {orderTotal > 20 && (
-              <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 12 }}>
-                <button disabled={orderPage <= 1} onClick={() => setOrderPage(p => p - 1)} className="ad-btn ad-btn--sm">◀</button>
-                <span style={{ fontSize: 12, color: '#aaa', alignSelf: 'center' }}>Page {orderPage} / {Math.ceil(orderTotal / 20)}</span>
-                <button disabled={orderList.length < 20} onClick={() => setOrderPage(p => p + 1)} className="ad-btn ad-btn--sm">▶</button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              </div>
+            )}
+            {subTotal > 20 && (
+              <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 14 }}>
+                <button disabled={subPage <= 1} onClick={() => setSubPage(p => p - 1)} style={{ ...tabStyle(false), opacity: subPage <= 1 ? 0.4 : 1 }}>◀</button>
+                <span style={{ fontSize: 12, color: C.textSec, alignSelf: 'center', fontWeight: 600 }}>Page {subPage} / {Math.ceil(subTotal / 20)}</span>
+                <button disabled={subList.length < 20} onClick={() => setSubPage(p => p + 1)} style={{ ...tabStyle(false), opacity: subList.length < 20 ? 0.4 : 1 }}>▶</button>
               </div>
             )}
           </div>
         )}
 
-        {/* Manual activate */}
+        {/* ── Trials ── */}
+        {subSubTab === 'trials' && (
+          <div>
+            {trialList.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: 40, color: C.textSec, fontSize: 13 }}>Aucun essai IA enregistré.</div>
+            ) : (
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, background: C.card }}>
+                <thead>
+                  <tr style={{ background: C.bg }}>
+                    {['Utilisateur', 'Email', 'Forfait', 'Moteur', 'Statut', 'Raison', 'Dates'].map(h => (
+                      <th key={h} style={{ padding: '8px 10px', textAlign: 'left', borderBottom: `2px solid ${C.border}`, fontSize: 10, fontWeight: 700, color: C.textSec, textTransform: 'uppercase' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {trialList.map(t => {
+                    const tsb = t.status === 'ACTIVE' ? { bg: '#D1FAE5', color: '#065F46' } : t.status === 'PROPOSED' ? { bg: '#FEF3C7', color: '#92400E' } : { bg: '#F1F5F9', color: '#475569' };
+                    return (
+                      <tr key={t.id} style={{ borderBottom: `1px solid ${C.border}` }}>
+                        <td style={{ padding: '8px 10px', fontWeight: 600, color: C.text }}>{t.user?.displayName || '—'}</td>
+                        <td style={{ padding: '8px 10px', fontSize: 11, color: C.textSec }}>{t.user?.email || '—'}</td>
+                        <td style={{ padding: '8px 10px', fontWeight: 700, color: C.accent }}>{t.planCode}</td>
+                        <td style={{ padding: '8px 10px', fontSize: 11 }}>{t.sourceEngine}</td>
+                        <td style={{ padding: '8px 10px' }}><span style={{ padding: '2px 6px', borderRadius: 4, fontSize: 10, fontWeight: 600, background: tsb.bg, color: tsb.color }}>{t.status}</span></td>
+                        <td style={{ padding: '8px 10px', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 11 }}>{t.reason}</td>
+                        <td style={{ padding: '8px 10px', fontSize: 10 }}>
+                          {t.startsAt ? new Date(t.startsAt).toLocaleDateString('fr-FR') : '—'}
+                          {t.endsAt ? ` → ${new Date(t.endsAt).toLocaleDateString('fr-FR')}` : ''}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+            {trialTotal > 20 && (
+              <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 14 }}>
+                <button disabled={trialPage <= 1} onClick={() => setTrialPage(p => p - 1)} style={{ ...tabStyle(false), opacity: trialPage <= 1 ? 0.4 : 1 }}>◀</button>
+                <span style={{ fontSize: 12, color: C.textSec, alignSelf: 'center', fontWeight: 600 }}>Page {trialPage}</span>
+                <button disabled={trialList.length < 20} onClick={() => setTrialPage(p => p + 1)} style={{ ...tabStyle(false), opacity: trialList.length < 20 ? 0.4 : 1 }}>▶</button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Orders ── */}
+        {subSubTab === 'orders' && (
+          <div>
+            {orderActionMsg && (
+              <div style={{ padding: '8px 14px', borderRadius: 6, marginBottom: 12, fontSize: 12,
+                background: orderActionMsg.startsWith('✅') ? '#D1FAE5' : '#FEE2E2',
+                color: orderActionMsg.startsWith('✅') ? '#065F46' : '#991B1B', border: `1px solid ${orderActionMsg.startsWith('✅') ? '#10B981' : '#EF4444'}20`,
+              }}>{orderActionMsg}</div>
+            )}
+
+            <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap', alignItems: 'center' }}>
+              <span style={{ fontSize: 11, color: C.textSec, fontWeight: 600 }}>Filtrer :</span>
+              {['ALL', 'PENDING', 'USER_CONFIRMED', 'PAID', 'FAILED', 'CANCELED', 'EXPIRED'].map(s => (
+                <button key={s} onClick={() => { setOrderStatusFilter(s); setOrderPage(1); }} style={tabStyle(orderStatusFilter === s)}>{s === 'ALL' ? 'Tous' : s}</button>
+              ))}
+              <span style={{ marginLeft: 'auto', fontSize: 12, color: C.textSec, fontWeight: 600 }}>{orderTotal} commande{orderTotal > 1 ? 's' : ''}</span>
+            </div>
+
+            {orderList.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: 40, color: C.textSec, fontSize: 13 }}>Aucune commande trouvée.</div>
+            ) : (
+              <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, background: C.card }}>
+                <thead>
+                  <tr style={{ background: C.bg }}>
+                    {['Utilisateur', 'Forfait', 'Montant', 'Méthode', 'Statut', 'Référence', 'Date', 'Actions'].map(h => (
+                      <th key={h} style={{ padding: '8px 10px', textAlign: 'left', borderBottom: `2px solid ${C.border}`, fontSize: 10, fontWeight: 700, color: C.textSec, textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {orderList.map(o => {
+                    const userName = o.user?.profile?.displayName || o.user?.email || o.userId || '—';
+                    const bizName = o.business?.publicName;
+                    const canActivate = ['PENDING', 'USER_CONFIRMED'].includes(o.status);
+                    const canFail = ['PENDING', 'USER_CONFIRMED'].includes(o.status);
+                    const osb = orderStatusBadge(o.status);
+                    return (
+                      <tr key={o.id} style={{ borderBottom: `1px solid ${C.border}` }}>
+                        <td style={{ padding: '8px 10px' }}>
+                          <span style={{ fontWeight: 600, color: C.text }}>{userName}</span>
+                          {bizName && <><br/><span style={{ fontSize: 10, color: C.accent }}>🏢 {bizName}</span></>}
+                          <br/><span style={{ fontSize: 9, color: C.textSec }}>{o.targetScope}</span>
+                        </td>
+                        <td style={{ padding: '8px 10px', fontWeight: 700, color: C.accent }}>{o.planCode}</td>
+                        <td style={{ padding: '8px 10px' }}>{(o.amountUsdCents / 100).toFixed(2)} $</td>
+                        <td style={{ padding: '8px 10px', fontSize: 10 }}>{o.method}</td>
+                        <td style={{ padding: '8px 10px' }}><span style={{ padding: '2px 6px', borderRadius: 4, fontSize: 10, fontWeight: 600, background: osb.bg, color: osb.color }}>{o.status}</span></td>
+                        <td style={{ padding: '8px 10px', fontSize: 10, fontFamily: 'monospace' }}>{o.transferReference}</td>
+                        <td style={{ padding: '8px 10px', fontSize: 10 }}>{new Date(o.createdAt).toLocaleDateString('fr-FR')}</td>
+                        <td style={{ padding: '8px 10px' }}>
+                          {(canActivate || canFail) && (
+                            <div style={{ display: 'flex', gap: 4, flexDirection: 'column' }}>
+                              {canActivate && (
+                                <button disabled={orderActionBusy !== null}
+                                  onClick={async () => {
+                                    const reason = prompt('Raison de l\'activation (optionnel) :') ?? '';
+                                    setOrderActionBusy(o.id); setOrderActionMsg(null);
+                                    try { await admin.billingValidateOrder({ orderId: o.id, reason }); setOrderActionMsg(`✅ Forfait ${o.planCode} activé pour ${userName}`); loadSectionData(); } catch (e: any) { setOrderActionMsg('❌ ' + (e?.message || 'Erreur')); } finally { setOrderActionBusy(null); }
+                                  }}
+                                  style={{ padding: '3px 8px', fontSize: 10, fontWeight: 600, border: 'none', borderRadius: 4, background: '#D1FAE5', color: '#065F46', cursor: 'pointer', opacity: orderActionBusy === o.id ? 0.5 : 1 }}>
+                                  {orderActionBusy === o.id ? '…' : '✅ Activer'}
+                                </button>
+                              )}
+                              {canFail && (
+                                <button disabled={orderActionBusy !== null}
+                                  onClick={async () => {
+                                    const reason = prompt('Raison du refus :'); if (!reason) return;
+                                    setOrderActionBusy(o.id); setOrderActionMsg(null);
+                                    try { await admin.billingFailOrder({ orderId: o.id, reason }); setOrderActionMsg(`✅ Commande ${o.transferReference} refusée`); loadSectionData(); } catch (e: any) { setOrderActionMsg('❌ ' + (e?.message || 'Erreur')); } finally { setOrderActionBusy(null); }
+                                  }}
+                                  style={{ padding: '3px 8px', fontSize: 10, fontWeight: 600, border: 'none', borderRadius: 4, background: '#FEE2E2', color: '#991B1B', cursor: 'pointer', opacity: orderActionBusy === o.id ? 0.5 : 1 }}>
+                                  ❌ Refuser
+                                </button>
+                              )}
+                            </div>
+                          )}
+                          {(o.status === 'PAID' || o.status === 'VALIDATED') && <span style={{ fontSize: 10, color: C.success }}>✅ Activé{o.validatedAt ? ` le ${new Date(o.validatedAt).toLocaleDateString('fr-FR')}` : ''}</span>}
+                          {o.status === 'FAILED' && o.depositorNote && <span style={{ fontSize: 9, color: C.textSec, display: 'block', marginTop: 2 }}>{o.depositorNote}</span>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              </div>
+            )}
+            {orderTotal > 20 && (
+              <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 14 }}>
+                <button disabled={orderPage <= 1} onClick={() => setOrderPage(p => p - 1)} style={{ ...tabStyle(false), opacity: orderPage <= 1 ? 0.4 : 1 }}>◀</button>
+                <span style={{ fontSize: 12, color: C.textSec, alignSelf: 'center', fontWeight: 600 }}>Page {orderPage} / {Math.ceil(orderTotal / 20)}</span>
+                <button disabled={orderList.length < 20} onClick={() => setOrderPage(p => p + 1)} style={{ ...tabStyle(false), opacity: orderList.length < 20 ? 0.4 : 1 }}>▶</button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Manual activate ── */}
         {subSubTab === 'activate' && (
-          <div style={{ maxWidth: 440 }}>
-            <h3 style={{ fontSize: 15, color: 'var(--color-text-primary, #fff)', marginBottom: 12 }}>🔑 Activer un forfait manuellement</h3>
+          <div style={{ maxWidth: 480 }}>
+            <h3 style={{ fontSize: 14, color: C.text, fontWeight: 700, marginBottom: 12 }}>🔑 Activer un forfait manuellement</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <input
-                placeholder="ID utilisateur"
-                value={activateForm.userId}
-                onChange={e => setActivateForm(f => ({ ...f, userId: e.target.value }))}
-                style={{ padding: 8, borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#fff', fontSize: 13 }}
-              />
-              <select
-                value={activateForm.planCode}
-                onChange={e => setActivateForm(f => ({ ...f, planCode: e.target.value }))}
-                style={{ padding: 8, borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#fff', fontSize: 13 }}
-              >
-                {['FREE', 'BOOST', 'AUTO', 'PRO_VENDOR', 'STARTER', 'BUSINESS', 'SCALE'].map(p => (
-                  <option key={p} value={p}>{p}</option>
-                ))}
+              <input placeholder="ID utilisateur" value={activateForm.userId} onChange={e => setActivateForm(f => ({ ...f, userId: e.target.value }))} style={inputStyle} />
+              <select value={activateForm.planCode} onChange={e => setActivateForm(f => ({ ...f, planCode: e.target.value }))} style={selectStyle}>
+                {['FREE', 'BOOST', 'AUTO', 'PRO_VENDOR', 'STARTER', 'BUSINESS', 'SCALE'].map(p => <option key={p} value={p}>{p}</option>)}
               </select>
-              <input
-                type="number"
-                placeholder="Durée (jours)"
-                value={activateForm.durationDays}
-                onChange={e => setActivateForm(f => ({ ...f, durationDays: Number(e.target.value) }))}
-                style={{ padding: 8, borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#fff', fontSize: 13 }}
-              />
-              <input
-                placeholder="Raison de l'activation"
-                value={activateForm.reason}
-                onChange={e => setActivateForm(f => ({ ...f, reason: e.target.value }))}
-                style={{ padding: 8, borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#fff', fontSize: 13 }}
-              />
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--color-text-secondary, #aaa)' }}>
-                <input
-                  type="checkbox"
-                  checked={activateForm.exempt}
-                  onChange={e => setActivateForm(f => ({ ...f, exempt: e.target.checked }))}
-                />
+              <input type="number" placeholder="Durée (jours)" value={activateForm.durationDays} onChange={e => setActivateForm(f => ({ ...f, durationDays: Number(e.target.value) }))} style={inputStyle} />
+              <input placeholder="Raison de l'activation" value={activateForm.reason} onChange={e => setActivateForm(f => ({ ...f, reason: e.target.value }))} style={inputStyle} />
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: C.textSec }}>
+                <input type="checkbox" checked={activateForm.exempt} onChange={e => setActivateForm(f => ({ ...f, exempt: e.target.checked }))} />
                 Exempter du paiement (gratuit)
               </label>
-              <button
-                onClick={handleActivate}
-                disabled={!activateForm.userId || !activateForm.reason}
-                style={{ padding: '10px 20px', fontSize: 13, fontWeight: 600, border: 'none', borderRadius: 8, background: 'linear-gradient(135deg, #6f58ff, #9b7aff)', color: '#fff', cursor: 'pointer', opacity: (!activateForm.userId || !activateForm.reason) ? 0.5 : 1 }}
-              >
+              <button onClick={handleActivate} disabled={!activateForm.userId || !activateForm.reason}
+                style={{ padding: '10px 20px', fontSize: 13, fontWeight: 700, border: 'none', borderRadius: 8, background: C.accent, color: '#FFF', cursor: 'pointer', opacity: (!activateForm.userId || !activateForm.reason) ? 0.4 : 1, transition: 'all 160ms ease' }}>
                 Activer le forfait
               </button>
-              {activateMsg && <p style={{ fontSize: 12, color: activateMsg.startsWith('✅') ? '#4caf50' : '#ff5252' }}>{activateMsg}</p>}
+              {activateMsg && <p style={{ fontSize: 12, color: activateMsg.startsWith('✅') ? C.success : C.danger, margin: '4px 0 0' }}>{activateMsg}</p>}
             </div>
           </div>
         )}
+
+        </div>
       </div>
     );
   };
 
   // ═══════════════════════════  VERIFICATION ADMIN  ═══════════════════════════
 
-  const renderVerification = () => {
-    const [verRequests, setVerRequests] = useState<VerificationListResponse | null>(null);
-    const [verLoading, setVerLoading] = useState(true);
-    const [verFilter, setVerFilter] = useState('');
-    const [verPage, setVerPage] = useState(1);
-    const [verDetail, setVerDetail] = useState<VerificationRequestData | null>(null);
-    const [verActionNote, setVerActionNote] = useState('');
-    const [verActing, setVerActing] = useState(false);
-    const [verScanResult, setVerScanResult] = useState<string | null>(null);
-
-    const loadVerRequests = async () => {
-      setVerLoading(true);
-      try {
-        const data = await verification.admin.getRequests({ status: verFilter || undefined, page: verPage, limit: 20 });
-        setVerRequests(data);
-      } catch { /* ignore */ }
-      setVerLoading(false);
-    };
-
-    useEffect(() => { void loadVerRequests(); }, [verFilter, verPage]);
-
-    const handleVerAction = async (id: string, action: 'approve' | 'reject' | 'revoke' | 'lockVerified' | 'lockRevoked' | 'reactivate') => {
-      setVerActing(true);
-      try {
-        await verification.admin[action](id, verActionNote || undefined);
-        setVerActionNote('');
-        setVerDetail(null);
-        await loadVerRequests();
-      } catch { /* ignore */ }
-      setVerActing(false);
-    };
-
-    const handleAiScan = async () => {
-      setVerActing(true);
-      try {
-        const result = await verification.admin.runAiScan();
-        setVerScanResult(JSON.stringify(result, null, 2));
-        await loadVerRequests();
-      } catch { /* ignore */ }
-      setVerActing(false);
-    };
-
-    const loadDetail = async (id: string) => {
-      try {
-        const data = await verification.admin.getDetail(id);
-        setVerDetail(data);
-      } catch { /* ignore */ }
-    };
-
-    const STATUS_COLORS: Record<string, string> = {
-      UNVERIFIED: '#888', PENDING: '#f0ad4e', VERIFIED: '#5cb85c', REJECTED: '#d9534f',
-      AI_ELIGIBLE: '#6f58ff', PARTIALLY_VERIFIED: '#5bc0de', REVOKED: '#d9534f',
-      ADMIN_LOCKED_VERIFIED: '#5cb85c', ADMIN_LOCKED_REVOKED: '#d9534f',
-    };
-
-    return (
-      <div className="ad-section">
-        <div className="ad-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <h2>✅ Vérifications</h2>
-          <button className="ad-btn ad-btn--primary" onClick={handleAiScan} disabled={verActing} style={{ fontSize: 13 }}>
-            {verActing ? '...' : '🤖 Lancer scan IA'}
-          </button>
-        </div>
-
-        {verScanResult && (
-          <pre style={{ background: 'rgba(111,88,255,0.08)', padding: 12, borderRadius: 8, fontSize: 12, marginBottom: 16, maxHeight: 200, overflow: 'auto' }}>
-            {verScanResult}
-          </pre>
-        )}
-
-        {/* Filtre */}
-        <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
-          {['', 'PENDING', 'VERIFIED', 'AI_ELIGIBLE', 'PARTIALLY_VERIFIED', 'REJECTED', 'REVOKED', 'ADMIN_LOCKED_VERIFIED', 'ADMIN_LOCKED_REVOKED'].map(s => (
-            <button
-              key={s}
-              onClick={() => { setVerFilter(s); setVerPage(1); }}
-              style={{
-                padding: '6px 14px', borderRadius: 8, fontSize: 12, cursor: 'pointer',
-                background: verFilter === s ? 'var(--color-accent)' : 'rgba(255,255,255,0.06)',
-                color: verFilter === s ? '#fff' : 'var(--color-text-muted)',
-                border: 'none',
-              }}
-            >
-              {s || 'Tous'}
-            </button>
-          ))}
-        </div>
-
-        {/* Detail modal */}
-        {verDetail && (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
-            onClick={() => setVerDetail(null)}>
-            <div onClick={e => e.stopPropagation()} style={{ background: 'var(--color-bg-primary)', borderRadius: 16, padding: 24, maxWidth: 600, width: '100%', maxHeight: '80vh', overflow: 'auto' }}>
-              <h3 style={{ marginBottom: 12 }}>Demande #{verDetail.id.slice(-6)}</h3>
-
-              <div style={{ display: 'grid', gap: 8, fontSize: 13, marginBottom: 16 }}>
-                <div><b>Utilisateur:</b> {verDetail.user?.profile?.displayName ?? verDetail.business?.publicName ?? '—'}</div>
-                <div><b>Statut:</b> <span style={{ color: STATUS_COLORS[verDetail.status] }}>{verDetail.status}</span></div>
-                <div><b>Source:</b> {verDetail.source}</div>
-                <div><b>Score IA:</b> {verDetail.freshAiScore ?? verDetail.aiScore ?? '—'}/100</div>
-                <div><b>Recommandation IA:</b> {verDetail.freshRecommendation ?? verDetail.aiRecommendation ?? '—'}</div>
-                <div><b>Admin lock:</b> {verDetail.adminLocked ? '🔒 Oui' : 'Non'}</div>
-                {verDetail.adminNote && <div><b>Note admin:</b> {verDetail.adminNote}</div>}
-              </div>
-
-              {/* Metrics */}
-              {verDetail.freshMetrics && (
-                <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 10, padding: 12, marginBottom: 16 }}>
-                  <h4 style={{ marginBottom: 8, fontSize: 13 }}>Métriques actuelles</h4>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6, fontSize: 12 }}>
-                    <div>📦 Transactions: {verDetail.freshMetrics.completedOrders}</div>
-                    <div>⭐ Note: {verDetail.freshMetrics.avgRating}/5</div>
-                    <div>💬 Avis: {verDetail.freshMetrics.reviewCount}</div>
-                    <div>📅 Ancienneté: {verDetail.freshMetrics.accountAgeDays}j</div>
-                    <div>🚨 Litiges: {verDetail.freshMetrics.disputeCount}</div>
-                    <div>🔥 Activité: {verDetail.freshMetrics.activityScore}/100</div>
-                  </div>
-                </div>
-              )}
-
-              {/* History */}
-              {verDetail.history?.length > 0 && (
-                <div style={{ marginBottom: 16 }}>
-                  <h4 style={{ marginBottom: 8, fontSize: 13 }}>Historique</h4>
-                  {verDetail.history.map(h => (
-                    <div key={h.id} style={{ fontSize: 12, padding: '4px 0', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-                      <span style={{ color: STATUS_COLORS[h.toStatus] }}>{h.action}</span>
-                      {h.reason && <span style={{ color: 'var(--color-text-muted)' }}> — {h.reason}</span>}
-                      <span style={{ float: 'right', color: 'var(--color-text-muted)' }}>{new Date(h.createdAt).toLocaleDateString('fr-FR')}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Admin actions */}
-              <textarea
-                value={verActionNote}
-                onChange={e => setVerActionNote(e.target.value)}
-                placeholder="Note admin (optionnel)..."
-                style={{ width: '100%', minHeight: 60, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, padding: 8, color: 'inherit', fontSize: 13, marginBottom: 12 }}
-              />
-
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <button className="ad-btn ad-btn--primary" onClick={() => handleVerAction(verDetail.id, 'approve')} disabled={verActing}>✅ Approuver</button>
-                <button className="ad-btn" onClick={() => handleVerAction(verDetail.id, 'reject')} disabled={verActing} style={{ background: '#d9534f', color: '#fff' }}>✕ Rejeter</button>
-                <button className="ad-btn" onClick={() => handleVerAction(verDetail.id, 'revoke')} disabled={verActing} style={{ background: '#d9534f', color: '#fff' }}>⊘ Révoquer</button>
-                <button className="ad-btn" onClick={() => handleVerAction(verDetail.id, 'lockVerified')} disabled={verActing} style={{ background: '#5cb85c', color: '#fff' }}>🔒 Lock Vérifié</button>
-                <button className="ad-btn" onClick={() => handleVerAction(verDetail.id, 'lockRevoked')} disabled={verActing} style={{ background: '#888', color: '#fff' }}>🔒 Lock Révoqué</button>
-                <button className="ad-btn" onClick={() => handleVerAction(verDetail.id, 'reactivate')} disabled={verActing} style={{ background: '#6f58ff', color: '#fff' }}>♻ Réactiver</button>
-              </div>
-
-              <button onClick={() => setVerDetail(null)} style={{ marginTop: 16, background: 'none', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer' }}>Fermer</button>
-            </div>
-          </div>
-        )}
-
-        {/* Table */}
-        {verLoading ? (
-          <div style={{ textAlign: 'center', padding: 32 }}>Chargement...</div>
-        ) : (
-          <>
-            <table className="ad-table" style={{ width: '100%', fontSize: 13 }}>
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>Nom</th>
-                  <th>Type</th>
-                  <th>Statut</th>
-                  <th>Score IA</th>
-                  <th>Source</th>
-                  <th>Date</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {verRequests?.requests.map(r => (
-                  <tr key={r.id}>
-                    <td style={{ fontFamily: 'monospace', fontSize: 11 }}>#{r.id.slice(-6)}</td>
-                    <td>{r.user?.profile?.displayName ?? r.business?.publicName ?? '—'}</td>
-                    <td>{r.userId ? '👤 User' : '🏪 Business'}</td>
-                    <td><span style={{ color: STATUS_COLORS[r.status], fontWeight: 600 }}>{r.status}</span></td>
-                    <td>{r.aiScore != null ? `${r.aiScore}/100` : '—'}</td>
-                    <td>{r.source}</td>
-                    <td>{new Date(r.createdAt).toLocaleDateString('fr-FR')}</td>
-                    <td>
-                      <button className="ad-btn ad-btn--sm" onClick={() => loadDetail(r.id)}>Détails</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-
-            {/* Pagination */}
-            {verRequests && verRequests.pages > 1 && (
-              <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 16 }}>
-                {Array.from({ length: verRequests.pages }, (_, i) => (
-                  <button
-                    key={i + 1}
-                    onClick={() => setVerPage(i + 1)}
-                    style={{
-                      padding: '4px 12px', borderRadius: 6,
-                      background: verPage === i + 1 ? 'var(--color-accent)' : 'rgba(255,255,255,0.06)',
-                      color: verPage === i + 1 ? '#fff' : 'var(--color-text-muted)',
-                      border: 'none', cursor: 'pointer',
-                    }}
-                  >
-                    {i + 1}
-                  </button>
-                ))}
-              </div>
-            )}
-          </>
-        )}
-      </div>
-    );
-  };
+  const renderVerification = () => <AdminVerificationPanel />;
 
   // ═══════════════════════════════════════════════
   // IA TABS — 5 sections Intelligence Artificielle
@@ -3231,67 +3415,7 @@ export function AdminDashboard() {
     else if (activeSection === 'ia-message') loadIaData('messages');
   }, [activeSection, loadIaData]);
 
-  const renderIaAnalytique = () => {
-    const d = iaData as any;
-    return (
-      <div className="ad-content-block">
-        <h2 className="ad-content-title">📈 Kin-Sell Analytique</h2>
-        <p className="ad-content-subtitle" style={{ color: 'var(--ad-text-3)', marginBottom: 16 }}>Vue globale du marché, des utilisateurs et de l'activité de la plateforme.</p>
-        {iaLoading ? <p className="ad-content-subtitle">Chargement des données analytiques…</p> : !d ? <p className="ad-content-subtitle">Aucune donnée</p> : (
-          <>
-            {/* KPIs principaux */}
-            <div className="ad-stats-row" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, marginBottom: 20 }}>
-              <div className="ad-stat-card glass-card" style={{ padding: 16, borderRadius: 12, textAlign: 'center' }}>
-                <div style={{ fontSize: 28, fontWeight: 700, color: '#6f58ff' }}>{d.users?.total ?? 0}</div>
-                <div style={{ fontSize: 12, color: 'var(--ad-text-3)' }}>Utilisateurs total</div>
-                <div style={{ fontSize: 11, color: '#4ecdc4' }}>+{d.users?.new24h ?? 0} (24h) · +{d.users?.new7d ?? 0} (7j)</div>
-              </div>
-              <div className="ad-stat-card glass-card" style={{ padding: 16, borderRadius: 12, textAlign: 'center' }}>
-                <div style={{ fontSize: 28, fontWeight: 700, color: '#6f58ff' }}>{d.listings?.active ?? 0}</div>
-                <div style={{ fontSize: 12, color: 'var(--ad-text-3)' }}>Articles actifs</div>
-                <div style={{ fontSize: 11, color: '#4ecdc4' }}>+{d.listings?.new24h ?? 0} (24h) / {d.listings?.total ?? 0} total</div>
-              </div>
-              <div className="ad-stat-card glass-card" style={{ padding: 16, borderRadius: 12, textAlign: 'center' }}>
-                <div style={{ fontSize: 28, fontWeight: 700, color: '#6f58ff' }}>{d.orders?.last7d ?? 0}</div>
-                <div style={{ fontSize: 12, color: 'var(--ad-text-3)' }}>Commandes (7j)</div>
-                <div style={{ fontSize: 11, color: '#4ecdc4' }}>{money(d.orders?.revenue7dCents ?? 0)} revenu</div>
-              </div>
-              <div className="ad-stat-card glass-card" style={{ padding: 16, borderRadius: 12, textAlign: 'center' }}>
-                <div style={{ fontSize: 28, fontWeight: 700, color: '#6f58ff' }}>{d.businesses ?? 0}</div>
-                <div style={{ fontSize: 12, color: 'var(--ad-text-3)' }}>Comptes Business</div>
-              </div>
-            </div>
-
-            {/* Catégories tendance */}
-            <h3 style={{ fontSize: 15, marginBottom: 8 }}>🔥 Catégories tendance (30j)</h3>
-            <div className="ad-table-wrap" style={{ marginBottom: 20 }}>
-              <table className="ad-table">
-                <thead><tr><th>Catégorie</th><th>Articles</th></tr></thead>
-                <tbody>
-                  {(d.trendingCategories ?? []).map((c: any, i: number) => (
-                    <tr key={i}><td>{c.category}</td><td>{c.count}</td></tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Top villes */}
-            <h3 style={{ fontSize: 15, marginBottom: 8 }}>🏙️ Top villes</h3>
-            <div className="ad-table-wrap">
-              <table className="ad-table">
-                <thead><tr><th>Ville</th><th>Articles actifs</th></tr></thead>
-                <tbody>
-                  {(d.topCities ?? []).map((c: any, i: number) => (
-                    <tr key={i}><td>{c.city ?? 'Non spécifié'}</td><td>{c.count}</td></tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </>
-        )}
-      </div>
-    );
-  };
+  const renderIaAnalytique = () => <AdminAnalyticsPanel />;
 
   const renderIaMarchande = () => {
     const d = iaData as any;
@@ -4722,8 +4846,6 @@ export function AdminDashboard() {
 
         {error && <div className="ad-badge ad-badge--danger" style={{ padding: '10px 16px', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>⚠ {error} <button className="ad-btn ad-btn--primary" style={{ marginLeft: 'auto', padding: '4px 12px', fontSize: 12 }} onClick={() => { setError(null); loadSectionData(); }}>↻ Réessayer</button></div>}
         {success && <div className="ad-badge ad-badge--success" style={{ padding: '10px 16px', fontSize: 13 }}>✅ {success}</div>}
-
-        <AdBanner page="admin" forceKinSell />
 
         {renderSection()}
       </main>

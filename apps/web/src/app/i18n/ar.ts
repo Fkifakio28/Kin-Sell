@@ -79,6 +79,8 @@ export const ar: Record<string, string> = {
   "auth.identifierPlaceholder": "البريد، @الاسم أو معرّف Kin-Sell",
   "auth.passwordLabel": "كلمة المرور",
   "auth.passwordPlaceholder": "كلمة المرور",
+  "auth.showPassword": "إظهار كلمة المرور",
+  "auth.hidePassword": "إخفاء كلمة المرور",
   "auth.rememberMe": "تذكرني",
   "auth.forgotPassword": "نسيت كلمة المرور؟",
   "auth.loggingIn": "جاري تسجيل الدخول...",
@@ -243,3 +245,4 @@ export const ar: Record<string, string> = {
   "zone.discoveryAll": "كل شيء",
   "zone.discoveryLocalOnly": "محلي فقط",
 };
+

@@ -77,6 +77,19 @@ export interface VerificationListResponse {
   pages: number;
 }
 
+export interface VerificationKpi {
+  pending: number;
+  verified: number;
+  verifiedAi: number;
+  partiallyVerified: number;
+  rejected: number;
+  revoked: number;
+  highRisk: number;
+  total: number;
+  byStatus: Record<string, number>;
+  bySource: Record<string, number>;
+}
+
 // ─── USER ENDPOINTS ───────────────────────────
 
 export const verification = {
@@ -103,8 +116,12 @@ export const verification = {
   // ─── ADMIN ENDPOINTS ─────────────────────────
 
   admin: {
+    // KPI overview
+    getKpi: () =>
+      request<VerificationKpi>("/verification/admin/kpi"),
+
     // Liste des demandes
-    getRequests: (filters?: { status?: string; page?: number; limit?: number }) =>
+    getRequests: (filters?: { status?: string; page?: number; limit?: number; email?: string; source?: string; accountType?: string; minTrustScore?: number; maxTrustScore?: number; dateFrom?: string; dateTo?: string }) =>
       request<VerificationListResponse>("/verification/admin/requests", { params: filters as any }),
 
     // Détail d'une demande

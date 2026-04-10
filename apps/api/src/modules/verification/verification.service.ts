@@ -135,11 +135,30 @@ export async function getVerificationRequests(filters: {
   status?: VerificationStatus;
   page?: number;
   limit?: number;
+  email?: string;
+  source?: string;
+  accountType?: "USER" | "BUSINESS";
+  minTrustScore?: number;
+  maxTrustScore?: number;
+  dateFrom?: string;
+  dateTo?: string;
 }) {
   const page = filters.page ?? 1;
   const limit = filters.limit ?? 20;
   const where: Prisma.VerificationRequestWhereInput = {};
   if (filters.status) where.status = filters.status;
+  if (filters.source) where.source = filters.source as any;
+  if (filters.accountType === "USER") where.userId = { not: null };
+  if (filters.accountType === "BUSINESS") where.businessId = { not: null };
+  if (filters.email) where.user = { email: { contains: filters.email, mode: "insensitive" } };
+  if (filters.minTrustScore != null || filters.maxTrustScore != null) {
+    where.user = { ...((where.user as any) ?? {}), trustScore: { gte: filters.minTrustScore ?? 0, lte: filters.maxTrustScore ?? 100 } };
+  }
+  if (filters.dateFrom || filters.dateTo) {
+    where.createdAt = {};
+    if (filters.dateFrom) (where.createdAt as any).gte = new Date(filters.dateFrom);
+    if (filters.dateTo) (where.createdAt as any).lte = new Date(filters.dateTo + "T23:59:59Z");
+  }
 
   const [requests, total] = await Promise.all([
     prisma.verificationRequest.findMany({
@@ -584,4 +603,42 @@ export function startVerificationScheduler() {
   // Initial run after 2 minutes
   setTimeout(() => { void run(); }, 2 * 60 * 1000);
   setInterval(() => { void run(); }, SIX_HOURS);
+}
+
+// ─── VERIFICATION KPI ─────────────────────────
+
+export async function getVerificationKpi() {
+  const allCounts = await prisma.verificationRequest.groupBy({
+    by: ["status"],
+    _count: { id: true },
+  });
+
+  const countMap: Record<string, number> = {};
+  for (const c of allCounts) countMap[c.status] = c._count.id;
+
+  const sourceCounts = await prisma.verificationRequest.groupBy({
+    by: ["source"],
+    _count: { id: true },
+  });
+  const sourceMap: Record<string, number> = {};
+  for (const s of sourceCounts) sourceMap[s.source] = s._count.id;
+
+  const highRisk = await prisma.verificationRequest.count({
+    where: { aiScore: { lt: 40 }, status: { notIn: ["REJECTED", "REVOKED", "ADMIN_LOCKED_REVOKED"] } },
+  });
+
+  const total = Object.values(countMap).reduce((a, b) => a + b, 0);
+
+  return {
+    pending: countMap["PENDING"] ?? 0,
+    verified: (countMap["VERIFIED"] ?? 0) + (countMap["ADMIN_LOCKED_VERIFIED"] ?? 0),
+    verifiedAi: countMap["AI_ELIGIBLE"] ?? 0,
+    partiallyVerified: countMap["PARTIALLY_VERIFIED"] ?? 0,
+    rejected: countMap["REJECTED"] ?? 0,
+    revoked: (countMap["REVOKED"] ?? 0) + (countMap["ADMIN_LOCKED_REVOKED"] ?? 0),
+    highRisk,
+    total,
+    byStatus: countMap,
+    bySource: sourceMap,
+  };
 }

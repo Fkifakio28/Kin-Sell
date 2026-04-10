@@ -4,6 +4,7 @@ import { requireAuth, requireRoles, type AuthenticatedRequest } from "../../shar
 import { Role } from "../../types/roles.js";
 import { asyncHandler } from "../../shared/utils/async-handler.js";
 import { rateLimit, RateLimits } from "../../shared/middleware/rate-limit.middleware.js";
+import { scrapeGuard } from "../../shared/middleware/scrape-guard.middleware.js";
 import { requireNoRestriction } from "../../shared/middleware/trust-guard.middleware.js";
 import * as listingsService from "./listings.service.js";
 import * as bulkImportService from "./bulk-import.service.js";
@@ -90,6 +91,8 @@ const router = Router();
 /* ── Public search ── */
 router.get(
   "/search",
+  scrapeGuard(),
+  rateLimit(RateLimits.PUBLIC_SEARCH),
   asyncHandler(async (request, response) => {
     const payload = searchSchema.parse(request.query);
     const result = await listingsService.searchListings(payload);
@@ -117,6 +120,8 @@ router.post(
 /* ── Public: latest listings (products / services) ── */
 router.get(
   "/latest",
+  scrapeGuard(),
+  rateLimit(RateLimits.PUBLIC_SEARCH),
   asyncHandler(async (request, response) => {
     const payload = z.object({
       type: listingTypeSchema.optional(),
@@ -272,6 +277,8 @@ router.get(
 /* ── Bundles actifs (public) ── */
 router.get(
   "/bundles/active",
+  scrapeGuard(),
+  rateLimit(RateLimits.PUBLIC_SEARCH),
   asyncHandler(async (_request, response) => {
     const bundles = await listingsService.getActiveBundles();
     response.json(bundles);

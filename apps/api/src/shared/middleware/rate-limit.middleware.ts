@@ -45,6 +45,14 @@ export const RateLimits = {
   REGISTER: { windowMs: 3600_000, max: 3, label: "REGISTER" },
   /** Ad tracking (impression/click): 60 per minute per IP */
   AD_TRACKING: { windowMs: 60_000, max: 60, label: "AD_TRACKING" },
+  /** Public search endpoints: 60 per minute per IP */
+  PUBLIC_SEARCH: { windowMs: 60_000, max: 60, label: "PUBLIC_SEARCH" },
+  /** Public feeds/explorer pages: 60 per minute per IP */
+  PUBLIC_EXPLORE: { windowMs: 60_000, max: 60, label: "PUBLIC_EXPLORE" },
+  /** Public blog/feed: 60 per minute per IP */
+  PUBLIC_FEED: { windowMs: 60_000, max: 60, label: "PUBLIC_FEED" },
+  /** Public ad banner: 120 per minute per IP */
+  PUBLIC_AD_BANNER: { windowMs: 60_000, max: 120, label: "PUBLIC_AD_BANNER" },
 } as const;
 
 type RateLimitConfig = { windowMs: number; max: number; label: string };
@@ -80,7 +88,8 @@ async function redisRateCheck(key: string, windowMs: number): Promise<number> {
 export function rateLimit(config: RateLimitConfig) {
   return async (req: Request, _res: Response, next: NextFunction): Promise<void> => {
     const authReq = req as AuthenticatedRequest;
-    const identifier = authReq.auth?.userId ?? req.ip ?? "unknown";
+    const ip = req.ip ?? "unknown";
+    const identifier = authReq.auth?.userId ? `${authReq.auth.userId}|${ip}` : ip;
     const key = `${identifier}:${config.label}`;
 
     // Try Redis first
