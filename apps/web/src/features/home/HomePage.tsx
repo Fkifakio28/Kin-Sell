@@ -870,181 +870,135 @@ export function HomePage() {
           </section>
         </div>
 
-        {/* ── SO-KIN FEED MOBILE — cards identiques à la page So-Kin ── */}
-        <section className="h-sokin-mobile-feed">
-          <div className="h-sokin-mobile-header">
-            <p className="h-sokin-title">So-Kin</p>
-            <p className="h-sokin-subtitle">{t('home.sokinFeed')}</p>
-          </div>
-          {sokinFeed.length === 0 ? (
-            <div className="h-sokin-card glass-card">
-              <p className="h-sokin-text" style={{ opacity: 0.6 }}>{t('home.noSokinPosts')}</p>
-            </div>
-          ) : (
-            <div className="h-sokin-mobile-cards">
-              {sokinFeed.slice(0, 4).map((post) => {
-                const profile = post.author?.profile;
-                const authorName = profile?.displayName ?? 'Utilisateur';
-                const authorAvatar = profile?.avatarUrl;
-                const cleanHandle = (profile?.username ?? post.author?.id ?? '').replace(/^@/, '');
-                const postLocation = (post as any).location ?? profile?.city ?? null;
-                const postSubject = (post as any).subject;
-                const postHashtags = (post.hashtags ?? []) as string[];
-                const postTags = (post.tags ?? []) as string[];
-                const ptIconMap: Record<string, string> = { SHOWCASE: '📸', DISCUSSION: '💬', QUESTION: '❓', SELLING: '🛍️', PROMO: '🏷️', SEARCH: '🔎', UPDATE: '🔄', REVIEW: '📝', TREND: '🔥' };
-                const ptLabelMap: Record<string, string> = { SHOWCASE: 'Showcase', DISCUSSION: 'Discussion', QUESTION: 'Question', SELLING: 'Vente', PROMO: 'Promo', SEARCH: 'Recherche', UPDATE: 'Actualité', REVIEW: 'Avis', TREND: 'Tendance' };
-                const mediaItems = (post.mediaUrls ?? []).filter(u => u.trim()).slice(0, 5).map(u => ({
-                  url: u,
-                  type: /\.(mp4|webm|mov|ogg)(\?.*)?$/i.test(u) ? 'video' as const : 'image' as const,
-                }));
-                const relDiff = Date.now() - new Date(post.createdAt).getTime();
-                const relM = Math.floor(relDiff / 60_000);
-                const relTimeStr = relM < 1 ? 'maintenant' : relM < 60 ? `${relM} min` : relM < 1440 ? `${Math.floor(relM / 60)} h` : relM < 10080 ? `${Math.floor(relM / 1440)} j` : new Date(post.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
-                const replyCount = post.comments ?? 0;
-
-                return (
-                  <article key={post.id} className="sk-card" onClick={() => navigate('/sokin')} style={{ cursor: 'pointer' }}>
-                    <header className="sk-card-header">
-                      <div className="sk-card-author" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <div className="sk-card-avatar-wrap">
-                          {authorAvatar ? (
-                            <img src={resolveMediaUrl(authorAvatar)} alt={authorName} className="sk-card-avatar" />
-                          ) : (
-                            <span className="sk-card-avatar-empty" aria-hidden="true">
-                              {authorName.charAt(0).toUpperCase()}
-                            </span>
-                          )}
-                        </div>
-                        <div className="sk-card-author-info">
-                          <div className="sk-card-author-line">
-                            <strong className="sk-card-author-name">{authorName}</strong>
-                            <span className="sk-card-type-pill">
-                              <span>{ptIconMap[post.postType] ?? '📌'}</span>
-                              <span>{ptLabelMap[post.postType] ?? post.postType}</span>
-                            </span>
-                          </div>
-                          <span className="sk-card-author-meta">
-                            <span className="sk-card-author-handle">@{cleanHandle}</span>
-                            <span className="sk-card-author-time"> · {relTimeStr}</span>
-                            {postLocation && <span className="sk-card-author-loc"> · 📍 {postLocation}</span>}
-                          </span>
-                        </div>
-                      </div>
-                    </header>
-
-                    {postSubject && (
-                      <div className="sk-card-subject-bar">
-                        <h3 className="sk-card-subject">{postSubject}</h3>
-                      </div>
-                    )}
-
-                    {post.text ? (
-                      mediaItems.length > 0
-                        ? <p className="sk-card-text">{post.text}</p>
-                        : (
-                          <div className="sk-card-text-only" style={{ background: `linear-gradient(135deg, #000, ${['#1c133b', '#2b1649', '#321f58', '#161616'][post.id.charCodeAt(0) % 4]})` }}>
-                            <p className="sk-card-text sk-card-text--centered">{post.text}</p>
-                          </div>
-                        )
-                    ) : null}
-
-                    {(postHashtags.length > 0 || postTags.length > 0) && (
-                      <div className="sk-card-tags">
-                        {postHashtags.map(h => <span key={h} className="sk-card-hashtag">#{h}</span>)}
-                        {postTags.map(tag => <span key={tag} className="sk-card-tag">@{tag}</span>)}
-                      </div>
-                    )}
-
-                    {mediaItems.length > 0 && (
-                      <div className={`sk-media-grid sk-media-grid--${mediaItems.length}`}>
-                        {mediaItems.map((item, i) => (
-                          <div key={i} className="sk-media-item">
-                            {item.type === 'video' ? (
-                              <>
-                                <video src={resolveMediaUrl(item.url)} muted playsInline preload="none" />
-                                <span className="sk-media-play-icon" aria-hidden="true">▶</span>
-                              </>
-                            ) : (
-                              <img src={resolveMediaUrl(item.url)} alt="" loading="lazy" />
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    <div className="sk-card-counters">
-                      {(post.likes ?? 0) > 0 && (
-                        <span className="sk-card-counter">
-                          <span className="sk-card-counter-dot sk-card-counter-dot--like" />
-                          {post.likes} j'aime
-                        </span>
-                      )}
-                      {replyCount > 0 && (
-                        <span className="sk-card-counter">
-                          {replyCount} commentaire{replyCount > 1 ? 's' : ''}
-                        </span>
-                      )}
-                      {(post.shares ?? 0) > 0 && (
-                        <span className="sk-card-counter">
-                          {post.shares} repost{(post.shares ?? 0) > 1 ? 's' : ''}
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="sk-card-social-bar">
-                      <span className="sk-social-btn">👍 J'aime</span>
-                      <span className="sk-social-btn">💬 Commenter</span>
-                      <span className="sk-social-btn">🔁 Partager</span>
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-          )}
-          <button type="button" onClick={() => navigate('/sokin')} className="glass-button primary h-sokin-cta" style={{ marginTop: '0.5rem' }}>{t('home.viewMoreSokin')}</button>
-        </section>
-
         {/* ── RIGHT SIDEBAR ── */}
         <aside className="h-right h-reveal">
           <div className="h-sokin-box glass-container">
             <p className="h-sokin-title">So-Kin</p>
             <p className="h-sokin-subtitle">{t('home.sokinFeed')}</p>
 
-            {currentSokinPost === null ? (
+            {sokinFeed.length === 0 ? (
               <div className="h-sokin-card glass-card">
                 <p className="h-sokin-text" style={{ opacity: 0.6 }}>{t('home.noSokinPosts')}</p>
               </div>
             ) : (
-              <div className="h-sokin-card glass-card" key={safeKinIdx}>
-                <p className="h-sokin-author">{currentSokinPost.author.profile?.displayName ?? t('home.defaultUser')}</p>
-                <p className="h-sokin-text">{currentSokinPost.text}</p>
-                {currentSokinPost.mediaUrls?.length > 0 && (
-                  <img
-                    src={resolveMediaUrl(currentSokinPost.mediaUrls[0])}
-                    alt=""
-                    className="h-sokin-img"
-                    loading="lazy"
-                    style={{ width: '100%', borderRadius: 8, marginTop: 6, maxHeight: 180, objectFit: 'cover' }}
-                  />
-                )}
-                <div className="h-sokin-meta">
-                  <span className="h-sokin-like">👍 {currentSokinPost.likes}</span>
-                  <span className="h-sokin-replies">💬 {currentSokinPost.comments}</span>
-                </div>
-              </div>
-            )}
+              <div className="h-sokin-real-feed">
+                {sokinFeed.slice(0, 4).map((post) => {
+                  const profile = post.author?.profile;
+                  const authorName = profile?.displayName ?? 'Utilisateur';
+                  const authorAvatar = profile?.avatarUrl;
+                  const cleanHandle = (profile?.username ?? post.author?.id ?? '').replace(/^@/, '');
+                  const postLocation = (post as any).location ?? profile?.city ?? null;
+                  const postSubject = (post as any).subject;
+                  const postHashtags = (post.hashtags ?? []) as string[];
+                  const postTags = (post.tags ?? []) as string[];
+                  const ptIconMap: Record<string, string> = { SHOWCASE: '📸', DISCUSSION: '💬', QUESTION: '❓', SELLING: '🛍️', PROMO: '🏷️', SEARCH: '🔎', UPDATE: '🔄', REVIEW: '📝', TREND: '🔥' };
+                  const ptLabelMap: Record<string, string> = { SHOWCASE: 'Showcase', DISCUSSION: 'Discussion', QUESTION: 'Question', SELLING: 'Vente', PROMO: 'Promo', SEARCH: 'Recherche', UPDATE: 'Actualité', REVIEW: 'Avis', TREND: 'Tendance' };
+                  const mediaItems = (post.mediaUrls ?? []).filter(u => u.trim()).slice(0, 5).map(u => ({
+                    url: u,
+                    type: /\.(mp4|webm|mov|ogg)(\?.*)?$/i.test(u) ? 'video' as const : 'image' as const,
+                  }));
+                  const relDiff = Date.now() - new Date(post.createdAt).getTime();
+                  const relM = Math.floor(relDiff / 60_000);
+                  const relTimeStr = relM < 1 ? 'maintenant' : relM < 60 ? `${relM} min` : relM < 1440 ? `${Math.floor(relM / 60)} h` : relM < 10080 ? `${Math.floor(relM / 1440)} j` : new Date(post.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+                  const replyCount = post.comments ?? 0;
 
-            {sokinFeed.length > 1 && (
-              <div className="h-sokin-dots">
-                {sokinFeed.map((_, i) => (
-                  <button
-                    key={i}
-                    type="button"
-                    className={`h-sokin-dot${i === safeKinIdx ? " active" : ""}`}
-                    onClick={() => setSokinIndex(i)}
-                    aria-label={`${t('home.sokinFeed')} ${i + 1}`}
-                  />
-                ))}
+                  return (
+                    <article key={post.id} className="sk-card" onClick={() => navigate('/sokin')} style={{ cursor: 'pointer' }}>
+                      <header className="sk-card-header">
+                        <div className="sk-card-author" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <div className="sk-card-avatar-wrap">
+                            {authorAvatar ? (
+                              <img src={resolveMediaUrl(authorAvatar)} alt={authorName} className="sk-card-avatar" />
+                            ) : (
+                              <span className="sk-card-avatar-empty" aria-hidden="true">
+                                {authorName.charAt(0).toUpperCase()}
+                              </span>
+                            )}
+                          </div>
+                          <div className="sk-card-author-info">
+                            <div className="sk-card-author-line">
+                              <strong className="sk-card-author-name">{authorName}</strong>
+                              <span className="sk-card-type-pill">
+                                <span>{ptIconMap[post.postType] ?? '📌'}</span>
+                                <span>{ptLabelMap[post.postType] ?? post.postType}</span>
+                              </span>
+                            </div>
+                            <span className="sk-card-author-meta">
+                              <span className="sk-card-author-handle">@{cleanHandle}</span>
+                              <span className="sk-card-author-time"> · {relTimeStr}</span>
+                              {postLocation && <span className="sk-card-author-loc"> · 📍 {postLocation}</span>}
+                            </span>
+                          </div>
+                        </div>
+                      </header>
+
+                      {postSubject && (
+                        <div className="sk-card-subject-bar">
+                          <h3 className="sk-card-subject">{postSubject}</h3>
+                        </div>
+                      )}
+
+                      {post.text ? (
+                        mediaItems.length > 0
+                          ? <p className="sk-card-text">{post.text}</p>
+                          : (
+                            <div className="sk-card-text-only" style={{ background: `linear-gradient(135deg, #000, ${['#1c133b', '#2b1649', '#321f58', '#161616'][post.id.charCodeAt(0) % 4]})` }}>
+                              <p className="sk-card-text sk-card-text--centered">{post.text}</p>
+                            </div>
+                          )
+                      ) : null}
+
+                      {(postHashtags.length > 0 || postTags.length > 0) && (
+                        <div className="sk-card-tags">
+                          {postHashtags.map(h => <span key={h} className="sk-card-hashtag">#{h}</span>)}
+                          {postTags.map(tag => <span key={tag} className="sk-card-tag">@{tag}</span>)}
+                        </div>
+                      )}
+
+                      {mediaItems.length > 0 && (
+                        <div className={`sk-media-grid sk-media-grid--${mediaItems.length}`}>
+                          {mediaItems.map((item, i) => (
+                            <div key={i} className="sk-media-item">
+                              {item.type === 'video' ? (
+                                <>
+                                  <video src={resolveMediaUrl(item.url)} muted playsInline preload="none" />
+                                  <span className="sk-media-play-icon" aria-hidden="true">▶</span>
+                                </>
+                              ) : (
+                                <img src={resolveMediaUrl(item.url)} alt="" loading="lazy" />
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="sk-card-counters">
+                        {(post.likes ?? 0) > 0 && (
+                          <span className="sk-card-counter">
+                            <span className="sk-card-counter-dot sk-card-counter-dot--like" />
+                            {post.likes} j'aime
+                          </span>
+                        )}
+                        {replyCount > 0 && (
+                          <span className="sk-card-counter">
+                            {replyCount} commentaire{replyCount > 1 ? 's' : ''}
+                          </span>
+                        )}
+                        {(post.shares ?? 0) > 0 && (
+                          <span className="sk-card-counter">
+                            {post.shares} repost{(post.shares ?? 0) > 1 ? 's' : ''}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="sk-card-social-bar">
+                        <span className="sk-social-btn">👍 J'aime</span>
+                        <span className="sk-social-btn">💬 Commenter</span>
+                        <span className="sk-social-btn">🔁 Partager</span>
+                      </div>
+                    </article>
+                  );
+                })}
               </div>
             )}
 
