@@ -102,7 +102,7 @@
 
 .hm-content {
   padding-top: 58px;
-  padding-bottom: 64px;
+  padding-bottom: 58px;
   transition: padding-top 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -113,7 +113,7 @@
 /* ─── Sections ─── */
 
 .hm-section {
-  padding: 10px 0;
+  padding: 7px 0;
 }
 
 .hm-section-title {
@@ -121,8 +121,8 @@
   font-size: 1.05rem;
   font-weight: 700;
   color: var(--color-text);
-  padding: 0 12px 6px;
-  margin: 0;
+  padding: 0 12px;
+  margin: 0 0 8px;
 }
 
 .hm-section-row {
@@ -168,7 +168,7 @@
 .hm-card-skeleton {
   flex-shrink: 0;
   width: 160px;
-  height: 200px;
+  height: 180px;
   border-radius: 14px;
   background: var(--color-glass-bg, rgba(255, 255, 255, 0.05));
   animation: hm-pulse 1.2s ease-in-out infinite;
@@ -176,13 +176,13 @@
 
 .hm-card-skeleton--small {
   width: 120px;
-  height: 150px;
+  height: 130px;
   border-radius: 12px;
 }
 
 .hm-letter-skeleton {
-  margin: 0 12px 10px;
-  height: 280px;
+  margin: 0 12px 6px;
+  height: 220px;
   border-radius: 16px;
   background: var(--color-glass-bg, rgba(255, 255, 255, 0.05));
   animation: hm-pulse 1.2s ease-in-out infinite;
@@ -218,7 +218,7 @@
 
 .hm-suggestion-img {
   width: 100%;
-  height: 100px;
+  height: 90px;
   border-radius: 10px 10px 0 0;
   overflow: hidden;
   background: var(--color-glass-bg, rgba(255, 255, 255, 0.05));
@@ -240,7 +240,7 @@
 
 .hm-suggestion-title {
   margin: 0;
-  padding: 4px 8px 0;
+  padding: 4px 12px 0;
   font-size: 0.78rem;
   font-weight: 600;
   line-height: 1.2;
@@ -257,7 +257,7 @@
   color: var(--color-primary);
   font-weight: 700;
   margin: 0;
-  padding: 2px 8px 6px;
+  padding: 2px 12px 4px;
 }
 
 /* ─── Tabs (Bloc 2) ─── */
@@ -265,7 +265,7 @@
 .hm-tabs {
   display: flex;
   gap: 6px;
-  padding: 0 12px 8px;
+  padding: 0 12px 4px;
 }
 
 .hm-tab {
@@ -309,7 +309,7 @@
 .hm-market-card-img {
   position: relative;
   width: 100%;
-  height: 140px;
+  height: 110px;
   overflow: hidden;
   background: var(--color-glass-bg, rgba(255, 255, 255, 0.04));
   display: flex;
@@ -356,12 +356,15 @@
   top: 8px;
   left: 8px;
   font-size: 12px;
-  padding: 4px 8px;
-  border-radius: 999px;
-  background: var(--color-primary, #6f58ff);
+  padding: 6px 10px;
+  border-radius: 12px;
+  max-width: 70%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: linear-gradient(135deg, var(--color-primary, #6f58ff), var(--color-secondary, #a78bfa));
   font-weight: 700;
-  box-shadow: 0 2px 10px rgba(111, 88, 255, 0.4);
-  border: 1px solid rgba(185, 166, 255, 0.3);
+  box-shadow: 0 2px 12px rgba(111, 88, 255, 0.45);
+  border: 1px solid rgba(185, 166, 255, 0.35);
   z-index: 3;
   line-height: 1.2;
   white-space: nowrap;
@@ -369,7 +372,7 @@
 }
 
 .hm-market-card-body {
-  padding: 6px 8px;
+  padding: 10px 12px;
 }
 
 .hm-market-card-title {
@@ -414,7 +417,7 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 0 10px;
+  padding: 0 12px;
 }
 
 .hm-sentinel {
@@ -437,12 +440,12 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 12px 4px;
+  padding: 6px 12px 2px;
 }
 
 .hm-letter-avatar {
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   overflow: hidden;
   background: var(--color-primary);
@@ -514,7 +517,7 @@
 }
 
 .hm-letter-text {
-  padding: 0 12px 4px;
+  padding: 0 12px 2px;
   font-size: 0.88rem;
   line-height: 1.4;
   color: var(--color-text);
@@ -586,7 +589,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 4px 10px 6px;
+  padding: 2px 12px 4px;
 }
 
 .hm-letter-foot-left,
@@ -600,7 +603,7 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 6px 10px;
+  padding: 5px 8px;
   border: none;
   background: transparent;
   color: var(--color-text-muted, rgba(255, 255, 255, 0.5));
@@ -627,7 +630,7 @@
   left: 0;
   right: 0;
   z-index: 950;
-  height: 60px;
+  height: 56px;
   display: flex;
   align-items: center;
   justify-content: space-around;
@@ -776,7 +779,7 @@
   height: 4px;
   border-radius: 2px;
   background: var(--color-text-muted, rgba(255, 255, 255, 0.2));
-  margin: 0 auto 10px;
+  margin: 0 auto 8px;
 }
 
 .hm-fab-menu-title {
@@ -784,7 +787,7 @@
   font-size: 0.95rem;
   font-weight: 700;
   color: var(--color-text);
-  margin: 0 0 10px;
+  margin: 0 0 8px;
 }
 
 .hm-fab-menu-item {

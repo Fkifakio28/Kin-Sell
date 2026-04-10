@@ -218,9 +218,9 @@
 
 .ex-content {
   padding-top: calc(52px + env(safe-area-inset-top, 0));
-  padding-bottom: calc(62px + env(safe-area-inset-bottom, 0));
-  padding-left: 10px;
-  padding-right: 10px;
+  padding-bottom: calc(58px + env(safe-area-inset-bottom, 0));
+  padding-left: 12px;
+  padding-right: 12px;
   transition: padding 0.35s cubic-bezier(.4,0,.2,1);
   max-width: 700px;
   margin: 0 auto;
@@ -235,7 +235,7 @@
 .ex-stats {
   display: flex;
   gap: 6px;
-  padding: 8px 0 6px;
+  padding: 6px 0 4px;
   overflow-x: auto;
   scrollbar-width: none;
 }
@@ -260,11 +260,11 @@
   border-radius: var(--radius-md);
   overflow: hidden;
   border: 1px solid var(--glass-border);
-  margin: 6px 0;
+  margin: 4px 0;
 }
 .ex-toggle-btn {
   flex: 1;
-  padding: 10px 0;
+  padding: 8px 0;
   border: none;
   background: rgba(35,24,72,0.3);
   color: var(--color-text-secondary);
@@ -285,8 +285,8 @@
   overflow-y: hidden;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
-  margin: 6px -10px;
-  padding: 0 10px 2px;
+  margin: 4px -12px 2px;
+  padding: 0 12px 2px;
   cursor: grab;
   user-select: none;
 }
@@ -295,7 +295,7 @@
 
 .ex-cats-row {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   width: max-content;
 }
 
@@ -341,8 +341,8 @@
 /* ── SECTION COMMON ── */
 
 .ex-section {
-  margin-top: 14px;
-  padding-top: 10px;
+  margin-top: 8px;
+  padding-top: 6px;
   border-top: 1px solid var(--glass-border);
 }
 .ex-section-head {
@@ -378,7 +378,7 @@
   text-align: center;
   color: var(--color-text-tertiary);
   font-style: italic;
-  padding: 16px 0;
+  padding: 10px 0;
 }
 
 /* ── MAP ── */
@@ -386,7 +386,7 @@
 .ex-map-wrap {
   border-radius: var(--radius-md);
   overflow: hidden;
-  margin-bottom: 10px;
+  margin-bottom: 6px;
   border: 1px solid var(--glass-border);
 }
 
@@ -395,7 +395,7 @@
 .ex-articles-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 8px;
+  gap: 10px;
 }
 
 .ex-article-card {
@@ -415,7 +415,7 @@
 
 .ex-article-img {
   position: relative;
-  height: 140px;
+  height: 120px;
   overflow: hidden;
 }
 .ex-article-img img {
@@ -428,15 +428,18 @@
   position: absolute;
   top: 8px;
   left: 8px;
-  padding: 4px 8px;
-  border-radius: 999px;
-  background: var(--color-primary, #6f58ff);
+  padding: 6px 10px;
+  border-radius: 12px;
+  max-width: 70%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: linear-gradient(135deg, var(--color-primary, #6f58ff), var(--color-secondary, #a78bfa));
   color: #fff;
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.01em;
-  box-shadow: 0 2px 10px rgba(111, 88, 255, 0.4);
-  border: 1px solid rgba(185, 166, 255, 0.3);
+  box-shadow: 0 2px 12px rgba(111, 88, 255, 0.45);
+  border: 1px solid rgba(185, 166, 255, 0.35);
   z-index: 3;
   line-height: 1.2;
   white-space: nowrap;
@@ -447,7 +450,7 @@
   display: flex;
   flex-direction: column;
   gap: 3px;
-  padding: 6px 8px;
+  padding: 10px 12px;
   flex: 1;
 }
 .ex-article-title {
@@ -507,7 +510,7 @@
 
 .ex-show-all {
   display: block;
-  margin: 14px auto 0;
+  margin: 8px auto 0;
   padding: 8px 20px;
   border: 1px solid var(--color-primary);
   border-radius: 999px;
@@ -557,7 +560,7 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  margin-top: 14px;
+  margin-top: 8px;
 }
 .ex-pager-pages {
   display: flex;
@@ -586,7 +589,7 @@
 .ex-shops-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 8px;
+  gap: 10px;
 }
 .ex-shop-card {
   display: flex;
@@ -638,7 +641,7 @@
   text-transform: uppercase;
 }
 .ex-shop-body {
-  padding: 6px 8px;
+  padding: 10px 12px;
   display: flex;
   flex-direction: column;
   gap: 3px;
@@ -677,14 +680,14 @@
 .ex-profiles-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 8px;
+  gap: 10px;
 }
 .ex-profile-card {
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
-  padding: 12px 8px;
+  padding: 8px 8px;
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-md);
   background: rgba(35,24,72,0.4);
@@ -701,7 +704,7 @@
   border-radius: 50%;
   overflow: hidden;
   border: 2px solid var(--glass-border);
-  margin-bottom: 8px;
+  margin-bottom: 4px;
 }
 .ex-profile-avatar img {
   width: 100%;
@@ -736,7 +739,7 @@
   color: var(--color-text-primary);
 }
 .ex-profile-city {
-  margin: 4px 0 0;
+  margin: 2px 0 0;
   font-size: 0.75rem;
   color: var(--color-text-tertiary);
 }
@@ -749,7 +752,7 @@
   left: 0;
   right: 0;
   z-index: 100;
-  height: 64px;
+  height: 56px;
   padding-bottom: env(safe-area-inset-bottom, 0);
   display: flex;
   align-items: center;
@@ -820,7 +823,7 @@
   backdrop-filter: blur(20px);
   border-top: 1px solid var(--glass-border);
   border-radius: 20px 20px 0 0;
-  padding: 16px 20px calc(20px + env(safe-area-inset-bottom, 0));
+  padding: 12px 16px calc(16px + env(safe-area-inset-bottom, 0));
   animation: ex-slide-up 0.25s ease;
 }
 .ex-create-handle {
@@ -828,10 +831,10 @@
   height: 4px;
   border-radius: 2px;
   background: rgba(255,255,255,0.15);
-  margin: 0 auto 14px;
+  margin: 0 auto 8px;
 }
 .ex-create-title {
-  margin: 0 0 12px;
+  margin: 0 0 8px;
   color: var(--color-text-secondary);
   font-size: 0.9rem;
   font-weight: 600;
@@ -839,7 +842,7 @@
 .ex-create-item {
   display: block;
   width: 100%;
-  padding: 14px 16px;
+  padding: 12px 12px;
   background: rgba(35,24,72,0.4);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-md);
@@ -847,7 +850,7 @@
   font-size: 0.95rem;
   text-align: left;
   cursor: pointer;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
   transition: background 0.15s ease;
 }
 .ex-create-item:active { background: rgba(111,88,255,0.2); }
@@ -924,6 +927,7 @@
   .ex-shops-grid { grid-template-columns: repeat(3, 1fr); gap: 14px; }
   .ex-profiles-grid { grid-template-columns: repeat(3, 1fr); gap: 14px; }
   .ex-article-img { height: 170px; }
+  .ex-article-badge { top: 10px; left: 10px; font-size: 13px; padding: 6px 10px; }
   .ex-shop-cover { height: 130px; }
   .ex-profile-avatar { width: 76px; height: 76px; }
   .ex-modal-panel { padding: 20px; }
@@ -938,6 +942,7 @@
   .ex-articles-grid { grid-template-columns: repeat(4, 1fr); }
   .ex-shops-grid { grid-template-columns: repeat(4, 1fr); }
   .ex-profiles-grid { grid-template-columns: repeat(4, 1fr); }
+  .ex-article-badge { top: 10px; left: 10px; font-size: 14px; padding: 6px 10px; border-radius: 14px; }
   .ex-modal-backdrop { align-items: center; justify-content: center; padding: 24px; }
   .ex-modal-panel { flex: unset; max-width: 1100px; max-height: 90vh; border-radius: 20px; border: 1px solid var(--glass-border); }
 }
