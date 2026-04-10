@@ -151,6 +151,40 @@ router.get(
 );
 
 /**
+ * GET /posts/mine
+ * Récupère les publications de l'utilisateur connecté
+ * Doit être déclaré AVANT /posts/:id pour ne pas être capté comme un :id.
+ * ?status=ACTIVE|HIDDEN|ARCHIVED|DELETED|all (défaut: tout sauf DELETED)
+ */
+router.get(
+  "/posts/mine",
+  requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const validStatuses = ["ACTIVE", "HIDDEN", "ARCHIVED", "DELETED", "all"] as const;
+    const rawStatus = req.query.status as string | undefined;
+    const statusFilter = rawStatus && validStatuses.includes(rawStatus as any)
+      ? (rawStatus as typeof validStatuses[number])
+      : undefined;
+    const posts = await getMySoKinPosts(req.auth!.userId, statusFilter);
+    res.json({ posts });
+  })
+);
+
+/**
+ * GET /posts/counts
+ * Compteurs par statut pour l'utilisateur connecté.
+ * Doit être déclaré AVANT /posts/:id pour ne pas être capté comme un :id.
+ */
+router.get(
+  "/posts/counts",
+  requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const counts = await getMyPostCounts(req.auth!.userId);
+    res.json({ counts });
+  })
+);
+
+/**
  * GET /posts/:id
  * Récupère une annonce spécifique
  */
@@ -181,38 +215,6 @@ router.get(
 );
 
 /* ─── Routes authentifiées ─── */
-
-/**
- * GET /posts/mine
- * Récupère les publications de l'utilisateur connecté
- * ?status=ACTIVE|HIDDEN|ARCHIVED|DELETED|all (défaut: tout sauf DELETED)
- */
-router.get(
-  "/posts/mine",
-  requireAuth,
-  asyncHandler(async (req: AuthenticatedRequest, res) => {
-    const validStatuses = ["ACTIVE", "HIDDEN", "ARCHIVED", "DELETED", "all"] as const;
-    const rawStatus = req.query.status as string | undefined;
-    const statusFilter = rawStatus && validStatuses.includes(rawStatus as any)
-      ? (rawStatus as typeof validStatuses[number])
-      : undefined;
-    const posts = await getMySoKinPosts(req.auth!.userId, statusFilter);
-    res.json({ posts });
-  })
-);
-
-/**
- * GET /posts/counts
- * Compteurs par statut pour l'utilisateur connecté
- */
-router.get(
-  "/posts/counts",
-  requireAuth,
-  asyncHandler(async (req: AuthenticatedRequest, res) => {
-    const counts = await getMyPostCounts(req.auth!.userId);
-    res.json({ counts });
-  })
-);
 
 /**
  * POST /posts
