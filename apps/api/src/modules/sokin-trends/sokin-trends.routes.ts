@@ -14,6 +14,15 @@
  * Endpoints insights produit — mobile-first (auth) :
  * - GET /sokin/trends/insights/post/:id  — Insight card post (gratuit + premium)
  * - GET /sokin/trends/insights/my        — Dashboard auteur (gratuit + premium)
+ *
+ * Smart feed blocks — tendances + suggestions intelligentes :
+ * - GET /sokin/trends/smart/feed          — Blocs secondaires combinés (public)
+ * - GET /sokin/trends/smart/hashtags      — Hashtags chauds (public)
+ * - GET /sokin/trends/smart/topics        — Sujets qui montent (public)
+ * - GET /sokin/trends/smart/formats       — Formats gagnants (public)
+ * - GET /sokin/trends/smart/ideas         — Idées de publication (auth)
+ * - GET /sokin/trends/smart/boost         — Opportunités de boost (auth)
+ * - GET /sokin/trends/smart/suggestions   — Suggestions personnalisées (auth)
  */
 
 import { Router } from "express";
@@ -22,6 +31,15 @@ import { asyncHandler } from "../../shared/utils/async-handler.js";
 import { getTrending, getSuggestedProfiles, getPostInsight } from "./sokin-trends.service.js";
 import { getPostPerformance, getAuthorSoKinInsights, getSoKinTrendsInsight } from "../analytics/sokin-analytics.service.js";
 import { getPostInsightCard, getAuthorDashboard } from "../sokin/sokin-author-insights.service.js";
+import {
+  getSmartFeedBlocks,
+  getHotHashtags,
+  getTrendingTopics,
+  getWinningFormats,
+  getPublishIdeas,
+  getBoostOpportunities,
+  getAuthorSmartSuggestions,
+} from "../sokin/sokin-smart-feed.service.js";
 import { HttpError } from "../../shared/errors/http-error.js";
 
 const router = Router();
@@ -157,5 +175,112 @@ router.get(
     if (period !== "7d" && period !== "30d") throw new HttpError(400, "Période invalide (7d ou 30d)");
     const dashboard = await getAuthorDashboard(req.auth!.userId, period);
     res.json(dashboard);
+  })
+);
+
+// ═══════════════════════════════════════════════════════
+// SMART FEED — Blocs secondaires intelligents
+// ═══════════════════════════════════════════════════════
+
+/**
+ * GET /sokin/trends/smart/feed
+ * Vue combinée : tendances + hashtags + formats + boost + idées
+ * Public — cache Redis 10 min
+ */
+router.get(
+  "/smart/feed",
+  asyncHandler(async (req, res) => {
+    const city = (req.query.city as string) || undefined;
+    const blocks = await getSmartFeedBlocks(city);
+    res.json(blocks);
+  })
+);
+
+/**
+ * GET /sokin/trends/smart/hashtags
+ * Hashtags chauds avec velocity (RISING / NEW / STEADY)
+ * Public — cache Redis 10 min
+ */
+router.get(
+  "/smart/hashtags",
+  asyncHandler(async (req, res) => {
+    const city = (req.query.city as string) || undefined;
+    const limit = Math.min(Number(req.query.limit) || 15, 30);
+    const data = await getHotHashtags(city, limit);
+    res.json({ hashtags: data });
+  })
+);
+
+/**
+ * GET /sokin/trends/smart/topics
+ * Sujets qui montent avec momentum (UP / EMERGING / STABLE)
+ * Public — cache Redis 10 min
+ */
+router.get(
+  "/smart/topics",
+  asyncHandler(async (req, res) => {
+    const city = (req.query.city as string) || undefined;
+    const limit = Math.min(Number(req.query.limit) || 8, 15);
+    const data = await getTrendingTopics(city, limit);
+    res.json({ topics: data });
+  })
+);
+
+/**
+ * GET /sokin/trends/smart/formats
+ * Formats de posts qui performent (HOT / STABLE / COOL)
+ * Public — cache Redis 10 min
+ */
+router.get(
+  "/smart/formats",
+  asyncHandler(async (req, res) => {
+    const city = (req.query.city as string) || undefined;
+    const data = await getWinningFormats(city);
+    res.json({ formats: data });
+  })
+);
+
+/**
+ * GET /sokin/trends/smart/ideas
+ * Idées de publication personnalisées pour l'auteur
+ * Auth — cache Redis 5 min
+ */
+router.get(
+  "/smart/ideas",
+  requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const city = (req.query.city as string) || undefined;
+    const ideas = await getPublishIdeas(req.auth!.userId, city);
+    res.json({ ideas });
+  })
+);
+
+/**
+ * GET /sokin/trends/smart/boost
+ * Opportunités de boost pour l'auteur (via IA Ads + scoring)
+ * Auth — cache Redis 5 min
+ */
+router.get(
+  "/smart/boost",
+  requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const limit = Math.min(Number(req.query.limit) || 5, 10);
+    const opportunities = await getBoostOpportunities(req.auth!.userId, limit);
+    res.json({ opportunities });
+  })
+);
+
+/**
+ * GET /sokin/trends/smart/suggestions
+ * Vue combinée personnalisée : idées + boost
+ * Auth — cache Redis 5 min
+ */
+router.get(
+  "/smart/suggestions",
+  requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const city = (req.query.city as string) || undefined;
+    const data = await getAuthorSmartSuggestions(req.auth!.userId, city);
+    res.json(data);
   })
 );
