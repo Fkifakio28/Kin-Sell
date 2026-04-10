@@ -1016,6 +1016,9 @@ export async function runBatchAutoNegotiation(): Promise<BatchAutoResult> {
             counterPrice: decision.counterPriceUsdCents,
             buyerTrust,
             stockQty: nego.listing.stockQuantity,
+            enrichmentTier: catEnrichment?.geminiDecision?.tier ?? "NONE",
+            enrichmentReason: catEnrichment?.geminiDecision?.reason ?? null,
+            enrichmentSource: catEnrichment?.sourceType ?? "NONE",
           },
         },
       });

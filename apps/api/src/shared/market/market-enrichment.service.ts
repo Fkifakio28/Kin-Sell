@@ -1,18 +1,29 @@
 /**
  * MARKET ENRICHMENT SERVICE — Kin-Sell
  *
- * Couche d'enrichissement hybride : combine données internes (Prisma)
- * + données externes (Gemini/Google Search) pour calculer des scores
- * contextuels utilisés par IA Marchande & IA Commande.
+ * Stratégie à 3 niveaux pour minimiser les appels Gemini :
+ *
+ *   Niveau 1 — INTERNAL         : Rule-based pur (données Prisma)
+ *              → Utilisé quand les données internes sont suffisantes
+ *   Niveau 2 — CACHED_EXTERNAL  : Enrichissement Gemini déjà en cache Redis/mémoire
+ *              → Réutilise un résultat précédent sans appel API
+ *   Niveau 3 — EXTERNAL (Gemini): Appel API en dernier recours
+ *              → Seulement si confiance interne faible / catégorie rare / ville rare
+ *
+ * Conditions d'appel Gemini (Niveau 3) :
+ *   - Confiance interne < 40
+ *   - Catégorie rare (< 3 annonces actives)
+ *   - Ville rare (≠ Kinshasa et aucun historique local)
+ *   - Historique insuffisant (< 3 négociations 30j)
+ *   - Cas ambigu (scores internes contradictoires)
+ *
+ * Chaque décision est journalisée avec raison métier.
  *
  * Scores calculés :
  *   - marketHeatScore       : 0-100 — chaleur du marché (activité négo + demande)
  *   - priceFlexibilityScore : 0-100 — flexibilité des prix (historique remises)
  *   - regionalDemandScore   : 0-100 — demande régionale (interne + externe Gemini)
  *   - competitionPressureScore : 0-100 — pression concurrentielle
- *
- * Cache Redis 1h pour minimiser les coûts API Gemini.
- * Fallback gracieux si Gemini/Redis indisponible.
  */
 
 import { prisma } from "../db/prisma.js";
@@ -65,6 +76,213 @@ export interface MarketEnrichment {
   computedAt: string;
   /** @deprecated — utiliser sourceType à la place */
   source: "INTERNAL" | "HYBRID";
+  /** Raison de la décision Gemini (appelé / évité / cache) */
+  geminiDecision?: EnrichmentDecision;
+}
+
+// ── Enrichment Gating — Stratégie 3 niveaux ───────────────
+
+export type EnrichmentTier = "INTERNAL" | "CACHED_EXTERNAL" | "EXTERNAL";
+
+export interface EnrichmentDecision {
+  /** Niveau retenu */
+  tier: EnrichmentTier;
+  /** Raison métier lisible */
+  reason: string;
+  /** Gemini a-t-il été appelé ? */
+  geminiCalled: boolean;
+  /** Gemini était-il disponible en cache ? */
+  geminiCacheHit: boolean;
+  /** Facteurs ayant influencé la décision */
+  factors: {
+    internalConfidence: number;      // 0-100
+    activeListings: number;
+    totalNegos30d: number;
+    isRareCategory: boolean;
+    isRareCity: boolean;
+    isAmbiguous: boolean;
+    hasHistoryGap: boolean;
+  };
+}
+
+// ── Métriques simples (en mémoire, reset au restart) ──────
+
+export interface EnrichmentMetrics {
+  totalCalls: number;
+  internalOnly: number;
+  cachedExternal: number;
+  geminiCalled: number;
+  geminiFailed: number;
+  geminiBlocked: number;
+  avgInternalConfidence: number;
+  lastResetAt: string;
+}
+
+const _metrics: EnrichmentMetrics = {
+  totalCalls: 0,
+  internalOnly: 0,
+  cachedExternal: 0,
+  geminiCalled: 0,
+  geminiFailed: 0,
+  geminiBlocked: 0,
+  avgInternalConfidence: 0,
+  lastResetAt: new Date().toISOString(),
+};
+
+let _confidenceSum = 0;
+
+/** Retourne les métriques d'enrichissement courantes */
+export function getEnrichmentMetrics(): EnrichmentMetrics {
+  return { ..._metrics };
+}
+
+/** Reset les métriques (appelable par admin) */
+export function resetEnrichmentMetrics(): void {
+  _metrics.totalCalls = 0;
+  _metrics.internalOnly = 0;
+  _metrics.cachedExternal = 0;
+  _metrics.geminiCalled = 0;
+  _metrics.geminiFailed = 0;
+  _metrics.geminiBlocked = 0;
+  _metrics.avgInternalConfidence = 0;
+  _confidenceSum = 0;
+  _metrics.lastResetAt = new Date().toISOString();
+}
+
+function trackMetric(tier: EnrichmentTier, geminiFailed: boolean, confidence: number): void {
+  _metrics.totalCalls++;
+  _confidenceSum += confidence;
+  _metrics.avgInternalConfidence = Math.round(_confidenceSum / _metrics.totalCalls);
+  if (tier === "INTERNAL") _metrics.internalOnly++;
+  else if (tier === "CACHED_EXTERNAL") _metrics.cachedExternal++;
+  else if (tier === "EXTERNAL") {
+    _metrics.geminiCalled++;
+    if (geminiFailed) _metrics.geminiFailed++;
+  }
+}
+
+// ── Gemini-specific cache (pour le Niveau 2) ──────────────
+// Permet de vérifier si du contenu Gemini existe en cache
+// SANS déclencher un appel API
+
+const GEMINI_CACHE_PREFIX = "ks:gemini:market:";
+
+async function hasGeminiCache(category: string, city: string, country: string = "rdc"): Promise<boolean> {
+  const cacheKey = `${country}:${city}:${category}`.toLowerCase().replace(/\s+/g, "-");
+  try {
+    const redis = getRedis();
+    if (redis) {
+      const exists = await redis.exists(`${GEMINI_CACHE_PREFIX}${cacheKey}`);
+      return exists === 1;
+    }
+  } catch { /* ignore */ }
+  return false;
+}
+
+// ── Seuils de la stratégie 3 niveaux ──────────────────────
+
+/** Confiance interne minimale pour éviter Gemini */
+const CONFIDENCE_THRESHOLD = 40;
+/** Nombre minimal d'annonces pour considérer la catégorie comme connue */
+const MIN_LISTINGS_KNOWN = 3;
+/** Nombre minimal de négociations 30j pour considérer l'historique suffisant */
+const MIN_NEGOS_SUFFICIENT = 3;
+/** Ville principale — les autres sont considérées "rares" */
+const PRIMARY_CITY = "kinshasa";
+
+/**
+ * Détermine si l'enrichissement externe (Gemini) est nécessaire.
+ *
+ * Retourne la décision avec la raison métier.
+ * L'appelant utilise cette décision pour choisir le niveau d'enrichissement.
+ *
+ * Cas où Gemini est AUTORISÉ :
+ *   - Confiance interne faible (< 40)
+ *   - Catégorie rare (< 3 annonces actives)
+ *   - Ville rare (≠ Kinshasa)
+ *   - Historique insuffisant (< 3 négociations 30j)
+ *   - Cas ambigu (heat > 50 mais demande < 20 ou inverse)
+ *
+ * Cas où Gemini est BLOQUÉ :
+ *   - Confiance interne >= 40 ET catégorie connue ET ville connue ET historique suffisant
+ *   - env.ENABLE_GEMINI === false
+ *   - Pas de clé API Gemini
+ */
+export async function shouldUseExternalEnrichment(
+  internalData: {
+    activeListings: number;
+    totalNegos: number;
+    demandScore: number;
+    activeSellers: number;
+  },
+  category: string,
+  city: string,
+): Promise<EnrichmentDecision> {
+  const isRareCategory = internalData.activeListings < MIN_LISTINGS_KNOWN;
+  const isRareCity = city.toLowerCase() !== PRIMARY_CITY;
+  const hasHistoryGap = internalData.totalNegos < MIN_NEGOS_SUFFICIENT;
+
+  // Confiance interne brute : basée sur volume de données
+  const internalConfidence = Math.min(100, Math.round(
+    internalData.totalNegos * 2 + internalData.activeListings * 3 + internalData.activeSellers * 5,
+  ));
+
+  // Détection d'ambiguïté : scores contradictoires
+  //   → heat élevé mais demande basse (ou inverse) indique des données incohérentes
+  const heatProxy = Math.min(100, internalData.totalNegos * 2);
+  const isAmbiguous = (heatProxy > 50 && internalData.demandScore < 20) ||
+                      (heatProxy < 20 && internalData.demandScore > 50);
+
+  const factors = {
+    internalConfidence,
+    activeListings: internalData.activeListings,
+    totalNegos30d: internalData.totalNegos,
+    isRareCategory,
+    isRareCity,
+    isAmbiguous,
+    hasHistoryGap,
+  };
+
+  // ── Décision ──
+
+  // Si données internes solides et pas de cas rare → INTERNAL suffit
+  if (internalConfidence >= CONFIDENCE_THRESHOLD && !isRareCategory && !isRareCity && !hasHistoryGap && !isAmbiguous) {
+    return {
+      tier: "INTERNAL",
+      reason: `Données internes suffisantes (confiance=${internalConfidence}, listings=${internalData.activeListings}, negos=${internalData.totalNegos})`,
+      geminiCalled: false,
+      geminiCacheHit: false,
+      factors,
+    };
+  }
+
+  // Vérifier si un résultat Gemini est déjà en cache
+  const hasCachedGemini = await hasGeminiCache(category, city);
+  if (hasCachedGemini) {
+    return {
+      tier: "CACHED_EXTERNAL",
+      reason: `Cache Gemini disponible — réutilisation sans appel API (confiance interne=${internalConfidence})`,
+      geminiCalled: false,
+      geminiCacheHit: true,
+      factors,
+    };
+  }
+
+  // Construire la raison spécifique
+  const reasons: string[] = [];
+  if (internalConfidence < CONFIDENCE_THRESHOLD) reasons.push(`confiance faible (${internalConfidence})`);
+  if (isRareCategory) reasons.push(`catégorie rare (${internalData.activeListings} annonces)`);
+  if (isRareCity) reasons.push(`ville hors Kinshasa (${city})`);
+  if (hasHistoryGap) reasons.push(`historique insuffisant (${internalData.totalNegos} négos)`);
+  if (isAmbiguous) reasons.push(`données contradictoires (heat~${heatProxy} vs demand~${internalData.demandScore})`);
+
+  return {
+    tier: "EXTERNAL",
+    reason: `Gemini nécessaire — ${reasons.join(", ")}`,
+    geminiCalled: true,
+    geminiCacheHit: false,
+    factors,
+  };
 }
 
 // ── Cache (Redis + in-memory fallback) ─────────────────────
@@ -242,8 +460,13 @@ function computeRegionalDemandScore(
 
 /**
  * Retourne l'enrichissement marché pour une catégorie + ville.
- * Combine données internes (Prisma) + externes (Gemini, si activé).
- * Résultat en cache Redis 1h.
+ *
+ * Stratégie 3 niveaux :
+ *   1. INTERNAL         — données Prisma suffisantes → pas d'appel Gemini
+ *   2. CACHED_EXTERNAL  — résultat Gemini déjà en cache Redis → réutilisation
+ *   3. EXTERNAL         — appel Gemini en dernier recours (cas rares / confiance faible)
+ *
+ * Résultat mis en cache Redis avec TTL dynamique.
  */
 export async function getMarketEnrichment(
   category: string,
@@ -252,35 +475,71 @@ export async function getMarketEnrichment(
   const cacheKey = `${city}:${category}`.toLowerCase().replace(/\s+/g, "-");
   const cached = await getCached(cacheKey);
   if (cached) {
-    // Marquer la fraîcheur
     const data = { ...cached.data };
     data.dataFreshness = cached.fromMemory ? "STALE" : "CACHED";
     return data;
   }
 
-  // 1. Données internes
+  // ── Niveau 1 : Données internes (toujours calculées) ──
   const internal = await computeInternalScores(category, city);
 
-  // 2. Données externes (Gemini) — best-effort, ne bloque pas si indisponible
+  // ── Décision : faut-il appeler Gemini ? ──
+  const decision = await shouldUseExternalEnrichment(
+    {
+      activeListings: internal.activeListings,
+      totalNegos: internal.totalNegos,
+      demandScore: internal.demandScore,
+      activeSellers: internal.activeSellers,
+    },
+    category,
+    city,
+  );
+
+  // ── Niveau 2 & 3 : Enrichissement externe (si nécessaire) ──
   let externalData: MarketEnrichment["externalData"] = null;
   let geminiFailed = false;
-  try {
-    const ctx = await getRegionalMarketContext(category, city);
-    const signal = ctx.signals[0]?.data;
-    if (signal && signal.demandLevel !== "UNKNOWN") {
-      externalData = {
-        demandLevel: signal.demandLevel,
-        trend: signal.trend,
-        competitorDensity: signal.competitorDensity,
-        insight: signal.insight,
-      };
+
+  if (decision.tier === "CACHED_EXTERNAL" || decision.tier === "EXTERNAL") {
+    try {
+      const ctx = await getRegionalMarketContext(category, city);
+      const signal = ctx.signals[0]?.data;
+      if (signal && signal.demandLevel !== "UNKNOWN") {
+        externalData = {
+          demandLevel: signal.demandLevel,
+          trend: signal.trend,
+          competitorDensity: signal.competitorDensity,
+          insight: signal.insight,
+        };
+      }
+    } catch (err) {
+      logger.warn({ err }, `[Enrichment] Gemini indisponible pour ${category}/${city}`);
+      geminiFailed = true;
     }
-  } catch (err) {
-    logger.warn({ err }, `[Enrichment] Gemini indisponible pour ${category}/${city}`);
-    geminiFailed = true;
   }
 
-  // 3. Calcul des scores
+  // ── Log métier de la décision ──
+  const wasGeminiActuallyCalled = decision.tier === "EXTERNAL" && !geminiFailed;
+  logger.info(
+    {
+      tier: decision.tier,
+      reason: decision.reason,
+      geminiCalled: decision.tier === "EXTERNAL",
+      geminiCacheHit: decision.tier === "CACHED_EXTERNAL",
+      geminiFailed,
+      category,
+      city,
+      internalConfidence: decision.factors.internalConfidence,
+      activeListings: internal.activeListings,
+      totalNegos: internal.totalNegos,
+    },
+    `[Enrichment] ${decision.tier} — ${category}/${city} — ${decision.reason}`,
+  );
+
+  // ── Métriques ──
+  trackMetric(decision.tier, geminiFailed, decision.factors.internalConfidence);
+  if (decision.tier === "INTERNAL") _metrics.geminiBlocked++;
+
+  // ── Calcul des scores ──
   const marketHeatScore = computeMarketHeatScore(
     internal.negoVolumeRatio,
     internal.totalNegos,
@@ -311,24 +570,21 @@ export async function getMarketEnrichment(
     competitionPressureScore * 0.2,
   );
 
-  // 4. Calcul sourceType + confidenceScore + fallbackUsed
+  // ── SourceType + Confidence ──
   let sourceType: EnrichmentSourceType;
   let confidenceScore: number;
-  const fallbackUsed = geminiFailed || (!externalData && !geminiFailed);
+  const fallbackUsed = geminiFailed || (decision.tier !== "INTERNAL" && !externalData);
 
   if (externalData) {
     sourceType = "HYBRID";
-    // Hybrid → haute confiance si données internes solides
     const internalStrength = Math.min(100, internal.totalNegos * 2 + internal.activeListings * 3);
     confidenceScore = Math.min(95, Math.round(internalStrength * 0.5 + 50));
   } else if (geminiFailed) {
     sourceType = "FALLBACK";
-    // Gemini a échoué, données internes uniquement
     const internalStrength = Math.min(100, internal.totalNegos * 2 + internal.activeListings * 3);
     confidenceScore = Math.round(Math.max(20, internalStrength * 0.6));
   } else {
     sourceType = "INTERNAL";
-    // Pas de Gemini mais pas d'échec → données internes suffisantes
     const internalStrength = Math.min(100, internal.totalNegos * 2 + internal.activeListings * 3);
     confidenceScore = Math.round(Math.max(25, internalStrength * 0.7));
   }
@@ -355,6 +611,7 @@ export async function getMarketEnrichment(
     fallbackUsed,
     source: externalData ? "HYBRID" : "INTERNAL",
     computedAt: new Date().toISOString(),
+    geminiDecision: decision,
   };
 
   await setCache(cacheKey, enrichment);

@@ -8,6 +8,7 @@ import {
   refreshMarketStatsFromListings,
 } from "./market-intelligence.service.js";
 import { getAllRatesFromUsd, getCurrencyRate, invalidateCurrencyCache } from "../../shared/market/currency.service.js";
+import { getEnrichmentMetrics, resetEnrichmentMetrics } from "../../shared/market/market-enrichment.service.js";
 
 const router = Router();
 
@@ -90,6 +91,38 @@ router.post(
   asyncHandler(async (_req: Request, res: Response) => {
     invalidateCurrencyCache();
     res.json({ ok: true, message: "Cache des taux de change invalidé." });
+  })
+);
+
+// ══════════════════════════════════════════════
+// Enrichment IA — Métriques stratégie 3 niveaux
+// ══════════════════════════════════════════════
+
+// GET /market/enrichment/metrics — métriques Gemini gating (admin)
+router.get(
+  "/enrichment/metrics",
+  requireAuth,
+  asyncHandler(async (_req: Request, res: Response) => {
+    const metrics = getEnrichmentMetrics();
+    const geminiRate = metrics.totalCalls > 0
+      ? Math.round((metrics.geminiCalled / metrics.totalCalls) * 100)
+      : 0;
+    res.json({
+      ...metrics,
+      geminiCallRate: `${geminiRate}%`,
+      internalOnlyRate: `${metrics.totalCalls > 0 ? Math.round((metrics.internalOnly / metrics.totalCalls) * 100) : 0}%`,
+      summary: `Sur ${metrics.totalCalls} enrichissements : ${metrics.internalOnly} internes purs, ${metrics.cachedExternal} cache Gemini, ${metrics.geminiCalled} appels Gemini (${metrics.geminiFailed} échoués)`,
+    });
+  })
+);
+
+// POST /market/enrichment/metrics/reset — reset métriques (admin)
+router.post(
+  "/enrichment/metrics/reset",
+  requireAuth,
+  asyncHandler(async (_req: Request, res: Response) => {
+    resetEnrichmentMetrics();
+    res.json({ ok: true, message: "Métriques enrichissement réinitialisées." });
   })
 );
 
