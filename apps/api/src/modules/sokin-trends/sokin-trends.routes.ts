@@ -40,6 +40,7 @@ import {
   getBoostOpportunities,
   getAuthorSmartSuggestions,
 } from "../sokin/sokin-smart-feed.service.js";
+import { requireSoKinAnalytics, requireSoKinAds, resolveSoKinAccess, getAnalyticsUpsell, getAdsUpsell } from "../sokin/sokin-gating.service.js";
 import { HttpError } from "../../shared/errors/http-error.js";
 
 const router = Router();
@@ -98,10 +99,12 @@ export default router;
 /**
  * GET /sokin/trends/analytics/post/:id
  * Performance détaillée d'un post — réservé à l'auteur
+ * PREMIUM ANALYTICS
  */
 router.get(
   "/analytics/post/:id",
   requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res, next) => { await requireSoKinAnalytics(req, res, next); }),
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     const postId = req.params.id;
     if (!postId) throw new HttpError(400, "postId requis");
@@ -114,10 +117,12 @@ router.get(
 /**
  * GET /sokin/trends/analytics/my
  * Insights complets auteur — période 7d ou 30d
+ * PREMIUM ANALYTICS
  */
 router.get(
   "/analytics/my",
   requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res, next) => { await requireSoKinAnalytics(req, res, next); }),
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     const period = (req.query.period as "7d" | "30d") || "7d";
     if (period !== "7d" && period !== "30d") throw new HttpError(400, "Période invalide (7d ou 30d)");
@@ -258,11 +263,12 @@ router.get(
 /**
  * GET /sokin/trends/smart/boost
  * Opportunités de boost pour l'auteur (via IA Ads + scoring)
- * Auth — cache Redis 5 min
+ * PREMIUM ADS — cache Redis 5 min
  */
 router.get(
   "/smart/boost",
   requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res, next) => { await requireSoKinAds(req, res, next); }),
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     const limit = Math.min(Number(req.query.limit) || 5, 10);
     const opportunities = await getBoostOpportunities(req.auth!.userId, limit);
@@ -282,5 +288,35 @@ router.get(
     const city = (req.query.city as string) || undefined;
     const data = await getAuthorSmartSuggestions(req.auth!.userId, city);
     res.json(data);
+  })
+);
+
+// ═══════════════════════════════════════════════════════
+// GATING — Accès So-Kin + Upsells
+// ═══════════════════════════════════════════════════════
+
+/**
+ * GET /sokin/trends/access
+ * Retourne le niveau d'accès So-Kin de l'utilisateur + upsells applicables.
+ * Le frontend l'appelle à l'init pour savoir quoi afficher/griser.
+ */
+router.get(
+  "/access",
+  requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const access = await resolveSoKinAccess(req.auth!.userId, req.auth!.role);
+    const upsells = [];
+    if (!access.hasAnalytics) upsells.push(getAnalyticsUpsell());
+    if (!access.hasAds) upsells.push(getAdsUpsell());
+    res.json({
+      tier: access.tier,
+      planCode: access.planCode,
+      features: {
+        analytics: access.hasAnalytics,
+        ads: access.hasAds,
+        admin: access.isAdmin,
+      },
+      upsells,
+    });
   })
 );

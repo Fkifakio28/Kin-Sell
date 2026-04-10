@@ -40,6 +40,7 @@ import { rateLimit, RateLimits } from "../../shared/middleware/rate-limit.middle
 import { trackEvents, VALID_EVENTS, getAuthorTrackingStats, type SoKinEventType } from "./sokin-tracking.service.js";
 import { scorePost, scoreAndPersist, batchRecalculate, getTopBoostCandidates, getTopSocialPosts, getTopBusinessPosts } from "./sokin-scoring.service.js";
 import { analyzePost, getAuthorTips, getAdminOpportunities, dismissTip, acceptTip, batchAnalyze } from "../ads/sokin-ads-advisor.service.js";
+import { requireSoKinAnalytics, requireSoKinAds, requireSoKinAdmin } from "./sokin-gating.service.js";
 
 const isVideoMediaUrl = (value: string) => /\.(mp4|webm|mov|ogg)(\?.*)?$/i.test(value);
 
@@ -440,11 +441,12 @@ router.get(
 /**
  * GET /scoring/post/:id
  * Calcule et retourne les 3 scores + breakdown pour un post.
- * Accessible à l'auteur du post uniquement.
+ * PREMIUM ANALYTICS — Accessible à l'auteur du post.
  */
 router.get(
   "/scoring/post/:id",
   requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res, next) => { await requireSoKinAnalytics(req, res, next); }),
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     const scored = await scorePost(req.params.id);
     if (!scored) {
@@ -458,11 +460,12 @@ router.get(
 /**
  * POST /scoring/recalculate/:id
  * Force le recalcul et la persistance des scores pour un post.
- * Accessible à l'auteur ou admin.
+ * PREMIUM ANALYTICS — Accessible à l'auteur ou admin.
  */
 router.post(
   "/scoring/recalculate/:id",
   requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res, next) => { await requireSoKinAnalytics(req, res, next); }),
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     const scored = await scoreAndPersist(req.params.id);
     if (!scored) {
@@ -497,11 +500,12 @@ router.get(
 /**
  * POST /scoring/batch
  * Déclenche un recalcul batch (admin / cron).
- * Limité à 100 posts par appel.
+ * ADMIN ONLY
  */
 router.post(
   "/scoring/batch",
   requireAuth,
+  requireSoKinAdmin,
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     const limit = Math.min(parseInt(req.query.limit as string) || 100, 200);
     const result = await batchRecalculate(limit);
@@ -514,10 +518,12 @@ router.post(
 /**
  * GET /advisor/post/:id
  * Analyse un post et retourne les tips IA Ads (sans persister).
+ * PREMIUM ADS
  */
 router.get(
   "/advisor/post/:id",
   requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res, next) => { await requireSoKinAds(req, res, next); }),
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     const tips = await analyzePost(req.params.id);
     res.json({ tips });
@@ -527,10 +533,12 @@ router.get(
 /**
  * GET /advisor/tips
  * Recommandations IA Ads pour l'auteur connecté.
+ * PREMIUM ADS
  */
 router.get(
   "/advisor/tips",
   requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res, next) => { await requireSoKinAds(req, res, next); }),
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     const limit = Math.min(parseInt(req.query.limit as string) || 10, 30);
     const tips = await getAuthorTips(req.auth!.userId, limit);
@@ -541,10 +549,12 @@ router.get(
 /**
  * GET /advisor/opportunities
  * Opportunités admin : posts à fort potentiel détectés.
+ * ADMIN ONLY
  */
 router.get(
   "/advisor/opportunities",
   requireAuth,
+  requireSoKinAdmin,
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     const limit = Math.min(parseInt(req.query.limit as string) || 20, 50);
     const opportunities = await getAdminOpportunities(limit);
@@ -583,10 +593,12 @@ router.post(
 /**
  * POST /advisor/batch
  * Déclenche un batch d'analyse IA Ads sur les top posts.
+ * ADMIN ONLY
  */
 router.post(
   "/advisor/batch",
   requireAuth,
+  requireSoKinAdmin,
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     const limit = Math.min(parseInt(req.query.limit as string) || 30, 50);
     const city = (req.query.city as string)?.slice(0, 100);
