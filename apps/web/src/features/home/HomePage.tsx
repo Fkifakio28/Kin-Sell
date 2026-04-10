@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../app/providers/AuthProvider";
 import { useLocaleCurrency } from "../../app/providers/LocaleCurrencyProvider";
 import { getDashboardPath } from "../../utils/role-routing";
-import { listings as listingsApi, orders as ordersApi, explorer as explorerApi, sokin as sokinApi, blog as blogApi, resolveMediaUrl, type PublicListing, type CartSummary, type OrderSummary, type ExplorerShopApi, type ExplorerProfileApi, type SoKinApiFeedPost, type PublicBlogPost } from "../../lib/api-client";
+import { listings as listingsApi, orders as ordersApi, explorer as explorerApi, sokin as sokinApi, blog as blogApi, messaging, users as usersApi, resolveMediaUrl, ApiError, type PublicListing, type CartSummary, type OrderSummary, type ExplorerShopApi, type ExplorerProfileApi, type SoKinApiFeedPost, type SoKinApiComment, type PublicBlogPost } from "../../lib/api-client";
 import { useHoverPopup, ArticleHoverPopup, type ArticleHoverData } from "../../components/HoverPopup";
 import { useScrollRestore } from "../../utils/useScrollRestore";
 import { useSocket } from "../../hooks/useSocket";
@@ -14,7 +14,8 @@ import { AdBanner } from "../../components/AdBanner";
 import { SeoMeta } from "../../components/SeoMeta";
 import { HOME_PRODUCT_CATEGORIES, HOME_SERVICE_CATEGORIES } from "../../shared/constants/categories";
 import { SoKinToastProvider } from "../../components/feedback/SoKinToast";
-import { AnnounceCard } from "../sokin/AnnounceCard";
+import { AnnounceCard, type MediaItem } from "../sokin/AnnounceCard";
+import { MediaViewer, CommentsDrawer, type CommentProfileState, type MissingPublicProfile } from "../sokin/SoKinShared";
 import "../sokin/sokin.css";
 import "./home.css";
 
@@ -71,6 +72,17 @@ export function HomePage() {
   const [trendingShops, setTrendingShops] = useState<ExplorerShopApi[]>([]);
   const [trendingProfiles, setTrendingProfiles] = useState<ExplorerProfileApi[]>([]);
   const [sokinFeed, setSokinFeed] = useState<SoKinApiFeedPost[]>([]);
+  /* So-Kin interaction state (media viewer, comments, contact) */
+  const [viewerItem, setViewerItem] = useState<MediaItem | null>(null);
+  const [openCommentsPostId, setOpenCommentsPostId] = useState<string | null>(null);
+  const [commentsByPost, setCommentsByPost] = useState<Record<string, SoKinApiComment[]>>({});
+  const [loadingCommentsPostId, setLoadingCommentsPostId] = useState<string | null>(null);
+  const [submittingCommentPostId, setSubmittingCommentPostId] = useState<string | null>(null);
+  const [commentDraft, setCommentDraft] = useState('');
+  const [replyToComment, setReplyToComment] = useState<SoKinApiComment | null>(null);
+  const [commentSort, setCommentSort] = useState<'recent' | 'relevant'>('recent');
+  const [commentProfileState, setCommentProfileState] = useState<CommentProfileState>({ status: 'idle', profile: null, message: null });
+  const [contactingPostId, setContactingPostId] = useState<string | null>(null);
   const [blogPosts, setBlogPosts] = useState<PublicBlogPost[]>([]);
   const [buyerCart, setBuyerCart] = useState<CartSummary | null>(null);
   const [notificationsCount, setNotificationsCount] = useState(0);
@@ -94,6 +106,125 @@ export function HomePage() {
   const getQty = (id: string) => cardQty[id] ?? 1;
   const changeQty = (id: string, delta: number, e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); setCardQty((prev) => ({ ...prev, [id]: Math.max(1, (prev[id] ?? 1) + delta) })); };
   useScrollRestore();
+
+  /* ── So-Kin handlers (media viewer, comments, contact) ── */
+  const clearCommentsComposer = useCallback(() => {
+    setReplyToComment(null);
+    setCommentProfileState({ status: 'idle', profile: null, message: null });
+    setCommentDraft('');
+  }, []);
+
+  const loadComments = useCallback(async (postId: string, sort: 'recent' | 'relevant' = 'recent') => {
+    setLoadingCommentsPostId(postId);
+    try {
+      const data = await sokinApi.postComments(postId, { limit: 100, sort });
+      setCommentsByPost((prev) => ({ ...prev, [postId]: data.comments ?? [] }));
+    } catch {
+      setCommentsByPost((prev) => ({ ...prev, [postId]: [] }));
+    } finally {
+      setLoadingCommentsPostId((prev) => (prev === postId ? null : prev));
+    }
+  }, []);
+
+  const handleOpenComments = useCallback((postId: string) => {
+    setOpenCommentsPostId(postId);
+    setCommentSort('recent');
+    clearCommentsComposer();
+    void loadComments(postId, 'recent');
+  }, [clearCommentsComposer, loadComments]);
+
+  const handleCloseComments = useCallback(() => {
+    setOpenCommentsPostId(null);
+    clearCommentsComposer();
+  }, [clearCommentsComposer]);
+
+  const handleCommentSortChange = useCallback((newSort: 'recent' | 'relevant') => {
+    setCommentSort(newSort);
+    if (openCommentsPostId) {
+      void loadComments(openCommentsPostId, newSort);
+    }
+  }, [openCommentsPostId, loadComments]);
+
+  const handlePrepareReply = useCallback((comment: SoKinApiComment) => {
+    const targetName = comment.author.profile?.displayName ?? 'Utilisateur';
+    const mention = `@${targetName}`;
+    setReplyToComment(comment);
+    setCommentDraft((prev) => {
+      const trimmed = prev.trim();
+      if (trimmed.startsWith(mention)) return prev;
+      if (!trimmed) return `${mention} `;
+      return `${mention} ${trimmed}`;
+    });
+  }, []);
+
+  const handleOpenCommentProfile = useCallback(async (comment: SoKinApiComment) => {
+    const profilePreview: MissingPublicProfile = {
+      avatarUrl: comment.author.profile?.avatarUrl ?? null,
+      displayName: comment.author.profile?.displayName ?? 'Utilisateur',
+      identifier: comment.author.profile?.username ? `@${comment.author.profile.username.replace('@', '')}` : comment.author.id,
+    };
+    const normalizeUsername = (value?: string | null) => (value ?? '').replace('@', '').trim();
+    const getErrorStatus = (error: unknown) => (error instanceof ApiError ? error.status : undefined);
+    const openResolvedProfile = (username: string) => {
+      setCommentProfileState({ status: 'success', profile: profilePreview, message: null });
+      navigate(`/user/${username}`);
+    };
+    setCommentProfileState({ status: 'loading', profile: profilePreview, message: 'Chargement du profil public…' });
+    const directUsername = normalizeUsername(comment.author.profile?.username);
+    if (directUsername) {
+      try { await usersApi.publicProfile(directUsername); openResolvedProfile(directUsername); return; }
+      catch (error) { if (getErrorStatus(error) !== 404) { setCommentProfileState({ status: 'error', profile: profilePreview, message: 'Erreur technique: impossible d\'ouvrir le profil public pour le moment.' }); return; } }
+    }
+    try {
+      const payload = (await usersApi.publicProfileById(comment.author.id)) as { username?: string | null };
+      const resolved = normalizeUsername(payload?.username);
+      if (resolved) { openResolvedProfile(resolved); return; }
+      setCommentProfileState({ status: 'not-available', profile: profilePreview, message: 'L\'utilisateur ou l\'entreprise n\'a pas de profil public ou de boutique en ligne.' });
+    } catch (error) {
+      if (getErrorStatus(error) === 404) { setCommentProfileState({ status: 'not-available', profile: profilePreview, message: 'L\'utilisateur ou l\'entreprise n\'a pas de profil public ou de boutique en ligne.' }); return; }
+      setCommentProfileState({ status: 'error', profile: profilePreview, message: 'Erreur technique: impossible d\'ouvrir le profil public pour le moment.' });
+    }
+  }, [navigate]);
+
+  const handleSubmitComment = useCallback(async () => {
+    if (!openCommentsPostId) return;
+    if (!isLoggedIn) { navigate('/login'); return; }
+    const content = commentDraft.trim();
+    if (!content) return;
+    setSubmittingCommentPostId(openCommentsPostId);
+    try {
+      const payload = await sokinApi.createComment(openCommentsPostId, { content, parentCommentId: replyToComment?.id });
+      const created = payload.comment;
+      setCommentsByPost((prev) => ({ ...prev, [openCommentsPostId]: [created, ...(prev[openCommentsPostId] ?? [])] }));
+      setSokinFeed((prev) => prev.map((p) => p.id === openCommentsPostId ? { ...p, comments: (p.comments ?? 0) + 1 } : p));
+      setCommentDraft('');
+      setReplyToComment(null);
+    } catch { /* conserver le draft */ }
+    finally { setSubmittingCommentPostId((prev) => (prev === openCommentsPostId ? null : prev)); }
+  }, [openCommentsPostId, isLoggedIn, navigate, commentDraft, replyToComment]);
+
+  const handleSokinContact = useCallback(async (post: SoKinApiFeedPost) => {
+    if (!isLoggedIn) { navigate('/login'); return; }
+    if (!user?.id || post.author.id === user.id) return;
+    if (contactingPostId) return;
+    setContactingPostId(post.id);
+    try {
+      const { conversation } = await messaging.createDM(post.author.id);
+      const mainMedia = post.mediaUrls?.[0] ? resolveMediaUrl(post.mediaUrls[0]) : null;
+      const textPreview = (post.text ?? '').replace(/\s+/g, ' ').trim().slice(0, 120);
+      navigate(`/messaging/${conversation.id}`, {
+        state: {
+          sokinPost: {
+            id: post.id, text: textPreview, mediaUrl: mainMedia,
+            authorName: post.author.profile?.displayName ?? 'Utilisateur',
+            authorId: post.author.id,
+            authorHandle: post.author.profile?.username ?? post.author.id,
+          },
+        },
+      });
+    } catch { navigate('/messaging'); }
+    finally { setContactingPostId(null); }
+  }, [isLoggedIn, user?.id, contactingPostId, navigate]);
 
   const reloadSokinFeed = useCallback(async () => {
     try {
@@ -891,11 +1022,11 @@ export function HomePage() {
                       post={post}
                       t={t}
                       isLoggedIn={isLoggedIn}
-                      onMediaClick={() => {}}
-                      isCommentsOpen={false}
-                      onOpenComments={() => navigate('/sokin')}
-                      onContact={() => navigate('/sokin')}
-                      isContacting={false}
+                      onMediaClick={(item) => setViewerItem(item)}
+                      isCommentsOpen={openCommentsPostId === post.id}
+                      onOpenComments={() => handleOpenComments(post.id)}
+                      onContact={() => void handleSokinContact(post)}
+                      isContacting={contactingPostId === post.id}
                       feedSource="home"
                     />
                   ))}
@@ -1029,6 +1160,30 @@ export function HomePage() {
           }}
         />
       ) : null}
+
+      {/* So-Kin Media Viewer */}
+      {viewerItem && <MediaViewer item={viewerItem} onClose={() => setViewerItem(null)} />}
+
+      {/* So-Kin Comments Drawer */}
+      <CommentsDrawer
+        post={sokinFeed.find((p) => p.id === openCommentsPostId) ?? null}
+        open={Boolean(openCommentsPostId)}
+        isLoggedIn={isLoggedIn}
+        comments={openCommentsPostId ? (commentsByPost[openCommentsPostId] ?? []) : []}
+        loading={loadingCommentsPostId === openCommentsPostId}
+        draft={commentDraft}
+        submitting={submittingCommentPostId === openCommentsPostId}
+        replyTo={replyToComment}
+        profileState={commentProfileState}
+        sort={commentSort}
+        onClose={handleCloseComments}
+        onDraftChange={setCommentDraft}
+        onSubmit={handleSubmitComment}
+        onPrepareReply={handlePrepareReply}
+        onOpenProfile={handleOpenCommentProfile}
+        onCloseProfileState={() => setCommentProfileState({ status: 'idle', profile: null, message: null })}
+        onSortChange={handleCommentSortChange}
+      />
     </div>
   );
 }
