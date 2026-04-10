@@ -8,6 +8,7 @@ import { isAcceptedImageInput } from "../../shared/utils/media-storage.js";
 import { verifyTurnstile } from "../../shared/utils/turnstile.js";
 import { env } from "../../config/env.js";
 import { rateLimit, RateLimits } from "../../shared/middleware/rate-limit.middleware.js";
+import { setAuthCookies, clearAuthCookies } from "../../shared/auth/session.js";
 import * as accountService from "./account.service.js";
 
 const accountTypeSchema = z.nativeEnum(AccountType).optional();
@@ -120,6 +121,11 @@ router.post(
       ipAddress: request.ip
     });
 
+    // Set httpOnly cookies for web auth (skip if TOTP challenge)
+    if ("accessToken" in result && result.accessToken && result.refreshToken && result.sessionId) {
+      setAuthCookies(response, result);
+    }
+
     response.json(result);
   })
 );
@@ -147,6 +153,9 @@ router.post(
       userAgent: request.header("user-agent") ?? undefined,
       ipAddress: request.ip
     });
+    if (result.accessToken && result.refreshToken && result.sessionId) {
+      setAuthCookies(response, result);
+    }
     response.json(result);
   })
 );
@@ -154,11 +163,17 @@ router.post(
 router.post(
   "/refresh",
   asyncHandler(async (request, response) => {
-    const { refreshToken } = refreshSchema.parse(request.body);
+    // Read refresh token from httpOnly cookie first, then body fallback
+    const refreshToken = (request as any).cookies?.kin_refresh || request.body?.refreshToken;
+    if (!refreshToken || typeof refreshToken !== "string" || refreshToken.length < 16) {
+      throw new HttpError(401, "Refresh token requis");
+    }
     try {
       const result = await accountService.refreshAuth(refreshToken);
+      setAuthCookies(response, result);
       response.json(result);
     } catch {
+      clearAuthCookies(response);
       throw new HttpError(401, "Refresh token invalide");
     }
   })
@@ -178,6 +193,7 @@ router.post(
   requireAuth,
   asyncHandler(async (request: AuthenticatedRequest, response) => {
     const result = await accountService.logoutCurrentSession(request.auth?.sessionId);
+    clearAuthCookies(response);
     response.json(result);
   })
 );
@@ -300,6 +316,9 @@ router.post(
       request.header("user-agent"),
       request.ip
     );
+    if (result.accessToken && result.refreshToken && result.sessionId) {
+      setAuthCookies(response, result);
+    }
     response.json(result);
   })
 );

@@ -52,6 +52,10 @@ export async function mutate<T>(
 }
 
 // ── Token Management ─────────────────────────────────────────────────────────
+// With httpOnly cookies, tokens are managed server-side.
+// These functions are kept for backward-compatibility (migration cleanup)
+// and will read/clear the legacy localStorage values.
+
 export function getToken(): string | null {
   return localStorage.getItem(ACCESS_TOKEN_KEY);
 }
@@ -134,25 +138,26 @@ async function refreshAccessToken(): Promise<boolean> {
   if (_refreshPromise) return _refreshPromise;
 
   _refreshPromise = (async () => {
-    const refreshToken = getRefreshToken();
-    if (!refreshToken) return false;
+    try {
+      // httpOnly cookie carries the refresh token automatically
+      const res = await fetch(`${API_BASE}/account/refresh`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({}),
+      });
 
-    const res = await fetch(`${API_BASE}/account/refresh`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ refreshToken })
-    });
+      if (!res.ok) {
+        clearAuthSession();
+        return false;
+      }
 
-    if (!res.ok) {
+      // Server sets new httpOnly cookies; clear any legacy localStorage tokens
       clearAuthSession();
+      return true;
+    } catch {
       return false;
     }
-
-    const data = (await res.json()) as { accessToken: string; refreshToken: string; sessionId: string };
-    setToken(data.accessToken);
-    setRefreshToken(data.refreshToken);
-    setSessionId(data.sessionId);
-    return true;
   })();
 
   try {
@@ -163,38 +168,15 @@ async function refreshAccessToken(): Promise<boolean> {
 }
 
 // ── Proactive Token Refresh ──────────────────────────────────────────────────
+// With httpOnly cookies, JS cannot read the JWT to compute TTL.
+// We use a fixed 12-minute interval (75% of 15min access token TTL).
 let _refreshTimer: ReturnType<typeof setTimeout> | null = null;
-
-function getTokenExpMs(): number | null {
-  const token = getToken();
-  if (!token) return null;
-  try {
-    const parts = token.split(".");
-    if (parts.length !== 3) return null;
-    const payload = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")));
-    if (typeof payload.exp === "number") return payload.exp * 1000;
-  } catch { /* malformed token */ }
-  return null;
-}
+const PROACTIVE_REFRESH_MS = 12 * 60 * 1000; // 12 minutes
 
 export function scheduleTokenRefresh(onSessionLost?: () => void): () => void {
   clearScheduledRefresh();
 
   const schedule = () => {
-    const expMs = getTokenExpMs();
-    if (!expMs) return;
-    // Refresh at 75% of TTL (e.g. 11 min 15 s for a 15 min token)
-    const now = Date.now();
-    const ttl = expMs - now;
-    if (ttl <= 0) {
-      // Already expired — attempt immediate refresh
-      void refreshAccessToken().then((ok) => {
-        if (ok) schedule();
-        else onSessionLost?.();
-      });
-      return;
-    }
-    const delay = Math.max(ttl * 0.75, 10_000); // at least 10 s
     _refreshTimer = setTimeout(async () => {
       const ok = await refreshAccessToken();
       if (ok) {
@@ -202,24 +184,25 @@ export function scheduleTokenRefresh(onSessionLost?: () => void): () => void {
       } else {
         onSessionLost?.();
       }
-    }, delay);
+    }, PROACTIVE_REFRESH_MS);
   };
 
   schedule();
 
-  // Also refresh when tab becomes visible after being hidden
+  // Also refresh when tab becomes visible after being hidden for a while
+  let lastVisible = Date.now();
   const handleVisibility = () => {
     if (document.visibilityState === "visible") {
-      const expMs = getTokenExpMs();
-      if (expMs && expMs - Date.now() < 60_000) {
-        // Less than 1 min remaining — refresh now
+      const hiddenDuration = Date.now() - lastVisible;
+      // If hidden for more than 10 minutes, refresh immediately
+      if (hiddenDuration > 10 * 60 * 1000) {
         void refreshAccessToken().then((ok) => {
           if (ok) schedule();
           else onSessionLost?.();
         });
-      } else {
-        schedule();
       }
+    } else {
+      lastVisible = Date.now();
     }
   };
   document.addEventListener("visibilitychange", handleVisibility);
@@ -251,9 +234,8 @@ export async function request<T>(path: string, opts: RequestOptions = {}, allowR
     if (str) url += `?${str}`;
   }
 
-  const token = getToken();
   const reqHeaders: Record<string, string> = { ...headers };
-  if (token) reqHeaders["Authorization"] = `Bearer ${token}`;
+  // httpOnly cookies carry auth automatically — no Authorization header needed
   if (body) reqHeaders["Content-Type"] = "application/json";
 
   const fetchWork = (async (): Promise<T> => {
@@ -262,6 +244,7 @@ export async function request<T>(path: string, opts: RequestOptions = {}, allowR
       res = await fetch(url, {
         method,
         headers: reqHeaders,
+        credentials: "include",
         body: body ? JSON.stringify(body) : undefined,
         cache: "no-store",
       });

@@ -1,7 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { io, type Socket } from "socket.io-client";
 import { useAuth } from "./AuthProvider";
-import { getToken } from "../../lib/api-client";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:4000";
 
@@ -31,17 +30,16 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const token = getToken();
-    if (!token) return;
-
+    // httpOnly cookies are sent automatically with the WebSocket handshake
     const socket = io(API_BASE, {
       path: "/ws",
-      auth: { token },
       reconnection: true,
       reconnectionAttempts: 20,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 10000,
       randomizationFactor: 0.15,
+      // Send cookies for httpOnly auth (withCredentials is runtime-supported)
+      ...(({ withCredentials: true }) as any),
     });
 
     socketRef.current = socket;

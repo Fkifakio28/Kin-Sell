@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { auth as authApi, clearAuthSession, clearCache, getRefreshToken, getToken, scheduleTokenRefresh, clearScheduledRefresh } from "../../lib/api-client";
+import { auth as authApi, clearAuthSession, clearCache, scheduleTokenRefresh, clearScheduledRefresh } from "../../lib/api-client";
 import type { AccountUser } from "../../lib/api-client";
 
 type AuthContextValue = {
@@ -32,24 +32,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // Bootstrap — token present OR refresh token fallback.
+  // Bootstrap — httpOnly cookies carry auth. Try /me to check if session is active.
   useEffect(() => {
-    const token = getToken();
-    const refreshToken = getRefreshToken();
-
-    if (!token && !refreshToken) {
-      setIsLoading(false);
-      return;
-    }
+    // Clear any legacy localStorage tokens from pre-cookie migration
+    clearAuthSession();
 
     const bootstrap = async () => {
       try {
-        if (!token && refreshToken) {
-          await authApi.refresh();
-        }
         await refreshUser();
       } catch {
-        clearAuthSession();
+        // No valid session — user is not logged in
         setUser(null);
       } finally {
         setIsLoading(false);

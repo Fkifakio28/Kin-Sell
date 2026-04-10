@@ -51,7 +51,6 @@ import { startAiAutonomyScheduler } from "./modules/analytics/ai-autonomy.servic
 
 const app = express();
 const httpServer = createServer(app);
-app.disable("x-powered-by");
 
 // ── Production-ready middleware ──
 if (env.NODE_ENV === "production") {

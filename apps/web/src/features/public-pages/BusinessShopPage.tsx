@@ -268,10 +268,10 @@ export function BusinessShopPage({ slug }: BusinessShopPageProps) {
     };
     try {
       const apiBaseUrl = (import.meta.env as Record<string, string | undefined>).VITE_API_URL ?? '/api';
-      const token = localStorage.getItem('ks-auth-token');
       await fetch(`${apiBaseUrl}/users/report`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reportedUserId: business.id, reason: newReport.reason, message: newReport.detail }),
       });
     } catch { /* ignore */ }

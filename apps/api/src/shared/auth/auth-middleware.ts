@@ -13,6 +13,11 @@ export type AuthenticatedRequest = Request & {
 };
 
 const getBearerToken = (request: Request): string | null => {
+  // 1) httpOnly cookie (web)
+  const cookieToken = (request as any).cookies?.kin_access;
+  if (cookieToken && typeof cookieToken === "string") return cookieToken;
+
+  // 2) Authorization header fallback (mobile / legacy)
   const authorization = request.header("authorization");
   if (!authorization) {
     return null;

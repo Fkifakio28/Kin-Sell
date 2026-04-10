@@ -40,6 +40,9 @@ const IconX = () => (
 const IconInfo = () => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
 );
+const IconCookie = () => (
+  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="8" cy="9" r="1" fill="currentColor"/><circle cx="15" cy="7" r="1" fill="currentColor"/><circle cx="10" cy="14" r="1" fill="currentColor"/><circle cx="16" cy="13" r="1" fill="currentColor"/><circle cx="13" cy="17" r="1" fill="currentColor"/></svg>
+);
 
 /* ── Data ── */
 const COLLECTED_DATA = [
@@ -346,10 +349,45 @@ export function PrivacyPage() {
         </div>
       </section>
 
-
-      {/* ══════ 9. MODIFICATIONS ══════ */}
+      {/* ══════ 9. COOKIES ══════ */}
       <section className="privacy-block">
         <div className="privacy-block-number">8</div>
+        <div className="privacy-block-content glass-container">
+          <div className="privacy-cookie-header">
+            <IconCookie />
+            <h2>Cookies</h2>
+          </div>
+          <p>
+            Kin-Sell utilise des <strong>cookies</strong> — de petits fichiers stockés sur votre
+            appareil — pour améliorer votre expérience sur la plateforme.
+          </p>
+          <div className="privacy-cookie-types">
+            <div className="privacy-cookie-type glass-card">
+              <h3>Cookies essentiels</h3>
+              <p>
+                Nécessaires au bon fonctionnement de la plateforme : connexion, sécurité,
+                préférences de session. Ils ne peuvent pas être désactivés.
+              </p>
+            </div>
+            <div className="privacy-cookie-type glass-card">
+              <h3>Cookies d'analyse</h3>
+              <p>
+                Nous aident à comprendre comment vous utilisez Kin-Sell (pages visitées, durée,
+                parcours). Ces données sont anonymisées et servent uniquement à améliorer la
+                plateforme.
+              </p>
+            </div>
+          </div>
+          <p className="privacy-cookie-note">
+            Vous pouvez gérer vos préférences de cookies depuis les paramètres de votre navigateur
+            à tout moment.
+          </p>
+        </div>
+      </section>
+
+      {/* ══════ 10. MODIFICATIONS ══════ */}
+      <section className="privacy-block">
+        <div className="privacy-block-number">9</div>
         <div className="privacy-block-content glass-container">
           <div className="privacy-update-header">
             <IconRefresh />
@@ -367,9 +405,9 @@ export function PrivacyPage() {
         </div>
       </section>
 
-      {/* ══════ 10. CONTACT ══════ */}
+      {/* ══════ 11. CONTACT ══════ */}
       <section className="privacy-block">
-        <div className="privacy-block-number">9</div>
+        <div className="privacy-block-number">10</div>
         <div className="privacy-block-content glass-container">
           <div className="privacy-contact-header">
             <IconMail />

@@ -58,9 +58,9 @@ async function flush() {
     const token = localStorage.getItem("kin-sell.token");
     await fetch(`${API_BASE}/sokin/track`, {
       method: "POST",
+      credentials: "include",
       headers: {
         "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       body: JSON.stringify({ events: batch }),
       keepalive: true, // survit au unload

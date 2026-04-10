@@ -733,7 +733,7 @@ export function AdminDashboard() {
       formData.append('files', file);
       const res = await fetch(`${import.meta.env.VITE_API_URL || ''}/uploads`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token') ?? ''}` },
+        credentials: 'include',
         body: formData,
       });
       if (!res.ok) throw new Error('Upload échoué');
@@ -3402,7 +3402,7 @@ export function AdminDashboard() {
     setIaData(null);
     try {
       const res = await fetch(`${(import.meta as any).env?.VITE_API_URL ?? '/api'}/admin/ia/${endpoint}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+        credentials: 'include',
       });
       if (res.ok) setIaData(await res.json());
     } catch { /* ignore */ }

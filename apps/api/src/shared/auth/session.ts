@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import { SessionStatus } from "@prisma/client";
+import type { Response } from "express";
 import { env } from "../../config/env.js";
 import { prisma } from "../db/prisma.js";
 
@@ -172,3 +173,51 @@ export const revokeOtherSessions = async (userId: string, keepSessionId: string)
     }
   });
 };
+
+// ── httpOnly Cookie Helpers ──────────────────────────────────────────────────
+
+const COOKIE_ACCESS  = "kin_access";
+const COOKIE_REFRESH = "kin_refresh";
+const COOKIE_SID     = "kin_sid";
+
+export function setAuthCookies(
+  res: Response,
+  tokens: { accessToken: string; refreshToken: string; sessionId: string },
+) {
+  const secure = env.NODE_ENV === "production";
+  const sameSite: "lax" = "lax";
+
+  res.cookie(COOKIE_ACCESS, tokens.accessToken, {
+    httpOnly: true,
+    secure,
+    sameSite,
+    path: "/",
+    maxAge: parseDurationMs(env.JWT_EXPIRES_IN),
+  });
+
+  res.cookie(COOKIE_REFRESH, tokens.refreshToken, {
+    httpOnly: true,
+    secure,
+    sameSite,
+    path: "/",
+    maxAge: parseDurationMs(env.REFRESH_TOKEN_EXPIRES_IN),
+  });
+
+  res.cookie(COOKIE_SID, tokens.sessionId, {
+    httpOnly: true,
+    secure,
+    sameSite,
+    path: "/",
+    maxAge: parseDurationMs(env.REFRESH_TOKEN_EXPIRES_IN),
+  });
+}
+
+export function clearAuthCookies(res: Response) {
+  const secure = env.NODE_ENV === "production";
+  const sameSite: "lax" = "lax";
+  const opts = { httpOnly: true, secure, sameSite, path: "/" } as const;
+
+  res.clearCookie(COOKIE_ACCESS, opts);
+  res.clearCookie(COOKIE_REFRESH, opts);
+  res.clearCookie(COOKIE_SID, opts);
+}

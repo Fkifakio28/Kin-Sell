@@ -40,7 +40,15 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
 
   /* ── Auth middleware ── */
   io.use((socket, next) => {
-    const token = socket.handshake.auth.token as string | undefined;
+    // Try auth.token first (mobile/legacy), then httpOnly cookie
+    let token = socket.handshake.auth.token as string | undefined;
+    if (!token) {
+      const cookieHeader = socket.handshake.headers.cookie;
+      if (cookieHeader) {
+        const match = cookieHeader.match(/(?:^|;\s*)kin_access=([^;]+)/);
+        if (match) token = match[1];
+      }
+    }
     if (!token) return next(new Error("Authentification requise"));
     try {
       const payload = verifyAccessToken(token);

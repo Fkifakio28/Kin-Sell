@@ -5,6 +5,7 @@ import { requireAuth, type AuthenticatedRequest } from "../../shared/auth/auth-m
 import { asyncHandler } from "../../shared/utils/async-handler.js";
 import { rateLimit, RateLimits } from "../../shared/middleware/rate-limit.middleware.js";
 import { logSecurityEvent, checkMultiAccount, createFraudSignal } from "../security/security.service.js";
+import { setAuthCookies } from "../../shared/auth/session.js";
 import * as authService from "./auth.service.js";
 import { getGoogleAuthUrl, handleGoogleCallback } from "./google-oauth.service.js";
 import { verifyTurnstile } from "../../shared/utils/turnstile.js";
@@ -138,10 +139,17 @@ router.get("/google/callback", asyncHandler(async (req, res) => {
 
   try {
     const result = await handleGoogleCallback(code);
-    const params = new URLSearchParams({
-      token: result.accessToken,
+
+    // Set httpOnly cookies — tokens no longer sent in URL
+    setAuthCookies(res, {
+      accessToken: result.accessToken,
       refreshToken: result.refreshToken,
       sessionId: result.sessionId,
+    });
+
+    // Only send non-secret metadata in URL
+    const params = new URLSearchParams({
+      authSuccess: "1",
       userId: result.user.id,
       displayName: result.user.displayName ?? "",
       role: result.user.role,

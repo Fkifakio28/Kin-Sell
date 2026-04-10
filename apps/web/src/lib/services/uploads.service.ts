@@ -1,4 +1,4 @@
-import { API_BASE, getToken, ApiError } from "../api-core";
+import { API_BASE, ApiError } from "../api-core";
 
 export const uploads = {
   uploadFiles: async (files: File[]): Promise<string[]> => {
@@ -6,11 +6,10 @@ export const uploads = {
     for (const file of files) {
       formData.append("files", file);
     }
-    const token = getToken();
     const baseUrl = API_BASE;
     const res = await fetch(`${baseUrl}/uploads`, {
       method: "POST",
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      credentials: "include",
       body: formData,
     });
     if (!res.ok) {

@@ -1,12 +1,12 @@
 import { useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
-import { setToken, setRefreshToken, setSessionId } from "../../lib/api-client";
+import { clearAuthSession } from "../../lib/api-client";
 import { useLocaleCurrency } from "../../app/providers/LocaleCurrencyProvider";
 
 /**
  * Page de callback OAuth.
- * L'API redirige ici avec les tokens en query params après authentification Google/Facebook/Apple.
- * On persiste les tokens puis on force un rechargement complet pour que AuthProvider bootstrap avec les tokens.
+ * L'API sets httpOnly cookies during the redirect — no tokens in URL anymore.
+ * We just read metadata (role, authSuccess) and redirect to the appropriate dashboard.
  */
 export function AuthCallbackPage() {
   const [searchParams] = useSearchParams();
@@ -17,28 +17,19 @@ export function AuthCallbackPage() {
     if (processed.current) return;
     processed.current = true;
 
-    const token = searchParams.get("token");
-    const refreshToken = searchParams.get("refreshToken");
-    const sessionId = searchParams.get("sessionId");
+    const authSuccess = searchParams.get("authSuccess");
     const role = searchParams.get("role");
     const error = searchParams.get("error");
 
-    if (error) {
+    // Clear any legacy localStorage tokens
+    clearAuthSession();
+
+    if (error || !authSuccess) {
       window.location.replace("/login");
       return;
     }
 
-    if (!token || !refreshToken || !sessionId) {
-      window.location.replace("/login");
-      return;
-    }
-
-    // Persister les tokens
-    setToken(token);
-    setRefreshToken(refreshToken);
-    setSessionId(sessionId);
-
-    // Full page reload pour que AuthProvider bootstrap avec les tokens
+    // Full page reload pour que AuthProvider bootstrap avec les cookies httpOnly
     if (role === "ADMIN" || role === "SUPER_ADMIN") {
       window.location.replace("/admin/dashboard");
     } else if (role === "BUSINESS") {
