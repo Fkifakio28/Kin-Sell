@@ -47,6 +47,7 @@ import { batchCreateWeeklySnapshots } from "./modules/analytics/ai-memory.servic
 import { startAdOrchestrator } from "./modules/ads/kinsell-internal-ads-orchestrator.js";
 import { runSubscriptionExpiryCheck, clearSubscriptionCache } from "./shared/billing/subscription-guard.js";
 import { startScoringScheduler } from "./modules/sokin/sokin-scoring.service.js";
+import { startAiAutonomyScheduler } from "./modules/analytics/ai-autonomy.service.js";
 
 const app = express();
 const httpServer = createServer(app);
@@ -249,7 +250,9 @@ httpServer.listen(env.API_PORT, async () => {
   setTimeout(() => { void runExpiry(); }, 60_000);
   setInterval(() => { void runExpiry(); }, 30 * 60 * 1000);
   logger.info("[Billing] Subscription expiry scheduler started (every 30min)");
-  logger.info("[IA] Agents initialisés (scheduler autonome désactivé)");
+  // ── IA Autonomie Scheduler ──
+  startAiAutonomyScheduler();
+  logger.info("[IA] Agents initialisés — scheduler autonome activé");
 });
 
 // ── Graceful shutdown ──

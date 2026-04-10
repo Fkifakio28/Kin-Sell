@@ -45,7 +45,8 @@ export type ProductType =
   | "BOOST"
   | "ADS_PACK"
   | "ADS_PREMIUM"
-  | "ANALYTICS";
+  | "ANALYTICS"
+  | "BUSINESS_TIP";
 
 export interface CommercialRecommendation {
   productType: ProductType;
@@ -78,6 +79,9 @@ interface AdvisorContext {
   salesLast30d: number;
   salesPrev30d: number;       // 30-60j pour comparaison croissance
   ordersLast30d: number;      // commandes reçues (pas forcément livrées)
+
+  // Qualité catalogue
+  listingsWithoutImage: number;
 
   // Promotions
   activePromos: number;
@@ -140,6 +144,7 @@ async function buildAdvisorContext(
     hasEverBoosted,
     hasEverRunAd,
     categoryStats,
+    listingsWithoutImage,
   ] = await Promise.all([
     prisma.listing.count({ where: { ownerUserId: userId, createdAt: { gte: d7 } } }),
     prisma.listing.count({ where: { ownerUserId: userId, createdAt: { gte: d30 } } }),
@@ -166,6 +171,7 @@ async function buildAdvisorContext(
       orderBy: { _count: { id: "desc" } },
       take: 10,
     }),
+    prisma.listing.count({ where: { ownerUserId: userId, status: "ACTIVE", imageUrl: null } }),
   ]);
 
   const topCat = categoryStats.length > 0
@@ -195,6 +201,7 @@ async function buildAdvisorContext(
     salesLast30d,
     salesPrev30d,
     ordersLast30d,
+    listingsWithoutImage,
     activePromos,
     promoWithoutBoost,
     stagnantCount: stagnant,
@@ -678,11 +685,151 @@ const ruleCategorySpecialist: AdvisorRule = (ctx) => {
   };
 };
 
+// ── BUSINESS_TIP : articles sans photo → ajoutez des images ──────────
+
+const ruleTipAddPhotos: AdvisorRule = (ctx) => {
+  if (ctx.profile.totalListings < 3) return null;
+  const noImageCount = ctx.listingsWithoutImage ?? 0;
+  if (noImageCount < 2) return null;
+
+  return {
+    productType: "BUSINESS_TIP",
+    productCode: "TIP_ADD_PHOTOS",
+    priority: 9,
+    confidence: Math.min(95, 60 + noImageCount * 5),
+    title: "📸 Ajoutez des photos à vos annonces",
+    message: `${noImageRatio} de vos annonces n'ont pas de photo. Les articles avec images obtiennent 3× plus de vues et 2× plus de contacts. Ajoutez des photos claires pour chaque article.`,
+    rationale: `${noImageRatio} annonces sans image — impact direct sur la conversion`,
+    ctaLabel: "Gérer mes articles",
+    ctaTarget: "/account?section=articles",
+    pricing: "Gratuit",
+    signals: [`${noImageRatio} annonces sans photo`, `${ctx.profile.totalListings} annonces total`],
+    metric: { withoutImage: noImageRatio, total: ctx.profile.totalListings },
+  };
+};
+
+// ── BUSINESS_TIP : prix pas compétitifs → ajustez vos prix ──────────
+
+const ruleTipPriceAdjust: AdvisorRule = (ctx) => {
+  if (ctx.salesLast30d >= 5) return null; // déjà en train de vendre
+  if (ctx.profile.totalListings < 3) return null;
+  if (ctx.stagnantRatio < 0.5) return null;
+  if (ctx.messagesLast30d > 10) return null; // a du trafic
+
+  return {
+    productType: "BUSINESS_TIP",
+    productCode: "TIP_ADJUST_PRICES",
+    priority: 8,
+    confidence: Math.min(90, 50 + Math.round(ctx.stagnantRatio * 40)),
+    title: "💰 Ajustez vos prix pour vendre plus",
+    message: `${Math.round(ctx.stagnantRatio * 100)}% de vos annonces stagnent sans contact. Vérifiez vos prix par rapport aux concurrents de la même catégorie. Une réduction de 10-15% sur les articles inactifs peut relancer les ventes.`,
+    rationale: `Stagnation ${Math.round(ctx.stagnantRatio * 100)}% + 0 messages — prix probablement trop hauts`,
+    ctaLabel: "Voir mes articles",
+    ctaTarget: "/account?section=articles",
+    pricing: "Gratuit",
+    signals: [
+      `${ctx.stagnantCount} annonces stagnantes`,
+      `${ctx.salesLast30d} ventes/30j`,
+      `${ctx.messagesLast30d} messages reçus/30j`,
+    ],
+    metric: { stagnantRatio: Math.round(ctx.stagnantRatio * 100), salesLast30d: ctx.salesLast30d },
+  };
+};
+
+// ── BUSINESS_TIP : peu de messages → améliorez vos descriptions ─────
+
+const ruleTipBetterDescriptions: AdvisorRule = (ctx) => {
+  if (ctx.profile.totalListings < 5) return null;
+  if (ctx.messagesLast30d >= 5) return null; // a du trafic
+  if (ctx.salesLast30d >= 3) return null;
+  if (ctx.stagnantRatio < 0.3) return null;
+
+  return {
+    productType: "BUSINESS_TIP",
+    productCode: "TIP_DESCRIPTIONS",
+    priority: 7,
+    confidence: Math.min(85, 40 + ctx.profile.totalListings * 3),
+    title: "✏️ Améliorez vos descriptions",
+    message: `Vos ${ctx.profile.totalListings} annonces génèrent peu de contacts. Ajoutez des descriptions détaillées (matière, dimensions, état, garantie) et des mots-clés que les acheteurs recherchent dans votre catégorie.`,
+    rationale: `${ctx.profile.totalListings} annonces + ${ctx.messagesLast30d} messages — descriptions probablement insuffisantes`,
+    ctaLabel: "Modifier mes annonces",
+    ctaTarget: "/account?section=articles",
+    pricing: "Gratuit",
+    signals: [
+      `${ctx.messagesLast30d} messages/30j`,
+      `${ctx.profile.totalListings} annonces`,
+    ],
+    metric: { listings: ctx.profile.totalListings, messages: ctx.messagesLast30d },
+  };
+};
+
+// ── BUSINESS_TIP : bonne activité → répondez vite aux messages ──────
+
+const ruleTipFastResponse: AdvisorRule = (ctx) => {
+  if (ctx.messagesLast7d < 10) return null; // pas assez de trafic pour que ça compte
+  if (ctx.salesLast7d >= 3) return null; // convertit bien
+  const conversionRate = ctx.messagesLast7d > 0 ? ctx.salesLast7d / ctx.messagesLast7d : 0;
+  if (conversionRate >= 0.15) return null;
+
+  return {
+    productType: "BUSINESS_TIP",
+    productCode: "TIP_FAST_RESPONSE",
+    priority: 8,
+    confidence: Math.min(90, 50 + ctx.messagesLast7d),
+    title: "⚡ Répondez plus vite aux acheteurs",
+    message: `Vous recevez ${ctx.messagesLast7d} messages/semaine mais convertissez peu. Les vendeurs qui répondent en moins de 30 min ont 4× plus de ventes. Activez les notifications et répondez rapidement.`,
+    rationale: `${ctx.messagesLast7d} messages et ${ctx.salesLast7d} ventes/7j — taux de conversion faible`,
+    ctaLabel: "Voir mes messages",
+    ctaTarget: "/messaging",
+    pricing: "Gratuit",
+    signals: [
+      `${ctx.messagesLast7d} messages/7j`,
+      `${ctx.salesLast7d} ventes/7j`,
+      `Conversion: ${Math.round(conversionRate * 100)}%`,
+    ],
+    metric: { messages: ctx.messagesLast7d, sales: ctx.salesLast7d, conversionPct: Math.round(conversionRate * 100) },
+  };
+};
+
+// ── BUSINESS_TIP : diversification catégorie ────────────────────────
+
+const ruleTipDiversify: AdvisorRule = (ctx) => {
+  if (ctx.categoryCount > 2) return null; // déjà diversifié
+  if (ctx.profile.totalListings < 5) return null;
+  if (!ctx.topCategory) return null;
+
+  return {
+    productType: "BUSINESS_TIP",
+    productCode: "TIP_DIVERSIFY",
+    priority: 5,
+    confidence: Math.min(75, 40 + ctx.profile.totalListings * 2),
+    title: "🎯 Diversifiez votre catalogue",
+    message: `Tous vos articles sont dans "${ctx.topCategory.name}". Ajoutez des articles dans d'autres catégories pour capter plus d'acheteurs et réduire votre dépendance à une seule niche.`,
+    rationale: `${ctx.profile.totalListings} articles dans ${ctx.categoryCount} catégorie(s) — mono-niche`,
+    ctaLabel: "Publier un article",
+    ctaTarget: "/account?section=articles&action=publish",
+    pricing: "Gratuit",
+    signals: [
+      `${ctx.categoryCount} catégorie(s)`,
+      `${ctx.profile.totalListings} articles`,
+      `Top: ${ctx.topCategory.name}`,
+    ],
+    metric: { categories: ctx.categoryCount, topCategory: ctx.topCategory.name },
+  };
+};
+
 // ═══════════════════════════════════════════════════════
 // Registre des règles (ordonnées par importance stratégique)
 // ═══════════════════════════════════════════════════════
 
 const RULES: AdvisorRule[] = [
+  // Conseils métier concrets (priorité haute — gratuits et actionnables)
+  ruleTipAddPhotos,
+  ruleTipPriceAdjust,
+  ruleTipFastResponse,
+  ruleTipBetterDescriptions,
+  ruleTipDiversify,
+
   // Plans (haute priorité) — un seul plan sera retenu
   ruleUserNeedsProVendor,
   ruleBusinessNeedsScale,
@@ -751,7 +898,7 @@ export async function getCommercialAdvice(userId: string): Promise<CommercialRec
     const rec = rule(ctx);
     if (!rec) continue;
 
-    // Dédupliquer : 1 seul PLAN, 1 seul ANALYTICS, multi ADDON ok
+    // Dédupliquer : 1 seul PLAN, 1 seul ANALYTICS, multi ADDON/BUSINESS_TIP ok
     if (rec.productType === "PLAN" && seenProductTypes.has("PLAN")) continue;
     if (rec.productType === "ANALYTICS" && seenProductTypes.has("ANALYTICS")) continue;
 

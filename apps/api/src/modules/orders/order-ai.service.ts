@@ -22,6 +22,7 @@ import {
   checkIaAccessOrLog,
   clearSubscriptionCache,
 } from "../../shared/billing/subscription-guard.js";
+import { sendPushToUser } from "../notifications/push.service.js";
 
 // ─────────────────────────────────────────────
 // Checkout Advisor
@@ -535,6 +536,19 @@ export async function runBatchCartRecovery(): Promise<CartRecoveryResult> {
         },
       });
 
+      // ── Notification buyer : rappel panier ──
+      const cartMsg = action === "URGENT_ALERT"
+        ? "Des articles de votre panier sont en quantité limitée ! Finalisez avant rupture."
+        : action === "OFFER_DISCOUNT"
+          ? `Votre panier de ${(cartTotal / 100).toFixed(2)}$ vous attend. Finalisez maintenant !`
+          : `Vous avez ${itemCount} article(s) dans votre panier. Finalisez votre achat.`;
+      void sendPushToUser(cart.buyerUserId, {
+        title: action === "URGENT_ALERT" ? "🔥 Stock limité dans votre panier" : "🛒 Votre panier vous attend",
+        body: cartMsg,
+        tag: `ia-cart-${cart.id}`,
+        data: { type: "IA_CART_RECOVERY", cartId: cart.id },
+      }).catch(() => {});
+
       result.processed++;
     } catch {
       result.errors++;
@@ -609,6 +623,14 @@ export async function runBatchOrderAutoValidation(): Promise<AutoValidationResul
             success: true,
           },
         });
+
+        // ── Notification vendeur : commande auto-validée ──
+        void sendPushToUser(order.sellerUserId, {
+          title: "✅ Commande auto-validée",
+          body: "L'IA a confirmé une commande. Préparez l'article pour l'expédition.",
+          tag: `ia-order-${order.id}`,
+          data: { type: "IA_ORDER_VALIDATED", orderId: order.id },
+        }).catch(() => {});
       } else {
         result.flagged++;
         await prisma.aiAutonomyLog.create({
@@ -926,6 +948,62 @@ export async function runBatchPostOrderTracking(): Promise<PostOrderTrackingResu
     return total >= MAX_ACTIONS_PER_ORDER;
   }
 
+  // ── 0. Auto-progression CONFIRMED → PROCESSING (vendeurs autonomes, commandes > 2h) ──
+  try {
+    const twoHoursAgo = new Date(now - 2 * 60 * 60 * 1000);
+    const staleConfirmedForProcessing = await prisma.order.findMany({
+      where: {
+        status: "CONFIRMED",
+        confirmedAt: { lt: twoHoursAgo },
+      },
+      select: { id: true, sellerUserId: true, totalUsdCents: true },
+      take: 50,
+    });
+
+    for (const order of staleConfirmedForProcessing) {
+      if (!(await checkIaAccessOrLog(order.sellerUserId, "IA_ORDER", "autoProgressToProcessing"))) continue;
+      if (await hasReachedMaxActions(order.id)) continue;
+
+      // Vérifier qu'on n'a pas déjà fait cette transition
+      const alreadyProgressed = await prisma.aiAutonomyLog.findFirst({
+        where: {
+          agentName: "IA_COMMANDE",
+          actionType: "AUTO_PROGRESS_PROCESSING",
+          targetId: order.id,
+        },
+      });
+      if (alreadyProgressed) continue;
+
+      await prisma.order.update({
+        where: { id: order.id },
+        data: { status: "PROCESSING" },
+      });
+
+      await prisma.aiAutonomyLog.create({
+        data: {
+          agentName: "IA_COMMANDE",
+          actionType: "AUTO_PROGRESS_PROCESSING",
+          targetId: order.id,
+          targetUserId: order.sellerUserId,
+          decision: "PROCESSING",
+          reasoning: `Commande confirmée > 2h — passage auto en préparation (${(order.totalUsdCents / 100).toFixed(2)}$)`,
+          success: true,
+        },
+      });
+
+      // ── Notification vendeur : commande en préparation ──
+      void sendPushToUser(order.sellerUserId, {
+        title: "📦 Commande passée en préparation",
+        body: `L'IA a lancé la préparation d'une commande de ${(order.totalUsdCents / 100).toFixed(2)}$. Expédiez quand c'est prêt.`,
+        tag: `ia-order-processing-${order.id}`,
+        data: { type: "IA_ORDER_PROCESSING", orderId: order.id },
+      }).catch(() => {});
+
+      result.confirmationReminders++;
+      result.processed++;
+    }
+  } catch { result.errors++; }
+
   // ── 1. Rappel confirmation vendeur (CONFIRMED > 24h) ──
   try {
     const staleConfirmed = await prisma.order.findMany({
@@ -965,7 +1043,82 @@ export async function runBatchPostOrderTracking(): Promise<PostOrderTrackingResu
           success: true,
         },
       });
+
+      // ── Notification vendeur : rappel expédition ──
+      void sendPushToUser(order.sellerUserId, {
+        title: "⏰ Rappel : commande en attente d'expédition",
+        body: `Une commande de ${(order.totalUsdCents / 100).toFixed(2)}$ attend votre expédition depuis plus de 24h.`,
+        tag: `ia-order-remind-${order.id}`,
+        data: { type: "IA_ORDER_REMIND", orderId: order.id },
+      }).catch(() => {});
+
       result.confirmationReminders++;
+      result.processed++;
+    }
+  } catch { result.errors++; }
+
+  // ── 1b. Auto-progression PROCESSING → SHIPPED pour commandes de services uniquement (> 6h) ──
+  try {
+    const sixHoursAgo = new Date(now - 6 * 60 * 60 * 1000);
+    const staleProcessing = await prisma.order.findMany({
+      where: {
+        status: "PROCESSING",
+        updatedAt: { lt: sixHoursAgo },
+      },
+      select: {
+        id: true,
+        sellerUserId: true,
+        totalUsdCents: true,
+        items: { select: { listing: { select: { type: true } } } },
+      },
+      take: 50,
+    });
+
+    for (const order of staleProcessing) {
+      // Seulement si TOUS les articles sont des services (pas de produit physique)
+      const allServices = order.items.length > 0 && order.items.every(
+        (item) => item.listing?.type === "SERVICE"
+      );
+      if (!allServices) continue;
+
+      if (!(await checkIaAccessOrLog(order.sellerUserId, "IA_ORDER", "autoProgressToShipped"))) continue;
+      if (await hasReachedMaxActions(order.id)) continue;
+
+      const alreadyShipped = await prisma.aiAutonomyLog.findFirst({
+        where: {
+          agentName: "IA_COMMANDE",
+          actionType: "AUTO_PROGRESS_SHIPPED",
+          targetId: order.id,
+        },
+      });
+      if (alreadyShipped) continue;
+
+      await prisma.order.update({
+        where: { id: order.id },
+        data: { status: "SHIPPED" },
+      });
+
+      await prisma.aiAutonomyLog.create({
+        data: {
+          agentName: "IA_COMMANDE",
+          actionType: "AUTO_PROGRESS_SHIPPED",
+          targetId: order.id,
+          targetUserId: order.sellerUserId,
+          decision: "SHIPPED",
+          reasoning: `Commande service en préparation > 6h — passage auto en livré (${(order.totalUsdCents / 100).toFixed(2)}$)`,
+          success: true,
+        },
+      });
+
+      // ── Notification vendeur + buyer : service marqué livré ──
+      void sendPushToUser(order.sellerUserId, {
+        title: "🚀 Service marqué comme livré",
+        body: `L'IA a marqué un service (${(order.totalUsdCents / 100).toFixed(2)}$) comme livré. L'acheteur doit confirmer avec le code.`,
+        tag: `ia-order-shipped-${order.id}`,
+        data: { type: "IA_ORDER_SHIPPED", orderId: order.id },
+      }).catch(() => {});
+
+      result.deliveryChecks++;
       result.processed++;
     }
   } catch { result.errors++; }
@@ -1009,6 +1162,15 @@ export async function runBatchPostOrderTracking(): Promise<PostOrderTrackingResu
           success: true,
         },
       });
+
+      // ── Notification buyer : avez-vous reçu la commande ? ──
+      void sendPushToUser(order.buyerUserId, {
+        title: "📬 Avez-vous reçu votre commande ?",
+        body: "Votre commande a été expédiée il y a plus de 48h. Confirmez la réception avec votre code.",
+        tag: `ia-delivery-check-${order.id}`,
+        data: { type: "IA_DELIVERY_CHECK", orderId: order.id },
+      }).catch(() => {});
+
       result.deliveryChecks++;
       result.processed++;
     }
@@ -1078,6 +1240,15 @@ export async function runBatchPostOrderTracking(): Promise<PostOrderTrackingResu
           success: true,
         },
       });
+
+      // ── Notification buyer : laissez un avis ──
+      void sendPushToUser(order.buyerUserId, {
+        title: "⭐ Laissez un avis sur votre achat",
+        body: "Votre avis aide la communauté Kin-Sell. Prenez 30 secondes pour noter votre vendeur.",
+        tag: `ia-review-${order.id}`,
+        data: { type: "IA_REVIEW_REQUEST", orderId: order.id },
+      }).catch(() => {});
+
       result.reviewRequests++;
       result.processed++;
     }

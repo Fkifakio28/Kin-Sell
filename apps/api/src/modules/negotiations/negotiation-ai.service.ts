@@ -24,6 +24,7 @@ import {
   checkIaAccessOrLog,
   clearSubscriptionCache,
 } from "../../shared/billing/subscription-guard.js";
+import { sendPushToUser } from "../notifications/push.service.js";
 
 // ─────────────────────────────────────────────
 // Types
@@ -1018,6 +1019,34 @@ export async function runBatchAutoNegotiation(): Promise<BatchAutoResult> {
           },
         },
       });
+
+      // ── Notification push vendeur ──
+      const offerPrice = nego.offers[0]?.priceUsdCents ?? 0;
+      const originalPrice = nego.listing.priceUsdCents;
+      const pctOffer = originalPrice > 0 ? Math.round((offerPrice / originalPrice) * 100) : 0;
+      if (decision.action === "ACCEPT") {
+        void sendPushToUser(nego.sellerUserId, {
+          title: "🤝 Marchandage accepté automatiquement",
+          body: `L'IA a accepté une offre à ${pctOffer}% du prix. La commande peut suivre.`,
+          tag: `ia-nego-${nego.id}`,
+          data: { type: "IA_NEGOTIATE", negotiationId: nego.id, action: "ACCEPT" },
+        }).catch(() => {});
+      } else if (decision.action === "COUNTER") {
+        const counterAmt = decision.counterPriceUsdCents ? (decision.counterPriceUsdCents / 100).toFixed(2) : "?";
+        void sendPushToUser(nego.sellerUserId, {
+          title: "💬 Contre-proposition IA envoyée",
+          body: `L'IA a proposé ${counterAmt}$ à l'acheteur. Vous pouvez intervenir si besoin.`,
+          tag: `ia-nego-${nego.id}`,
+          data: { type: "IA_NEGOTIATE", negotiationId: nego.id, action: "COUNTER" },
+        }).catch(() => {});
+      } else {
+        void sendPushToUser(nego.sellerUserId, {
+          title: "❌ Offre refusée automatiquement",
+          body: `L'offre à ${pctOffer}% du prix a été refusée par l'IA (en dessous du seuil).`,
+          tag: `ia-nego-${nego.id}`,
+          data: { type: "IA_NEGOTIATE", negotiationId: nego.id, action: "REFUSE" },
+        }).catch(() => {});
+      }
     } catch {
       result.errors++;
     }

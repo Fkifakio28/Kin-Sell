@@ -53,10 +53,6 @@ const DRAWER_LINKS = {
     { icon: "\uD83D\uDECD\uFE0F", labelKey: "common.products", href: "/explorer?type=produits" },
     { icon: "\uD83D\uDD27", labelKey: "common.services", href: "/explorer?type=services" },
   ],
-  user: [
-    { icon: "\uD83C\uDFEA", labelKey: "home.drawerSellSpace", href: "__DASHBOARD__?section=sell" },
-    { icon: "\uD83D\uDED2", labelKey: "home.drawerBuySpace", href: "__DASHBOARD__?section=buy" },
-  ],
   public: [
     { icon: "\uD83D\uDCE2", labelKey: "home.sokinFeed", href: "/sokin" },
     { icon: "\uD83D\uDC64", labelKey: "home.sokinProfiles", href: "/explorer/public-profiles" },
@@ -71,6 +67,16 @@ const DRAWER_LINKS = {
     { icon: "\u2696\uFE0F", labelKey: "home.terms", href: "/terms" },
   ],
 };
+
+function getUserDrawerLinks(role: string | undefined | null): { icon: string; labelKey: string; href: string }[] {
+  if (role === "BUSINESS") {
+    return [{ icon: "\uD83C\uDFE2", labelKey: "home.drawerBusinessOrders", href: "/business/dashboard" }];
+  }
+  if (role === "ADMIN" || role === "SUPER_ADMIN") {
+    return [{ icon: "\u2699\uFE0F", labelKey: "home.drawerAdminPanel", href: "/admin/dashboard" }];
+  }
+  return [{ icon: "\uD83D\uDCCB", labelKey: "home.drawerMyPage", href: "/account" }];
+}
 
 /* ────────────── Hook: scroll direction ────────────── */
 
@@ -208,7 +214,7 @@ function SideDrawer({
               onClose();
               void navigate(
                 isLoggedIn
-                  ? getDashboardPath(user?.role) + "?section=sell"
+                  ? getDashboardPath(user?.role) + "?section=articles&action=publish"
                   : "/login",
               );
             }}
@@ -245,13 +251,7 @@ function SideDrawer({
           {isLoggedIn && (
             <DrawerSection
               title={t("home.drawerUserSection")}
-              links={DRAWER_LINKS.user.map((l) => ({
-                ...l,
-                href: l.href.replace(
-                  "__DASHBOARD__",
-                  getDashboardPath(user?.role),
-                ),
-              }))}
+              links={getUserDrawerLinks(user?.role)}
               onClose={onClose}
               t={t}
             />
@@ -1224,7 +1224,7 @@ function BottomNav({
 
         {/* Notifications */}
         <Link
-          to={isLoggedIn ? getDashboardPath(user?.role) + "?section=notifications" : "/login"}
+          to={isLoggedIn ? getDashboardPath(user?.role) : "/login"}
           className="hm-bnav-item"
         >
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1269,7 +1269,7 @@ function BottomNav({
               onClick={() =>
                 go(
                   getDashboardPath(user?.role) +
-                    "?section=sell&create=produit",
+                    "?section=articles&action=publish",
                 )
               }
             >
@@ -1281,7 +1281,7 @@ function BottomNav({
               onClick={() =>
                 go(
                   getDashboardPath(user?.role) +
-                    "?section=sell&create=service",
+                    "?section=articles&action=publish",
                 )
               }
             >

@@ -45,11 +45,11 @@ function CreateMenu({
           <span aria-hidden="true">📢</span>
           <span>Publier sur SoKin</span>
         </button>
-        <button className="msh-create-item" onClick={() => go(`${getDashboardPath(user?.role)}?section=sell&create=produit`)}>
+        <button className="msh-create-item" onClick={() => go(`${getDashboardPath(user?.role)}?section=articles&action=publish`)}>
           <span aria-hidden="true">🛍️</span>
           <span>Ajouter un produit</span>
         </button>
-        <button className="msh-create-item" onClick={() => go(`${getDashboardPath(user?.role)}?section=sell&create=service`)}>
+        <button className="msh-create-item" onClick={() => go(`${getDashboardPath(user?.role)}?section=articles&action=publish`)}>
           <span aria-hidden="true">🔧</span>
           <span>Ajouter un service</span>
         </button>

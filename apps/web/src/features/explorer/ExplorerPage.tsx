@@ -188,8 +188,8 @@ function ExCreateMenu({ open, onClose, isLoggedIn }: {
         <div className="ex-create-handle" />
         <p className="ex-create-title">Publier ou ajouter</p>
         <button className="ex-create-item" onClick={() => go('/sokin')}>📢 Publier sur SoKin</button>
-        <button className="ex-create-item" onClick={() => go(`${getDashboardPath(user?.role)}?section=sell&create=produit`)}>🛍️ Ajouter un produit</button>
-        <button className="ex-create-item" onClick={() => go(`${getDashboardPath(user?.role)}?section=sell&create=service`)}>🔧 Ajouter un service</button>
+        <button className="ex-create-item" onClick={() => go(`${getDashboardPath(user?.role)}?section=articles&action=publish`)}>🛍️ Ajouter un produit</button>
+        <button className="ex-create-item" onClick={() => go(`${getDashboardPath(user?.role)}?section=articles&action=publish`)}>🔧 Ajouter un service</button>
       </div>
     </>
   );
@@ -216,7 +216,7 @@ function ExBottomNav({ visible, createOpen, onToggleCreate }: {
       <button className={`ex-bnav-fab${createOpen ? ' ex-bnav-fab--open' : ''}`} onClick={onToggleCreate} aria-label="Créer" aria-expanded={createOpen}>
         <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
       </button>
-      <button className="ex-bnav-item" onClick={() => { sessionStorage.setItem('ud-section', 'notifications'); window.location.href = dashPath; }} aria-label="Notifications">
+      <button className="ex-bnav-item" onClick={() => { window.location.href = dashPath; }} aria-label="Notifications">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
         <span>Notifs</span>
       </button>
