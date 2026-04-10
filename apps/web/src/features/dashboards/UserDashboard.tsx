@@ -596,10 +596,20 @@ export function UserDashboard() {
   // F24: Refetch plan every 5 min to detect subscription changes
   useEffect(() => {
     if (!isLoggedIn) return;
-    const interval = setInterval(() => {
+    const refreshPlan = () => {
       billing.myPlan().then((p) => setActivePlan(p)).catch(() => {});
-    }, 5 * 60 * 1000);
-    return () => clearInterval(interval);
+    };
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') refreshPlan();
+    };
+    const interval = setInterval(refreshPlan, 60 * 1000);
+    window.addEventListener('focus', refreshPlan);
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', refreshPlan);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
   }, [isLoggedIn]);
 
   /* showAi for NegotiationRespondPopup: free hints always, paid advice when toggled on */

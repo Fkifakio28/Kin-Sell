@@ -71,6 +71,7 @@ router.post(
   asyncHandler(async (request: AuthenticatedRequest, response) => {
     const payload = addCartItemSchema.parse(request.body);
     const data = await ordersService.addCartItem(request.auth!.userId, payload);
+    emitToUser(request.auth!.userId, "cart:updated", { action: "item-added", cartId: data.id });
     response.status(201).json(data);
   })
 );
@@ -82,6 +83,7 @@ router.patch(
   asyncHandler(async (request: AuthenticatedRequest, response) => {
     const payload = updateCartItemSchema.parse(request.body);
     const data = await ordersService.updateCartItem(request.auth!.userId, request.params.itemId, payload);
+    emitToUser(request.auth!.userId, "cart:updated", { action: "item-updated", cartId: data.id });
     response.json(data);
   })
 );
@@ -91,6 +93,7 @@ router.delete(
   requireAuth,
   asyncHandler(async (request: AuthenticatedRequest, response) => {
     const data = await ordersService.removeCartItem(request.auth!.userId, request.params.itemId);
+    emitToUser(request.auth!.userId, "cart:updated", { action: "item-removed", cartId: data.id });
     response.json(data);
   })
 );
@@ -144,6 +147,7 @@ router.post(
         createdAt: new Date().toISOString(),
       });
     }
+    emitToUser(request.auth!.userId, "cart:updated", { action: "checked-out", cartId: "" });
     response.status(201).json(data);
   })
 );
@@ -202,6 +206,7 @@ router.post(
       });
     }
 
+    emitToUser(request.auth!.userId, "cart:updated", { action: "checked-out", cartId: "" });
     response.status(201).json({ ...data, mobileMoneyPayments: momoPayments });
   })
 );

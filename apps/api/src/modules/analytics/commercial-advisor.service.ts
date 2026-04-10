@@ -698,13 +698,13 @@ const ruleTipAddPhotos: AdvisorRule = (ctx) => {
     priority: 9,
     confidence: Math.min(95, 60 + noImageCount * 5),
     title: "📸 Ajoutez des photos à vos annonces",
-    message: `${noImageRatio} de vos annonces n'ont pas de photo. Les articles avec images obtiennent 3× plus de vues et 2× plus de contacts. Ajoutez des photos claires pour chaque article.`,
-    rationale: `${noImageRatio} annonces sans image — impact direct sur la conversion`,
+    message: `${noImageCount} de vos annonces n'ont pas de photo. Les articles avec images obtiennent 3× plus de vues et 2× plus de contacts. Ajoutez des photos claires pour chaque article.`,
+    rationale: `${noImageCount} annonces sans image — impact direct sur la conversion`,
     ctaLabel: "Gérer mes articles",
     ctaTarget: "/account?section=articles",
     pricing: "Gratuit",
-    signals: [`${noImageRatio} annonces sans photo`, `${ctx.profile.totalListings} annonces total`],
-    metric: { withoutImage: noImageRatio, total: ctx.profile.totalListings },
+    signals: [`${noImageCount} annonces sans photo`, `${ctx.profile.totalListings} annonces total`],
+    metric: { withoutImage: noImageCount, total: ctx.profile.totalListings },
   };
 };
 

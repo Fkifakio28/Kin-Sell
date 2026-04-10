@@ -8,7 +8,6 @@ import { prisma } from "../../shared/db/prisma.js";
 import * as adminService from "./admin.service.js";
 import * as messageGuardService from "../message-guard/message-guard.service.js";
 import * as adsService from "../ads/ads.service.js";
-import * as aiTrigger from "../analytics/ai-trigger.service.js";
 import aiAdminRoutes from "../analytics/ai-admin.routes.js";
 import * as iaAdsPlacements from "../ads/ia-ads-placements.service.js";
 import * as iaMessengerPromo from "../ads/ia-messenger-promo.service.js";
@@ -762,7 +761,7 @@ const adminActivateSchema = z.object({
 router.post("/subscriptions/activate", asyncHandler(async (req: AuthenticatedRequest, res) => {
   await checkPermission(req, "BILLING");
   const payload = adminActivateSchema.parse(req.body);
-  const result = await aiTrigger.adminActivatePlan({
+  const result = await billingService.adminActivatePlan({
     ...payload,
     activatedBy: req.auth!.userId,
   });

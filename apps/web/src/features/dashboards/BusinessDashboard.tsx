@@ -449,10 +449,20 @@ export function BusinessDashboard() {
   // F24: Refetch plan every 5 min
   useEffect(() => {
     if (!business) return;
-    const interval = setInterval(() => {
+    const refreshPlan = () => {
       billing.myPlan().then((p) => setMyPlan(p)).catch(() => {});
-    }, 5 * 60 * 1000);
-    return () => clearInterval(interval);
+    };
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') refreshPlan();
+    };
+    const interval = setInterval(refreshPlan, 60 * 1000);
+    window.addEventListener('focus', refreshPlan);
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', refreshPlan);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
   }, [business]);
 
   const bizAutoNegoActive = bizHasIaMarchandPlan && bizAiAutoNegoEnabled;

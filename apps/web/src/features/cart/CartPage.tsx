@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../app/providers/AuthProvider";
 import { useLocaleCurrency } from "../../app/providers/LocaleCurrencyProvider";
 import { orders, negotiations, billing, orderAi, resolveMediaUrl, type CartSummary, type NegotiationSummary, type BillingPlanSummary, type CheckoutAdvice, type OrderSummary, type OrderStatus, ApiError } from "../../lib/api-client";
 import { useSocket } from "../../hooks/useSocket";
+import { useRealtimeSync } from "../../hooks/useRealtimeSync";
 import { NegotiationRespondPopup } from "../negotiations/NegotiationRespondPopup";
 import { NegotiatePopup } from "../negotiations/NegotiatePopup";
 import { BundleNegotiatePopup, type BundleListingItem } from "../negotiations/BundleNegotiatePopup";
@@ -85,30 +86,40 @@ export function CartPage() {
   }, []);
 
   /* ── Fetch cart ── */
+  const loadCart = useCallback(async () => {
+    if (!isLoggedIn) return;
+    try {
+      const data = await orders.buyerCart();
+      setCart(data);
+    } catch {
+      setCart(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [isLoggedIn]);
+
   useEffect(() => {
     if (authLoading) return;
-    if (!isLoggedIn) {
-      setLoading(false);
-      return;
-    }
+    if (!isLoggedIn) { setLoading(false); return; }
+    void loadCart();
+  }, [isLoggedIn, authLoading, loadCart]);
 
-    let cancelled = false;
+  /* ── Realtime: cart/order socket events → refetch; fallback polling 120s ── */
+  useRealtimeSync({
+    channels: ["cart", "orders"],
+    onInvalidate: useCallback(() => { void loadCart(); }, [loadCart]),
+    onReconnect: useCallback(() => { void loadCart(); }, [loadCart]),
+    onVisibilityResync: useCallback(() => { void loadCart(); }, [loadCart]),
+    visibilityThresholdMs: 10_000,
+    enabled: isLoggedIn,
+  });
 
-    const load = async () => {
-      try {
-        const data = await orders.buyerCart();
-        if (!cancelled) setCart(data);
-      } catch {
-        if (!cancelled) setCart(null);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-
-    void load();
-    const poll = setInterval(() => { void load(); }, 30_000); // refresh cart every 30s
-    return () => { cancelled = true; clearInterval(poll); };
-  }, [isLoggedIn, authLoading]);
+  // Fallback polling réduit : 120s au lieu de 30s (socket couvre le temps réel)
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    const poll = setInterval(() => { void loadCart(); }, 120_000);
+    return () => clearInterval(poll);
+  }, [isLoggedIn, loadCart]);
 
   /* ── Fetch buyer orders ── */
   const loadBuyerOrders = useCallback(async () => {

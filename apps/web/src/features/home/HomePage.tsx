@@ -7,6 +7,7 @@ import { listings as listingsApi, orders as ordersApi, explorer as explorerApi, 
 import { useHoverPopup, ArticleHoverPopup, type ArticleHoverData } from "../../components/HoverPopup";
 import { useScrollRestore } from "../../utils/useScrollRestore";
 import { useSocket } from "../../hooks/useSocket";
+import { useRealtimeSync } from "../../hooks/useRealtimeSync";
 import { useMarketPreference } from "../../app/providers/MarketPreferenceProvider";
 import { NegotiatePopup } from "../negotiations/NegotiatePopup";
 import { useLockedCategories, isCategoryLocked } from "../../hooks/useLockedCategories";
@@ -392,9 +393,19 @@ export function HomePage() {
       } catch { /* ignore */ }
     };
     void loadDash();
-    const poll = setInterval(() => { void loadDash(); }, 60_000); // refresh every 60s
+    const poll = setInterval(() => { void loadDash(); }, 180_000); // fallback 3min (socket couvre le temps réel)
     return () => { cancelled = true; clearInterval(poll); };
   }, [isLoggedIn]);
+
+  /* ── Realtime: orders/negotiations/cart events → resync dashboard sur reconnexion ── */
+  useRealtimeSync({
+    channels: ["orders", "negotiations", "cart"],
+    onInvalidate: useCallback(() => { void reloadDashOverview(); }, [reloadDashOverview]),
+    onReconnect: useCallback(() => { void reloadDashOverview(); }, [reloadDashOverview]),
+    onVisibilityResync: useCallback(() => { void reloadDashOverview(); }, [reloadDashOverview]),
+    visibilityThresholdMs: 15_000,
+    enabled: isLoggedIn,
+  });
 
   useEffect(() => {
     const handlePostCreated = (_payload: {

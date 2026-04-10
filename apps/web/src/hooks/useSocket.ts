@@ -68,6 +68,10 @@ type SocketEvents = {
     createdAt: string;
     sourceUserId: string;
   }) => void;
+  "cart:updated": (data: {
+    action: "item-added" | "item-updated" | "item-removed" | "checked-out";
+    cartId: string;
+  }) => void;
   "webrtc:offer": (data: { callerId: string; sdp: RTCSessionDescriptionInit }) => void;
   "webrtc:answer": (data: { answererId: string; sdp: RTCSessionDescriptionInit }) => void;
   "webrtc:ice-candidate": (data: { fromUserId: string; candidate: RTCIceCandidateInit }) => void;

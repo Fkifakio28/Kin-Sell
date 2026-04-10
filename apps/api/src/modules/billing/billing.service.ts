@@ -40,6 +40,91 @@ const createTransferReference = () => {
   return `KS-${Date.now().toString(36).toUpperCase()}-${rand}`;
 };
 
+async function reconcileBusinessSubscriptionStatus(
+  businessId: string | null,
+  expectedPlanCode: string | null,
+  tx: Prisma.TransactionClient | typeof prisma = prisma,
+) {
+  if (!businessId) return;
+
+  const business = await tx.businessAccount.findUnique({
+    where: { id: businessId },
+    select: { subscriptionStatus: true },
+  });
+  if (!business) return;
+
+  const nextStatus = expectedPlanCode ?? "FREE";
+  if (business.subscriptionStatus !== nextStatus) {
+    await tx.businessAccount.update({
+      where: { id: businessId },
+      data: { subscriptionStatus: nextStatus },
+    });
+  }
+}
+
+async function replaceActiveSubscriptionInTx(
+  tx: Prisma.TransactionClient,
+  params: {
+    scope: RoleScope;
+    userId: string | null;
+    businessId: string | null;
+    planCode: string;
+    billingCycle: BillingCycle;
+    priceUsdCents: number;
+    autoRenew: boolean;
+    metadata: Prisma.JsonObject;
+    startsAt?: Date;
+    endsAt?: Date | null;
+  },
+) {
+  const targetPlan = getPlanOrThrow(params.planCode, params.scope);
+  const startsAt = params.startsAt ?? new Date();
+
+  const current = await tx.subscription.findFirst({
+    where: {
+      scope: params.scope as SubscriptionScope,
+      status: SubscriptionStatus.ACTIVE,
+      userId: params.scope === "USER" ? params.userId : null,
+      businessId: params.scope === "BUSINESS" ? params.businessId : null,
+    },
+  });
+
+  if (current) {
+    await tx.subscription.update({
+      where: { id: current.id },
+      data: {
+        status: SubscriptionStatus.CANCELED,
+        endsAt: startsAt,
+        autoRenew: false,
+      },
+    });
+  }
+
+  const created = await tx.subscription.create({
+    data: {
+      scope: params.scope as SubscriptionScope,
+      userId: params.scope === "USER" ? params.userId : null,
+      businessId: params.scope === "BUSINESS" ? params.businessId : null,
+      planCode: targetPlan.code,
+      status: SubscriptionStatus.ACTIVE,
+      billingCycle: params.billingCycle,
+      priceUsdCents: params.priceUsdCents,
+      startsAt,
+      endsAt: params.endsAt ?? null,
+      autoRenew: params.autoRenew,
+      metadata: params.metadata,
+    },
+  });
+
+  await reconcileBusinessSubscriptionStatus(
+    params.scope === "BUSINESS" ? params.businessId : null,
+    targetPlan.code,
+    tx,
+  );
+
+  return { created, targetPlan };
+}
+
 const serializePlan = (
   scope: RoleScope,
   subscription: {
@@ -149,6 +234,10 @@ export const getCatalog = () => {
 export const getMyPlan = async (userId: string) => {
   const { scope, businessId } = await resolveContext(userId);
   const activeSubscription = await findActiveSubscription(userId, scope, businessId);
+  await reconcileBusinessSubscriptionStatus(
+    scope === "BUSINESS" ? businessId : null,
+    activeSubscription?.planCode ?? null,
+  );
   return serializePlan(scope, activeSubscription);
 };
 
@@ -398,45 +487,23 @@ async function activateSubscriptionFromOrder(
   extraMeta: Record<string, unknown> = {}
 ) {
   const scope: RoleScope = order.targetScope === SubscriptionScope.BUSINESS ? "BUSINESS" : "USER";
-  const targetPlan = getPlanOrThrow(order.planCode, scope);
 
   await prisma.$transaction(async (tx) => {
-    // Annuler l'abonnement actif existant
-    const current = await tx.subscription.findFirst({
-      where: {
-        scope: order.targetScope,
-        status: SubscriptionStatus.ACTIVE,
-        userId: scope === "USER" ? order.userId : null,
-        businessId: scope === "BUSINESS" ? order.businessId : null,
-      },
-    });
-
-    if (current) {
-      await tx.subscription.update({
-        where: { id: current.id },
-        data: { status: SubscriptionStatus.CANCELED, endsAt: new Date(), autoRenew: false },
-      });
-    }
-
-    // Créer le nouvel abonnement ACTIF
-    await tx.subscription.create({
-      data: {
-        scope: order.targetScope,
-        userId: scope === "USER" ? order.userId : null,
-        businessId: scope === "BUSINESS" ? order.businessId : null,
-        planCode: targetPlan.code,
-        status: SubscriptionStatus.ACTIVE,
-        billingCycle: BillingCycle.MONTHLY,
-        priceUsdCents: targetPlan.monthlyPriceUsdCents,
-        startsAt: new Date(),
-        autoRenew: true,
-        metadata: {
-          source,
-          orderId: order.id,
-          transferReference: order.transferReference,
-          ...extraMeta,
-        } as Prisma.JsonObject,
-      },
+    const targetPlan = getPlanOrThrow(order.planCode, scope);
+    await replaceActiveSubscriptionInTx(tx, {
+      scope,
+      userId: scope === "USER" ? order.userId : null,
+      businessId: scope === "BUSINESS" ? order.businessId : null,
+      planCode: targetPlan.code,
+      billingCycle: BillingCycle.MONTHLY,
+      priceUsdCents: targetPlan.monthlyPriceUsdCents,
+      autoRenew: true,
+      metadata: {
+        source,
+        orderId: order.id,
+        transferReference: order.transferReference,
+        ...extraMeta,
+      } as Prisma.JsonObject,
     });
 
     // Marquer la commande comme PAID
@@ -447,13 +514,6 @@ async function activateSubscriptionFromOrder(
         validatedAt: new Date(),
       },
     });
-
-    if (scope === "BUSINESS" && order.businessId) {
-      await tx.businessAccount.update({
-        where: { id: order.businessId },
-        data: { subscriptionStatus: targetPlan.code },
-      });
-    }
   });
 
   // Invalidate subscription guard cache after activation
@@ -499,6 +559,49 @@ export const adminValidateOrder = async (payload: { orderId: string; adminUserId
 /**
  * Create a PayPal REST API checkout — creates PaymentOrder + PayPal Order + returns approval URL.
  */
+export const adminActivatePlan = async (payload: {
+  userId: string;
+  planCode: string;
+  durationDays: number;
+  reason: string;
+  exempt: boolean;
+  activatedBy: string;
+}) => {
+  const { scope, businessId } = await resolveContext(payload.userId);
+  const targetPlan = getPlanOrThrow(payload.planCode, scope);
+  const startsAt = new Date();
+  const endsAt = new Date(Date.now() + payload.durationDays * 24 * 60 * 60 * 1000);
+
+  await prisma.$transaction(async (tx) => {
+    await replaceActiveSubscriptionInTx(tx, {
+      scope,
+      userId: scope === "USER" ? payload.userId : null,
+      businessId,
+      planCode: targetPlan.code,
+      billingCycle: BillingCycle.ONE_TIME,
+      priceUsdCents: payload.exempt ? 0 : targetPlan.monthlyPriceUsdCents,
+      autoRenew: false,
+      startsAt,
+      endsAt,
+      metadata: {
+        source: "ADMIN_MANUAL",
+        adminActivated: true,
+        activatedBy: payload.activatedBy,
+        reason: payload.reason,
+        exempt: payload.exempt,
+      } as Prisma.JsonObject,
+    });
+  });
+
+  clearSubscriptionCache();
+
+  const refreshed = await findActiveSubscription(payload.userId, scope, businessId);
+  return {
+    plan: serializePlan(scope, refreshed),
+    message: "Forfait activÃ© manuellement",
+  };
+};
+
 export const createPaypalCheckout = async (
   userId: string,
   payload: { planCode: string; billingCycle: "MONTHLY" | "ONE_TIME" }
