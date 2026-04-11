@@ -42,6 +42,7 @@ import { SoKinToastProvider, useSoKinToast } from '../../components/feedback/SoK
 import { InlineSearchResults } from '../../components/InlineSearchResults';
 import { AdBanner } from '../../components/AdBanner';
 import { SeoMeta } from '../../components/SeoMeta';
+import { BoostFlowModal } from '../../components/BoostFlowModal';
 import { buildSoKinFeedItems } from './ad-cadence';
 import { observePostView, trackSoKinEvent, flushTracking } from '../../lib/services/sokin-tracking.service';
 import { sokinTrends, sokinAnalytics, type TrendingTopic, type TrendingHashtag, type SuggestedProfile, type PostInsight, type PostInsightCard, type AuthorTip, type SmartFeedBlocks, type SoKinAccessInfo, type SoKinTier, type ScoredPost } from '../../lib/services/sokin-analytics.service';
@@ -2358,16 +2359,19 @@ function SoKinPageInner() {
     setDismissedTipIds((prev) => new Set(prev).add(tipId));
   }, []);
 
-  // ── Boost tip CTA — navigate to post then mark as accepted ──
+  // ── Boost tip CTA — open boost modal ──
+  const [boostModalPostId, setBoostModalPostId] = useState<string | null>(null);
+  const [boostModalTitle, setBoostModalTitle] = useState<string | undefined>();
+
   const handleBoostTip = useCallback((tip: AuthorTip) => {
     const postId = (tip.actionData?.postId as string) ?? '';
     if (postId) {
-      navigate(`/sokin/post/${postId}?boost=1`);
+      setBoostModalPostId(postId);
+      setBoostModalTitle(tip.title);
     }
     setDismissedTipIds((prev) => new Set(prev).add(tip.id));
-    // Accept tip in backend (fire & forget)
     sokinTrends.acceptTip(tip.id).catch(() => {});
-  }, [navigate]);
+  }, []);
 
   // ── Repost ──
   const [repostTarget, setRepostTarget] = useState<SoKinApiFeedPost | null>(null);
@@ -3837,6 +3841,16 @@ function SoKinPageInner() {
 
       {viewerItem && (
         <MediaViewer item={viewerItem} onClose={() => setViewerItem(null)} />
+      )}
+
+      {/* ═══ MODAL BOOST FLOW ═══ */}
+      {boostModalPostId && (
+        <BoostFlowModal
+          postId={boostModalPostId}
+          postTitle={boostModalTitle}
+          onClose={() => { setBoostModalPostId(null); setBoostModalTitle(undefined); }}
+          onBoosted={() => {}}
+        />
       )}
 
       {/* ═══ MODAL REPOST ═══ */}
