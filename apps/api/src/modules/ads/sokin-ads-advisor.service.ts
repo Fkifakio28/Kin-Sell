@@ -40,7 +40,9 @@ export type SoKinTipType =
   | "GEO_EXPANSION"          // élargir la portée géographique
   | "LINK_LISTING"           // relier un article au post
   | "KEEP_SOCIAL"            // le post est social, ne pas commercialiser
-  | "HIGH_POTENTIAL_ALERT";  // signal admin pour post viral potentiel
+  | "HIGH_POTENTIAL_ALERT"   // signal admin pour post viral potentiel
+  | "PERFORMANCE_ALERT"      // alerte auteur: post en bonne performance
+  | "REBOOST_SUGGESTION";   // suggestion de re-boost après bon résultat
 
 export type GeoScope = "LOCAL" | "NATIONAL" | "CROSS_BORDER";
 
@@ -193,6 +195,8 @@ interface PostMeta {
   hasLinkedListing: boolean;
   location: string | null;
   ageHours: number;
+  views: number;
+  sponsored: boolean;
 }
 
 async function getPostMeta(postId: string): Promise<PostMeta | null> {
@@ -208,6 +212,8 @@ async function getPostMeta(postId: string): Promise<PostMeta | null> {
       linkedListingId: true,
       location: true,
       createdAt: true,
+      views: true,
+      sponsored: true,
     },
   });
   if (!post) return null;
@@ -222,6 +228,8 @@ async function getPostMeta(postId: string): Promise<PostMeta | null> {
     hasLinkedListing: !!post.linkedListingId,
     location: post.location,
     ageHours: (Date.now() - post.createdAt.getTime()) / (1000 * 60 * 60),
+    views: (post as any).views ?? 0,
+    sponsored: (post as any).sponsored ?? false,
   };
 }
 
@@ -380,6 +388,51 @@ export async function analyzePost(postId: string): Promise<SoKinTip[]> {
       actionData: {
         postId: meta.id,
         improvements,
+      },
+    });
+  }
+
+  // ── 7. Alerte performance — post qui explose ──
+  const viewsPerHour = meta.ageHours > 0 ? meta.views / meta.ageHours : 0;
+  if (meta.views >= 50 && viewsPerHour >= 10 && meta.ageHours <= 48) {
+    tips.push({
+      type: "PERFORMANCE_ALERT",
+      audience: "AUTHOR",
+      postId: meta.id,
+      authorId: meta.authorId,
+      priority: 9,
+      title: "🔥 Votre post explose !",
+      message: `${meta.views} vues en ${Math.round(meta.ageHours)}h — profitez du momentum avec un boost pour tripler la portée.`,
+      rationale: `views=${meta.views}, viewsPerHour=${Math.round(viewsPerHour)}, ageHours=${Math.round(meta.ageHours)}`,
+      actionType: "BOOST_POST",
+      actionTarget: `/sokin/post/${meta.id}`,
+      actionData: {
+        postId: meta.id,
+        views: meta.views,
+        viewsPerHour: Math.round(viewsPerHour),
+        ageHours: Math.round(meta.ageHours),
+      },
+    });
+  }
+
+  // ── 8. Re-boost suggestion — post sponsorisé qui performe bien ──
+  if (meta.sponsored && meta.views >= 100 && scored.boostScore >= 50) {
+    tips.push({
+      type: "REBOOST_SUGGESTION",
+      audience: "AUTHOR",
+      postId: meta.id,
+      authorId: meta.authorId,
+      priority: 7,
+      title: "📈 Re-boostez ce champion",
+      message: `Ce post sponsorisé a atteint ${meta.views} vues avec un score de ${scored.boostScore}/100. Un re-boost prolongerait l'élan.`,
+      rationale: `sponsored=true, views=${meta.views}, boostScore=${scored.boostScore}`,
+      actionType: "BOOST_POST",
+      actionTarget: `/sokin/post/${meta.id}`,
+      actionData: {
+        postId: meta.id,
+        views: meta.views,
+        boostScore: scored.boostScore,
+        reboost: true,
       },
     });
   }

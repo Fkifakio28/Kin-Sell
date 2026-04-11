@@ -441,6 +441,7 @@ function AnnouncesFeed({
   socialState,
   onScoring,
   onBoostTip,
+  onBoost,
 }: {
   posts: SoKinApiFeedPost[];
   hasMore: boolean;
@@ -466,6 +467,7 @@ function AnnouncesFeed({
   socialState?: { reactions: Record<string, SoKinReactionType>; bookmarks: Set<string> };
   onScoring?: (postId: string) => void;
   onBoostTip?: (tip: AuthorTip) => void;
+  onBoost?: (postId: string) => void;
 }) {
   const feedItems = useMemo(() => buildSoKinFeedItems(posts, 4), [posts]);
   const [resolvedAdsBySlot, setResolvedAdsBySlot] = useState<Record<string, string | null>>({});
@@ -535,6 +537,7 @@ function AnnouncesFeed({
           initialSaved={socialState?.bookmarks.has(post.id) ?? false}
           onScoring={onScoring}
           boostStats={boostStatsCache[post.id] ?? null}
+          onBoost={onBoost}
         />
       );
 
@@ -579,12 +582,16 @@ function AnnouncesFeed({
     if (pos < items.length) {
       const tip = visibleTips[injected];
       const isBoostTip = tip.actionType === 'BOOST_POST' || tip.triggerType === 'BOOST_SUGGESTION';
+      const isPerformanceAlert = tip.triggerType === 'PERFORMANCE_ALERT';
+      const isReboost = tip.triggerType === 'REBOOST_SUGGESTION';
       const boostScore = (tip.actionData?.boostScore as number) ?? null;
+      const tipIcon = isPerformanceAlert ? '🔥' : isReboost ? '📈' : isBoostTip ? '🚀' : '🤖';
+      const tipLabel = isPerformanceAlert ? 'Performance' : isReboost ? 'Re-boost' : isBoostTip ? 'Opportunité Boost' : 'Conseil IA';
       items.splice(pos, 0, (
-        <div key={`tip-${tip.id}`} className={`sk-tip-card${isBoostTip ? ' sk-tip-card--boost' : ''}`}>
+        <div key={`tip-${tip.id}`} className={`sk-tip-card${isBoostTip ? ' sk-tip-card--boost' : ''}${isPerformanceAlert ? ' sk-tip-card--perf' : ''}`}>
           <div className="sk-tip-card-header">
-            <span className="sk-tip-card-icon">{isBoostTip ? '🚀' : '🤖'}</span>
-            <span className="sk-tip-card-label">{isBoostTip ? 'Opportunité Boost' : 'Conseil IA'}</span>
+            <span className="sk-tip-card-icon">{tipIcon}</span>
+            <span className="sk-tip-card-label">{tipLabel}</span>
             {isBoostTip && boostScore !== null && (
               <span className="sk-tip-card-score">Score {boostScore}/100</span>
             )}
@@ -2915,11 +2922,28 @@ function SoKinPageInner() {
 
       setShowCreateScreen(false);
 
-      toast.success('Publication créée');
+      toast.success('🎉 Publication créée — vos insights arrivent…');
 
       try {
         const full = await sokinApi.publicPost(created.id);
         setPosts((prev) => [full.post, ...prev.filter((item) => item.id !== full.post.id)]);
+
+        // Boucle addictive: auto-scroll au post + auto-load insight après 8s
+        requestAnimationFrame(() => {
+          const el = document.getElementById(`sk-post-${created.id}`);
+          el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        });
+
+        setTimeout(() => {
+          loadPostInsight(created.id);
+        }, 8000);
+
+        // Rafraîchir les tips advisor après publication
+        setTimeout(() => {
+          sokinTrends.advisorTips(5).then((r) => {
+            if (r?.tips) setAdvisorTips(r.tips);
+          }).catch(() => {});
+        }, 15000);
       } catch {
         void loadFeed(true);
       }
@@ -3184,6 +3208,7 @@ function SoKinPageInner() {
               onToggle={handleToggleFromFeed}
               socialState={socialStateMap}
               onScoring={handleOpenScoring}
+              onBoost={(postId) => { setBoostModalPostId(postId); }}
             />
           </div>
 
@@ -3530,6 +3555,7 @@ function SoKinPageInner() {
                 onToggle={handleToggleFromFeed}
                 socialState={socialStateMap}
                 onScoring={handleOpenScoring}
+                onBoost={(postId) => { setBoostModalPostId(postId); }}
               />
             </main>
 

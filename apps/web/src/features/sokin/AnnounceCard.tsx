@@ -316,6 +316,7 @@ export type AnnounceCardProps = {
   initialSaved?: boolean;
   onScoring?: (postId: string) => void;
   boostStats?: BoostPostStats | null;
+  onBoost?: (postId: string) => void;
 };
 
 export function AnnounceCard({
@@ -337,6 +338,7 @@ export function AnnounceCard({
   initialSaved,
   onScoring,
   boostStats,
+  onBoost,
 }: AnnounceCardProps) {
   const navigate = useNavigate();
   const cardRef = useRef<HTMLElement>(null);
@@ -432,7 +434,7 @@ export function AnnounceCard({
   }, [navigate]);
 
   return (
-    <article ref={cardRef} className={`sk-card${isCommercialType ? ' sk-card--commercial' : ''}${localStatus === 'HIDDEN' ? ' sk-card--hidden' : ''}`}>
+    <article ref={cardRef} id={`sk-post-${post.id}`} className={`sk-card${isCommercialType ? ' sk-card--commercial' : ''}${localStatus === 'HIDDEN' ? ' sk-card--hidden' : ''}`}>
 
       {/* ═══ BANDEAU MASQUÉ — visible seulement pour l'auteur ═══ */}
       {isAuthor && localStatus === 'HIDDEN' && (
@@ -841,8 +843,8 @@ export function AnnounceCard({
                       {(postInsight as PostInsight).tip && (
                         <p className="sk-insight-tip">💡 {(postInsight as PostInsight).tip}</p>
                       )}
-                      {(postInsight as PostInsight).boostSuggested && (
-                        <button type="button" className="sk-insight-boost-cta">
+                      {(postInsight as PostInsight).boostSuggested && onBoost && (
+                        <button type="button" className="sk-insight-boost-cta" onClick={() => onBoost(post.id)}>
                           🚀 Booster ce post
                         </button>
                       )}
