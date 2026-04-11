@@ -650,6 +650,73 @@ export function CartPage() {
         </div>
       )}
 
+      {/* ── Active buyer orders (PENDING → SHIPPED) — affiché EN HAUT pour visibilité mobile ── */}
+      {isLoggedIn && activeOrders.length > 0 && (
+        <div className="cart-history cart-active-orders glass-container">
+          <div className="cart-history-head">
+            <h3 className="cart-history-title">📦 {t('cart.activeOrdersTitle')}</h3>
+            <span className="cart-history-hint">{activeOrders.length} {t('cart.inProgress')}</span>
+          </div>
+          <div className="cart-history-list">
+            {activeOrders.map((order) => (
+              <div
+                key={order.id}
+                className="cart-history-card glass-card"
+                onClick={() => setSelectedOrder(selectedOrder?.id === order.id ? null : order)}
+                style={{ cursor: 'pointer' }}
+              >
+                <div className="cart-history-card-head">
+                  <span className="cart-history-card-id">#{order.id.slice(0, 8).toUpperCase()}</span>
+                  <span className={statusBadgeClass(order.status)}>{statusLabel(order.status)}</span>
+                </div>
+                <div className="cart-history-card-body">
+                  <span className="cart-history-card-amount">{formatMoneyFromUsdCents(order.totalUsdCents)}</span>
+                  <span className="cart-history-card-meta">
+                    {order.itemsCount} article{order.itemsCount > 1 ? 's' : ''} · {new Date(order.createdAt).toLocaleDateString('fr-FR')}
+                  </span>
+                </div>
+                <div className="cart-history-card-actions" onClick={(e) => e.stopPropagation()}>
+                  {(order.status === 'PROCESSING' || order.status === 'SHIPPED') && (
+                    <button
+                      type="button"
+                      className="cart-btn cart-btn--primary"
+                      style={{ fontSize: '.8rem', padding: '6px 12px' }}
+                      onClick={() => {
+                        setBuyerConfirmOrderId(order.id);
+                        setBuyerConfirmCode("");
+                        setBuyerConfirmMode("manual");
+                        setBuyerConfirmScanError(null);
+                      }}
+                    >
+                      📬 {t('cart.confirmReception')}
+                    </button>
+                  )}
+                </div>
+
+                {selectedOrder?.id === order.id && (
+                  <div className="cart-history-card-detail">
+                    {order.items.map((item) => (
+                      <div key={item.id} className="cart-history-item">
+                        {item.imageUrl ? (
+                          <img src={resolveMediaUrl(item.imageUrl)} alt={item.title} className="cart-history-item-img" />
+                        ) : (
+                          <span className="cart-history-item-ph">{item.listingType === 'SERVICE' ? '🛠' : '📦'}</span>
+                        )}
+                        <div className="cart-history-item-info">
+                          <strong>{item.title}</strong>
+                          <span>{item.category} · x{item.quantity}</span>
+                        </div>
+                        <span className="cart-history-item-price">{formatMoneyFromUsdCents(item.lineTotalUsdCents)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* ── Cart items grid ── */}
       {!isEmpty && (
         <div className="cart-items-wrap">
@@ -960,73 +1027,6 @@ export function CartPage() {
       {!isEmpty && (
         <div className="cart-footer glass-container">
           <Link to="/explorer" className="cart-btn cart-btn--secondary">← Continuer mes achats</Link>
-        </div>
-      )}
-
-      {/* ── Active buyer orders (PENDING → SHIPPED stay in cart) ── */}
-      {isLoggedIn && activeOrders.length > 0 && (
-        <div className="cart-history glass-container">
-          <div className="cart-history-head">
-            <h3 className="cart-history-title">📦 {t('cart.activeOrdersTitle')}</h3>
-            <span className="cart-history-hint">{activeOrders.length} {t('cart.inProgress')}</span>
-          </div>
-          <div className="cart-history-list">
-            {activeOrders.map((order) => (
-              <div
-                key={order.id}
-                className="cart-history-card glass-card"
-                onClick={() => setSelectedOrder(selectedOrder?.id === order.id ? null : order)}
-                style={{ cursor: 'pointer' }}
-              >
-                <div className="cart-history-card-head">
-                  <span className="cart-history-card-id">#{order.id.slice(0, 8).toUpperCase()}</span>
-                  <span className={statusBadgeClass(order.status)}>{statusLabel(order.status)}</span>
-                </div>
-                <div className="cart-history-card-body">
-                  <span className="cart-history-card-amount">{formatMoneyFromUsdCents(order.totalUsdCents)}</span>
-                  <span className="cart-history-card-meta">
-                    {order.itemsCount} article{order.itemsCount > 1 ? 's' : ''} · {new Date(order.createdAt).toLocaleDateString('fr-FR')}
-                  </span>
-                </div>
-                <div className="cart-history-card-actions" onClick={(e) => e.stopPropagation()}>
-                  {(order.status === 'PROCESSING' || order.status === 'SHIPPED') && (
-                    <button
-                      type="button"
-                      className="cart-btn cart-btn--primary"
-                      style={{ fontSize: '.8rem', padding: '6px 12px' }}
-                      onClick={() => {
-                        setBuyerConfirmOrderId(order.id);
-                        setBuyerConfirmCode("");
-                        setBuyerConfirmMode("manual");
-                        setBuyerConfirmScanError(null);
-                      }}
-                    >
-                      📬 {t('cart.confirmReception')}
-                    </button>
-                  )}
-                </div>
-
-                {selectedOrder?.id === order.id && (
-                  <div className="cart-history-card-detail">
-                    {order.items.map((item) => (
-                      <div key={item.id} className="cart-history-item">
-                        {item.imageUrl ? (
-                          <img src={resolveMediaUrl(item.imageUrl)} alt={item.title} className="cart-history-item-img" />
-                        ) : (
-                          <span className="cart-history-item-ph">{item.listingType === 'SERVICE' ? '🛠' : '📦'}</span>
-                        )}
-                        <div className="cart-history-item-info">
-                          <strong>{item.title}</strong>
-                          <span>{item.category} · x{item.quantity}</span>
-                        </div>
-                        <span className="cart-history-item-price">{formatMoneyFromUsdCents(item.lineTotalUsdCents)}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
         </div>
       )}
 
