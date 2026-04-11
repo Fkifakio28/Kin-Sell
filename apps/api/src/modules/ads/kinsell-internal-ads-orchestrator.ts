@@ -263,7 +263,7 @@ async function storeInternalAds(ads: InternalAd[]): Promise<number> {
           advertiserEmail: "ia@kin-sell.com",
           amountPaidCents: 0,
           paymentRef: "INTERNAL_AUTO",
-          promotionScope: "LOCAL",
+          promotionScope: "NATIONAL",
           baseCity: ad.baseCity,
           baseCountry: ad.baseCountry,
           pricingMultiplier: 1.0,
