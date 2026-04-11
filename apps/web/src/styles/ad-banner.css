@@ -215,8 +215,22 @@
    Light theme — uses app data-theme, not OS setting
    ═══════════════════════════════════════ */
 html[data-theme="light"] .ks-ad-banner {
-  background: rgba(111, 88, 255, 0.05);
-  border-color: rgba(111, 88, 255, 0.15);
+  background: rgba(111, 88, 255, 0.06);
+  border-color: rgba(111, 88, 255, 0.18);
+}
+
+html[data-theme="light"] .ks-ad-banner:hover {
+  background: rgba(111, 88, 255, 0.1);
+  border-color: rgba(111, 88, 255, 0.3);
+}
+
+html[data-theme="light"] .ks-ad-banner::before {
+  background: linear-gradient(180deg, #6f58ff, rgba(111, 88, 255, 0.5));
+}
+
+html[data-theme="light"] .ks-ad-banner__icon {
+  background: rgba(111, 88, 255, 0.1);
+  border-color: rgba(111, 88, 255, 0.2);
 }
 
 html[data-theme="light"] .ks-ad-banner__title {
@@ -229,8 +243,18 @@ html[data-theme="light"] .ks-ad-banner__desc {
 
 html[data-theme="light"] .ks-ad-banner__tag {
   color: #5b45cc;
+  background: rgba(111, 88, 255, 0.08);
+  border-color: rgba(111, 88, 255, 0.2);
 }
 
 html[data-theme="light"] .ks-ad-banner__cta {
   color: #5b45cc;
+  background: rgba(111, 88, 255, 0.08);
+  border-color: rgba(111, 88, 255, 0.2);
+}
+
+html[data-theme="light"] .ks-ad-banner__cta:hover {
+  color: #fff;
+  background: #6f58ff;
+  border-color: #6f58ff;
 }

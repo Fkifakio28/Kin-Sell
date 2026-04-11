@@ -513,7 +513,7 @@ export function HomePage() {
     ? `${user.role === "BUSINESS" ? t("home.businessRole") : t("home.userRole")} · ${user.id.slice(0, 8)}`
     : t("home.visitorMode");
 
-  // Scroll reveal
+  // Scroll reveal — re-scan quand les sections async apparaissent
   useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
@@ -523,7 +523,7 @@ export function HomePage() {
     );
     document.querySelectorAll(".h-reveal").forEach((el) => observer.observe(el));
     return () => observer.disconnect();
-  }, []);
+  }, [isLoadingArticles, activeBundles.length]);
 
   // So-Kin auto-rotate (single-card slider, 2 min)
   useEffect(() => {
