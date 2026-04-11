@@ -22,6 +22,8 @@ import { useIsMobile } from '../../hooks/useIsMobile';
 import { getDashboardPath } from '../../utils/role-routing';
 import { ExplorerPageDesktop } from './ExplorerPageDesktop';
 import { RegionLanguageCurrencySelector } from '../../components/RegionLanguageCurrencySelector';
+import NotificationCenter from '../../components/NotificationCenter';
+import { useGlobalNotification } from '../../app/providers/GlobalNotificationProvider';
 
 const PREVIEW_PAGE_SIZE = 4;
 const MODAL_PAGE_SIZE = 8;
@@ -154,6 +156,8 @@ function ExBottomNav({ visible, createOpen, onToggleCreate }: {
 }) {
   const { user } = useAuth();
   const dashPath = getDashboardPath(user?.role);
+  const { missedCount } = useGlobalNotification();
+  const [ncOpen, setNcOpen] = useState(false);
 
   return (
     <nav className={`ex-bnav${visible ? '' : ' ex-bnav--hidden'}`} aria-label="Navigation principale">
@@ -168,14 +172,16 @@ function ExBottomNav({ visible, createOpen, onToggleCreate }: {
       <button className={`ex-bnav-fab${createOpen ? ' ex-bnav-fab--open' : ''}`} onClick={onToggleCreate} aria-label="Créer" aria-expanded={createOpen}>
         <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
       </button>
-      <button className="ex-bnav-item" onClick={() => { window.location.href = dashPath; }} aria-label="Notifications">
+      <button className="ex-bnav-item" style={{ position: 'relative' }} onClick={() => setNcOpen(true)} aria-label="Notifications">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        {missedCount > 0 && <span className="nc-badge">{missedCount}</span>}
         <span>Notifs</span>
       </button>
       <Link to={dashPath} className="ex-bnav-item">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
         <span>Compte</span>
       </Link>
+      <NotificationCenter open={ncOpen} onClose={() => setNcOpen(false)} />
     </nav>
   );
 }

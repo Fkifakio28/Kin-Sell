@@ -8,11 +8,25 @@ import "../../styles/global-notifications.css";
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:4000";
 
 /* ── Context ── */
+export type MissedNotification = {
+  id: string;
+  kind: NotificationKind;
+  title: string;
+  content: string;
+  icon: string;
+  targetUrl: string;
+  timestamp: number;
+};
+
 type GlobalNotifContextValue = {
   messagingActive: boolean;
   setMessagingActive: (v: boolean) => void;
   pushEnabled: boolean;
   requestPushPermission: () => Promise<boolean>;
+  missedNotifications: MissedNotification[];
+  missedCount: number;
+  markSeen: (id: string) => void;
+  markAllSeen: () => void;
 };
 
 type NotificationKind = "message" | "order" | "negotiation" | "like" | "publication" | "system";
@@ -33,6 +47,10 @@ const GlobalNotifContext = createContext<GlobalNotifContextValue>({
   setMessagingActive: () => {},
   pushEnabled: false,
   requestPushPermission: async () => false,
+  missedNotifications: [],
+  missedCount: 0,
+  markSeen: () => {},
+  markAllSeen: () => {},
 });
 
 export function useGlobalNotification() {
@@ -99,6 +117,40 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
   const { user, isLoggedIn } = useAuth();
   const [messagingActive, setMessagingActive] = useState(false);
   const messagingActiveRef = useRef(false);
+
+  /* ── Missed notifications (persisted) ── */
+  const MISSED_KEY = "ks-missed-notifs";
+  const MAX_MISSED = 50;
+
+  const [missedNotifications, setMissedNotifications] = useState<MissedNotification[]>(() => {
+    try {
+      const raw = localStorage.getItem(MISSED_KEY);
+      return raw ? (JSON.parse(raw) as MissedNotification[]).slice(0, MAX_MISSED) : [];
+    } catch { return []; }
+  });
+
+  const missedCount = missedNotifications.length;
+
+  // Persist whenever missedNotifications changes
+  useEffect(() => {
+    try { localStorage.setItem(MISSED_KEY, JSON.stringify(missedNotifications)); } catch {}
+  }, [missedNotifications]);
+
+  const pushMissed = useCallback((notif: Omit<MissedNotification, "id" | "timestamp">, dedupeKey?: string) => {
+    const id = dedupeKey ?? `${notif.kind}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    setMissedNotifications((prev) => {
+      if (prev.some((n) => n.id === id)) return prev;
+      return [{ ...notif, id, timestamp: Date.now() }, ...prev].slice(0, MAX_MISSED);
+    });
+  }, []);
+
+  const markSeen = useCallback((id: string) => {
+    setMissedNotifications((prev) => prev.filter((n) => n.id !== id));
+  }, []);
+
+  const markAllSeen = useCallback(() => {
+    setMissedNotifications([]);
+  }, []);
 
   /* ── Shared socket from SocketProvider (NO duplicate connection) ── */
   const { socketRef } = useSocketContext();
@@ -267,6 +319,7 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
       };
       setToasts((p) => [toast, ...p].slice(0, 4));
       setTimeout(() => setToasts((p) => p.filter((t) => t.id !== toast.id)), 6000);
+      pushMissed({ kind: toast.kind, title: toast.title, content: toast.content, icon: toast.icon, targetUrl: toast.targetUrl });
     };
 
     const handleIncomingCall = (data: { conversationId: string; callerId: string; callType: "audio" | "video" }) => {
@@ -305,6 +358,7 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
       };
       setToasts((p) => [toast, ...p].slice(0, 4));
       setTimeout(() => setToasts((p) => p.filter((t) => t.id !== toast.id)), 6000);
+      pushMissed({ kind: toast.kind, title: toast.title, content: toast.content, icon: toast.icon, targetUrl: toast.targetUrl });
       playMessageSound();
     };
 
@@ -323,6 +377,7 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
       };
       setToasts((p) => [toast, ...p].slice(0, 4));
       setTimeout(() => setToasts((p) => p.filter((t) => t.id !== toast.id)), 6000);
+      pushMissed({ kind: toast.kind, title: toast.title, content: toast.content, icon: toast.icon, targetUrl: toast.targetUrl });
       playMessageSound();
     };
 
@@ -339,6 +394,7 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
       };
       setToasts((p) => [toast, ...p].slice(0, 4));
       setTimeout(() => setToasts((p) => p.filter((t) => t.id !== toast.id)), 6000);
+      pushMissed({ kind: toast.kind, title: toast.title, content: toast.content, icon: toast.icon, targetUrl: toast.targetUrl });
       playMessageSound();
     };
 
@@ -380,6 +436,7 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
       };
       setToasts((p) => [toast, ...p].slice(0, 4));
       setTimeout(() => setToasts((p) => p.filter((t) => t.id !== toast.id)), 6000);
+      pushMissed({ kind: toast.kind, title: toast.title, content: toast.content, icon: toast.icon, targetUrl: toast.targetUrl });
       playMessageSound();
     };
 
@@ -395,6 +452,7 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
       };
       setToasts((p) => [toast, ...p].slice(0, 4));
       setTimeout(() => setToasts((p) => p.filter((t) => t.id !== toast.id)), 6000);
+      pushMissed({ kind: toast.kind, title: toast.title, content: toast.content, icon: toast.icon, targetUrl: toast.targetUrl });
     };
 
     const handleSokinPostCreated = (data: { postId: string; authorId: string; sourceUserId: string }) => {
@@ -410,6 +468,7 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
       };
       setToasts((p) => [toast, ...p].slice(0, 4));
       setTimeout(() => setToasts((p) => p.filter((t) => t.id !== toast.id)), 6000);
+      pushMissed({ kind: toast.kind, title: toast.title, content: toast.content, icon: toast.icon, targetUrl: toast.targetUrl });
     };
 
     socket.on("message:new", handleNewMessage);
@@ -462,8 +521,8 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
 
   /* ── Context value ── */
   const ctxValue = useMemo(
-    () => ({ messagingActive, setMessagingActive, pushEnabled: false, requestPushPermission }),
-    [messagingActive, requestPushPermission],
+    () => ({ messagingActive, setMessagingActive, pushEnabled: false, requestPushPermission, missedNotifications, missedCount, markSeen, markAllSeen }),
+    [messagingActive, requestPushPermission, missedNotifications, missedCount, markSeen, markAllSeen],
   );
 
   return (
