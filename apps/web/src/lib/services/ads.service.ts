@@ -16,11 +16,13 @@ export type AdvertisementItem = {
 };
 
 export const adsApi = {
-  getBanner: (page: string, options?: { excludeAdId?: string; slotKey?: string }) => {
+  getBanner: (page: string, options?: { excludeAdId?: string; slotKey?: string; city?: string; country?: string }) => {
     const query = new URLSearchParams();
     query.set('page', page);
     if (options?.excludeAdId) query.set('excludeAdId', options.excludeAdId);
     if (options?.slotKey) query.set('slotKey', options.slotKey);
+    if (options?.city) query.set('city', options.city);
+    if (options?.country) query.set('country', options.country);
     return request<{ ad: AdvertisementItem | null }>(`/ads/banner?${query.toString()}`);
   },
   recordImpression: (id: string) =>

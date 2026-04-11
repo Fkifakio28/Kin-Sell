@@ -4066,6 +4066,76 @@
 
 /* ── Overlays ── */
 .sk-desktop-preview-overlay,
+/* ═══ Popups identiques à Home (h-popup) ═══ */
+.h-popup-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  background: rgba(8,5,20,0.6);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+.h-popup {
+  width: min(420px, 90vw);
+  padding: 1.2rem;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: var(--shadow-glass);
+  animation: hPopupIn 0.2s ease-out;
+}
+@keyframes hPopupIn {
+  from { opacity: 0; transform: translateY(-10px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.h-popup--sm { width: min(300px, 85vw); }
+.h-popup--account {
+  position: fixed;
+  width: min(320px, calc(100vw - 1.5rem));
+  max-width: calc(100vw - 1.5rem);
+  transform-origin: top left;
+  animation: hAccountMenuIn 220ms ease;
+}
+.h-popup-head {
+  display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.65rem;
+}
+.h-popup-head strong { font-size: 1rem; color: var(--color-text-primary); flex: 1; }
+.h-popup-head p { margin: 0; font-size: 0.72rem; color: var(--color-text-tertiary); flex: 1; }
+.h-popup-head button {
+  width: 30px; height: 30px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.8rem; margin-left: auto;
+}
+.h-popup-close {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.h-popup-close:hover {
+  background: rgba(111,88,255,0.18);
+  color: var(--color-text-primary);
+}
+.h-popup-links { display: flex; flex-direction: column; gap: 0.15rem; }
+.h-popup-link {
+  display: block; padding: 0.45rem 0.55rem; border-radius: var(--radius-sm);
+  text-decoration: none; font-size: 0.82rem; color: var(--color-text-secondary);
+  background: none; border: none; cursor: pointer; font-family: inherit;
+  text-align: left; width: 100%;
+  transition: background 0.15s, color 0.15s;
+}
+.h-popup-link:hover {
+  background: rgba(111,88,255,0.12); color: var(--color-text-primary);
+}
+.h-popup-link--btn { font-family: inherit; }
+
 .sk-desktop-help-overlay,
 .sk-desktop-account-overlay {
   position: fixed;

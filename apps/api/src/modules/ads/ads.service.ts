@@ -1,4 +1,5 @@
 import { prisma } from '../../shared/db/prisma.js';
+import { resolveCountryCode } from '../../shared/geo/country-aliases.js';
 import { expireBoosts } from './ads-boost.service.js';
 
 const VALID_PAGES = ['home', 'explorer', 'sokin', 'sokin-market', 'sokin-profiles'];
@@ -12,6 +13,7 @@ export const getActiveBannerForPage = async (
   try {
     const now = new Date();
     const validPage = VALID_PAGES.includes(page) ? page : 'home';
+    const viewerCountryCode = resolveCountryCode(viewerCountry);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const ads = await (prisma as any).advertisement.findMany({
       where: {
@@ -33,6 +35,7 @@ export const getActiveBannerForPage = async (
     // Geographic filtering: only show ads that match the viewer's location
     const filtered = ads.filter((ad: any) => {
       const scope = ad.promotionScope ?? 'LOCAL';
+      const adCountryCode = resolveCountryCode(ad.baseCountry);
 
       // No base location set → show to everyone (backward compat)
       if (!ad.baseCountry && !ad.baseCity) return true;
@@ -45,11 +48,19 @@ export const getActiveBannerForPage = async (
         case 'NATIONAL':
           // Must match viewer's country
           if (!viewerCountry) return false;
+          if (viewerCountryCode && adCountryCode) {
+            return viewerCountryCode === adCountryCode;
+          }
           return ad.baseCountry?.toLowerCase() === viewerCountry.toLowerCase();
         case 'CROSS_BORDER':
           // Must be in target countries list
           if (!viewerCountry) return false;
           const targets = (ad.targetCountries ?? []) as string[];
+          if (viewerCountryCode) {
+            return targets.some(
+              (t: string) => resolveCountryCode(t) === viewerCountryCode
+            );
+          }
           return targets.some(
             (t: string) => t.toLowerCase() === viewerCountry.toLowerCase()
           );

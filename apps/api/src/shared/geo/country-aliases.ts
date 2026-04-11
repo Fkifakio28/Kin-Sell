@@ -8,7 +8,7 @@
 import type { CountryCode } from "@prisma/client";
 
 export const COUNTRY_ALIASES: Record<string, string[]> = {
-  CD: ["CD", "RDC", "RD Congo", "DRC", "Democratic Republic of the Congo", "Congo-Kinshasa"],
+  CD: ["CD", "RDC", "RD Congo", "DRC", "Democratic Republic of the Congo", "Congo-Kinshasa", "Republique democratique du Congo", "République démocratique du Congo"],
   GA: ["GA", "Gabon"],
   CG: ["CG", "Congo", "Congo-Brazzaville", "Republic of the Congo"],
   AO: ["AO", "Angola"],

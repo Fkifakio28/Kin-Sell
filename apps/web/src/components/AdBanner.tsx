@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { adsApi, resolveMediaUrl, type AdvertisementItem } from '../lib/api-client';
+import { useMarketPreference } from '../app/providers/MarketPreferenceProvider';
+import { useAuth } from '../app/providers/AuthProvider';
 import '../styles/ad-banner.css';
 
 // ── Kin-Sell internal promos (fallback quand aucune pub payante n'est active) ──
@@ -105,6 +107,11 @@ export function AdBanner({
   onAdResolved,
 }: AdBannerProps) {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const { effectiveCountry, getCountryConfig } = useMarketPreference();
+  const countryCfg = getCountryConfig(effectiveCountry);
+  const viewerCity = user?.profile?.city || countryCfg.defaultCity;
+  const viewerCountry = countryCfg.code;
   const isKinSellOnly = forceKinSell || KIN_SELL_ONLY_PAGES.includes(page);
 
   // Promo Kin-Sell stable pour ce composant (évite le flash au fallback)
@@ -124,7 +131,7 @@ export function AdBanner({
     let cancelled = false;
     const load = async () => {
       try {
-        const result = await adsApi.getBanner(page, { excludeAdId, slotKey });
+        const result = await adsApi.getBanner(page, { excludeAdId, slotKey, city: viewerCity, country: viewerCountry });
         if (cancelled) return;
         const resolvedAd = result.ad && result.ad.id !== excludeAdId ? result.ad : null;
         if (resolvedAd) {

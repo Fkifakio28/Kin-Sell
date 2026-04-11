@@ -114,15 +114,15 @@ type HeaderNotification = {
 };
 
 const DESKTOP_INFO_ITEMS = [
-  { title: 'À propos', href: '/about' },
-  { title: 'Conditions', href: '/terms' },
-  { title: 'Guide', href: '/guide' },
-  { title: 'Comment ça marche', href: '/how-it-works' },
-  { title: 'Confidentialité', href: '/privacy' },
-  { title: 'Mentions légales', href: '/legal' },
-  { title: 'Blog', href: '/blog' },
-  { title: 'FAQ', href: '/faq' },
-  { title: 'Contact', href: '/contact' },
+  { titleKey: 'home.aboutUs', href: '/about' },
+  { titleKey: 'home.terms', href: '/terms' },
+  { titleKey: 'home.usageTips', href: '/guide' },
+  { titleKey: 'home.howItWorks', href: '/how-it-works' },
+  { titleKey: 'home.dataProcessing', href: '/privacy' },
+  { titleKey: 'home.legalNotice', href: '/legal' },
+  { titleKey: 'home.blog', href: '/blog' },
+  { titleKey: 'home.faq', href: '/faq' },
+  { titleKey: 'home.contact', href: '/contact' },
 ] as const;
 
 const CREATE_DRAFT_STORAGE_KEY = 'ks-sokin-create-draft-v1';
@@ -3731,18 +3731,16 @@ function SoKinPageInner() {
           </div>
 
           {desktopHelpOpen && (
-            <div className="sk-desktop-help-overlay" onClick={() => setDesktopHelpOpen(false)}>
-              <div className="sk-desktop-help-popup" onClick={(e) => e.stopPropagation()}>
-                <header>
+            <div className="h-popup-overlay" onClick={() => setDesktopHelpOpen(false)}>
+              <div className="h-popup glass-container" onClick={(e) => e.stopPropagation()}>
+                <div className="h-popup-head">
                   <strong>Kin-Sell</strong>
-                  <button type="button" onClick={() => setDesktopHelpOpen(false)}>✕</button>
-                </header>
-                <nav>
+                  <p>{t('home.quickNav')}</p>
+                  <button type="button" className="h-popup-close" onClick={() => setDesktopHelpOpen(false)}>✕</button>
+                </div>
+                <nav className="h-popup-links">
                   {DESKTOP_INFO_ITEMS.map((item) => (
-                    <button key={item.href} type="button" onClick={() => {
-                      setDesktopHelpOpen(false);
-                      navigate(item.href);
-                    }}>{item.title}</button>
+                    <button type="button" key={item.href} onClick={() => { navigate(item.href); setDesktopHelpOpen(false); }} className="h-popup-link">{t(item.titleKey)}</button>
                   ))}
                 </nav>
               </div>
@@ -3750,17 +3748,24 @@ function SoKinPageInner() {
           )}
 
           {desktopAccountOpen && (
-            <div className="sk-desktop-account-overlay" onClick={() => setDesktopAccountOpen(false)}>
-              <div className="sk-desktop-account-popup" onClick={(e) => e.stopPropagation()}>
-                <button type="button" onClick={() => {
-                  setDesktopAccountOpen(false);
-                  navigate(getDashboardPath(user?.role));
-                }}>Compte</button>
-                <button type="button" onClick={() => {
-                  setDesktopAccountOpen(false);
-                  navigate('/messaging');
-                }}>Messagerie</button>
-                <button type="button" onClick={() => void handleDesktopLogout()}>Déconnexion</button>
+            <div className="h-popup-overlay" onClick={() => setDesktopAccountOpen(false)}>
+              <div className="h-popup h-popup--sm glass-container" onClick={(e) => e.stopPropagation()}>
+                <div className="h-popup-head">
+                  <strong>{t('home.account')}</strong>
+                  <button type="button" className="h-popup-close" onClick={() => setDesktopAccountOpen(false)}>✕</button>
+                </div>
+                {isLoggedIn ? (
+                  <nav className="h-popup-links">
+                    <button type="button" className="h-popup-link h-popup-link--btn" onClick={() => { setDesktopAccountOpen(false); navigate(getDashboardPath(user?.role)); }}>{t('home.myAccount')}</button>
+                    <button type="button" className="h-popup-link h-popup-link--btn" onClick={() => { setDesktopAccountOpen(false); navigate('/messaging'); }}>{t('home.messaging')}</button>
+                    <button type="button" className="h-popup-link h-popup-link--btn" onClick={() => { setDesktopAccountOpen(false); void handleDesktopLogout(); }}>{t('home.disconnect')}</button>
+                  </nav>
+                ) : (
+                  <nav className="h-popup-links">
+                    <button type="button" className="h-popup-link h-popup-link--btn" onClick={() => { setDesktopAccountOpen(false); navigate('/login'); }}>{t('home.login')}</button>
+                    <button type="button" className="h-popup-link h-popup-link--btn" onClick={() => { setDesktopAccountOpen(false); navigate('/register'); }}>{t('home.createAccount')}</button>
+                  </nav>
+                )}
               </div>
             </div>
           )}
