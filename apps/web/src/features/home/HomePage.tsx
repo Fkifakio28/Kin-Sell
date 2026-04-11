@@ -14,6 +14,7 @@ import { getUrgencyLabel } from "../../shared/promo/promo-engine";
 import { useLockedCategories, isCategoryLocked } from "../../hooks/useLockedCategories";
 import { AdBanner } from "../../components/AdBanner";
 import { SeoMeta } from "../../components/SeoMeta";
+import { InlineSearchResults } from "../../components/InlineSearchResults";
 import { HOME_PRODUCT_CATEGORIES, HOME_SERVICE_CATEGORIES } from "../../shared/constants/categories";
 import { SoKinToastProvider } from "../../components/feedback/SoKinToast";
 import { AnnounceCard, type MediaItem } from "../sokin/AnnounceCard";
@@ -575,9 +576,8 @@ export function HomePage() {
 
   const handleSearch = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const q = searchQuery.trim();
-    navigate(q ? `/explorer?q=${encodeURIComponent(q)}` : "/explorer");
   };
+  const closeDesktopSearch = () => setSearchQuery('');
 
   const currentTip = t(TIPS_KEYS[tipIndex]);
   const fullscreenLabel = t(isFullscreen ? 'home.fullscreenExit' : 'home.fullscreenEnter');
@@ -611,25 +611,32 @@ export function HomePage() {
         </div>
 
         {/* Search */}
-        <form className="h-search glass-container" onSubmit={handleSearch}>
-          <button type="submit" className="h-search-icon" aria-label="Rechercher" style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          </button>
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={t('home.searchPlaceholder')}
-            className="h-search-input"
-          />
-          <button type="button" className="h-action-btn h-fullscreen-btn" onClick={toggleFullscreen} aria-label={fullscreenLabel} title={fullscreenLabel}>
-            {isFullscreen ? (
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
-            ) : (
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
-            )}
-          </button>
-        </form>
+        <div style={{ position: 'relative' }}>
+          <form className="h-search glass-container" onSubmit={handleSearch}>
+            <span className="h-search-icon" style={{ display: 'flex', alignItems: 'center' }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            </span>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={t('home.searchPlaceholder')}
+              className="h-search-input"
+            />
+            <button type="button" className="h-action-btn h-fullscreen-btn" onClick={toggleFullscreen} aria-label={fullscreenLabel} title={fullscreenLabel}>
+              {isFullscreen ? (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+              ) : (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+              )}
+            </button>
+          </form>
+          {searchQuery.trim().length >= 2 && (
+            <div className="h-desktop-search-dropdown">
+              <InlineSearchResults query={searchQuery} onNavigate={closeDesktopSearch} t={t} />
+            </div>
+          )}
+        </div>
 
         {/* Actions */}
         <div className="h-actions glass-container">

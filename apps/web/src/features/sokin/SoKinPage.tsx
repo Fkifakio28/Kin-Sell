@@ -39,6 +39,7 @@ import {
 } from '../../lib/api-client';
 import { ApiError } from '../../lib/api-core';
 import { SoKinToastProvider, useSoKinToast } from '../../components/feedback/SoKinToast';
+import { InlineSearchResults } from '../../components/InlineSearchResults';
 import { AdBanner } from '../../components/AdBanner';
 import { SeoMeta } from '../../components/SeoMeta';
 import { buildSoKinFeedItems } from './ad-cadence';
@@ -2398,13 +2399,12 @@ function SoKinPageInner() {
   }, []);
 
   const handleDesktopSearch = useCallback(() => {
-    const q = desktopSearch.trim();
-    if (!q) {
-      navigate('/explorer');
-      return;
-    }
-    navigate(`/explorer?q=${encodeURIComponent(q)}`);
-  }, [desktopSearch, navigate]);
+    // Desktop search is handled inline via InlineSearchResults
+  }, []);
+
+  const closeDesktopSearch = useCallback(() => {
+    setDesktopSearch('');
+  }, []);
 
   const handleDesktopLogout = useCallback(async () => {
     await logout();
@@ -2914,14 +2914,10 @@ function SoKinPageInner() {
     if (mobileSearchOpen && mobileSearchRef.current) mobileSearchRef.current.focus();
   }, [mobileSearchOpen]);
 
-  const handleMobileSearch = useCallback((e: React.FormEvent) => {
-    e.preventDefault();
-    const q = mobileSearchQuery.trim();
-    if (!q) return;
+  const closeMobileSearch = useCallback(() => {
     setMobileSearchOpen(false);
     setMobileSearchQuery('');
-    navigate(`/explorer?q=${encodeURIComponent(q)}`);
-  }, [mobileSearchQuery, navigate]);
+  }, []);
 
   // ── Visibility des barres (top bar + FAB) ──
   const hasActiveOverlay = showCreateScreen || Boolean(openCommentsPostId) || Boolean(viewerItem) || showMobileManage;
@@ -2981,7 +2977,7 @@ function SoKinPageInner() {
             {/* ── Mobile Search Overlay ── */}
             {mobileSearchOpen && (
               <div className="sk-search-overlay">
-                <form className="sk-search-form" onSubmit={handleMobileSearch}>
+                <form className="sk-search-form" onSubmit={(e) => e.preventDefault()}>
                   <input
                     ref={mobileSearchRef}
                     type="search"
@@ -2991,11 +2987,9 @@ function SoKinPageInner() {
                     onChange={(e) => setMobileSearchQuery(e.target.value)}
                     aria-label={t('common.search')}
                   />
-                  <button type="submit" className="sk-search-btn" aria-label={t('common.search')}>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-                  </button>
-                  <button type="button" className="sk-search-cancel" onClick={() => { setMobileSearchOpen(false); setMobileSearchQuery(''); }} aria-label={t('common.close')}>&times;</button>
+                  <button type="button" className="sk-search-cancel" onClick={closeMobileSearch} aria-label={t('common.close')}>&times;</button>
                 </form>
+                <InlineSearchResults query={mobileSearchQuery} onNavigate={closeMobileSearch} t={t} />
               </div>
             )}
 
@@ -3302,20 +3296,23 @@ function SoKinPageInner() {
             </button>
 
             {/* Search */}
-            <div className="sk-desktop-global-search glass-container">
-              <button type="button" className="sk-desktop-search-icon" onClick={handleDesktopSearch} aria-label="Lancer la recherche" style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-              </button>
+            <div className="sk-desktop-global-search glass-container" style={{ position: 'relative' }}>
+              <svg className="sk-desktop-search-icon-svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, opacity: 0.5 }}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
               <input
                 type="search"
                 value={desktopSearch}
                 onChange={(e) => setDesktopSearch(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleDesktopSearch();
+                  if (e.key === 'Escape') setDesktopSearch('');
                 }}
                 placeholder="Rechercher sur So-Kin…"
                 aria-label="Recherche So-Kin"
               />
+              {desktopSearch.trim().length >= 2 && (
+                <div className="sk-desktop-search-dropdown">
+                  <InlineSearchResults query={desktopSearch} onNavigate={closeDesktopSearch} t={t} />
+                </div>
+              )}
             </div>
 
             {/* Actions */}
@@ -3491,20 +3488,23 @@ function SoKinPageInner() {
             <aside className="sk-desktop-right" aria-label="Découvrir et informations">
 
               {/* ── Recherche rapide ── */}
-              <section className="sk-desktop-panel sk-desktop-search-panel glass-container" aria-label="Recherche">
+              <section className="sk-desktop-panel sk-desktop-search-panel glass-container" aria-label="Recherche" style={{ position: 'relative' }}>
                 <div className="sk-desktop-search-inline">
-                  <button type="button" onClick={handleDesktopSearch} aria-label="Lancer la recherche" style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                  </button>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, opacity: 0.5 }}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                   <input
                     type="search"
                     value={desktopSearch}
                     onChange={(e) => setDesktopSearch(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') handleDesktopSearch(); }}
+                    onKeyDown={(e) => { if (e.key === 'Escape') setDesktopSearch(''); }}
                     placeholder="Rechercher…"
                     className="sk-desktop-search-input-sm"
                   />
                 </div>
+                {desktopSearch.trim().length >= 2 && (
+                  <div className="sk-desktop-search-dropdown">
+                    <InlineSearchResults query={desktopSearch} onNavigate={closeDesktopSearch} t={t} />
+                  </div>
+                )}
               </section>
 
               {/* ── Tendances locales (dynamiques) ── */}

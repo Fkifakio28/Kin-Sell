@@ -44,6 +44,7 @@ import { SoKinToastProvider } from "../../components/feedback/SoKinToast";
 import { AnnounceCard, type MediaItem } from "../sokin/AnnounceCard";
 import { MediaViewer, CommentsDrawer, type CommentProfileState, type MissingPublicProfile } from "../sokin/SoKinShared";
 import "../sokin/sokin.css";
+import { InlineSearchResults } from "../../components/InlineSearchResults";
 import "./home-mobile.css";
 
 /* ────────────── Static data ────────────── */
@@ -434,7 +435,6 @@ function SearchOverlay({
   onClose: () => void;
   t: (k: string) => string;
 }) {
-  const navigate = useNavigate();
   const [q, setQ] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -443,16 +443,9 @@ function SearchOverlay({
   }, [open]);
   if (!open) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!q.trim()) return;
-    onClose();
-    void navigate("/explorer?q=" + encodeURIComponent(q.trim()));
-  };
-
   return (
     <div className="hm-search-overlay">
-      <form className="hm-search-form" onSubmit={handleSubmit}>
+      <form className="hm-search-form" onSubmit={(e) => e.preventDefault()}>
         <input
           ref={inputRef}
           type="search"
@@ -462,21 +455,16 @@ function SearchOverlay({
           onChange={(e) => setQ(e.target.value)}
           aria-label={t("common.search")}
         />
-        <button type="submit" className="hm-search-btn" aria-label={t("common.search")}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="11" cy="11" r="8" />
-            <path d="m21 21-4.35-4.35" />
-          </svg>
-        </button>
         <button
           type="button"
           className="hm-search-cancel"
-          onClick={onClose}
+          onClick={() => { setQ(""); onClose(); }}
           aria-label={t("common.close")}
         >
           &times;
         </button>
       </form>
+      <InlineSearchResults query={q} onNavigate={() => { setQ(""); onClose(); }} t={t} />
     </div>
   );
 }

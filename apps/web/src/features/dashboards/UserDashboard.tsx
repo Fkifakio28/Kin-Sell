@@ -4,6 +4,7 @@ import { useAuth } from '../../app/providers/AuthProvider';
 import { getDashboardPath } from '../../utils/role-routing';
 import { useLocaleCurrency } from '../../app/providers/LocaleCurrencyProvider';
 import { DashboardMessaging } from './DashboardMessaging';
+import { InlineSearchResults } from '../../components/InlineSearchResults';
 import {
   ApiError,
   auth as authApi,
@@ -2006,7 +2007,7 @@ export function UserDashboard() {
       {/* ── Mobile Search Bar ── */}
       {mobileSearchOpen && (
         <div className="dash-mobile-searchbar">
-          <form onSubmit={(e) => { e.preventDefault(); if (mobileSearchQuery.trim()) { navigate(`/explorer?q=${encodeURIComponent(mobileSearchQuery.trim())}`); setMobileSearchOpen(false); } }}>
+          <form onSubmit={(e) => e.preventDefault()}>
             <input
               type="text"
               className="dash-mobile-search-input"
@@ -2015,9 +2016,9 @@ export function UserDashboard() {
               onChange={e => setMobileSearchQuery(e.target.value)}
               autoFocus
             />
-            <button type="submit" className="dash-mobile-search-go">→</button>
           </form>
           <button type="button" className="dash-mobile-search-close" onClick={() => setMobileSearchOpen(false)}>✕</button>
+          <InlineSearchResults query={mobileSearchQuery} onNavigate={() => { setMobileSearchQuery(''); setMobileSearchOpen(false); }} t={t} />
         </div>
       )}
 
