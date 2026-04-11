@@ -2,6 +2,7 @@
  * English dictionary - Kin-Sell i18n
  */
 export const en: Record<string, string> = {
+    "footer.social": "Social networks",
     "footer.language": "Language",
     "footer.currency": "Currency",
     "footer.country": "Country",
@@ -1682,6 +1683,7 @@ export const en: Record<string, string> = {
     "user.totpCodeHint": "Enter a 6-digit code.",
     "user.totpEnabledMsg": "2FA authentication enabled successfully.",
     "user.totpDisabledMsg": "2FA authentication disabled.",
+    "user.openMenu": "Open menu",
     "user.closeMenu": "Collapse menu",
     "user.editAction": "Edit",
     "user.deactivateAction": "Deactivate",

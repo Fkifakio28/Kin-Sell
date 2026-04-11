@@ -106,7 +106,8 @@ export function rateLimit(config: RateLimitConfig) {
           riskLevel: 3,
           metadata: { count: redisCount, windowMs: config.windowMs, max: config.max, backend: "redis" },
         });
-        throw new HttpError(429, `Trop de requêtes. Réessayez dans quelques instants.`);
+        next(new HttpError(429, `Trop de requêtes. Réessayez dans quelques instants.`));
+        return;
       }
       next();
       return;
@@ -132,7 +133,8 @@ export function rateLimit(config: RateLimitConfig) {
         metadata: { count: entry.timestamps.length, windowMs: config.windowMs, max: config.max, backend: "memory" },
       });
 
-      throw new HttpError(429, `Trop de requêtes. Réessayez dans quelques instants.`);
+      next(new HttpError(429, `Trop de requêtes. Réessayez dans quelques instants.`));
+      return;
     }
 
     entry.timestamps.push(now);

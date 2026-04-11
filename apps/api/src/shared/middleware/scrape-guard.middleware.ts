@@ -27,7 +27,8 @@ export function scrapeGuard() {
         riskLevel: 4,
         metadata: { path: req.path, method: req.method, emptyUserAgent: isEmpty },
       }).catch(() => {});
-      throw new HttpError(429, "Trop de requêtes. Réessayez dans quelques instants.");
+      next(new HttpError(429, "Trop de requêtes. Réessayez dans quelques instants."));
+      return;
     }
 
     next();
