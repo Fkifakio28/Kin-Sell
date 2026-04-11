@@ -51,6 +51,8 @@ import {
 import AdminVerificationPanel from './AdminVerificationPanel';
 import AdminAnalyticsPanel from './AdminAnalyticsPanel';
 import { DashboardMessaging } from './DashboardMessaging';
+import TutorialOverlay, { useTutorial, TutorialRelaunchBtn } from '../../components/TutorialOverlay';
+import { adminDashboardSteps } from '../../components/tutorial-steps';
 import './dashboard.css';
 import './admin-dashboard.css';
 
@@ -147,6 +149,7 @@ export function AdminDashboard() {
   const { user, isLoading, isLoggedIn, logout } = useAuth();
   const { t, formatMoneyFromUsdCents, formatDate } = useLocaleCurrency();
   const money = useCallback((usdCents: number) => formatMoneyFromUsdCents(usdCents), [formatMoneyFromUsdCents]);
+  const tutorial = useTutorial('admin-dashboard');
   const moneyCdf = useCallback((usdCents: number) => formatMoneyFromUsdCents(usdCents), [formatMoneyFromUsdCents]);
   const fmtDate = useCallback((iso: string) => formatDate(iso), [formatDate]);
 
@@ -5186,6 +5189,9 @@ export function AdminDashboard() {
       </main>
 
       {renderModal()}
+
+      <TutorialOverlay pageKey="admin-dashboard" steps={adminDashboardSteps} open={tutorial.isOpen} onClose={tutorial.close} />
+      {!tutorial.isOpen && <TutorialRelaunchBtn reset={tutorial.reset} start={tutorial.start} />}
     </div>
   );
 }

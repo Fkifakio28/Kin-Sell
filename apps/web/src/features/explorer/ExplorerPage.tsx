@@ -25,6 +25,8 @@ import { ExplorerPageDesktop } from './ExplorerPageDesktop';
 import { RegionLanguageCurrencySelector } from '../../components/RegionLanguageCurrencySelector';
 import NotificationCenter from '../../components/NotificationCenter';
 import { useGlobalNotification } from '../../app/providers/GlobalNotificationProvider';
+import TutorialOverlay, { useTutorial, TutorialRelaunchBtn } from '../../components/TutorialOverlay';
+import { explorerMobileSteps } from '../../components/tutorial-steps';
 
 const PREVIEW_PAGE_SIZE = 4;
 const MODAL_PAGE_SIZE = 8;
@@ -229,6 +231,7 @@ function ExplorerPageMobile() {
   const { t, formatPriceLabelFromUsdCents } = useLocaleCurrency();
   const { effectiveCountry, getCountryConfig } = useMarketPreference();
   const lockedCats = useLockedCategories();
+  const tutorial = useTutorial('explorer-mobile');
   const defaultCity = getCountryConfig(effectiveCountry).defaultCity;
   const [searchParams, setSearchParams] = useSearchParams();
   const urlType = searchParams.get('type');
@@ -645,6 +648,9 @@ function ExplorerPageMobile() {
           onSuccess={() => { setNegotiateArticle(null); nav('/cart'); }}
         />
       )}
+
+      <TutorialOverlay pageKey="explorer-mobile" steps={explorerMobileSteps} open={tutorial.isOpen} onClose={tutorial.close} />
+      {!tutorial.isOpen && <TutorialRelaunchBtn reset={tutorial.reset} start={tutorial.start} />}
     </div>
   );
 }

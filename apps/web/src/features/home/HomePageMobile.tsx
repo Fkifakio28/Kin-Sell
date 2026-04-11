@@ -50,6 +50,8 @@ import { BundlePromoCard } from "../../components/BundlePromoCard";
 import { type PromotionSummary } from "../../lib/api-client";
 import NotificationCenter from "../../components/NotificationCenter";
 import { useGlobalNotification } from "../../app/providers/GlobalNotificationProvider";
+import TutorialOverlay, { useTutorial, TutorialRelaunchBtn } from "../../components/TutorialOverlay";
+import { homeMobileSteps } from "../../components/tutorial-steps";
 import "./home-mobile.css";
 
 /* ────────────── Static data ────────────── */
@@ -1405,6 +1407,7 @@ export function HomePageMobile() {
   const defaultCity = getCountryConfig(effectiveCountry).defaultCity;
   const lockedCats = useLockedCategories();
   const barsVisibleRaw = useScrollDirection();
+  const tutorial = useTutorial("home-mobile");
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -1553,6 +1556,9 @@ export function HomePageMobile() {
           onSuccess={() => setNegotiateListing(null)}
         />
       )}
+
+      <TutorialOverlay pageKey="home-mobile" steps={homeMobileSteps} open={tutorial.isOpen} onClose={tutorial.close} />
+      {!tutorial.isOpen && <TutorialRelaunchBtn reset={tutorial.reset} start={tutorial.start} />}
     </div>
   );
 }

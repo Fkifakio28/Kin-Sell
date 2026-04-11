@@ -22,6 +22,8 @@ import { BundlePromoCard } from '../../components/BundlePromoCard';
 import MapView from '../../components/MapView';
 import { SeoMeta } from '../../components/SeoMeta';
 import { Header } from '../../components/Header';
+import TutorialOverlay, { useTutorial, TutorialRelaunchBtn } from '../../components/TutorialOverlay';
+import { explorerDesktopSteps } from '../../components/tutorial-steps';
 
 const PREVIEW_PAGE_SIZE = 4;
 const MODAL_PAGE_SIZE = 8;
@@ -30,6 +32,7 @@ export function ExplorerPageDesktop() {
   const { t, formatPriceLabelFromUsdCents } = useLocaleCurrency();
   const { effectiveCountry, getCountryConfig } = useMarketPreference();
   const lockedCats = useLockedCategories();
+  const tutorial = useTutorial('explorer-desktop');
   const defaultCity = getCountryConfig(effectiveCountry).defaultCity;
   const [searchParams, setSearchParams] = useSearchParams();
   const urlType = searchParams.get('type');
@@ -821,6 +824,9 @@ export function ExplorerPageDesktop() {
           }}
         />
       ) : null}
+
+      <TutorialOverlay pageKey="explorer-desktop" steps={explorerDesktopSteps} open={tutorial.isOpen} onClose={tutorial.close} />
+      {!tutorial.isOpen && <TutorialRelaunchBtn reset={tutorial.reset} start={tutorial.start} />}
     </div>
     </>
   );

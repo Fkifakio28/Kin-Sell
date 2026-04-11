@@ -22,6 +22,8 @@ import { AnnounceCard, type MediaItem } from "../sokin/AnnounceCard";
 import { MediaViewer, CommentsDrawer, type CommentProfileState, type MissingPublicProfile } from "../sokin/SoKinShared";
 import NotificationCenter from "../../components/NotificationCenter";
 import { useGlobalNotification } from "../../app/providers/GlobalNotificationProvider";
+import TutorialOverlay, { useTutorial, TutorialRelaunchBtn } from "../../components/TutorialOverlay";
+import { homeDesktopSteps } from "../../components/tutorial-steps";
 import "../sokin/sokin.css";
 import "./home.css";
 
@@ -62,6 +64,7 @@ export function HomePage() {
   const { t, formatMoneyFromUsdCents, formatPriceLabelFromUsdCents } = useLocaleCurrency();
   const lockedCats = useLockedCategories();
   const { missedCount } = useGlobalNotification();
+  const tutorial = useTutorial("home-desktop");
   const [ncOpen, setNcOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [isInfoOpen, setIsInfoOpen] = useState(false);
@@ -1306,6 +1309,9 @@ export function HomePage() {
         onCloseProfileState={() => setCommentProfileState({ status: 'idle', profile: null, message: null })}
         onSortChange={handleCommentSortChange}
       />
+
+      <TutorialOverlay pageKey="home-desktop" steps={homeDesktopSteps} open={tutorial.isOpen} onClose={tutorial.close} />
+      {!tutorial.isOpen && <TutorialRelaunchBtn reset={tutorial.reset} start={tutorial.start} />}
     </div>
   );
 }

@@ -23,6 +23,8 @@ import {
   ICE_RESTART_DELAYS, ICE_MAX_ATTEMPTS,
 } from "../../utils/webrtc-config";
 import { useWakeLock } from "../../hooks/useWakeLock";
+import TutorialOverlay, { useTutorial, TutorialRelaunchBtn } from '../../components/TutorialOverlay';
+import { messagingSteps } from '../../components/tutorial-steps';
 import "./messaging.css";
 
 type SoKinPostRef = {
@@ -262,6 +264,7 @@ export function MessagingPage() {
   const { t, language } = useLocaleCurrency();
   const { emit, on, off, isConnected } = useSocket();
   const { setMessagingActive } = useGlobalNotification();
+  const tutorial = useTutorial('messaging');
   const navigate = useNavigate();
   const location = useLocation();
   const { conversationId: urlConvId } = useParams<{ conversationId?: string }>();
@@ -2055,6 +2058,9 @@ export function MessagingPage() {
           )}
         </div>
       )}
+
+      <TutorialOverlay pageKey="messaging" steps={messagingSteps} open={tutorial.isOpen} onClose={tutorial.close} />
+      {!tutorial.isOpen && <TutorialRelaunchBtn reset={tutorial.reset} start={tutorial.start} />}
     </div>
   );
 }
