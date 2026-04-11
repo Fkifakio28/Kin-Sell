@@ -46,6 +46,8 @@ import { AnnounceCard, type MediaItem } from "../sokin/AnnounceCard";
 import { MediaViewer, CommentsDrawer, type CommentProfileState, type MissingPublicProfile } from "../sokin/SoKinShared";
 import "../sokin/sokin.css";
 import { InlineSearchResults } from "../../components/InlineSearchResults";
+import { BundlePromoCard } from "../../components/BundlePromoCard";
+import { type PromotionSummary } from "../../lib/api-client";
 import "./home-mobile.css";
 
 /* ────────────── Static data ────────────── */
@@ -583,6 +585,82 @@ function SuggestionsSection({
                 </p>
               </button>
             ))}
+      </div>
+    </section>
+  );
+}
+
+/* ────────────── Bloc 1.5: Lots promo ────────────── */
+
+function BundlesSection({
+  formatMoney,
+  t,
+  cityHint,
+  countryHint,
+}: {
+  formatMoney: (c: number) => string;
+  t: (k: string) => string;
+  cityHint?: string;
+  countryHint?: string;
+}) {
+  const { isLoggedIn, user } = useAuth();
+  const navigate = useNavigate();
+  const [bundles, setBundles] = useState<PromotionSummary[]>([]);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [fb, setFb] = useState<{ id: string; msg: string } | null>(null);
+  const isAdmin = user?.role === "ADMIN" || user?.role === "SUPER_ADMIN";
+
+  useEffect(() => {
+    listingsApi.getActiveBundles(4).then(setBundles).catch(() => {});
+  }, []);
+
+  const handleCart = async (bundle: PromotionSummary, e: React.MouseEvent) => {
+    e.preventDefault(); e.stopPropagation();
+    if (!isLoggedIn) { navigate("/login"); return; }
+    if (isAdmin) { setFb({ id: bundle.id, msg: "🔒 Admin" }); setTimeout(() => setFb(null), 3000); return; }
+    if (busy) return;
+    setBusy(bundle.id);
+    try {
+      const bundlePrice = bundle.bundlePriceUsdCents ?? 0;
+      const totalOriginal = bundle.items.reduce((s, it) => s + it.originalPriceUsdCents * it.quantity, 0);
+      let remaining = bundlePrice;
+      for (let i = 0; i < bundle.items.length; i++) {
+        const item = bundle.items[i];
+        const isLast = i === bundle.items.length - 1;
+        const itemShare = isLast ? remaining : Math.round(bundlePrice * (item.originalPriceUsdCents * item.quantity) / totalOriginal);
+        remaining -= itemShare;
+        await ordersApi.addCartItem({ listingId: item.listing.id, quantity: item.quantity, unitPriceUsdCents: Math.max(1, Math.round(itemShare / item.quantity)) });
+      }
+      setFb({ id: bundle.id, msg: `✓ ${bundle.items.length} articles ajoutés` });
+    } catch { setFb({ id: bundle.id, msg: "✗ Erreur" }); }
+    finally { setBusy(null); setTimeout(() => setFb(null), 3000); }
+  };
+
+  if (bundles.length === 0) return null;
+
+  return (
+    <section className="hm-section hm-bundles" aria-label="Lots promo">
+      <h2 className="hm-section-title">📦 Lots promo</h2>
+      <div className="hm-hscroll">
+        {bundles.map((b) => (
+          <div key={b.id} className="hm-bundle-card-wrap">
+            <BundlePromoCard
+              promo={{ ...b, promoType: "BUNDLE" as const, status: "ACTIVE" as const } as any}
+              resolveMediaUrl={resolveMediaUrl}
+              onViewItem={(lid) => navigate(`/explorer?q=${lid}`)}
+              owner={b.ownerUser?.profile}
+            />
+            <button
+              type="button"
+              className="hm-bundle-cta"
+              disabled={busy === b.id}
+              onClick={(e) => void handleCart(b, e)}
+            >
+              🛒 Ajouter au panier
+            </button>
+            {fb?.id === b.id && <span className="hm-bundle-fb">{fb.msg}</span>}
+          </div>
+        ))}
       </div>
     </section>
   );
@@ -1422,6 +1500,12 @@ export function HomePageMobile() {
           t={t}
           onArticleTap={handleArticleTap}
           cartBusyId={cartBusyId}
+        />
+        <BundlesSection
+          formatMoney={formatMoneyFromUsdCents}
+          t={t}
+          cityHint={defaultCity}
+          countryHint={effectiveCountry}
         />
         <ListingsSection
           formatMoney={formatMoneyFromUsdCents}

@@ -790,6 +790,28 @@
   color: var(--color-primary-hover);
 }
 
+/* ── BUNDLES GRID ── */
+
+.explorer-bundles-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-lg);
+  align-items: stretch;
+}
+.explorer-bundle-wrap {
+  position: relative;
+}
+.explorer-bundle-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 10px;
+}
+.explorer-bundle-actions .explorer-article-action-btn {
+  flex: 1;
+  max-width: 260px;
+}
+
 .explorer-shops-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

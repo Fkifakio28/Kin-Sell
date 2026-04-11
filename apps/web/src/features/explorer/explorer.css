@@ -584,6 +584,29 @@
 .ex-pager-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 .ex-pager-dots { color: var(--color-text-tertiary); padding: 0 2px; }
 
+/* ── BUNDLES GRID ── */
+
+.ex-bundles-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+.ex-bundle-wrap {
+  position: relative;
+}
+.ex-bundle-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 8px;
+}
+.ex-bundle-actions .ex-article-act {
+  flex: 1;
+  max-width: 240px;
+  font-size: 0.85rem;
+  padding: 8px 14px;
+}
+
 /* ── SHOPS GRID ── */
 
 .ex-shops-grid {
@@ -924,6 +947,7 @@
 @media (min-width: 600px) {
   .ex-content { max-width: 900px; padding-left: 20px; padding-right: 20px; }
   .ex-articles-grid { grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .ex-bundles-grid { grid-template-columns: repeat(2, 1fr); gap: 14px; }
   .ex-shops-grid { grid-template-columns: repeat(3, 1fr); gap: 14px; }
   .ex-profiles-grid { grid-template-columns: repeat(3, 1fr); gap: 14px; }
   .ex-article-img { height: 170px; }
@@ -940,6 +964,7 @@
 @media (min-width: 1024px) {
   .ex-content { max-width: 1100px; padding-left: 28px; padding-right: 28px; }
   .ex-articles-grid { grid-template-columns: repeat(4, 1fr); }
+  .ex-bundles-grid { grid-template-columns: repeat(3, 1fr); }
   .ex-shops-grid { grid-template-columns: repeat(4, 1fr); }
   .ex-profiles-grid { grid-template-columns: repeat(4, 1fr); }
   .ex-article-badge { top: 10px; left: 10px; font-size: 14px; padding: 6px 10px; border-radius: 14px; }

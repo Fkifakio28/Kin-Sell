@@ -9,7 +9,7 @@ import {
 import type { ExplorerArticlePreview } from './explorer-data';
 import { slugToCategoryInfo, normalizeCategoryToId } from '../../shared/constants/category-registry';
 import { getUrgencyLabel } from '../../shared/promo/promo-engine';
-import { explorer as explorerApi, orders as ordersApi, listings as listingsApi, resolveMediaUrl, type ExplorerShopApi, type ExplorerProfileApi } from '../../lib/api-client';
+import { explorer as explorerApi, orders as ordersApi, listings as listingsApi, resolveMediaUrl, type ExplorerShopApi, type ExplorerProfileApi, type PromotionSummary } from '../../lib/api-client';
 import { useHoverPopup, ArticleHoverPopup, ProfileHoverPopup, type ArticleHoverData, type ProfileHoverData } from '../../components/HoverPopup';
 import { useScrollRestore } from '../../utils/useScrollRestore';
 import { useAuth } from '../../app/providers/AuthProvider';
@@ -18,6 +18,7 @@ import { useMarketPreference } from '../../app/providers/MarketPreferenceProvide
 import { NegotiatePopup } from '../negotiations/NegotiatePopup';
 import { useLockedCategories, isCategoryLocked } from '../../hooks/useLockedCategories';
 import { AdBanner } from '../../components/AdBanner';
+import { BundlePromoCard } from '../../components/BundlePromoCard';
 import MapView from '../../components/MapView';
 import { SeoMeta } from '../../components/SeoMeta';
 import { Header } from '../../components/Header';
@@ -59,6 +60,9 @@ export function ExplorerPageDesktop() {
   const [liveArticles, setLiveArticles] = useState<ExplorerArticlePreview[]>([]);
   const [shops, setShops] = useState<ExplorerShopApi[]>([]);
   const [profiles, setProfiles] = useState<ExplorerProfileApi[]>([]);
+  const [activeBundles, setActiveBundles] = useState<PromotionSummary[]>([]);
+  const [bundleCartBusy, setBundleCartBusy] = useState<string | null>(null);
+  const [bundleCartFb, setBundleCartFb] = useState<{ id: string; msg: string } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const dragStateRef = useRef({ isDown: false, startX: 0, scrollLeft: 0 });
   const articleHover = useHoverPopup<ArticleHoverData>();
@@ -201,6 +205,29 @@ export function ExplorerPageDesktop() {
     dragStateRef.current.isDown = false;
   };
 
+  /* ── Bundle handlers ── */
+  const handleDkBundleCart = async (bundle: PromotionSummary, e: React.MouseEvent) => {
+    e.preventDefault(); e.stopPropagation();
+    if (!isLoggedIn) { nav('/login'); return; }
+    if (isAdmin) { setBundleCartFb({ id: bundle.id, msg: '🔒 Les administrateurs ne peuvent pas effectuer de transactions.' }); setTimeout(() => setBundleCartFb(null), 3000); return; }
+    if (bundleCartBusy) return;
+    setBundleCartBusy(bundle.id);
+    try {
+      const bundlePrice = bundle.bundlePriceUsdCents ?? 0;
+      const totalOriginal = bundle.items.reduce((s, it) => s + it.originalPriceUsdCents * it.quantity, 0);
+      let remaining = bundlePrice;
+      for (let i = 0; i < bundle.items.length; i++) {
+        const item = bundle.items[i];
+        const isLast = i === bundle.items.length - 1;
+        const itemShare = isLast ? remaining : Math.round(bundlePrice * (item.originalPriceUsdCents * item.quantity) / totalOriginal);
+        remaining -= itemShare;
+        await ordersApi.addCartItem({ listingId: item.listing.id, quantity: item.quantity, unitPriceUsdCents: Math.max(1, Math.round(itemShare / item.quantity)) });
+      }
+      setBundleCartFb({ id: bundle.id, msg: `✓ ${bundle.items.length} articles ajoutés au panier` });
+    } catch { setBundleCartFb({ id: bundle.id, msg: '✗ Erreur' }); }
+    finally { setBundleCartBusy(null); setTimeout(() => setBundleCartFb(null), 3000); }
+  };
+
   const buildArticleDescription = (title: string) => `Annonce: ${title}`;
 
   const buildShopDescription = (badge: string) => `Boutique ${badge.toLowerCase()} active sur Kin-Sell.`;
@@ -322,6 +349,7 @@ export function ExplorerPageDesktop() {
     loadStats();
     loadShops();
     loadProfiles();
+    listingsApi.getActiveBundles(6).then(setActiveBundles).catch(() => {});
 
     return () => {
       controller.abort();
@@ -608,6 +636,33 @@ export function ExplorerPageDesktop() {
             )}
           </div>
         </div>
+
+        {/* ═══════════════════════════════════════════════
+            BUNDLES PROMO SECTION
+            ═══════════════════════════════════════════════ */}
+        {activeBundles.length > 0 && (
+          <div className="explorer-shops-section">
+            <div className="explorer-section-header">
+              <h3 className="explorer-section-title">📦 Offres lots promo</h3>
+            </div>
+            <div className="explorer-bundles-grid">
+              {activeBundles.map((b) => (
+                <div key={b.id} className="explorer-bundle-wrap">
+                  <BundlePromoCard
+                    promo={{ ...b, promoType: 'BUNDLE' as const, status: 'ACTIVE' as const } as any}
+                    resolveMediaUrl={resolveMediaUrl}
+                    onViewItem={(lid) => nav(`/explorer?q=${lid}`)}
+                    owner={b.ownerUser?.profile}
+                  />
+                  <div className="explorer-bundle-actions">
+                    <button type="button" className="explorer-article-action-btn" disabled={bundleCartBusy === b.id} onClick={(e) => void handleDkBundleCart(b, e)}>🛒 Ajouter au panier</button>
+                  </div>
+                  {bundleCartFb?.id === b.id && <span className="explorer-article-feedback">{bundleCartFb.msg}</span>}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* ═══════════════════════════════════════════════
             FEATURED SHOPS SECTION

@@ -517,8 +517,15 @@ export function HomePage() {
     if (bundleCartBusy) return;
     setBundleCartBusy(bundle.id);
     try {
-      for (const item of bundle.items) {
-        await ordersApi.addCartItem({ listingId: item.listing.id, quantity: item.quantity });
+      const bundlePrice = bundle.bundlePriceUsdCents ?? 0;
+      const totalOriginal = bundle.items.reduce((s, it) => s + it.originalPriceUsdCents * it.quantity, 0);
+      let remaining = bundlePrice;
+      for (let i = 0; i < bundle.items.length; i++) {
+        const item = bundle.items[i];
+        const isLast = i === bundle.items.length - 1;
+        const itemShare = isLast ? remaining : Math.round(bundlePrice * (item.originalPriceUsdCents * item.quantity) / totalOriginal);
+        remaining -= itemShare;
+        await ordersApi.addCartItem({ listingId: item.listing.id, quantity: item.quantity, unitPriceUsdCents: Math.max(1, Math.round(itemShare / item.quantity)) });
       }
       setBundleCartFeedback({ id: bundle.id, msg: `✓ ${bundle.items.length} articles ${t('home.addedToCart')}` });
     } catch {

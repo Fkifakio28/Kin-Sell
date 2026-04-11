@@ -287,6 +287,39 @@
   border-color: var(--color-primary);
 }
 
+/* ─── Bundle Card wrap (Bloc 1.5) ─── */
+
+.hm-bundle-card-wrap {
+  flex-shrink: 0;
+  width: 260px;
+  scroll-snap-align: start;
+}
+.hm-bundle-cta {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 8px 0;
+  border: none;
+  border-radius: 10px;
+  background: var(--color-primary, #6f58ff);
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.hm-bundle-cta:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+.hm-bundle-fb {
+  display: block;
+  text-align: center;
+  font-size: 0.78rem;
+  color: var(--color-text-secondary, #aaa);
+  margin-top: 4px;
+}
+
 /* ─── Market Card (Bloc 2) ─── */
 
 .hm-market-card {

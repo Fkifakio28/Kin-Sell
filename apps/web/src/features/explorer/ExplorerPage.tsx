@@ -5,7 +5,7 @@ import './explorer.css';
 import { PRODUCT_CATEGORIES, SERVICE_CATEGORIES } from './explorer-data';
 import type { ExplorerArticlePreview } from './explorer-data';
 import { slugToCategoryInfo, normalizeCategoryToId } from '../../shared/constants/category-registry';
-import { explorer as explorerApi, orders as ordersApi, listings as listingsApi, resolveMediaUrl, type ExplorerShopApi, type ExplorerProfileApi } from '../../lib/api-client';
+import { explorer as explorerApi, orders as ordersApi, listings as listingsApi, resolveMediaUrl, type ExplorerShopApi, type ExplorerProfileApi, type PromotionSummary } from '../../lib/api-client';
 import { useHoverPopup, ArticleHoverPopup, ProfileHoverPopup, type ArticleHoverData, type ProfileHoverData } from '../../components/HoverPopup';
 import { useScrollRestore } from '../../utils/useScrollRestore';
 import { useAuth } from '../../app/providers/AuthProvider';
@@ -15,6 +15,7 @@ import { NegotiatePopup } from '../negotiations/NegotiatePopup';
 import { getUrgencyLabel } from '../../shared/promo/promo-engine';
 import { useLockedCategories, isCategoryLocked } from '../../hooks/useLockedCategories';
 import { AdBanner } from '../../components/AdBanner';
+import { BundlePromoCard } from '../../components/BundlePromoCard';
 import MapView from '../../components/MapView';
 import { SeoMeta } from '../../components/SeoMeta';
 import { useScrollDirection } from '../../hooks/useScrollDirection';
@@ -262,6 +263,9 @@ function ExplorerPageMobile() {
   const [liveArticles, setLiveArticles] = useState<ExplorerArticlePreview[]>([]);
   const [shops, setShops] = useState<ExplorerShopApi[]>([]);
   const [profiles, setProfiles] = useState<ExplorerProfileApi[]>([]);
+  const [activeBundles, setActiveBundles] = useState<PromotionSummary[]>([]);
+  const [bundleCartBusy, setBundleCartBusy] = useState<string | null>(null);
+  const [bundleCartFb, setBundleCartFb] = useState<{ id: string; msg: string } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const dragStateRef = useRef({ isDown: false, startX: 0, scrollLeft: 0 });
   const articleHover = useHoverPopup<ArticleHoverData>();
@@ -328,6 +332,29 @@ function ExplorerPageMobile() {
     try { const r = await listingsApi.contactSeller(article.id); nav(`/messaging/${r.conversationId}`); } catch { nav('/messaging'); }
   };
 
+  /* ── Bundle handlers ── */
+  const handleExBundleCart = async (bundle: PromotionSummary, e: React.MouseEvent) => {
+    e.preventDefault(); e.stopPropagation();
+    if (!isLoggedIn) { nav('/login'); return; }
+    if (isAdmin) { setBundleCartFb({ id: bundle.id, msg: '🔒 Les administrateurs ne peuvent pas effectuer de transactions.' }); setTimeout(() => setBundleCartFb(null), 3000); return; }
+    if (bundleCartBusy) return;
+    setBundleCartBusy(bundle.id);
+    try {
+      const bundlePrice = bundle.bundlePriceUsdCents ?? 0;
+      const totalOriginal = bundle.items.reduce((s, it) => s + it.originalPriceUsdCents * it.quantity, 0);
+      let remaining = bundlePrice;
+      for (let i = 0; i < bundle.items.length; i++) {
+        const item = bundle.items[i];
+        const isLast = i === bundle.items.length - 1;
+        const itemShare = isLast ? remaining : Math.round(bundlePrice * (item.originalPriceUsdCents * item.quantity) / totalOriginal);
+        remaining -= itemShare;
+        await ordersApi.addCartItem({ listingId: item.listing.id, quantity: item.quantity, unitPriceUsdCents: Math.max(1, Math.round(itemShare / item.quantity)) });
+      }
+      setBundleCartFb({ id: bundle.id, msg: `✓ ${bundle.items.length} articles ajoutés au panier` });
+    } catch { setBundleCartFb({ id: bundle.id, msg: '✗ Erreur' }); }
+    finally { setBundleCartBusy(null); setTimeout(() => setBundleCartFb(null), 3000); }
+  };
+
   const handleSwitchToggle = (products: boolean) => { setIsProducts(products); setSelectedCategoryId(null); setPreviewPage(0); setModalPage(0); };
   const handleCategoryClick = (id: string) => { setSelectedCategoryId((p) => p === id ? null : id); setPreviewPage(0); setModalPage(0); };
 
@@ -348,6 +375,7 @@ function ExplorerPageMobile() {
     const loadShops = async () => { try { setShops(await explorerApi.shops({ limit: 4, city: defaultCity, country: effectiveCountry })); } catch { /* */ } };
     const loadProfiles = async () => { try { setProfiles(await explorerApi.profiles({ limit: 4, city: defaultCity, country: effectiveCountry })); } catch { /* */ } };
     loadStats(); loadShops(); loadProfiles();
+    listingsApi.getActiveBundles(6).then(setActiveBundles).catch(() => {});
     return () => { ctrl.abort(); };
   }, [defaultCity, effectiveCountry]);
 
@@ -480,6 +508,31 @@ function ExplorerPageMobile() {
             </>
           )}
         </section>
+
+        {/* ── Bundles promo ── */}
+        {activeBundles.length > 0 && (
+          <section className="ex-section">
+            <div className="ex-section-head">
+              <h2 className="ex-section-title">📦 Offres lots promo</h2>
+            </div>
+            <div className="ex-bundles-grid">
+              {activeBundles.map((b) => (
+                <div key={b.id} className="ex-bundle-wrap">
+                  <BundlePromoCard
+                    promo={{ ...b, promoType: 'BUNDLE' as const, status: 'ACTIVE' as const } as any}
+                    resolveMediaUrl={resolveMediaUrl}
+                    onViewItem={(lid) => nav(`/explorer?q=${lid}`)}
+                    owner={b.ownerUser?.profile}
+                  />
+                  <div className="ex-bundle-actions">
+                    <button type="button" className="ex-article-act" title="Panier" disabled={bundleCartBusy === b.id} onClick={(e) => void handleExBundleCart(b, e)}>🛒 Ajouter au panier</button>
+                  </div>
+                  {bundleCartFb?.id === b.id && <span className="ex-article-fb">{bundleCartFb.msg}</span>}
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* ── Shops ── */}
         <section className="ex-section">

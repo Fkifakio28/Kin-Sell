@@ -19,6 +19,10 @@ export type PromotionSummary = {
   bundlePriceUsdCents: number | null;
   bundleOriginalUsdCents: number | null;
   createdAt: string;
+  ownerUser?: {
+    id: string;
+    profile: { displayName: string; username: string | null; avatarUrl: string | null };
+  };
   items: Array<{
     id: string;
     originalPriceUsdCents: number;
