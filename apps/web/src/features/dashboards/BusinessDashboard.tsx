@@ -37,7 +37,7 @@ type AbonnementTier = 'based' | 'medium' | 'premium';
 import { USD_TO_CDF_RATE, DEFAULT_CURRENCY_RATES } from '../../shared/constants/currencies';
 import { SK_BIZ_AI_ADVICE, SK_BIZ_AI_AUTO_NEGO, SK_BIZ_AI_COMMANDE } from '../../shared/constants/storage-keys';
 import { useFeatureGate } from '../../shared/hooks/useFeatureGate';
-import { DashboardSecurityBlock, DashboardVerificationSection } from './sections';
+import { DashboardSecurityBlock, DashboardVerificationSection, DashboardAiSettings } from './sections';
 import { AdsBoostPopup } from '../../components/AdsBoostPopup';
 import { PostPublishAdvisor } from '../../components/PostPublishAdvisor';
 import { PostSaleAdvisor } from '../../components/PostSaleAdvisor';
@@ -3249,6 +3249,15 @@ export function BusinessDashboard() {
               </div>
             </section>
 
+            {/* ── Gestion IA ── */}
+            <DashboardAiSettings
+              t={t}
+              storageKeys={{ advice: SK_BIZ_AI_ADVICE, autoNego: SK_BIZ_AI_AUTO_NEGO, commande: SK_BIZ_AI_COMMANDE }}
+              hasIaMarchandPlan={bizHasIaMarchandPlan}
+              hasIaOrderPlan={bizHasIaOrderPlan}
+              autoNegoActive={bizAiAutoNegoEnabled}
+            />
+
             {/* ── Zone sensible ── */}
             <section className="ud-glass-panel bz-glass-panel ud-settings-danger">
               <h2 className="ud-panel-title" style={{ color: 'var(--color-error, #ff6b6b)' }}>⚠️ {t('biz.dangerZone')}</h2>
@@ -3387,10 +3396,10 @@ export function BusinessDashboard() {
                 <h3 style={{ margin: '0 0 10px', fontSize: 15, color: 'var(--color-text-primary, #fff)' }}>🤖 IA disponibles</h3>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 10 }}>
                   {[
-                    { name: 'IA Marchande', icon: '🤝', desc: 'Négociation automatisée', active: bizAiAutoNegoEnabled, locked: !bizHasIaMarchandPlan },
-                    { name: 'IA Ads', icon: '📢', desc: 'Boost articles & boutique', active: bizAiAdviceEnabled, locked: false },
-                    { name: 'Kin-Sell Analytique', icon: '📊', desc: 'Analyses marché avancées', active: bizHasAnalytics, locked: !bizHasAnalytics },
-                    { name: 'IA Commande', icon: '📦', desc: 'Automatisation des ventes', active: bizAiCommandeEnabled, locked: !bizHasIaOrderPlan },
+                    { name: 'IA Marchande', icon: '🤝', desc: 'Négociation automatisée', active: bizAiAutoNegoEnabled, locked: !bizHasIaMarchandPlan, key: 'autoNego' as const },
+                    { name: 'IA Ads', icon: '📢', desc: 'Boost articles & boutique', active: bizAiAdviceEnabled, locked: false, key: 'advice' as const },
+                    { name: 'Kin-Sell Analytique', icon: '📊', desc: 'Analyses marché avancées', active: bizHasAnalytics, locked: !bizHasAnalytics, key: 'analytics' as const },
+                    { name: 'IA Commande', icon: '📦', desc: 'Automatisation des ventes', active: bizAiCommandeEnabled, locked: !bizHasIaOrderPlan, key: 'commande' as const },
                   ].map((ia) => (
                     <div key={ia.name} style={{
                       background: ia.locked ? 'rgba(255,255,255,0.02)' : 'rgba(111,88,255,0.05)',
@@ -3399,9 +3408,35 @@ export function BusinessDashboard() {
                     }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                         <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text-primary, #fff)' }}>{ia.icon} {ia.name}</span>
-                        <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 6, background: ia.active && !ia.locked ? 'rgba(76,175,80,0.15)' : 'rgba(255,255,255,0.06)', color: ia.active && !ia.locked ? '#4caf50' : '#888' }}>
-                          {ia.locked ? '🔒 Forfait requis' : ia.active ? '✅ Active' : '⏸ Inactive'}
-                        </span>
+                        {ia.locked ? (
+                          <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 6, background: 'rgba(255,255,255,0.06)', color: '#888' }}>🔒 Forfait requis</span>
+                        ) : ia.key === 'analytics' ? (
+                          <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 6, background: 'rgba(76,175,80,0.15)', color: '#4caf50' }}>✅ Active</span>
+                        ) : (
+                          <button
+                            type="button"
+                            className={`ud-ai-switch${ia.active ? ' ud-ai-switch--on' : ''}`}
+                            style={{ flexShrink: 0 }}
+                            onClick={() => {
+                              if (ia.key === 'advice') {
+                                const next = !bizAiAdviceEnabled;
+                                setBizAiAdviceEnabled(next);
+                                localStorage.setItem(SK_BIZ_AI_ADVICE, next ? 'on' : 'off');
+                              } else if (ia.key === 'autoNego') {
+                                const next = !bizAiAutoNegoEnabled;
+                                setBizAiAutoNegoEnabled(next);
+                                localStorage.setItem(SK_BIZ_AI_AUTO_NEGO, next ? 'on' : 'off');
+                              } else if (ia.key === 'commande') {
+                                const next = !bizAiCommandeEnabled;
+                                setBizAiCommandeEnabled(next);
+                                localStorage.setItem(SK_BIZ_AI_COMMANDE, next ? 'on' : 'off');
+                              }
+                            }}
+                            aria-pressed={ia.active}
+                          >
+                            <span className="ud-ai-switch-thumb" />
+                          </button>
+                        )}
                       </div>
                       <p style={{ margin: 0, fontSize: 12, color: 'var(--color-text-secondary, #aaa)' }}>{ia.desc}</p>
                       {ia.locked && (
