@@ -710,6 +710,28 @@ export const admin = {
   logExport: (body: { type: string; title: string; tier: string; format: string; size?: string }) =>
     request<ExportHistoryItem>("/admin/ia/exports", { method: "POST", body }),
 
+  // ── IA Sources & Enrichment ──
+  iaSources: (domain?: string) =>
+    request<{ sources: IaSource[]; total: number }>("/admin/ia/sources", { params: domain ? { domain } : undefined }),
+  iaAddSource: (body: { domain: string; type: "URL" | "FILE"; name: string; url?: string; fileType?: string; notes?: string }) =>
+    request<IaSource>("/admin/ia/sources", { method: "POST", body }),
+  iaDeleteSource: (id: string) =>
+    request<{ ok: boolean }>(`/admin/ia/sources/${encodeURIComponent(id)}`, { method: "DELETE" }),
+
+  // ── IA Commande: toggle user ──
+  iaCommandeToggleUser: (body: { userId: string; enabled: boolean; reason: string }) =>
+    request<{ ok: boolean }>("/admin/ia/commande/toggle-user", { method: "POST", body }),
+
+  // ── IA ADS: create admin ad ──
+  iaAdsCreate: (body: { title: string; description?: string; imageUrl?: string; linkUrl?: string; ctaText?: string; targetPages?: string[]; startDate?: string; endDate?: string; priority?: number }) =>
+    request<unknown>("/admin/ia/ads/create", { method: "POST", body }),
+
+  // ── IA Message: send promo ──
+  iaMessageSend: (body: { recipientIds: string[]; channel: "EMAIL" | "PUSH"; subject: string; body: string; reason?: string }) =>
+    request<{ ok: boolean; sent: number; total: number }>("/admin/ia/messages/send", { method: "POST", body }),
+  iaMessageTargetUsers: (params?: { search?: string; role?: string; limit?: number }) =>
+    request<{ users: IaTargetUser[] }>("/admin/ia/messages/target-users", { params: params as Record<string, string | number | undefined> }),
+
 };
 
 // ── Admin AI/Subscription types ──
@@ -897,4 +919,25 @@ export type ExportHistoryItem = {
   format: string;
   createdAt: string;
   size: string;
+};
+
+export type IaSource = {
+  id: string;
+  domain: string;
+  type: "URL" | "FILE";
+  name: string;
+  url?: string;
+  fileType?: string;
+  addedAt: string;
+  addedBy: string;
+  notes?: string;
+};
+
+export type IaTargetUser = {
+  id: string;
+  email: string | null;
+  role: string;
+  displayName: string;
+  city?: string | null;
+  country?: string | null;
 };

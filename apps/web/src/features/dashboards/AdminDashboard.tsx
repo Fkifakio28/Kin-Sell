@@ -45,6 +45,8 @@ import {
   type AdminSubscriptionDetail,
   type AdminAiTrialItem,
   type AdminBillingOrderItem,
+  type IaSource,
+  type IaTargetUser,
 } from '../../lib/api-client';
 import AdminVerificationPanel from './AdminVerificationPanel';
 import AdminAnalyticsPanel from './AdminAnalyticsPanel';
@@ -3473,6 +3475,31 @@ export function AdminDashboard() {
   const [iaData, setIaData] = useState<Record<string, unknown> | null>(null);
   const [iaLoading, setIaLoading] = useState(false);
 
+  // IA Marchande — sources
+  const [iaMarchandeSources, setIaMarchandeSources] = useState<IaSource[]>([]);
+  const [iaMarchandeSrcForm, setIaMarchandeSrcForm] = useState({ type: 'URL' as 'URL' | 'FILE', name: '', url: '', fileType: '', notes: '' });
+  const [iaMarchandeSrcMsg, setIaMarchandeSrcMsg] = useState<string | null>(null);
+
+  // IA Commande — toggle
+  const [iaCommandeToggling, setIaCommandeToggling] = useState<string | null>(null);
+
+  // IA Ads — create form
+  const [iaAdsForm, setIaAdsForm] = useState({ title: '', description: '', imageUrl: '', linkUrl: '', ctaText: '', targetPages: [] as string[], priority: 5 });
+  const [iaAdsFormOpen, setIaAdsFormOpen] = useState(false);
+  const [iaAdsMsg, setIaAdsMsg] = useState<string | null>(null);
+
+  // IA Message — send promo form
+  const [iaMsgFormOpen, setIaMsgFormOpen] = useState(false);
+  const [iaMsgForm, setIaMsgForm] = useState({ channel: 'EMAIL' as 'EMAIL' | 'PUSH', subject: '', body: '', reason: 'PROMO_MANUAL' });
+  const [iaMsgTargetSearch, setIaMsgTargetSearch] = useState('');
+  const [iaMsgTargetUsers, setIaMsgTargetUsers] = useState<IaTargetUser[]>([]);
+  const [iaMsgSelected, setIaMsgSelected] = useState<string[]>([]);
+  const [iaMsgSending, setIaMsgSending] = useState(false);
+  const [iaMsgResult, setIaMsgResult] = useState<string | null>(null);
+
+  const isMsgSelected = (id: string) => iaMsgSelected.includes(id);
+  const isMsgSendDisabled = () => iaMsgSending || !iaMsgForm.subject || !iaMsgForm.body || iaMsgSelected.length === 0;
+
   const loadIaData = useCallback(async (endpoint: string) => {
     setIaLoading(true);
     setIaData(null);
@@ -3487,7 +3514,10 @@ export function AdminDashboard() {
 
   useEffect(() => {
     if (activeSection === 'ia-analytique') loadIaData('analytique');
-    else if (activeSection === 'ia-marchande') loadIaData('marchande');
+    else if (activeSection === 'ia-marchande') {
+      loadIaData('marchande');
+      admin.iaSources('marchande').then(r => setIaMarchandeSources(r.sources)).catch(() => {});
+    }
     else if (activeSection === 'ia-commande') loadIaData('commande');
     else if (activeSection === 'ia-ads') loadIaData('ads');
     else if (activeSection === 'ia-message') loadIaData('messages');
@@ -3543,7 +3573,7 @@ export function AdminDashboard() {
 
             {/* Articles récents (temps réel) */}
             <h3 style={{ fontSize: 15, marginBottom: 8 }}>⚡ Articles ajoutés récemment (24h)</h3>
-            <div className="ad-table-wrap">
+            <div className="ad-table-wrap" style={{ marginBottom: 24 }}>
               <table className="ad-table">
                 <thead><tr><th>Article</th><th>Catégorie</th><th>Ville</th><th>Prix</th><th>Vendeur</th><th>Heure</th></tr></thead>
                 <tbody>
@@ -3561,6 +3591,67 @@ export function AdminDashboard() {
                 </tbody>
               </table>
             </div>
+
+            {/* ═══ Sources & Enrichissement ═══ */}
+            <h3 style={{ fontSize: 15, marginBottom: 8 }}>🔗 Sources de données & Enrichissement</h3>
+            <div className="glass-card" style={{ padding: 16, borderRadius: 12, marginBottom: 16 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ad-text-1)', marginBottom: 10 }}>➕ Ajouter une source</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+                <select value={iaMarchandeSrcForm.type} onChange={e => setIaMarchandeSrcForm(f => ({ ...f, type: e.target.value as 'URL' | 'FILE' }))} style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid var(--ad-border)', fontSize: 12, color: 'var(--ad-text-1)', background: 'var(--ad-surface)' }}>
+                  <option value="URL">🔗 Lien URL</option>
+                  <option value="FILE">📄 Fichier</option>
+                </select>
+                <input placeholder="Nom" value={iaMarchandeSrcForm.name} onChange={e => setIaMarchandeSrcForm(f => ({ ...f, name: e.target.value }))} style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid var(--ad-border)', fontSize: 12, color: 'var(--ad-text-1)', background: 'var(--ad-surface)', flex: 1, minWidth: 120 }} />
+                {iaMarchandeSrcForm.type === 'URL' ? (
+                  <input placeholder="https://..." value={iaMarchandeSrcForm.url} onChange={e => setIaMarchandeSrcForm(f => ({ ...f, url: e.target.value }))} style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid var(--ad-border)', fontSize: 12, color: 'var(--ad-text-1)', background: 'var(--ad-surface)', flex: 1, minWidth: 180 }} />
+                ) : (
+                  <select value={iaMarchandeSrcForm.fileType} onChange={e => setIaMarchandeSrcForm(f => ({ ...f, fileType: e.target.value }))} style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid var(--ad-border)', fontSize: 12, color: 'var(--ad-text-1)', background: 'var(--ad-surface)' }}>
+                    <option value="">Type</option>
+                    <option value="XML">XML</option>
+                    <option value="PDF">PDF</option>
+                    <option value="DOCX">Word</option>
+                    <option value="CSV">CSV</option>
+                  </select>
+                )}
+                <input placeholder="Notes" value={iaMarchandeSrcForm.notes} onChange={e => setIaMarchandeSrcForm(f => ({ ...f, notes: e.target.value }))} style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid var(--ad-border)', fontSize: 12, color: 'var(--ad-text-1)', background: 'var(--ad-surface)', minWidth: 100 }} />
+                <button disabled={!iaMarchandeSrcForm.name || (iaMarchandeSrcForm.type === 'URL' && !iaMarchandeSrcForm.url)} onClick={async () => {
+                  setIaMarchandeSrcMsg(null);
+                  try {
+                    await admin.iaAddSource({ domain: 'marchande', ...iaMarchandeSrcForm });
+                    setIaMarchandeSrcMsg('✅ Source ajoutée');
+                    setIaMarchandeSrcForm({ type: 'URL', name: '', url: '', fileType: '', notes: '' });
+                    admin.iaSources('marchande').then(r => setIaMarchandeSources(r.sources)).catch(() => {});
+                  } catch { setIaMarchandeSrcMsg('❌ Erreur'); }
+                }} className="ad-btn ad-btn--accent" style={{ fontSize: 12, padding: '6px 14px', opacity: (!iaMarchandeSrcForm.name || (iaMarchandeSrcForm.type === 'URL' && !iaMarchandeSrcForm.url)) ? 0.4 : 1 }}>
+                  Ajouter
+                </button>
+              </div>
+              {iaMarchandeSrcMsg && <p style={{ fontSize: 12, color: iaMarchandeSrcMsg.startsWith('✅') ? 'var(--ad-green)' : 'var(--ad-red)', marginTop: 6 }}>{iaMarchandeSrcMsg}</p>}
+            </div>
+            {iaMarchandeSources.length > 0 && (
+              <div className="ad-table-wrap">
+                <table className="ad-table">
+                  <thead><tr><th>Type</th><th>Nom</th><th>URL / Fichier</th><th>Notes</th><th>Ajouté le</th><th>Action</th></tr></thead>
+                  <tbody>
+                    {iaMarchandeSources.map(s => (
+                      <tr key={s.id}>
+                        <td><span className={`ad-badge ${s.type === 'URL' ? 'ad-badge--active' : 'ad-badge--pending'}`}>{s.type === 'URL' ? '🔗 URL' : `📄 ${s.fileType || 'Fichier'}`}</span></td>
+                        <td style={{ fontWeight: 500 }}>{s.name}</td>
+                        <td style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.url || '—'}</td>
+                        <td style={{ fontSize: 11, color: 'var(--ad-text-3)' }}>{s.notes || '—'}</td>
+                        <td style={{ fontSize: 11 }}>{new Date(s.addedAt).toLocaleDateString('fr-FR')}</td>
+                        <td>
+                          <button onClick={async () => { await admin.iaDeleteSource(s.id); admin.iaSources('marchande').then(r => setIaMarchandeSources(r.sources)).catch(() => {}); }} style={{ background: 'none', border: '1px solid var(--ad-red)', color: 'var(--ad-red)', borderRadius: 6, padding: '3px 8px', fontSize: 11, cursor: 'pointer' }}>🗑</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {iaMarchandeSources.length === 0 && (
+              <p style={{ color: 'var(--ad-text-3)', fontSize: 13, textAlign: 'center', padding: '12px 0' }}>Aucune source externe. Ajoutez des liens URL, fichiers XML, PDF ou Word pour enrichir l&apos;IA Marchande.</p>
+            )}
           </>
         )}
       </div>
@@ -3572,7 +3663,7 @@ export function AdminDashboard() {
     return (
       <div className="ad-content-block">
         <h2 className="ad-content-title">🤖 IA de Commande</h2>
-        <p className="ad-content-subtitle" style={{ color: 'var(--ad-text-3)', marginBottom: 16 }}>Suivi des boutiques en automatique, ventes IA et personnes gérées.</p>
+        <p className="ad-content-subtitle" style={{ color: 'var(--ad-text-3)', marginBottom: 16 }}>Suivi des boutiques en automatique, ventes IA et personnes gérées. Activez ou désactivez l&apos;auto-shop par utilisateur.</p>
         {iaLoading ? <p className="ad-content-subtitle">Chargement…</p> : !d ? <p className="ad-content-subtitle">Aucune donnée</p> : (
           <>
             {/* Stats */}
@@ -3595,16 +3686,41 @@ export function AdminDashboard() {
               </div>
             </div>
 
-            {/* Utilisateurs gérés */}
-            <h3 style={{ fontSize: 15, marginBottom: 8 }}>👥 Personnes / Boutiques gérées</h3>
+            {/* Utilisateurs gérés avec toggle */}
+            <h3 style={{ fontSize: 15, marginBottom: 8 }}>👥 Personnes / Boutiques gérées — Auto-Shop</h3>
             <div className="ad-table-wrap" style={{ marginBottom: 20 }}>
               <table className="ad-table">
-                <thead><tr><th>Nom</th><th>Boutique</th></tr></thead>
+                <thead><tr><th>Nom</th><th>Boutique</th><th>Statut Auto-Shop</th><th>Action</th></tr></thead>
                 <tbody>
-                  {(d.managedUsers ?? []).map((u: any) => (
-                    <tr key={u.id}><td>{u.name}</td><td>{u.business ?? '—'}</td></tr>
-                  ))}
-                  {(d.managedUsers ?? []).length === 0 && <tr><td colSpan={2} style={{ textAlign: 'center', color: 'var(--ad-text-3)' }}>Aucune personne gérée en automatique</td></tr>}
+                  {(d.managedUsers ?? []).map((u: any) => {
+                    const isEnabled = u.autoShopEnabled !== false;
+                    const toggling = iaCommandeToggling === u.id;
+                    return (
+                      <tr key={u.id}>
+                        <td>{u.name}</td>
+                        <td>{u.business ?? '—'}</td>
+                        <td>
+                          <span className={`ad-badge ${isEnabled ? 'ad-badge--active' : 'ad-badge--danger'}`}>
+                            {isEnabled ? '✅ Activé' : '🚫 Désactivé'}
+                          </span>
+                        </td>
+                        <td>
+                          <button disabled={toggling} onClick={async () => {
+                            const reason = isEnabled ? 'Désactivé par l\'admin' : 'Réactivé par l\'admin';
+                            setIaCommandeToggling(u.id);
+                            try {
+                              await admin.iaCommandeToggleUser({ userId: u.id, enabled: !isEnabled, reason });
+                              await loadIaData('commande');
+                            } catch { /* ignore */ }
+                            setIaCommandeToggling(null);
+                          }} className={`ad-btn ${isEnabled ? 'ad-btn--danger' : 'ad-btn--accent'}`} style={{ fontSize: 11, padding: '4px 12px' }}>
+                            {toggling ? '⏳' : isEnabled ? '🚫 Désactiver' : '✅ Réactiver'}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {(d.managedUsers ?? []).length === 0 && <tr><td colSpan={4} style={{ textAlign: 'center', color: 'var(--ad-text-3)' }}>Aucune personne gérée en automatique</td></tr>}
                 </tbody>
               </table>
             </div>
@@ -3634,12 +3750,12 @@ export function AdminDashboard() {
 
   const renderIaAds = () => {
     const d = iaData as any;
+    const AD_PAGES = ['home', 'explorer', 'sokin', 'user-dashboard', 'admin-dashboard', 'listing-detail'];
     return (
       <div className="ad-content-block">
         <h2 className="ad-content-title">📣 IA ADS</h2>
         <p className="ad-content-subtitle" style={{ color: 'var(--ad-text-3)', marginBottom: 16 }}>
-          Gestion intelligente des publicités Kin-Sell et des pubs clients.<br/>
-          <span style={{ fontSize: 11, color: '#6f58ff' }}>💡 Pour les pubs Kin-Sell : utilisez Gemini / ChatGPT pour la création. Placez manuellement les pubs clients dans les bons emplacements.</span>
+          Gestion intelligente des publicités Kin-Sell. Visualisez les pubs générées par l&apos;IA et créez manuellement vos propres publicités.
         </p>
         {iaLoading ? <p className="ad-content-subtitle">Chargement des données publicitaires…</p> : !d ? <p className="ad-content-subtitle">Aucune donnée</p> : (
           <>
@@ -3665,6 +3781,64 @@ export function AdminDashboard() {
                 <div style={{ fontSize: 22, fontWeight: 700, color: '#6f58ff' }}>{d.stats?.ctr24h ?? '0.00'}%</div>
                 <div style={{ fontSize: 11, color: 'var(--ad-text-3)' }}>CTR (24h)</div>
               </div>
+            </div>
+
+            {/* ═══ Créer une publicité manuelle ═══ */}
+            <div style={{ marginBottom: 20 }}>
+              <button onClick={() => setIaAdsFormOpen(!iaAdsFormOpen)} className="ad-btn ad-btn--accent" style={{ fontSize: 13, padding: '8px 20px', marginBottom: iaAdsFormOpen ? 12 : 0 }}>
+                {iaAdsFormOpen ? '✕ Fermer' : '➕ Créer une publicité'}
+              </button>
+              {iaAdsFormOpen && (
+                <div className="glass-card" style={{ padding: 16, borderRadius: 12 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ad-text-1)', marginBottom: 12 }}>📝 Nouvelle publicité Kin-Sell</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+                    <input placeholder="Titre *" value={iaAdsForm.title} onChange={e => setIaAdsForm(f => ({ ...f, title: e.target.value }))} style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid var(--ad-border)', fontSize: 12, color: 'var(--ad-text-1)', background: 'var(--ad-surface)' }} />
+                    <input placeholder="Lien URL (CTA)" value={iaAdsForm.linkUrl} onChange={e => setIaAdsForm(f => ({ ...f, linkUrl: e.target.value }))} style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid var(--ad-border)', fontSize: 12, color: 'var(--ad-text-1)', background: 'var(--ad-surface)' }} />
+                  </div>
+                  <textarea placeholder="Description" value={iaAdsForm.description} onChange={e => setIaAdsForm(f => ({ ...f, description: e.target.value }))} rows={2} style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--ad-border)', fontSize: 12, color: 'var(--ad-text-1)', background: 'var(--ad-surface)', resize: 'vertical', marginBottom: 10 }} />
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 10 }}>
+                    <input placeholder="URL image" value={iaAdsForm.imageUrl} onChange={e => setIaAdsForm(f => ({ ...f, imageUrl: e.target.value }))} style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid var(--ad-border)', fontSize: 12, color: 'var(--ad-text-1)', background: 'var(--ad-surface)' }} />
+                    <input placeholder="Texte CTA (ex: Découvrir)" value={iaAdsForm.ctaText} onChange={e => setIaAdsForm(f => ({ ...f, ctaText: e.target.value }))} style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid var(--ad-border)', fontSize: 12, color: 'var(--ad-text-1)', background: 'var(--ad-surface)' }} />
+                    <input type="number" placeholder="Priorité (1-10)" value={iaAdsForm.priority} onChange={e => setIaAdsForm(f => ({ ...f, priority: Number(e.target.value) }))} min={1} max={10} style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid var(--ad-border)', fontSize: 12, color: 'var(--ad-text-1)', background: 'var(--ad-surface)' }} />
+                  </div>
+                  <div style={{ marginBottom: 10 }}>
+                    <div style={{ fontSize: 12, color: 'var(--ad-text-2)', marginBottom: 6 }}>📍 Pages cibles :</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {AD_PAGES.map(p => (
+                        <label key={p} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--ad-text-1)', cursor: 'pointer', padding: '4px 8px', borderRadius: 6, background: iaAdsForm.targetPages.includes(p) ? 'rgba(111,88,255,0.2)' : 'transparent', border: `1px solid ${iaAdsForm.targetPages.includes(p) ? '#6f58ff' : 'var(--ad-border)'}` }}>
+                          <input type="checkbox" checked={iaAdsForm.targetPages.includes(p)} onChange={() => setIaAdsForm(f => ({ ...f, targetPages: f.targetPages.includes(p) ? f.targetPages.filter(x => x !== p) : [...f.targetPages, p] }))} style={{ accentColor: '#6f58ff' }} />
+                          {p}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                    <button disabled={!iaAdsForm.title} onClick={async () => {
+                      setIaAdsMsg(null);
+                      try {
+                        await admin.iaAdsCreate(iaAdsForm);
+                        setIaAdsMsg('✅ Publicité créée avec succès');
+                        setIaAdsForm({ title: '', description: '', imageUrl: '', linkUrl: '', ctaText: '', targetPages: [], priority: 5 });
+                        setIaAdsFormOpen(false);
+                        await loadIaData('ads');
+                      } catch { setIaAdsMsg('❌ Erreur lors de la création'); }
+                    }} className="ad-btn ad-btn--accent" style={{ fontSize: 12, padding: '8px 18px', opacity: !iaAdsForm.title ? 0.4 : 1 }}>
+                      🚀 Publier la publicité
+                    </button>
+                    {iaAdsMsg && <span style={{ fontSize: 12, color: iaAdsMsg.startsWith('✅') ? 'var(--ad-green)' : 'var(--ad-red)' }}>{iaAdsMsg}</span>}
+                  </div>
+                  {/* Aperçu */}
+                  {iaAdsForm.title && (
+                    <div style={{ marginTop: 14, padding: 14, borderRadius: 10, background: 'rgba(111,88,255,0.08)', border: '1px solid rgba(111,88,255,0.2)' }}>
+                      <div style={{ fontSize: 11, color: 'var(--ad-text-3)', marginBottom: 6 }}>👁 Aperçu</div>
+                      {iaAdsForm.imageUrl && <img src={iaAdsForm.imageUrl} alt="" style={{ maxWidth: 300, maxHeight: 120, borderRadius: 8, marginBottom: 8, objectFit: 'cover' }} />}
+                      <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--ad-text-1)' }}>{iaAdsForm.title}</div>
+                      {iaAdsForm.description && <div style={{ fontSize: 12, color: 'var(--ad-text-2)', marginTop: 4 }}>{iaAdsForm.description}</div>}
+                      {iaAdsForm.ctaText && <span style={{ display: 'inline-block', marginTop: 6, padding: '4px 14px', borderRadius: 6, background: '#6f58ff', color: '#fff', fontSize: 12, fontWeight: 600 }}>{iaAdsForm.ctaText}</span>}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Emplacements publicitaires */}
@@ -3717,7 +3891,7 @@ export function AdminDashboard() {
     return (
       <div className="ad-content-block">
         <h2 className="ad-content-title">📨 IA Message</h2>
-        <p className="ad-content-subtitle" style={{ color: 'var(--ad-text-3)', marginBottom: 16 }}>Messages promotionnels envoyés par l&apos;IA Messenger — emails via ADS@Kin-sell.com et notifications push.</p>
+        <p className="ad-content-subtitle" style={{ color: 'var(--ad-text-3)', marginBottom: 16 }}>Messages promotionnels envoyés par l&apos;IA Messenger — emails via ADS@Kin-sell.com et notifications push. Envoyez manuellement des promos ciblées.</p>
         {iaLoading ? <p className="ad-content-subtitle">Chargement…</p> : !d ? <p className="ad-content-subtitle">Aucune donnée</p> : (
           <>
             {/* Stats campagne */}
@@ -3759,6 +3933,89 @@ export function AdminDashboard() {
                 </div>
               ))}
               {(d.byReason ?? []).length === 0 && <p style={{ color: 'var(--ad-text-3)', fontSize: 13 }}>Aucune campagne envoyée</p>}
+            </div>
+
+            {/* ═══ Envoyer un message promo ═══ */}
+            <div style={{ marginBottom: 20 }}>
+              <button onClick={() => { setIaMsgFormOpen(!iaMsgFormOpen); setIaMsgResult(null); }} className="ad-btn ad-btn--accent" style={{ fontSize: 13, padding: '8px 20px', marginBottom: iaMsgFormOpen ? 12 : 0 }}>
+                {iaMsgFormOpen ? '✕ Fermer' : '📨 Envoyer un message promotionnel'}
+              </button>
+              {iaMsgFormOpen && (
+                <div className="glass-card" style={{ padding: 16, borderRadius: 12 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ad-text-1)', marginBottom: 12 }}>📝 Nouveau message promotionnel</div>
+
+                  {/* Canal + Raison */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+                    <select value={iaMsgForm.channel} onChange={e => setIaMsgForm(f => ({ ...f, channel: e.target.value as 'EMAIL' | 'PUSH' }))} style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid var(--ad-border)', fontSize: 12, color: 'var(--ad-text-1)', background: 'var(--ad-surface)' }}>
+                      <option value="EMAIL">📧 Email</option>
+                      <option value="PUSH">🔔 Notification Push</option>
+                    </select>
+                    <select value={iaMsgForm.reason} onChange={e => setIaMsgForm(f => ({ ...f, reason: e.target.value }))} style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid var(--ad-border)', fontSize: 12, color: 'var(--ad-text-1)', background: 'var(--ad-surface)' }}>
+                      <option value="PROMO_MANUAL">📣 Promo manuelle</option>
+                      <option value="NEW_FEATURE">🆕 Nouvelle fonctionnalité</option>
+                      <option value="ENGAGEMENT">💬 Engagement</option>
+                      <option value="ANNOUNCEMENT">📢 Annonce</option>
+                    </select>
+                  </div>
+
+                  {/* Sujet */}
+                  <input placeholder="Sujet du message *" value={iaMsgForm.subject} onChange={e => setIaMsgForm(f => ({ ...f, subject: e.target.value }))} style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--ad-border)', fontSize: 12, color: 'var(--ad-text-1)', background: 'var(--ad-surface)', marginBottom: 10 }} />
+
+                  {/* Corps */}
+                  <textarea placeholder="Contenu du message *" value={iaMsgForm.body} onChange={e => setIaMsgForm(f => ({ ...f, body: e.target.value }))} rows={4} style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--ad-border)', fontSize: 12, color: 'var(--ad-text-1)', background: 'var(--ad-surface)', resize: 'vertical', marginBottom: 12 }} />
+
+                  {/* Sélection des destinataires */}
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ad-text-1)', marginBottom: 8 }}>🎯 Destinataires ({iaMsgSelected.length} sélectionnés)</div>
+                  <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                    <input placeholder="Rechercher un utilisateur…" value={iaMsgTargetSearch} onChange={e => {
+                      setIaMsgTargetSearch(e.target.value);
+                      if (e.target.value.length >= 2) {
+                        admin.iaMessageTargetUsers({ search: e.target.value, limit: 15 }).then(r => setIaMsgTargetUsers(r.users)).catch(() => {});
+                      } else { setIaMsgTargetUsers([]); }
+                    }} style={{ flex: 1, padding: '7px 12px', borderRadius: 8, border: '1px solid var(--ad-border)', fontSize: 12, color: 'var(--ad-text-1)', background: 'var(--ad-surface)' }} />
+                    {iaMsgSelected.length > 0 && (
+                      <button onClick={() => setIaMsgSelected([])} style={{ background: 'none', border: '1px solid var(--ad-red)', color: 'var(--ad-red)', borderRadius: 6, padding: '4px 10px', fontSize: 11, cursor: 'pointer' }}>Tout désélectionner</button>
+                    )}
+                  </div>
+                  {iaMsgTargetUsers.length > 0 && (
+                    <div style={{ maxHeight: 200, overflowY: 'auto', border: '1px solid var(--ad-border)', borderRadius: 8, marginBottom: 10 }}>
+                      {iaMsgTargetUsers.map(u => {
+                        const sel = isMsgSelected(u.id);
+                        return (
+                          <div key={u.id} onClick={() => setIaMsgSelected(prev => sel ? prev.filter(x => x !== u.id) : [...prev, u.id])} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', cursor: 'pointer', background: sel ? 'rgba(111,88,255,0.12)' : 'transparent', borderBottom: '1px solid var(--ad-border)' }}>
+                            <input type="checkbox" checked={sel} readOnly style={{ accentColor: '#6f58ff' }} />
+                            <div>
+                              <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--ad-text-1)' }}>{u.displayName}</div>
+                              <div style={{ fontSize: 11, color: 'var(--ad-text-3)' }}>{u.email} · {u.role}{u.city ? ` · ${u.city}` : ''}{u.country ? ` (${u.country})` : ''}</div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Actions */}
+                  <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                    <button disabled={isMsgSendDisabled()} onClick={async () => {
+                      setIaMsgSending(true);
+                      setIaMsgResult(null);
+                      try {
+                        await admin.iaMessageSend({ recipientIds: iaMsgSelected, channel: iaMsgForm.channel, subject: iaMsgForm.subject, body: iaMsgForm.body, reason: iaMsgForm.reason });
+                        setIaMsgResult(`✅ Message envoyé à ${iaMsgSelected.length} destinataire(s)`);
+                        setIaMsgForm({ channel: 'EMAIL', subject: '', body: '', reason: 'PROMO_MANUAL' });
+                        setIaMsgSelected([]);
+                        setIaMsgTargetUsers([]);
+                        setIaMsgTargetSearch('');
+                        await loadIaData('messages');
+                      } catch { setIaMsgResult('❌ Erreur lors de l\'envoi'); }
+                      setIaMsgSending(false);
+                    }} className="ad-btn ad-btn--accent" style={{ fontSize: 12, padding: '8px 18px', opacity: isMsgSendDisabled() ? 0.4 : 1 }}>
+                      {iaMsgSending ? '⏳ Envoi…' : '🚀 Envoyer'}
+                    </button>
+                    {iaMsgResult && <span style={{ fontSize: 12, color: iaMsgResult.startsWith('✅') ? 'var(--ad-green)' : 'var(--ad-red)' }}>{iaMsgResult}</span>}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Messages récents */}

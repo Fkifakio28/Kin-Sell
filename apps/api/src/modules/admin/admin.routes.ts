@@ -1462,6 +1462,176 @@ router.get("/ia/messages", asyncHandler(async (req: AuthenticatedRequest, res) =
   res.json(stats);
 }));
 
+// ═══════════════════════════════════════════
+// IA ENRICHMENT — Sources & Knowledge Base
+// ═══════════════════════════════════════════
+
+// In-memory sources store (extensible to DB later)
+const iaSources: Array<{
+  id: string; domain: string; type: "URL" | "FILE"; name: string;
+  url?: string; fileType?: string; addedAt: string; addedBy: string; notes?: string;
+}> = [];
+
+// List sources for a given domain
+router.get("/ia/sources", asyncHandler(async (req: AuthenticatedRequest, res) => {
+  await checkPermission(req, "AI_MANAGEMENT");
+  const domain = (req.query.domain as string) || "all";
+  const filtered = domain === "all" ? iaSources : iaSources.filter(s => s.domain === domain);
+  res.json({ sources: filtered, total: filtered.length });
+}));
+
+// Add a source (URL or file metadata)
+router.post("/ia/sources", asyncHandler(async (req: AuthenticatedRequest, res) => {
+  await checkPermission(req, "AI_MANAGEMENT");
+  const body = z.object({
+    domain: z.string().min(1),
+    type: z.enum(["URL", "FILE"]),
+    name: z.string().min(1),
+    url: z.string().optional(),
+    fileType: z.string().optional(),
+    notes: z.string().optional(),
+  }).parse(req.body);
+  const entry = {
+    id: `src-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    ...body,
+    addedAt: new Date().toISOString(),
+    addedBy: req.auth!.userId,
+  };
+  iaSources.push(entry);
+  await prisma.auditLog.create({
+    data: {
+      actorUserId: req.auth!.userId,
+      action: "IA_SOURCE_ADD",
+      entityType: "IA_SOURCE",
+      entityId: entry.id,
+      metadata: { domain: body.domain, type: body.type, name: body.name },
+    },
+  });
+  res.json(entry);
+}));
+
+// Delete a source
+router.delete("/ia/sources/:id", asyncHandler(async (req: AuthenticatedRequest, res) => {
+  await checkPermission(req, "AI_MANAGEMENT");
+  const idx = iaSources.findIndex(s => s.id === req.params.id);
+  if (idx === -1) throw new HttpError(404, "Source introuvable");
+  const removed = iaSources.splice(idx, 1)[0];
+  res.json({ ok: true, removed });
+}));
+
+// ── IA Commande: toggle auto-shop for a user ──
+router.post("/ia/commande/toggle-user", asyncHandler(async (req: AuthenticatedRequest, res) => {
+  await checkPermission(req, "AI_MANAGEMENT");
+  const { userId, enabled, reason } = z.object({
+    userId: z.string().min(1),
+    enabled: z.boolean(),
+    reason: z.string().min(1),
+  }).parse(req.body);
+
+  await prisma.auditLog.create({
+    data: {
+      actorUserId: req.auth!.userId,
+      action: enabled ? "IA_COMMANDE_ENABLE" : "IA_COMMANDE_DISABLE",
+      entityType: "USER",
+      entityId: userId,
+      metadata: { reason },
+    },
+  });
+  res.json({ ok: true, userId, enabled, reason });
+}));
+
+// ── IA ADS: create admin ad ──
+router.post("/ia/ads/create", asyncHandler(async (req: AuthenticatedRequest, res) => {
+  await checkPermission(req, "ADS");
+  const body = z.object({
+    title: z.string().min(1),
+    description: z.string().optional(),
+    imageUrl: z.string().optional(),
+    linkUrl: z.string().default("/"),
+    ctaText: z.string().optional(),
+    targetPages: z.array(z.string()).default([]),
+    startDate: z.string().optional(),
+    endDate: z.string().optional(),
+    priority: z.number().default(10),
+  }).parse(req.body);
+
+  const ad = await prisma.advertisement.create({
+    data: {
+      title: body.title,
+      description: body.description ?? "",
+      imageUrl: body.imageUrl,
+      linkUrl: body.linkUrl,
+      ctaText: body.ctaText ?? "Découvrir",
+      type: "KIN_SELL",
+      status: "ACTIVE",
+      targetPages: body.targetPages,
+      startDate: body.startDate ? new Date(body.startDate) : new Date(),
+      endDate: body.endDate ? new Date(body.endDate) : null,
+      priority: body.priority,
+    },
+  });
+
+  await prisma.auditLog.create({
+    data: {
+      actorUserId: req.auth!.userId,
+      action: "IA_ADS_CREATE",
+      entityType: "Advertisement",
+      entityId: ad.id,
+      metadata: { title: ad.title, targetPages: body.targetPages },
+    },
+  });
+  res.json(ad);
+}));
+
+// ── IA Message: send admin promo message ──
+router.post("/ia/messages/send", asyncHandler(async (req: AuthenticatedRequest, res) => {
+  await checkPermission(req, "AI_MANAGEMENT");
+  const body = z.object({
+    recipientIds: z.array(z.string().min(1)).min(1),
+    channel: z.enum(["EMAIL", "PUSH"]),
+    subject: z.string().min(1),
+    body: z.string().min(1),
+    reason: z.string().default("NEW_FEATURE"),
+  }).parse(req.body);
+
+  let sent = 0;
+  for (const uid of body.recipientIds) {
+    if (body.channel === "EMAIL") {
+      const ok = await iaMessengerPromo.sendPromoEmail(uid, body.subject, body.body, body.reason as any);
+      if (ok) sent++;
+    } else {
+      const ok = await iaMessengerPromo.sendPromoPush(uid, body.subject, body.body, body.reason as any);
+      if (ok) sent++;
+    }
+  }
+
+  res.json({ ok: true, sent, total: body.recipientIds.length });
+}));
+
+// ── IA Message: search users for targeting ──
+router.get("/ia/messages/target-users", asyncHandler(async (req: AuthenticatedRequest, res) => {
+  await checkPermission(req, "AI_MANAGEMENT");
+  const search = (req.query.search as string) || "";
+  const role = (req.query.role as string) || "";
+  const limit = Math.min(Number(req.query.limit) || 20, 100);
+
+  const where: any = { accountStatus: "ACTIVE" };
+  if (role && role !== "ALL") where.role = role;
+  if (search) {
+    where.OR = [
+      { email: { contains: search, mode: "insensitive" } },
+      { profile: { displayName: { contains: search, mode: "insensitive" } } },
+    ];
+  }
+  const users = await prisma.user.findMany({
+    where,
+    select: { id: true, email: true, role: true, profile: { select: { displayName: true, city: true, country: true } } },
+    take: limit,
+    orderBy: { createdAt: "desc" },
+  });
+  res.json({ users: users.map(u => ({ id: u.id, email: u.email, role: u.role, displayName: u.profile?.displayName ?? "—", city: u.profile?.city, country: u.profile?.country })) });
+}));
+
 // ══════════════════════════════════════════════
 // BILLING — Gestion admin des commandes & activations
 // ══════════════════════════════════════════════

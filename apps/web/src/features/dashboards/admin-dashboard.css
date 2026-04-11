@@ -491,6 +491,13 @@
 }
 .ad-btn--primary:hover { background: #5a44e6; }
 
+.ad-btn--accent {
+  background: var(--ad-accent);
+  border-color: var(--ad-accent);
+  color: #fff;
+}
+.ad-btn--accent:hover { background: #5a44e6; }
+
 .ad-btn--danger {
   border-color: var(--ad-red);
   color: var(--ad-red);

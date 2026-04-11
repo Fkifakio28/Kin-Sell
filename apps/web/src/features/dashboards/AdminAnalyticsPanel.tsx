@@ -14,22 +14,23 @@ import type {
   MarketIntelligenceData,
   CaseStudyData,
   ExportHistoryItem,
+  IaSource,
 } from "../../lib/services/admin.service";
 
-// ── Palette ──
+// ── Palette — Dark admin theme ──
 const C = {
-  bg: "#F8FAFC",
-  card: "#FFFFFF",
-  text: "#0F172A",
-  text2: "#475569",
-  text3: "#94A3B8",
-  border: "#CBD5E1",
-  accent: "#0EA5E9",
+  bg: "var(--ad-bg, #120b2b)",
+  card: "var(--ad-surface, rgba(35, 24, 72, 0.66))",
+  text: "var(--ad-text-1, #ffffff)",
+  text2: "var(--ad-text-2, #c7bedf)",
+  text3: "var(--ad-text-3, #9d92bb)",
+  border: "var(--ad-border, rgba(180, 160, 255, 0.24))",
+  accent: "#6f58ff",
   cyan: "#22D3EE",
-  green: "#34D399",
-  amber: "#F59E0B",
-  danger: "#EF4444",
-  success: "#10B981",
+  green: "#4ecdc4",
+  amber: "#ffd93d",
+  danger: "#ff5c5c",
+  success: "#22C55E",
 } as const;
 
 const money = (cents: number) =>
@@ -43,7 +44,7 @@ const TIERS = [
   { key: "premium", label: "Premium / Agency", color: C.amber, desc: "White-label, revente, export de masse" },
 ] as const;
 
-type Tab = "overview" | "market-intel" | "case-study" | "exports";
+type Tab = "overview" | "market-intel" | "case-study" | "exports" | "sources";
 
 // ── Small helpers ──
 const Badge = ({ children, color }: { children: React.ReactNode; color: string }) => (
@@ -70,6 +71,7 @@ const Card = ({ children, style }: { children: React.ReactNode; style?: React.CS
       border: `1px solid ${C.border}`,
       borderRadius: 12,
       padding: 20,
+      backdropFilter: "blur(10px)",
       ...style,
     }}
   >
@@ -145,6 +147,11 @@ export default function AdminAnalyticsPanel() {
   // Exports
   const [exports, setExports] = useState<ExportHistoryItem[]>([]);
 
+  // Sources
+  const [sources, setSources] = useState<IaSource[]>([]);
+  const [sourceForm, setSourceForm] = useState({ type: "URL" as "URL" | "FILE", name: "", url: "", fileType: "", notes: "" });
+  const [sourceMsg, setSourceMsg] = useState<string | null>(null);
+
   // Avoid double-fetch
   const fetchedRef = useRef(false);
 
@@ -198,6 +205,9 @@ export default function AdminAnalyticsPanel() {
   useEffect(() => {
     if (tab === "exports") {
       admin.exportHistory().then(setExports).catch(() => {});
+    }
+    if (tab === "sources") {
+      admin.iaSources("analytique").then(r => setSources(r.sources)).catch(() => {});
     }
   }, [tab]);
 
@@ -299,6 +309,7 @@ export default function AdminAnalyticsPanel() {
         <TabBtn active={tab === "market-intel"} label="🔍 Market Intelligence" onClick={() => setTab("market-intel")} />
         <TabBtn active={tab === "case-study"} label="📋 Case Study Studio" onClick={() => setTab("case-study")} />
         <TabBtn active={tab === "exports"} label="📦 Historique exports" onClick={() => setTab("exports")} />
+        <TabBtn active={tab === "sources"} label="🔗 Sources & Enrichissement" onClick={() => setTab("sources")} />
       </div>
 
       {loading && <p style={{ color: C.text3, fontSize: 13 }}>Chargement…</p>}
@@ -324,6 +335,73 @@ export default function AdminAnalyticsPanel() {
 
       {/* ════════════════ TAB: Exports ════════════════ */}
       {tab === "exports" && renderExports(exports)}
+
+      {/* ════════════════ TAB: Sources & Enrichissement ════════════════ */}
+      {tab === "sources" && (
+        <>
+          <SectionTitle icon="🔗" text="Sources de données externes" />
+          <Card style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: C.text, marginBottom: 12 }}>➕ Ajouter une source</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
+              <select value={sourceForm.type} onChange={e => setSourceForm(f => ({ ...f, type: e.target.value as "URL" | "FILE" }))} style={{ padding: "7px 12px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 12, color: C.text, background: C.card, minWidth: 100 }}>
+                <option value="URL">🔗 Lien URL</option>
+                <option value="FILE">📄 Fichier (XML/PDF/Word)</option>
+              </select>
+              <input placeholder="Nom de la source" value={sourceForm.name} onChange={e => setSourceForm(f => ({ ...f, name: e.target.value }))} style={{ padding: "7px 12px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 12, color: C.text, background: C.card, flex: 1, minWidth: 150 }} />
+              {sourceForm.type === "URL" ? (
+                <input placeholder="https://..." value={sourceForm.url} onChange={e => setSourceForm(f => ({ ...f, url: e.target.value }))} style={{ padding: "7px 12px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 12, color: C.text, background: C.card, flex: 1, minWidth: 200 }} />
+              ) : (
+                <select value={sourceForm.fileType} onChange={e => setSourceForm(f => ({ ...f, fileType: e.target.value }))} style={{ padding: "7px 12px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 12, color: C.text, background: C.card, minWidth: 100 }}>
+                  <option value="">Type de fichier</option>
+                  <option value="XML">XML</option>
+                  <option value="PDF">PDF</option>
+                  <option value="DOCX">Word (DOCX)</option>
+                  <option value="CSV">CSV</option>
+                </select>
+              )}
+              <input placeholder="Notes (optionnel)" value={sourceForm.notes} onChange={e => setSourceForm(f => ({ ...f, notes: e.target.value }))} style={{ padding: "7px 12px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 12, color: C.text, background: C.card, minWidth: 150 }} />
+              <button disabled={!sourceForm.name || (sourceForm.type === "URL" && !sourceForm.url)} onClick={async () => {
+                setSourceMsg(null);
+                try {
+                  await admin.iaAddSource({ domain: "analytique", ...sourceForm });
+                  setSourceMsg("✅ Source ajoutée");
+                  setSourceForm({ type: "URL", name: "", url: "", fileType: "", notes: "" });
+                  admin.iaSources("analytique").then(r => setSources(r.sources)).catch(() => {});
+                } catch { setSourceMsg("❌ Erreur"); }
+              }} style={{ padding: "7px 16px", borderRadius: 8, border: "none", background: C.accent, color: "#FFF", fontSize: 12, fontWeight: 600, cursor: "pointer", opacity: (!sourceForm.name || (sourceForm.type === "URL" && !sourceForm.url)) ? 0.4 : 1 }}>
+                Ajouter
+              </button>
+            </div>
+            {sourceMsg && <p style={{ fontSize: 12, color: sourceMsg.startsWith("✅") ? C.success : C.danger, marginTop: 6 }}>{sourceMsg}</p>}
+          </Card>
+
+          {sources.length > 0 ? (
+            <Card>
+              <div className="ad-table-wrap">
+                <table className="ad-table" style={{ fontSize: 12 }}>
+                  <thead><tr><th>Type</th><th>Nom</th><th>URL / Fichier</th><th>Notes</th><th>Ajouté le</th><th>Action</th></tr></thead>
+                  <tbody>
+                    {sources.map(s => (
+                      <tr key={s.id}>
+                        <td><Badge color={s.type === "URL" ? C.cyan : C.amber}>{s.type === "URL" ? "🔗 URL" : `📄 ${s.fileType || "Fichier"}`}</Badge></td>
+                        <td style={{ fontWeight: 500 }}>{s.name}</td>
+                        <td style={{ maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.url || "—"}</td>
+                        <td style={{ fontSize: 11, color: C.text3 }}>{s.notes || "—"}</td>
+                        <td style={{ fontSize: 11 }}>{new Date(s.addedAt).toLocaleDateString("fr-FR")}</td>
+                        <td>
+                          <button onClick={async () => { await admin.iaDeleteSource(s.id); admin.iaSources("analytique").then(r => setSources(r.sources)).catch(() => {}); }} style={{ background: "none", border: `1px solid ${C.danger}`, color: C.danger, borderRadius: 6, padding: "3px 8px", fontSize: 11, cursor: "pointer" }}>🗑</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          ) : (
+            <Card><p style={{ color: C.text3, fontSize: 13, textAlign: "center" }}>Aucune source externe ajoutée. Ajoutez des liens URL, fichiers XML, PDF ou Word pour enrichir l'IA Analytique.</p></Card>
+          )}
+        </>
+      )}
 
       {/* ── Tier Comparison ── */}
       {(tab === "case-study" || tab === "market-intel") && (
