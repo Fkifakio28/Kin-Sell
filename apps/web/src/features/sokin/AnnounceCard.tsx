@@ -20,6 +20,38 @@ import { observePostView, trackSoKinEvent } from '../../lib/services/sokin-track
 import { resolveBackgroundCss } from './sokin-backgrounds';
 import type { PostInsight, PostInsightCard, BoostPostStats } from '../../lib/services/sokin-analytics.service';
 
+let activeVideoEl: HTMLVideoElement | null = null;
+let visibilityListenerAttached = false;
+
+function safePlayVideo(video: HTMLVideoElement): void {
+  try {
+    const maybePromise = video.play();
+    if (maybePromise && typeof (maybePromise as Promise<void>).catch === 'function') {
+      (maybePromise as Promise<void>).catch(() => undefined);
+    }
+  } catch {
+    // ignore autoplay errors
+  }
+}
+
+function pauseVideo(video: HTMLVideoElement): void {
+  try {
+    video.pause();
+  } catch {
+    // ignore pause errors
+  }
+}
+
+function ensureVideoVisibilityListener(): void {
+  if (visibilityListenerAttached || typeof document === 'undefined') return;
+  visibilityListenerAttached = true;
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden || !activeVideoEl) return;
+    pauseVideo(activeVideoEl);
+    activeVideoEl = null;
+  });
+}
+
 /* ─────────────────────────────────────────────────────── */
 /* TYPES                                                    */
 /* ─────────────────────────────────────────────────────── */
@@ -248,9 +280,15 @@ export function IconMoreHoriz() {
 export function MediaCollage({
   items,
   onItemClick,
+  onVideoToggle,
+  onVideoRef,
+  autoPlayVideoIndex,
 }: {
   items: MediaItem[];
   onItemClick: (item: MediaItem) => void;
+  onVideoToggle?: (videoEl: HTMLVideoElement, item: MediaItem) => void;
+  onVideoRef?: (videoEl: HTMLVideoElement | null, item: MediaItem, index: number) => void;
+  autoPlayVideoIndex?: number;
 }) {
   const count = items.length;
   if (count === 0) return null;
@@ -261,34 +299,46 @@ export function MediaCollage({
       role="group"
       aria-label="Médias de l'annonce"
     >
-      {items.map((item, i) => (
-        <button
-          key={i}
-          type="button"
-          className="sk-media-item"
-          onClick={() => onItemClick(item)}
-          aria-label={item.type === 'video' ? 'Voir la vidéo' : "Voir l'image"}
-        >
-          {item.type === 'video' ? (
-            <>
-              <video
+      {items.map((item, i) => {
+        const isAutoPlay = i === autoPlayVideoIndex;
+        return (
+          <button
+            key={i}
+            type="button"
+            className={`sk-media-item${item.type === 'video' ? ' sk-media-item--video' : ''}`}
+            onClick={() => {
+              if (item.type === 'video') return;
+              onItemClick(item);
+            }}
+            aria-label={item.type === 'video' ? 'Voir la vid�o' : "Voir l'image"}
+          >
+            {item.type === 'video' ? (
+              <>
+                <video
+                  src={resolveMediaUrl(item.url)}
+                  ref={(el) => onVideoRef?.(el, item, i)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (onVideoToggle) onVideoToggle(e.currentTarget, item);
+                  }}
+                  data-autoplay={isAutoPlay ? 'true' : undefined}
+                  muted
+                  playsInline
+                  preload="metadata"
+                  tabIndex={-1}
+                />
+                <span className="sk-media-play-icon" aria-hidden="true">&#9654;</span>
+              </>
+            ) : (
+              <img
                 src={resolveMediaUrl(item.url)}
-                muted
-                playsInline
-                preload="none"
-                tabIndex={-1}
+                alt=""
+                loading="lazy"
               />
-              <span className="sk-media-play-icon" aria-hidden="true">▶</span>
-            </>
-          ) : (
-            <img
-              src={resolveMediaUrl(item.url)}
-              alt=""
-              loading="lazy"
-            />
-          )}
-        </button>
-      ))}
+            )}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -343,6 +393,9 @@ export function AnnounceCard({
   const navigate = useNavigate();
   const cardRef = useRef<HTMLElement>(null);
   const cardToast = useSoKinToast();
+  const mainVideoRef = useRef<HTMLVideoElement | null>(null);
+  const userPausedRef = useRef(false);
+  const [mainVideoEl, setMainVideoEl] = useState<HTMLVideoElement | null>(null);
   const [myReaction, setMyReaction] = useState<SoKinReactionType | null>(initialReaction ?? null);
   const [likeCount, setLikeCount] = useState(post.likes ?? 0);
   const [saved, setSaved] = useState(initialSaved ?? false);
@@ -367,6 +420,9 @@ export function AnnounceCard({
       source: feedSource,
     });
   }, [post.id, post.authorId, post.postType, feedSource]);
+  useEffect(() => {
+    ensureVideoVisibilityListener();
+  }, []);
 
   const trackEv = useCallback((event: Parameters<typeof trackSoKinEvent>[0]['event'], meta?: Record<string, unknown>) => {
     trackSoKinEvent({
@@ -380,6 +436,28 @@ export function AnnounceCard({
     });
   }, [post.id, post.authorId, post.postType, feedSource]);
 
+  const handleVideoToggle = useCallback((videoEl: HTMLVideoElement) => {
+    if (!videoEl) return;
+    if (videoEl.paused) {
+      userPausedRef.current = false;
+      if (mainVideoRef.current !== videoEl) {
+        mainVideoRef.current = videoEl;
+        setMainVideoEl(videoEl);
+      }
+      if (activeVideoEl && activeVideoEl !== videoEl) {
+        pauseVideo(activeVideoEl);
+      }
+      activeVideoEl = videoEl;
+      safePlayVideo(videoEl);
+      return;
+    }
+    userPausedRef.current = true;
+    pauseVideo(videoEl);
+    if (activeVideoEl === videoEl) {
+      activeVideoEl = null;
+    }
+  }, []);
+
   const profile = post.author.profile;
   const authorName = profile?.displayName ?? 'Utilisateur';
   const authorHandle = profile?.username ?? post.author.id;
@@ -387,6 +465,54 @@ export function AnnounceCard({
   const cleanHandle = authorHandle?.replace('@', '') ?? '';
 
   const mediaItems = categorizeMedia(post.mediaUrls ?? []);
+  const firstVideoIndex = mediaItems.findIndex((item) => item.type === 'video');
+
+  useEffect(() => {
+    if (firstVideoIndex < 0) {
+      if (mainVideoEl && activeVideoEl === mainVideoEl) {
+        pauseVideo(mainVideoEl);
+        activeVideoEl = null;
+      }
+      return;
+    }
+
+    const cardEl = cardRef.current;
+    const videoEl = mainVideoEl;
+    if (!cardEl || !videoEl) return;
+
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.target !== cardEl) return;
+        if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
+          if (!userPausedRef.current) {
+            if (activeVideoEl && activeVideoEl !== videoEl) {
+              pauseVideo(activeVideoEl);
+            }
+            activeVideoEl = videoEl;
+            safePlayVideo(videoEl);
+          }
+        } else {
+          if (activeVideoEl === videoEl) {
+            pauseVideo(videoEl);
+            activeVideoEl = null;
+          } else {
+            pauseVideo(videoEl);
+          }
+          userPausedRef.current = false;
+        }
+      });
+    }, { threshold: [0, 0.5] });
+
+    observer.observe(cardEl);
+
+    return () => {
+      observer.disconnect();
+      if (activeVideoEl === videoEl) {
+        pauseVideo(videoEl);
+        activeVideoEl = null;
+      }
+    };
+  }, [post.id, firstVideoIndex, mainVideoEl]);
   const replyCount = post.comments ?? 0;
   const postType = ((post as any).postType ?? 'SHOWCASE') as SoKinPostType;
   const ptMeta = POST_TYPE_META[postType] ?? POST_TYPE_META.SHOWCASE;
@@ -665,7 +791,19 @@ export function AnnounceCard({
 
       {/* ═══ L3. MÉDIAS ═══ */}
       {mediaItems.length > 0 && (
-        <MediaCollage items={mediaItems} onItemClick={onMediaClick} />
+        <MediaCollage
+          items={mediaItems}
+          onItemClick={onMediaClick}
+          onVideoToggle={handleVideoToggle}
+          onVideoRef={(el, _item, index) => {
+            if (index !== firstVideoIndex) return;
+            if (mainVideoRef.current !== el) {
+              mainVideoRef.current = el;
+              setMainVideoEl(el);
+            }
+          }}
+          autoPlayVideoIndex={firstVideoIndex >= 0 ? firstVideoIndex : undefined}
+        />
       )}
 
       {/* ═══ ORIGINAL POST EMBARQUÉ (si repost) ═══ */}
@@ -950,3 +1088,20 @@ export function AnnounceCard({
     </article>
   );
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

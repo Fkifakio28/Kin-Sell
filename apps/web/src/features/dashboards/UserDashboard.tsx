@@ -585,17 +585,14 @@ export function UserDashboard() {
   const { hasAnalytics, hasPremiumAnalytics, hasIaMarchand: hasIaMarchandPlan, hasIaOrder: hasIaOrderPlan } = useFeatureGate(activePlan);
 
   // F19+F24: When plan changes, clean up localStorage toggles if access lost
+  // NOTE: IA_MERCHANT (auto-nego) is FREE for all users — never wiped here
   useEffect(() => {
     if (!planLoaded) return; // don't wipe toggles before plan is fetched
-    if (!hasIaMarchandPlan) {
-      localStorage.setItem(SK_AI_AUTO_NEGO, 'off');
-      setAiAutoNegoEnabled(false);
-    }
     if (!hasIaOrderPlan) {
       localStorage.setItem(SK_AI_COMMANDE, 'off');
       setAiCommandeEnabled(false);
     }
-  }, [planLoaded, hasIaMarchandPlan, hasIaOrderPlan]);
+  }, [planLoaded, hasIaOrderPlan]);
 
   // F24: Refetch plan every 5 min to detect subscription changes
   useEffect(() => {

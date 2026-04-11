@@ -64,7 +64,7 @@ export function DashboardAiSettings({
           </button>
         </div>
 
-        {/* ── Marchandage automatique (payant) ── */}
+        {/* ── Marchandage automatique — gratuit pour users, payant pour business ── */}
         <div className={`ud-ai-toggle-row${!hasIaMarchandPlan ? " ud-ai-toggle-row--locked" : ""}`}>
           <div className="ud-ai-toggle-info">
             <strong>🤝 {t("user.aiAutoNegoLabel")}</strong>
@@ -75,6 +75,9 @@ export function DashboardAiSettings({
                   ? t("user.aiAutoNegoHint")
                   : t("user.aiAutoNegoLocked")}
             </span>
+            {planLoaded && hasIaMarchandPlan && (
+              <span className="ud-ai-toggle-badge-free">✓ Inclus par défaut</span>
+            )}
             {planLoaded && !hasIaMarchandPlan && (
               <span className="ud-ai-toggle-badge-locked">Désactivé par abonnement</span>
             )}

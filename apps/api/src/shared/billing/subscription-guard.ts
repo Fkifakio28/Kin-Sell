@@ -7,10 +7,10 @@
  * Utilisé par les batch IA pour filtrer les users sans abonnement valide.
  *
  * Logique :
- *   1. Récupérer l'abonnement ACTIF (status=ACTIVE + endsAt non dépassé)
- *   2. Vérifier si le plan inclut la feature IA
- *   3. OU vérifier si un addon actif donne la feature
- *   4. Plan FREE inclut IA_MERCHANT gratuitement (user scope)
+ *   1. IA_MERCHANT est GRATUIT pour tous les comptes USER (early return)
+ *   2. Récupérer l'abonnement ACTIF (status=ACTIVE + endsAt non dépassé)
+ *   3. Vérifier si le plan inclut la feature IA
+ *   4. OU vérifier si un addon actif donne la feature
  *
  * Cache en mémoire par session batch (évite N*2 requêtes DB).
  *
@@ -269,6 +269,11 @@ async function _resolveAccess(userId: string, feature: IaFeature): Promise<Subsc
   const isBusinessScope = user.role === "BUSINESS";
   const businessId = isBusinessScope ? user.businesses[0]?.id : null;
 
+  // IA_MERCHANT is FREE for ALL user accounts — always grant access regardless of plan
+  if (!isBusinessScope && feature === "IA_MERCHANT") {
+    return { hasAccess: true, planCode: "FREE", source: "FREE_DEFAULT" };
+  }
+
   const sub = await prisma.subscription.findFirst({
     where: {
       status: SubscriptionStatus.ACTIVE,
@@ -291,12 +296,8 @@ async function _resolveAccess(userId: string, feature: IaFeature): Promise<Subsc
     },
   });
 
-  // 2. Pas d'abonnement → vérifier le plan FREE (user scope uniquement)
+  // 2. Pas d'abonnement
   if (!sub) {
-    // Plan FREE (users) inclut IA_MERCHANT gratuitement
-    if (!isBusinessScope && feature === "IA_MERCHANT") {
-      return { hasAccess: true, planCode: "FREE", source: "FREE_DEFAULT" };
-    }
     return noAccess;
   }
 
@@ -314,11 +315,6 @@ async function _resolveAccess(userId: string, feature: IaFeature): Promise<Subsc
   );
   if (addonMatch) {
     return { hasAccess: true, planCode: sub.planCode, source: "ADDON" };
-  }
-
-  // 5. Fallback FREE + IA_MERCHANT
-  if (!isBusinessScope && feature === "IA_MERCHANT" && sub.planCode === "FREE") {
-    return { hasAccess: true, planCode: "FREE", source: "FREE_DEFAULT" };
   }
 
   return { ...noAccess, planCode: sub.planCode };

@@ -438,9 +438,10 @@ export function BusinessDashboard() {
   }, [isLoggedIn, user, on, off]);
 
   /* ── AI plan gating for business ── */
-  const { hasAnalytics: bizHasAnalytics, hasPremiumAnalytics: bizHasPremiumAnalytics, hasIaMarchand: bizHasIaMarchandPlan, hasIaOrder: bizHasIaOrderPlan } = useFeatureGate(myPlan);
+  const { hasAnalytics: bizHasAnalytics, hasPremiumAnalytics: bizHasPremiumAnalytics, hasIaMarchand: bizHasIaMarchandPlan, hasIaOrder: bizHasIaOrderPlan } = useFeatureGate(myPlan, "BUSINESS");
 
   // F19+F24: Clean up localStorage toggles if access lost
+  // NOTE: IA_MERCHANT cleanup kept for BUSINESS scope (not free for businesses)
   useEffect(() => {
     if (!planLoaded) return; // don't wipe toggles before plan is fetched
     if (!bizHasIaMarchandPlan) {

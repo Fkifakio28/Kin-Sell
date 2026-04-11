@@ -10,8 +10,10 @@ type PlanSummary = {
 /**
  * Centralise la logique de gating des fonctionnalités basées sur le plan actif.
  * Remplace les useMemo dupliqués dans UserDashboard et BusinessDashboard.
+ *
+ * scope = "USER" → IA_MERCHANT est TOUJOURS gratuit et disponible.
  */
-export function useFeatureGate(plan: PlanSummary | null | undefined) {
+export function useFeatureGate(plan: PlanSummary | null | undefined, scope: "USER" | "BUSINESS" = "USER") {
   const hasAnalytics = useMemo(() => {
     if (!plan) return false;
     return plan.analyticsTier !== "NONE";
@@ -22,12 +24,13 @@ export function useFeatureGate(plan: PlanSummary | null | undefined) {
   }, [plan]);
 
   const hasIaMarchand = useMemo(() => {
+    // IA_MERCHANT is FREE for all USER accounts — always true regardless of plan
+    if (scope === "USER") return true;
     if (!plan) return false;
-    // Plan inclut la feature directement (includes FREE via PLAN_CATALOG)
     const featureIncluded = plan.features?.includes("IA_MERCHANT") ?? false;
     const addonActive = plan.addOns?.some((a) => a.code === "IA_MERCHANT" && a.status === "ACTIVE") ?? false;
     return featureIncluded || addonActive;
-  }, [plan]);
+  }, [plan, scope]);
 
   const hasIaOrder = useMemo(() => {
     if (!plan) return false;

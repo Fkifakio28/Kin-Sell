@@ -41,7 +41,7 @@ export const PLAN_CATALOG: PlanCatalogItem[] = [
     scope: "USER",
     monthlyPriceUsdCents: 600,
     analyticsTier: "NONE",
-    features: ["BOOST_PROFILE", "BOOST_LISTINGS", "BASIC_ADS", "BETTER_VISIBILITY"]
+    features: ["BOOST_PROFILE", "BOOST_LISTINGS", "BASIC_ADS", "BETTER_VISIBILITY", "IA_MERCHANT"]
   },
   {
     code: "AUTO",
@@ -49,7 +49,7 @@ export const PLAN_CATALOG: PlanCatalogItem[] = [
     scope: "USER",
     monthlyPriceUsdCents: 1200,
     analyticsTier: "NONE",
-    features: ["BOOST_PROFILE", "BOOST_LISTINGS", "IA_ORDER", "AUTO_REPLY", "SALES_AUTOMATION"]
+    features: ["BOOST_PROFILE", "BOOST_LISTINGS", "IA_ORDER", "AUTO_REPLY", "SALES_AUTOMATION", "IA_MERCHANT"]
   },
   {
     code: "PRO_VENDOR",
@@ -57,7 +57,7 @@ export const PLAN_CATALOG: PlanCatalogItem[] = [
     scope: "USER",
     monthlyPriceUsdCents: 2000,
     analyticsTier: "MEDIUM",
-    features: ["IA_ORDER", "AUTO_REPLY", "SALES_AUTOMATION", "ANALYTICS_MEDIUM"]
+    features: ["IA_ORDER", "AUTO_REPLY", "SALES_AUTOMATION", "ANALYTICS_MEDIUM", "IA_MERCHANT"]
   },
   {
     code: "STARTER",
