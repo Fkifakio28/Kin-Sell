@@ -337,18 +337,3 @@
   .terms-hero { padding: 1.2rem 0.75rem 0.75rem; }
   .terms-hero-title { font-size: 1.5rem; }
 }
-
-/* LIGHT THEME — Terms */
-:root[data-theme="light"] .terms {
-  background: var(--color-dark-blue);
-}
-:root[data-theme="light"] .terms-hero {
-  background: linear-gradient(135deg, rgba(244, 239, 255, 0.95) 0%, rgba(234, 226, 255, 0.9) 100%);
-}
-:root[data-theme="light"] .terms-hero-glow {
-  opacity: 0.1;
-}
-:root[data-theme="light"] .terms-section {
-  background: var(--glass-bg);
-  border-color: var(--glass-border);
-}

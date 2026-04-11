@@ -623,22 +623,3 @@
   .privacy-hero { padding: 1.5rem 0.75rem 1rem; }
   .privacy-hero-title { font-size: 1.5rem; }
 }
-
-/* LIGHT THEME — Privacy */
-:root[data-theme="light"] .privacy {
-  background: var(--color-dark-blue);
-}
-:root[data-theme="light"] .privacy-hero {
-  background: linear-gradient(135deg, rgba(244, 239, 255, 0.95) 0%, rgba(234, 226, 255, 0.9) 100%);
-}
-:root[data-theme="light"] .privacy-hero-glow {
-  opacity: 0.1;
-}
-:root[data-theme="light"] .privacy-section {
-  background: var(--glass-bg);
-  border-color: var(--glass-border);
-}
-:root[data-theme="light"] .privacy-callout {
-  background: rgba(98, 71, 236, 0.06);
-  border-left-color: var(--color-primary);
-}

@@ -1730,39 +1730,3 @@
     height: 48px;
   }
 }
-
-/* ═══════════════════════════════════════════════
-   LIGHT THEME — Messaging
-   ═══════════════════════════════════════════════ */
-:root[data-theme="light"] .mg-shell {
-  background: var(--color-dark-blue);
-}
-:root[data-theme="light"] .mg-drawer {
-  background: rgba(244, 239, 255, 0.98);
-  border-right-color: rgba(94, 72, 194, 0.12);
-}
-:root[data-theme="light"] .mg-convview {
-  background: var(--color-dark-blue);
-}
-:root[data-theme="light"] .mg-context-menu {
-  background: rgba(255, 255, 255, 0.96);
-  border-color: rgba(94, 72, 194, 0.15);
-  box-shadow: var(--shadow-md);
-}
-:root[data-theme="light"] .mg-bubble--mine {
-  background: rgba(98, 71, 236, 0.12);
-}
-:root[data-theme="light"] .mg-bubble--other {
-  background: rgba(255, 255, 255, 0.7);
-}
-:root[data-theme="light"] .mg-composer {
-  background: rgba(244, 239, 255, 0.92);
-  border-top-color: rgba(94, 72, 194, 0.12);
-}
-:root[data-theme="light"] .mg-composer-input {
-  background: rgba(255, 255, 255, 0.6);
-  color: var(--color-text-primary);
-}
-:root[data-theme="light"] .mg-composer-input::placeholder {
-  color: var(--color-text-tertiary);
-}

@@ -497,31 +497,3 @@
   .contact-hero-title { font-size: 1.5rem; }
   .contact-input, .contact-textarea, .contact-select { font-size: 16px; }
 }
-
-/* LIGHT THEME — Contact */
-:root[data-theme="light"] .contact {
-  background: var(--color-dark-blue);
-}
-:root[data-theme="light"] .contact-hero {
-  background: linear-gradient(135deg, rgba(244, 239, 255, 0.95) 0%, rgba(234, 226, 255, 0.9) 100%);
-}
-:root[data-theme="light"] .contact-hero-glow {
-  opacity: 0.1;
-}
-:root[data-theme="light"] .contact-card {
-  background: var(--glass-bg);
-  border-color: var(--glass-border);
-}
-:root[data-theme="light"] .contact-input,
-:root[data-theme="light"] .contact-textarea,
-:root[data-theme="light"] .contact-select {
-  background: rgba(255, 255, 255, 0.6);
-  border-color: rgba(94, 72, 194, 0.15);
-  color: var(--color-text-primary);
-}
-:root[data-theme="light"] .contact-input:focus,
-:root[data-theme="light"] .contact-textarea:focus,
-:root[data-theme="light"] .contact-select:focus {
-  background: rgba(255, 255, 255, 0.85);
-  border-color: var(--color-primary);
-}
