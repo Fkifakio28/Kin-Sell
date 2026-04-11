@@ -7584,6 +7584,18 @@
   line-height: 1.35;
 }
 
+.ud-ai-toggle-badge-locked {
+  display: inline-block;
+  margin-top: 2px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.1);
+  padding: 2px 8px;
+  border-radius: 8px;
+  width: fit-content;
+}
+
 /* ── Toggle Switch ── */
 
 .ud-ai-switch {
@@ -7602,6 +7614,12 @@
 .ud-ai-switch--on {
   background: rgba(111, 88, 255, 0.4);
   border-color: rgba(111, 88, 255, 0.6);
+}
+
+.ud-ai-switch--loading {
+  opacity: 0.35;
+  cursor: default;
+  pointer-events: none;
 }
 
 .ud-ai-switch-thumb {

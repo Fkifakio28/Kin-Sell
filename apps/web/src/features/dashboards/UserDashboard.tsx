@@ -279,6 +279,7 @@ export function UserDashboard() {
   const [loadingPublicProfile, setLoadingPublicProfile] = useState(false);
   const [activePlan, setActivePlan] = useState<BillingPlanSummary | null>(null);
   const [loadingPlan, setLoadingPlan] = useState(false);
+  const [planLoaded, setPlanLoaded] = useState(false);
   const [basicInsights, setBasicInsights] = useState<BasicInsights | null>(null);
   const [deepInsights, setDeepInsights] = useState<DeepInsights | null>(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
@@ -561,6 +562,7 @@ export function UserDashboard() {
       } finally {
         if (!cancelled) {
           setLoadingPlan(false);
+          setPlanLoaded(true);
         }
       }
     };
@@ -584,7 +586,7 @@ export function UserDashboard() {
 
   // F19+F24: When plan changes, clean up localStorage toggles if access lost
   useEffect(() => {
-    if (activePlan === undefined) return; // still loading
+    if (!planLoaded) return; // don't wipe toggles before plan is fetched
     if (!hasIaMarchandPlan) {
       localStorage.setItem(SK_AI_AUTO_NEGO, 'off');
       setAiAutoNegoEnabled(false);
@@ -593,7 +595,7 @@ export function UserDashboard() {
       localStorage.setItem(SK_AI_COMMANDE, 'off');
       setAiCommandeEnabled(false);
     }
-  }, [activePlan, hasIaMarchandPlan, hasIaOrderPlan]);
+  }, [planLoaded, hasIaMarchandPlan, hasIaOrderPlan]);
 
   // F24: Refetch plan every 5 min to detect subscription changes
   useEffect(() => {
@@ -4375,6 +4377,7 @@ export function UserDashboard() {
               hasIaMarchandPlan={hasIaMarchandPlan}
               hasIaOrderPlan={hasIaOrderPlan}
               autoNegoActive={autoNegoActive}
+              planLoaded={planLoaded}
             />
 
             {missing.length > 0 ? (

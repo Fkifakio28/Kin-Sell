@@ -17,6 +17,8 @@ interface AiSettingsProps {
   hasIaMarchandPlan: boolean;
   hasIaOrderPlan: boolean;
   autoNegoActive?: boolean;
+  /** True once the billing plan has been fetched (prevents premature toggle wipe) */
+  planLoaded?: boolean;
 }
 
 export function DashboardAiSettings({
@@ -25,6 +27,7 @@ export function DashboardAiSettings({
   hasIaMarchandPlan,
   hasIaOrderPlan,
   autoNegoActive = false,
+  planLoaded = true,
 }: AiSettingsProps) {
   const [aiAdviceEnabled, setAiAdviceEnabled] = useState(() => localStorage.getItem(storageKeys.advice) !== "off");
   const [aiAutoNegoEnabled, setAiAutoNegoEnabled] = useState(() => localStorage.getItem(storageKeys.autoNego) === "on");
@@ -66,10 +69,19 @@ export function DashboardAiSettings({
           <div className="ud-ai-toggle-info">
             <strong>🤝 {t("user.aiAutoNegoLabel")}</strong>
             <span className="ud-ai-toggle-hint">
-              {hasIaMarchandPlan ? t("user.aiAutoNegoHint") : t("user.aiAutoNegoLocked")}
+              {!planLoaded
+                ? "Chargement du plan…"
+                : hasIaMarchandPlan
+                  ? t("user.aiAutoNegoHint")
+                  : t("user.aiAutoNegoLocked")}
             </span>
+            {planLoaded && !hasIaMarchandPlan && (
+              <span className="ud-ai-toggle-badge-locked">Désactivé par abonnement</span>
+            )}
           </div>
-          {hasIaMarchandPlan ? (
+          {!planLoaded ? (
+            <span className="ud-ai-switch ud-ai-switch--loading"><span className="ud-ai-switch-thumb" /></span>
+          ) : hasIaMarchandPlan ? (
             <button
               type="button"
               className={`ud-ai-switch${aiAutoNegoEnabled ? " ud-ai-switch--on" : ""}`}
@@ -92,10 +104,19 @@ export function DashboardAiSettings({
           <div className="ud-ai-toggle-info">
             <strong>📦 {t("user.aiCommandeLabel")}</strong>
             <span className="ud-ai-toggle-hint">
-              {hasIaOrderPlan ? t("user.aiCommandeHint") : t("user.aiCommandeLocked")}
+              {!planLoaded
+                ? "Chargement du plan…"
+                : hasIaOrderPlan
+                  ? t("user.aiCommandeHint")
+                  : t("user.aiCommandeLocked")}
             </span>
+            {planLoaded && !hasIaOrderPlan && (
+              <span className="ud-ai-toggle-badge-locked">Désactivé par abonnement</span>
+            )}
           </div>
-          {hasIaOrderPlan ? (
+          {!planLoaded ? (
+            <span className="ud-ai-switch ud-ai-switch--loading"><span className="ud-ai-switch-thumb" /></span>
+          ) : hasIaOrderPlan ? (
             <button
               type="button"
               className={`ud-ai-switch${aiCommandeEnabled ? " ud-ai-switch--on" : ""}`}

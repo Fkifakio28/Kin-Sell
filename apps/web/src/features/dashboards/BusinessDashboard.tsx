@@ -124,6 +124,7 @@ export function BusinessDashboard() {
   const [myListings, setMyListings] = useState<MyListing[]>([]);
   const [listingStats, setListingStats] = useState<MyListingsStats | null>(null);
   const [myPlan, setMyPlan] = useState<BillingPlanSummary | null>(null);
+  const [planLoaded, setPlanLoaded] = useState(false);
   const [dataLoading, setDataLoading] = useState(false);
   const [bizBasicInsights, setBizBasicInsights] = useState<BasicInsights | null>(null);
   const [bizDeepInsights, setBizDeepInsights] = useState<DeepInsights | null>(null);
@@ -352,7 +353,7 @@ export function BusinessDashboard() {
           setBizReviewsAvg(reviewsRes.value.averageRating);
         }
       } finally {
-        if (!cancelled) { setDataLoading(false); setBizReviewsLoading(false); }
+        if (!cancelled) { setDataLoading(false); setBizReviewsLoading(false); setPlanLoaded(true); }
       }
     };
     void load();
@@ -441,7 +442,7 @@ export function BusinessDashboard() {
 
   // F19+F24: Clean up localStorage toggles if access lost
   useEffect(() => {
-    if (myPlan === undefined) return;
+    if (!planLoaded) return; // don't wipe toggles before plan is fetched
     if (!bizHasIaMarchandPlan) {
       localStorage.setItem(SK_BIZ_AI_AUTO_NEGO, 'off');
       setBizAiAutoNegoEnabled(false);
@@ -450,7 +451,7 @@ export function BusinessDashboard() {
       localStorage.setItem(SK_BIZ_AI_COMMANDE, 'off');
       setBizAiCommandeEnabled(false);
     }
-  }, [myPlan, bizHasIaMarchandPlan, bizHasIaOrderPlan]);
+  }, [planLoaded, bizHasIaMarchandPlan, bizHasIaOrderPlan]);
 
   // F24: Refetch plan every 5 min
   useEffect(() => {
@@ -3256,6 +3257,7 @@ export function BusinessDashboard() {
               hasIaMarchandPlan={bizHasIaMarchandPlan}
               hasIaOrderPlan={bizHasIaOrderPlan}
               autoNegoActive={bizAiAutoNegoEnabled}
+              planLoaded={planLoaded}
             />
 
             {/* ── Zone sensible ── */}
