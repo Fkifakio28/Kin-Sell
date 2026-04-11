@@ -27,8 +27,8 @@ const mapCycle = (cycle: "MONTHLY" | "ONE_TIME") => {
   return cycle === "ONE_TIME" ? BillingCycle.ONE_TIME : BillingCycle.MONTHLY;
 };
 
-const defaultPlanCodeForScope = (scope: RoleScope) => {
-  return scope === "BUSINESS" ? "STARTER" : "FREE";
+const defaultPlanCodeForScope = (_scope: RoleScope) => {
+  return "FREE";
 };
 
 const toRoleScope = (role: string): RoleScope => {
@@ -155,7 +155,7 @@ const serializePlan = (
     planName: plan.name,
     analyticsTier: plan.analyticsTier,
     priceUsdCents: subscription?.priceUsdCents ?? plan.monthlyPriceUsdCents,
-    status: subscription?.status ?? "ACTIVE",
+    status: subscription ? subscription.status : (planCode === "FREE" ? "ACTIVE" : "CANCELED"),
     billingCycle: subscription?.billingCycle ?? "MONTHLY",
     startsAt: subscription?.startsAt?.toISOString() ?? null,
     endsAt: subscription?.endsAt?.toISOString() ?? null,

@@ -28,6 +28,14 @@ export const PLAN_CATALOG: PlanCatalogItem[] = [
     features: ["POST_LISTINGS", "BUY", "MESSAGING", "IA_MERCHANT"]
   },
   {
+    code: "FREE",
+    name: "FREE",
+    scope: "BUSINESS",
+    monthlyPriceUsdCents: 0,
+    analyticsTier: "NONE",
+    features: ["SHOP"]
+  },
+  {
     code: "BOOST",
     name: "BOOST",
     scope: "USER",

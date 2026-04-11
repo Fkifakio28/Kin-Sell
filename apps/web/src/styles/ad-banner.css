@@ -212,27 +212,25 @@
 }
 
 /* ═══════════════════════════════════════
-   Dark mode tweaks (already dark by default)
+   Light theme — uses app data-theme, not OS setting
    ═══════════════════════════════════════ */
-@media (prefers-color-scheme: light) {
-  .ks-ad-banner {
-    background: rgba(111, 88, 255, 0.05);
-    border-color: rgba(111, 88, 255, 0.15);
-  }
+html[data-theme="light"] .ks-ad-banner {
+  background: rgba(111, 88, 255, 0.05);
+  border-color: rgba(111, 88, 255, 0.15);
+}
 
-  .ks-ad-banner__title {
-    color: #1a0d4f;
-  }
+html[data-theme="light"] .ks-ad-banner__title {
+  color: #1a0d4f;
+}
 
-  .ks-ad-banner__desc {
-    color: #4a3a8a;
-  }
+html[data-theme="light"] .ks-ad-banner__desc {
+  color: #4a3a8a;
+}
 
-  .ks-ad-banner__tag {
-    color: #5b45cc;
-  }
+html[data-theme="light"] .ks-ad-banner__tag {
+  color: #5b45cc;
+}
 
-  .ks-ad-banner__cta {
-    color: #5b45cc;
-  }
+html[data-theme="light"] .ks-ad-banner__cta {
+  color: #5b45cc;
 }
