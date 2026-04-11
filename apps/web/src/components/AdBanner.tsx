@@ -155,7 +155,7 @@ export function AdBanner({
     };
     void load();
     return () => { cancelled = true; };
-  }, [page, isKinSellOnly, excludeAdId, slotKey, onAdResolved]);
+  }, [page, isKinSellOnly, excludeAdId, slotKey, onAdResolved, viewerCity, viewerCountry]);
 
   // Enregistrer l'impression une seule fois, une fois la pub déterminée
   useEffect(() => {
