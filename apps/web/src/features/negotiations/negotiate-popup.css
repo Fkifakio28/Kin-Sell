@@ -301,6 +301,117 @@
   cursor: not-allowed;
 }
 
+/* ── Submit busy animation ── */
+.neg-submit--busy {
+  pointer-events: none;
+  animation: neg-submit-pulse 1s ease-in-out infinite;
+}
+@keyframes neg-submit-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(111,88,255,0.4); }
+  50% { box-shadow: 0 0 14px 4px rgba(111,88,255,0.25); }
+}
+.neg-submit-sending {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+}
+.neg-submit-dots {
+  display: inline-flex; gap: 3px;
+}
+.neg-submit-dots span {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--color-text-primary);
+  animation: neg-submit-dot 0.8s ease-in-out infinite;
+}
+.neg-submit-dots span:nth-child(2) { animation-delay: 0.15s; }
+.neg-submit-dots span:nth-child(3) { animation-delay: 0.3s; }
+@keyframes neg-submit-dot {
+  0%, 100% { opacity: 0.3; transform: scale(0.7); }
+  50% { opacity: 1; transform: scale(1); }
+}
+
+/* ── Smart price suggestions ── */
+.neg-suggestions {
+  display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap;
+}
+.neg-suggest-pill {
+  padding: 5px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(111,88,255,0.35);
+  background: rgba(111,88,255,0.1);
+  color: var(--color-accent, #6f58ff);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s, transform 0.12s;
+}
+.neg-suggest-pill:hover {
+  background: rgba(111,88,255,0.25);
+  transform: scale(1.07);
+}
+.neg-suggest-pill:active {
+  transform: scale(0.93);
+}
+
+/* ── Savings progress bar ── */
+.neg-savings-bar {
+  margin-top: 6px;
+  display: flex; flex-direction: column; gap: 3px;
+}
+.neg-savings-bar-track {
+  width: 100%; height: 6px; border-radius: 3px;
+  background: rgba(255,255,255,0.06);
+  overflow: hidden;
+}
+.neg-savings-bar-fill {
+  height: 100%; border-radius: 3px;
+  background: linear-gradient(90deg, #6f58ff, #a78bfa);
+  transition: width 0.35s ease;
+}
+.neg-savings-bar-fill--high {
+  background: linear-gradient(90deg, #22c55e, #4ade80);
+}
+.neg-savings-bar-label {
+  font-size: 11px; color: var(--color-text-secondary);
+}
+
+/* ── Celebration overlay (buyer) ── */
+.neg-send-done {
+  text-align: center;
+  padding: 40px 24px;
+  animation: neg-popup-up 0.4s ease-out;
+  max-width: 360px;
+  width: 95%;
+}
+.neg-send-done-icon {
+  font-size: 56px;
+  animation: neg-celeb-bounce 0.6s ease;
+}
+@keyframes neg-celeb-bounce {
+  0% { transform: scale(0); opacity: 0; }
+  50% { transform: scale(1.3); }
+  100% { transform: scale(1); opacity: 1; }
+}
+.neg-send-done-title {
+  margin: 12px 0 6px;
+  font-size: 20px;
+  color: var(--color-text-primary);
+}
+.neg-send-done-sub {
+  margin: 0 0 10px;
+  font-size: 14px;
+  color: var(--color-text-secondary);
+}
+.neg-send-done-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+  animation: neg-hint-fade 0.5s 0.3s ease both;
+}
+@keyframes neg-hint-fade {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 /* ── Info ── */
 .neg-info {
   margin: 0;
@@ -826,4 +937,755 @@
 @media (prefers-reduced-motion: reduce) {
   .neg-overlay { animation: none; }
   .neg-popup { animation: none; }
+  .neg-chat-bubble { animation: none; }
+  .neg-chat-done-icon { animation: none; }
+}
+
+/* ─────────────────────────────────────────────
+   Chat-style Negotiation Respond Popup
+   ───────────────────────────────────────────── */
+
+/* ── Chat popup container ── */
+.neg-chat-popup {
+  position: relative;
+  max-width: 480px;
+  width: 92%;
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  border-radius: 18px;
+  animation: neg-popup-up 0.3s ease;
+  padding: 0;
+  overflow: hidden;
+}
+
+/* ── Header ── */
+.neg-chat-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--glass-border);
+  background: rgba(111, 88, 255, 0.06);
+  flex-shrink: 0;
+}
+
+.neg-chat-header .neg-close {
+  position: static;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  font-size: 12px;
+  order: 3;
+  margin-left: auto;
+}
+
+.neg-chat-header-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+.neg-chat-header-img {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.neg-chat-header-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  background: rgba(111, 88, 255, 0.15);
+  flex-shrink: 0;
+}
+
+.neg-chat-header-text {
+  min-width: 0;
+}
+
+.neg-chat-header-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.neg-chat-header-sub {
+  margin: 0;
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+}
+
+.neg-chat-price-badge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(111, 88, 255, 0.12);
+  border: 1px solid rgba(111, 88, 255, 0.25);
+}
+
+.neg-chat-price-current {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.neg-chat-price-delta {
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.neg-chat-price-delta--down { color: #4ade80; }
+.neg-chat-price-delta--up { color: #fb923c; }
+
+/* ── Messages area ── */
+.neg-chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 160px;
+  max-height: 340px;
+}
+
+/* System messages */
+.neg-chat-system {
+  text-align: center;
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+  padding: 4px 12px;
+  background: rgba(111, 88, 255, 0.06);
+  border-radius: 999px;
+  align-self: center;
+  max-width: 90%;
+}
+
+.neg-chat-system--hint {
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.2);
+  color: #fcd34d;
+  animation: neg-chat-hint-in 0.4s ease;
+}
+
+/* ── Chat bubbles ── */
+.neg-chat-bubble {
+  max-width: 78%;
+  padding: 10px 14px;
+  border-radius: 16px;
+  position: relative;
+  animation: neg-chat-msg-in 0.25s ease;
+}
+
+.neg-chat-bubble--buyer {
+  align-self: flex-start;
+  background: rgba(111, 88, 255, 0.12);
+  border: 1px solid rgba(111, 88, 255, 0.2);
+  border-bottom-left-radius: 4px;
+}
+
+.neg-chat-bubble--seller {
+  align-self: flex-end;
+  background: rgba(46, 204, 113, 0.1);
+  border: 1px solid rgba(46, 204, 113, 0.2);
+  border-bottom-right-radius: 4px;
+}
+
+.neg-chat-bubble--latest {
+  animation: neg-chat-msg-in 0.3s ease, neg-chat-glow 2s ease 0.3s;
+}
+
+.neg-chat-bubble-name {
+  font-size: 11px;
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+
+.neg-chat-bubble--buyer .neg-chat-bubble-name { color: #b9a6ff; }
+.neg-chat-bubble--seller .neg-chat-bubble-name { color: #86efac; }
+
+.neg-chat-bubble-price {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--color-text-primary);
+  letter-spacing: -0.02em;
+}
+
+.neg-chat-bubble-msg {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  font-style: italic;
+  line-height: 1.4;
+}
+
+.neg-chat-bubble-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.neg-chat-bubble-time {
+  font-size: 10px;
+  color: var(--color-text-tertiary);
+}
+
+.neg-chat-bubble-status {
+  font-size: 10px;
+  font-weight: 600;
+}
+
+/* ── IA Marchand integrated in chat ── */
+.neg-chat-ai {
+  flex-shrink: 0;
+  border-top: 1px solid var(--glass-border);
+  background: rgba(111, 88, 255, 0.05);
+  animation: neg-ai-slide-in 0.3s ease;
+}
+@keyframes neg-ai-slide-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.neg-chat-ai--ready {
+  border-top-color: rgba(111, 88, 255, 0.3);
+}
+.neg-chat-ai--loading {
+  animation: neg-ai-loading-bg 1.5s ease-in-out infinite;
+}
+@keyframes neg-ai-loading-bg {
+  0%, 100% { background: rgba(111, 88, 255, 0.03); }
+  50% { background: rgba(111, 88, 255, 0.08); }
+}
+
+.neg-chat-ai--collapsed { }
+
+.neg-chat-ai-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  transition: background 0.15s;
+}
+
+.neg-chat-ai-toggle:hover {
+  background: rgba(111, 88, 255, 0.08);
+}
+
+.neg-chat-ai-toggle-icon { font-size: 16px; }
+.neg-chat-ai-toggle-label { font-weight: 700; background: linear-gradient(135deg, var(--color-primary, #6f58ff), #a78bfa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+.neg-chat-ai-toggle-arrow { margin-left: auto; font-size: 10px; }
+
+/* AI loading dots in toggle */
+.neg-chat-ai-loading-dots {
+  display: inline-flex; gap: 3px; margin-left: 6px;
+}
+.neg-chat-ai-loading-dots span {
+  width: 4px; height: 4px; border-radius: 50%;
+  background: var(--color-accent, #6f58ff);
+  animation: neg-ai-dot-pulse 0.8s ease-in-out infinite;
+}
+.neg-chat-ai-loading-dots span:nth-child(2) { animation-delay: 0.15s; }
+.neg-chat-ai-loading-dots span:nth-child(3) { animation-delay: 0.3s; }
+@keyframes neg-ai-dot-pulse {
+  0%, 100% { opacity: 0.3; transform: scale(0.7); }
+  50% { opacity: 1; transform: scale(1.1); }
+}
+
+/* Notification dot when collapsed + ready */
+.neg-chat-ai-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: #6f58ff;
+  margin-left: 4px;
+  animation: neg-ai-dot-glow 1.5s ease-in-out infinite;
+}
+@keyframes neg-ai-dot-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(111,88,255,0.5); }
+  50% { box-shadow: 0 0 6px 2px rgba(111,88,255,0.4); }
+}
+
+/* Loading skeleton */
+.neg-ai-loading-skeleton {
+  display: flex; flex-direction: column; gap: 8px; padding: 4px 0;
+}
+.neg-ai-skeleton-line {
+  height: 10px; border-radius: 5px;
+  background: linear-gradient(90deg, rgba(111,88,255,0.1) 25%, rgba(111,88,255,0.2) 50%, rgba(111,88,255,0.1) 75%);
+  background-size: 200% 100%;
+  animation: neg-ai-skeleton-shimmer 1.4s ease-in-out infinite;
+}
+@keyframes neg-ai-skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Suggest card with prominent button */
+.neg-chat-ai-suggest-card {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 6px 10px;
+  background: rgba(111,88,255,0.08);
+  border-radius: var(--radius-md, 10px);
+  border: 1px solid rgba(111,88,255,0.2);
+}
+.neg-chat-ai-use--prominent {
+  padding: 4px 14px;
+  font-size: 12px;
+  animation: neg-ai-use-glow 2s ease-in-out infinite;
+}
+@keyframes neg-ai-use-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(111,88,255,0.3); }
+  50% { box-shadow: 0 0 10px 2px rgba(111,88,255,0.2); }
+}
+
+.neg-chat-ai-body {
+  padding: 0 16px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.neg-chat-ai-suggest {
+  font-size: 12px;
+  margin: 0;
+  color: var(--color-text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.neg-chat-ai-use {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: rgba(111, 88, 255, 0.2);
+  border: 1px solid rgba(111, 88, 255, 0.4);
+  color: var(--color-text-primary);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s, transform 0.1s;
+}
+
+.neg-chat-ai-use:hover { background: rgba(111, 88, 255, 0.35); }
+.neg-chat-ai-use:active { transform: scale(0.95); }
+
+/* ── Bottom input area ── */
+.neg-chat-input-area {
+  flex-shrink: 0;
+  padding: 10px 14px 12px;
+  border-top: 1px solid var(--glass-border);
+  background: rgba(111, 88, 255, 0.04);
+}
+
+.neg-chat-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.neg-chat-price-input {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  padding: 0 12px;
+  background: rgba(255, 255, 255, 0.04);
+  transition: border-color 0.2s;
+}
+
+.neg-chat-price-input:focus-within {
+  border-color: rgba(185, 166, 255, 0.6);
+}
+
+.neg-chat-input {
+  flex: 1;
+  height: 38px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-primary);
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  outline: none;
+}
+
+.neg-chat-input::placeholder {
+  font-weight: 400;
+  color: var(--color-text-tertiary);
+  font-size: 13px;
+}
+
+.neg-chat-input-currency {
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+  font-weight: 600;
+}
+
+.neg-chat-send-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: none;
+  background: linear-gradient(135deg, rgba(111, 88, 255, 0.5), rgba(111, 88, 255, 0.3));
+  color: white;
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: transform 0.15s, background 0.2s;
+}
+
+.neg-chat-send-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(111, 88, 255, 0.7), rgba(111, 88, 255, 0.45));
+  transform: scale(1.08);
+}
+
+.neg-chat-send-btn:active:not(:disabled) { transform: scale(0.92); }
+.neg-chat-send-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+.neg-chat-quick-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.neg-chat-quick {
+  flex: 1;
+  padding: 8px 0;
+  border-radius: 999px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.15s;
+}
+
+.neg-chat-quick:active:not(:disabled) { transform: scale(0.96); }
+.neg-chat-quick:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.neg-chat-quick--accept {
+  border: 1px solid rgba(46, 204, 113, 0.45);
+  background: rgba(46, 204, 113, 0.12);
+  color: #86efac;
+}
+
+.neg-chat-quick--accept:hover:not(:disabled) { background: rgba(46, 204, 113, 0.25); }
+
+.neg-chat-quick--refuse {
+  border: 1px solid rgba(255, 100, 120, 0.35);
+  background: rgba(120, 35, 54, 0.15);
+  color: #ffacb5;
+}
+
+.neg-chat-quick--refuse:hover:not(:disabled) { background: rgba(120, 35, 54, 0.3); }
+
+/* ── Action done overlay ── */
+.neg-chat-done {
+  padding: 40px 30px;
+  text-align: center;
+  border-radius: 18px;
+  animation: neg-popup-up 0.3s ease;
+}
+
+.neg-chat-done-icon {
+  font-size: 3.5rem;
+  display: block;
+  margin-bottom: 12px;
+}
+
+.neg-chat-done-icon--accept { animation: neg-chat-check-pop 0.5s ease; }
+.neg-chat-done-icon--counter { animation: neg-chat-slide-up 0.4s ease; }
+.neg-chat-done-icon--refuse { animation: neg-chat-shake 0.4s ease; }
+
+.neg-chat-done-text {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+/* ── Chat animations ── */
+@keyframes neg-chat-msg-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes neg-chat-glow {
+  0% { box-shadow: 0 0 0 0 rgba(111, 88, 255, 0.3); }
+  50% { box-shadow: 0 0 12px 2px rgba(111, 88, 255, 0.15); }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+@keyframes neg-chat-hint-in {
+  from { opacity: 0; transform: scale(0.9); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes neg-chat-check-pop {
+  0% { transform: scale(0); }
+  50% { transform: scale(1.3); }
+  100% { transform: scale(1); }
+}
+
+@keyframes neg-chat-slide-up {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes neg-chat-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}
+
+/* ── Chat responsive ── */
+@media (max-width: 500px) {
+  .neg-chat-popup {
+    width: 100%;
+    max-height: 100vh;
+    border-radius: 0;
+    height: 100vh;
+    height: 100dvh;
+  }
+  .neg-chat-messages {
+    max-height: none;
+    flex: 1;
+  }
+  .neg-chat-header-img,
+  .neg-chat-header-avatar { width: 34px; height: 34px; }
+  .neg-chat-price-badge { padding: 3px 8px; }
+  .neg-chat-price-current { font-size: 12px; }
+  .neg-chat-bubble { max-width: 85%; }
+  .neg-chat-bubble-price { font-size: 16px; }
+}
+
+/* ─────────────────────────────────────────────
+   Step 2: Micro-interactions
+   ───────────────────────────────────────────── */
+
+/* ── Global button tap scale ── */
+.neg-submit:active:not(:disabled),
+.neg-action-btn:active:not(:disabled),
+.neg-chat-quick:active:not(:disabled),
+.neg-chat-send-btn:active:not(:disabled),
+.neg-chat-ai-use:active,
+.neg-mode-tab:active,
+.neg-qty-btn:active,
+.neg-group-card:active {
+  transform: scale(0.94);
+}
+
+/* ── Progress bar (original → current price) ── */
+.neg-chat-progress {
+  padding: 0 16px 8px;
+  flex-shrink: 0;
+}
+
+.neg-chat-progress-bar {
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.neg-chat-progress-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #4ade80, #6f58ff);
+  transition: width 0.6s ease;
+}
+
+.neg-chat-progress-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--color-text-tertiary);
+  margin-top: 3px;
+}
+
+/* ── Optimistic sending bubble ── */
+.neg-chat-bubble--sending {
+  opacity: 0.7;
+  animation: neg-chat-sending-pulse 1s ease-in-out infinite;
+}
+
+.neg-chat-bubble--accept-glow {
+  border-color: rgba(46, 204, 113, 0.5);
+  box-shadow: 0 0 16px rgba(46, 204, 113, 0.2);
+}
+
+@keyframes neg-chat-sending-pulse {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 0.4; }
+}
+
+/* ── Sending dots animation ── */
+.neg-chat-bubble-sending-dots {
+  display: inline-flex;
+  gap: 2px;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--color-text-tertiary);
+}
+
+.neg-chat-bubble-sending-dots span {
+  animation: neg-chat-dot-bounce 1.2s ease-in-out infinite;
+}
+
+.neg-chat-bubble-sending-dots span:nth-child(2) { animation-delay: 0.15s; }
+.neg-chat-bubble-sending-dots span:nth-child(3) { animation-delay: 0.3s; }
+
+@keyframes neg-chat-dot-bounce {
+  0%, 60%, 100% { transform: translateY(0); }
+  30% { transform: translateY(-4px); }
+}
+
+/* ── Waiting indicator (typing-style) ── */
+.neg-chat-waiting {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  align-self: flex-start;
+  padding: 6px 14px;
+  border-radius: 16px;
+  background: rgba(111, 88, 255, 0.06);
+  border: 1px solid rgba(111, 88, 255, 0.12);
+  animation: neg-chat-msg-in 0.3s ease;
+}
+
+.neg-chat-waiting-dots {
+  display: flex;
+  gap: 3px;
+}
+
+.neg-chat-waiting-dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-text-tertiary);
+  animation: neg-chat-typing 1.4s ease-in-out infinite;
+}
+
+.neg-chat-waiting-dots span:nth-child(2) { animation-delay: 0.2s; }
+.neg-chat-waiting-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes neg-chat-typing {
+  0%, 60%, 100% { opacity: 0.3; transform: scale(0.8); }
+  30% { opacity: 1; transform: scale(1.1); }
+}
+
+.neg-chat-waiting-label {
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+  font-style: italic;
+}
+
+/* ── Send button spinning when sending ── */
+.neg-chat-send-btn--sending {
+  animation: neg-chat-send-spin 0.8s linear infinite;
+  background: linear-gradient(135deg, rgba(111, 88, 255, 0.6), rgba(46, 204, 113, 0.4)) !important;
+}
+
+@keyframes neg-chat-send-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* ── Latest bubble enhanced glow ── */
+.neg-chat-bubble--latest .neg-chat-bubble-price {
+  animation: neg-chat-price-flash 0.6s ease;
+}
+
+@keyframes neg-chat-price-flash {
+  0% { color: var(--color-text-primary); }
+  30% { color: #fbbf24; text-shadow: 0 0 8px rgba(251, 191, 36, 0.4); }
+  100% { color: var(--color-text-primary); text-shadow: none; }
+}
+
+/* ── Status checkmarks ── */
+.neg-chat-bubble-status {
+  font-size: 10px;
+  font-weight: 600;
+  animation: neg-chat-status-fade 0.5s ease;
+}
+
+@keyframes neg-chat-status-fade {
+  from { opacity: 0; transform: translateX(4px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+/* ─────────────────────────────────────────────
+   Step 7: Polish — Mobile + Reduced Motion
+   ───────────────────────────────────────────── */
+
+/* ── Buyer popup mobile: suggestions + savings bar ── */
+@media (max-width: 500px) {
+  .neg-send-done {
+    width: 92%; padding: 32px 18px;
+  }
+  .neg-send-done-icon { font-size: 44px; }
+  .neg-send-done-title { font-size: 18px; }
+  .neg-suggestions { gap: 6px; }
+  .neg-suggest-pill { padding: 4px 11px; font-size: 12px; }
+  .neg-savings-bar-label { font-size: 10px; }
+  .neg-chat-ai-suggest-card { flex-direction: column; align-items: flex-start; gap: 6px; }
+  .neg-chat-ai-use--prominent { width: 100%; text-align: center; }
+}
+
+/* ── Accessibility: reduced motion ── */
+@media (prefers-reduced-motion: reduce) {
+  .neg-chat-bubble,
+  .neg-chat-done-icon,
+  .neg-chat-popup,
+  .neg-popup,
+  .neg-send-done,
+  .neg-send-done-icon,
+  .neg-chat-ai,
+  .neg-ai-loading-skeleton .neg-ai-skeleton-line,
+  .neg-chat-system--hint,
+  .neg-chat-waiting-dots span,
+  .neg-chat-bubble--sending,
+  .neg-chat-send-btn--sending,
+  .neg-submit--busy,
+  .neg-submit-dots span,
+  .neg-chat-ai-loading-dots span,
+  .neg-chat-ai-dot,
+  .neg-chat-ai-use--prominent,
+  .neg-suggest-pill,
+  .neg-savings-bar-fill,
+  .neg-chat-bubble--latest .neg-chat-bubble-price,
+  .neg-chat-bubble-status {
+    animation: none !important;
+    transition: none !important;
+  }
 }

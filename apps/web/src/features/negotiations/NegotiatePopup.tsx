@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useLocaleCurrency } from "../../app/providers/LocaleCurrencyProvider";
 import { DEFAULT_CURRENCY_RATES } from "../../shared/constants/currencies";
 import { negotiations, resolveMediaUrl, type NegotiationSummary, type GroupNegotiationSummary, ApiError } from "../../lib/api-client";
@@ -33,6 +33,9 @@ export function NegotiatePopup({ listing, onClose, onSuccess }: NegotiatePopupPr
   const [minBuyers, setMinBuyers] = useState(2);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sent, setSent] = useState(false);
+  const sentResultRef = useRef<NegotiationSummary | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   // Grouped mode: existing open groups for this listing
   const [openGroups, setOpenGroups] = useState<GroupNegotiationSummary[]>([]);
@@ -102,7 +105,9 @@ export function NegotiatePopup({ listing, onClose, onSuccess }: NegotiatePopupPr
           ...(mode === "GROUPED" ? { minBuyers } : {}),
         });
       }
-      onSuccess(result);
+      sentResultRef.current = result;
+      setSent(true);
+      setTimeout(() => onSuccess(result), 1200);
     } catch (err) {
       const msg = err instanceof ApiError
         ? ((err.data as { error?: string })?.error ?? t("error.negotiationFailed"))
@@ -123,6 +128,38 @@ export function NegotiatePopup({ listing, onClose, onSuccess }: NegotiatePopupPr
     QUANTITY: { icon: "📦", label: t("negotiation.modeQuantity") },
     GROUPED: { icon: "👥", label: t("negotiation.modeGrouped") },
   };
+
+  // Smart price suggestions (percentage discounts)
+  const originalLocal = listing.priceUsdCents / 100 * negRate;
+  const suggestPercents = [10, 20, 30];
+  const applySuggestion = (pct: number) => {
+    const val = originalLocal * (1 - pct / 100);
+    const dec = currency === 'USD' || currency === 'EUR' || currency === 'MAD' ? 2 : 0;
+    setPriceDollars(val.toFixed(dec));
+    inputRef.current?.focus();
+  };
+
+  // Savings calculation
+  const proposedLocal = parseFloat(priceDollars) || 0;
+  const savingsPercent = proposedLocal > 0 && originalLocal > 0
+    ? Math.max(0, Math.round((1 - proposedLocal / originalLocal) * 100))
+    : 0;
+
+  // Success celebration overlay
+  if (sent) {
+    return (
+      <div className="neg-overlay" onClick={onClose}>
+        <div className="neg-send-done glass-container" onClick={(e) => e.stopPropagation()}>
+          <div className="neg-send-done-icon">🎉</div>
+          <h3 className="neg-send-done-title">Offre envoyée !</h3>
+          <p className="neg-send-done-sub">
+            {formatMoneyFromUsdCents(sentResultRef.current?.offers?.[0]?.priceUsdCents ?? proposedCents)} proposé pour « {listing.title} »
+          </p>
+          <p className="neg-send-done-hint">⏳ Le vendeur peut répondre sous 48h</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="neg-overlay" onClick={onClose}>
@@ -206,6 +243,7 @@ export function NegotiatePopup({ listing, onClose, onSuccess }: NegotiatePopupPr
             {mode === "QUANTITY" ? `Prix unitaire proposé (${negSym})` : `Votre prix proposé (${negSym})`}
             <div className="neg-input-row">
               <input
+                ref={inputRef}
                 className="neg-input"
                 type="number"
                 min={0.01}
@@ -217,7 +255,28 @@ export function NegotiatePopup({ listing, onClose, onSuccess }: NegotiatePopupPr
               />
               <span className="neg-currency">{negSym}</span>
             </div>
+            {/* Smart price suggestions */}
+            <div className="neg-suggestions">
+              {suggestPercents.map((pct) => (
+                <button key={pct} type="button" className="neg-suggest-pill" onClick={() => applySuggestion(pct)}>
+                  −{pct}%
+                </button>
+              ))}
+            </div>
           </label>
+
+          {/* Savings progress bar */}
+          {savingsPercent > 0 && (
+            <div className="neg-savings-bar">
+              <div className="neg-savings-bar-track">
+                <div
+                  className={`neg-savings-bar-fill${savingsPercent > 40 ? ' neg-savings-bar-fill--high' : ''}`}
+                  style={{ width: `${Math.min(savingsPercent, 100)}%` }}
+                />
+              </div>
+              <span className="neg-savings-bar-label">💰 {savingsPercent}% d'économie</span>
+            </div>
+          )}
 
           <label className="neg-label">
             Quantité{mode === "QUANTITY" ? " (lot)" : ""}
@@ -281,11 +340,15 @@ export function NegotiatePopup({ listing, onClose, onSuccess }: NegotiatePopupPr
 
         <button
           type="button"
-          className="neg-submit"
+          className={`neg-submit${busy ? ' neg-submit--busy' : ''}`}
           disabled={busy || !priceDollars}
           onClick={() => void handleSubmit()}
         >
-          {busy ? "Envoi en cours..." : mode === "GROUPED" && joinGroupId ? "👥 Rejoindre le groupe" : mode === "GROUPED" ? "👥 Créer le groupe" : mode === "QUANTITY" ? "📦 Envoyer l'offre en lot" : "🤝 Envoyer ma proposition"}
+          {busy ? (
+            <span className="neg-submit-sending">
+              <span className="neg-submit-dots"><span /><span /><span /></span> Envoi…
+            </span>
+          ) : mode === "GROUPED" && joinGroupId ? "👥 Rejoindre le groupe" : mode === "GROUPED" ? "👥 Créer le groupe" : mode === "QUANTITY" ? "📦 Envoyer l'offre en lot" : "🤝 Envoyer ma proposition"}
         </button>
 
         <p className="neg-info">

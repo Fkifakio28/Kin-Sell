@@ -1137,17 +1137,43 @@
 
 .cart-ai-panel {
   margin-top: 12px;
-  padding: 14px;
+  padding: 0;
   border: 1px solid rgba(111, 88, 255, 0.35);
   border-radius: var(--radius-lg);
   background: rgba(111, 88, 255, 0.08);
+  overflow: hidden;
+  animation: cart-ai-panel-in 0.35s ease;
+}
+@keyframes cart-ai-panel-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.cart-ai-panel--ready {
+  border-color: rgba(111, 88, 255, 0.45);
+}
+.cart-ai-panel--loading {
+  animation: cart-ai-panel-in 0.35s ease, cart-ai-bg-pulse 1.5s ease-in-out infinite;
+}
+@keyframes cart-ai-bg-pulse {
+  0%, 100% { background: rgba(111, 88, 255, 0.05); }
+  50% { background: rgba(111, 88, 255, 0.12); }
 }
 
 .cart-ai-header {
+  width: 100%;
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 10px;
+  padding: 12px 14px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--color-text-secondary);
+  transition: background 0.15s;
+}
+.cart-ai-header:hover {
+  background: rgba(111, 88, 255, 0.06);
 }
 
 .cart-ai-icon {
@@ -1175,10 +1201,65 @@
   50% { opacity: 1; }
 }
 
+/* AI loading dots */
+.cart-ai-loading-dots {
+  display: inline-flex; gap: 3px; margin-left: 6px;
+}
+.cart-ai-loading-dots span {
+  width: 4px; height: 4px; border-radius: 50%;
+  background: var(--color-accent, #6f58ff);
+  animation: cart-ai-dot-anim 0.8s ease-in-out infinite;
+}
+.cart-ai-loading-dots span:nth-child(2) { animation-delay: 0.15s; }
+.cart-ai-loading-dots span:nth-child(3) { animation-delay: 0.3s; }
+@keyframes cart-ai-dot-anim {
+  0%, 100% { opacity: 0.3; transform: scale(0.7); }
+  50% { opacity: 1; transform: scale(1.1); }
+}
+
+/* Notification dot */
+.cart-ai-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: #6f58ff; margin-left: 4px;
+  animation: cart-ai-dot-glow 1.5s ease-in-out infinite;
+}
+@keyframes cart-ai-dot-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(111,88,255,0.5); }
+  50% { box-shadow: 0 0 6px 2px rgba(111,88,255,0.4); }
+}
+
+/* Arrow toggle */
+.cart-ai-arrow {
+  margin-left: auto; font-size: 10px;
+}
+
+/* Skeleton loader */
+.cart-ai-skeleton {
+  display: flex; flex-direction: column; gap: 8px; padding: 4px 0;
+}
+.cart-ai-skeleton-line {
+  height: 10px; border-radius: 5px;
+  background: linear-gradient(90deg, rgba(111,88,255,0.1) 25%, rgba(111,88,255,0.2) 50%, rgba(111,88,255,0.1) 75%);
+  background-size: 200% 100%;
+  animation: cart-ai-shimmer 1.4s ease-in-out infinite;
+}
+@keyframes cart-ai-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
 .cart-ai-body {
+  padding: 0 14px 12px;
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+.cart-ai-body--animated {
+  animation: cart-ai-body-in 0.3s ease;
+}
+@keyframes cart-ai-body-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .cart-ai-section strong {
@@ -1215,6 +1296,13 @@
   color: #fbbf24;
   font-size: 13px;
   font-weight: 600;
+}
+.cart-ai-urgency--pulse {
+  animation: cart-ai-urgency-glow 2s ease-in-out infinite;
+}
+@keyframes cart-ai-urgency-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(251,191,36,0.2); }
+  50% { box-shadow: 0 0 10px 2px rgba(251,191,36,0.15); }
 }
 
 .cart-ai-tips {
@@ -1768,5 +1856,258 @@
     justify-content: center;
     font-size: 0.78rem;
     padding: 6px 8px;
+  }
+}
+
+/* ─────────────────────────────────────────────
+   Addictive Checkout — Micro-interactions
+   ───────────────────────────────────────────── */
+
+/* ── Checkout button glow when ready ── */
+.cart-checkout-btn--ready {
+  animation: cart-btn-glow 2.5s ease-in-out infinite;
+}
+@keyframes cart-btn-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(111,88,255,0.3); }
+  50% { box-shadow: 0 0 18px 4px rgba(111,88,255,0.2); }
+}
+
+.cart-checkout-btn--busy {
+  pointer-events: none;
+  animation: cart-btn-pulse 1s ease-in-out infinite;
+}
+@keyframes cart-btn-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(111,88,255,0.35); }
+  50% { box-shadow: 0 0 14px 5px rgba(111,88,255,0.2); }
+}
+
+.cart-checkout-btn-sending {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+}
+.cart-checkout-btn-dots {
+  display: inline-flex; gap: 3px;
+}
+.cart-checkout-btn-dots span {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--color-text-primary);
+  animation: cart-dot-bounce 0.8s ease-in-out infinite;
+}
+.cart-checkout-btn-dots span:nth-child(2) { animation-delay: 0.15s; }
+.cart-checkout-btn-dots span:nth-child(3) { animation-delay: 0.3s; }
+@keyframes cart-dot-bounce {
+  0%, 100% { opacity: 0.3; transform: scale(0.7); }
+  50% { opacity: 1; transform: scale(1); }
+}
+
+/* ── Confirmer button confirming state ── */
+.cart-btn--confirming {
+  pointer-events: none;
+  animation: cart-btn-pulse 1s ease-in-out infinite;
+}
+
+/* ── Checkout steps indicator ── */
+.cart-checkout-steps {
+  display: flex; gap: 24px; justify-content: center; margin-top: 14px; padding-top: 10px;
+  border-top: 1px solid var(--glass-border);
+}
+.cart-checkout-step {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12px; color: var(--color-text-tertiary);
+  transition: color 0.3s;
+}
+.cart-checkout-step--active {
+  color: var(--color-accent, #6f58ff);
+}
+.cart-checkout-step-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--color-text-tertiary);
+  transition: background 0.3s, transform 0.3s;
+}
+.cart-checkout-step--active .cart-checkout-step-dot {
+  background: var(--color-accent, #6f58ff);
+  transform: scale(1.3);
+  box-shadow: 0 0 8px rgba(111,88,255,0.5);
+}
+
+/* ── Celebration overlay ── */
+.cart-checkout-celebrate-overlay {
+  position: fixed; inset: 0; z-index: 9999;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0,0,0,0.65);
+  backdrop-filter: blur(6px);
+  animation: cart-celebrate-fade 0.3s ease;
+}
+@keyframes cart-celebrate-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.cart-checkout-celebrate {
+  text-align: center;
+  padding: 40px 28px 30px;
+  max-width: 400px; width: 92%;
+  animation: cart-celebrate-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes cart-celebrate-pop {
+  0% { opacity: 0; transform: scale(0.7) translateY(20px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.cart-celebrate-confetti {
+  font-size: 42px;
+  animation: cart-confetti-burst 0.8s ease;
+}
+@keyframes cart-confetti-burst {
+  0% { transform: scale(0) rotate(-30deg); opacity: 0; }
+  50% { transform: scale(1.4) rotate(10deg); }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+
+.cart-celebrate-icon {
+  font-size: 52px; margin-top: 8px;
+  animation: cart-check-pop 0.5s 0.3s ease both;
+}
+@keyframes cart-check-pop {
+  0% { transform: scale(0); }
+  60% { transform: scale(1.3); }
+  100% { transform: scale(1); }
+}
+
+.cart-celebrate-title {
+  margin: 14px 0 6px;
+  font-size: 22px; font-weight: 700;
+  color: var(--color-text-primary);
+  animation: cart-title-slide 0.4s 0.4s ease both;
+}
+@keyframes cart-title-slide {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.cart-celebrate-sub {
+  margin: 0 0 14px;
+  font-size: 14px;
+  color: var(--color-text-secondary);
+  animation: cart-title-slide 0.4s 0.5s ease both;
+}
+
+.cart-celebrate-badges {
+  display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;
+  margin-bottom: 16px;
+  animation: cart-title-slide 0.4s 0.6s ease both;
+}
+.cart-celebrate-badge {
+  padding: 5px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(111,88,255,0.3);
+  background: rgba(111,88,255,0.1);
+  font-size: 12px; font-weight: 600;
+  color: var(--color-accent, #6f58ff);
+}
+
+.cart-celebrate-hint {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+  animation: cart-title-slide 0.4s 0.7s ease both;
+}
+
+.cart-celebrate-progress {
+  width: 100%; height: 4px;
+  border-radius: 2px;
+  background: rgba(255,255,255,0.06);
+  overflow: hidden;
+}
+.cart-celebrate-progress-bar {
+  height: 100%; border-radius: 2px;
+  background: linear-gradient(90deg, #6f58ff, #a78bfa);
+  animation: cart-progress-fill 3.5s linear forwards;
+}
+@keyframes cart-progress-fill {
+  from { width: 0; }
+  to { width: 100%; }
+}
+
+/* ── Tap feedback on all cart buttons ── */
+.cart-btn:active:not(:disabled),
+.cart-checkout-btn:active:not(:disabled),
+.cart-qty-btn:active:not(:disabled),
+.cart-neg-start-btn:active,
+.cart-neg-action-btn:active,
+.cart-bundle-neg-btn:active {
+  transform: scale(0.94);
+}
+
+/* ── Cart item hover lift ── */
+.cart-item {
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.cart-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(111, 88, 255, 0.08);
+}
+
+/* ── History card hover ── */
+.cart-history-card {
+  transition: transform 0.15s ease, border-color 0.2s;
+}
+.cart-history-card:hover {
+  transform: translateY(-1px);
+  border-color: rgba(185, 166, 255, 0.4);
+}
+.cart-history-card--active-nego {
+  border-left: 3px solid var(--color-accent, #6f58ff);
+}
+
+/* ── Negotiate button pulse in cart ── */
+.cart-neg-start-btn {
+  transition: background 0.2s, transform 0.12s;
+}
+.cart-neg-start-btn:hover {
+  transform: scale(1.04);
+}
+
+/* ── Cart mobile polish ── */
+@media (max-width: 600px) {
+  .cart-checkout-celebrate {
+    padding: 30px 18px 22px;
+    width: 95%;
+  }
+  .cart-celebrate-icon { font-size: 42px; }
+  .cart-celebrate-title { font-size: 19px; }
+  .cart-celebrate-badges { gap: 6px; }
+  .cart-celebrate-badge { padding: 4px 10px; font-size: 11px; }
+  .cart-checkout-steps { gap: 16px; flex-wrap: wrap; }
+  .cart-ai-panel { margin-top: 8px; }
+  .cart-ai-header { padding: 10px 12px; }
+}
+
+/* ── Accessibility: reduced motion ── */
+@media (prefers-reduced-motion: reduce) {
+  .cart-checkout-btn--ready,
+  .cart-checkout-btn--busy,
+  .cart-btn--confirming,
+  .cart-checkout-btn-dots span,
+  .cart-checkout-celebrate,
+  .cart-checkout-celebrate-overlay,
+  .cart-celebrate-confetti,
+  .cart-celebrate-icon,
+  .cart-celebrate-title,
+  .cart-celebrate-sub,
+  .cart-celebrate-badges,
+  .cart-celebrate-hint,
+  .cart-celebrate-progress-bar,
+  .cart-checkout-step-dot,
+  .cart-ai-panel,
+  .cart-ai-panel--loading,
+  .cart-ai-body--animated,
+  .cart-ai-loading-dots span,
+  .cart-ai-dot,
+  .cart-ai-urgency--pulse,
+  .cart-ai-skeleton-line,
+  .cart-item,
+  .cart-history-card {
+    animation: none !important;
+    transition: none !important;
   }
 }

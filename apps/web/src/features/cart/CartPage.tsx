@@ -28,6 +28,7 @@ export function CartPage() {
   const [busy, setBusy] = useState(false);
   const [checkoutBusy, setCheckoutBusy] = useState(false);
   const [checkoutModalOpen, setCheckoutModalOpen] = useState(false);
+  const [aiCommandeCollapsed, setAiCommandeCollapsed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [draftPrices, setDraftPrices] = useState<Record<string, string>>({});
@@ -69,6 +70,11 @@ export function CartPage() {
   const [buyerNegosLoading, setBuyerNegosLoading] = useState(false);
   const [selectedNego, setSelectedNego] = useState<NegotiationSummary | null>(null);
   const [historyTab, setHistoryTab] = useState<"orders" | "negotiations">("orders");
+
+  /* ── Checkout celebration ── */
+  const [checkoutDone, setCheckoutDone] = useState(false);
+  const [checkoutDoneMsg, setCheckoutDoneMsg] = useState("");
+  const [checkoutStep, setCheckoutStep] = useState(0); // 0=form, 1=confirming, 2=done
 
   /* ── Buyer delivery confirmation state ── */
   const [buyerConfirmOrderId, setBuyerConfirmOrderId] = useState<string | null>(null);
@@ -380,15 +386,18 @@ export function CartPage() {
     setError(null);
     setSuccess(null);
     try {
+      setCheckoutStep(1);
       const payloadNotes = [notes, checkoutNotes.trim()].filter(Boolean).join(" | ");
       const result = await orders.checkoutBuyerCart({
         ...(payloadNotes ? { notes: payloadNotes } : {}),
         ...deliveryData,
       });
-      setSuccess(result.message || t('cart.orderSuccess'));
+      setCheckoutStep(2);
+      const msg = result.message || t('cart.orderSuccess');
+      setCheckoutDoneMsg(msg);
+      setSuccess(msg);
       setCart(null);
       setCheckoutNotes("");
-      setCheckoutModalOpen(false);
       setCheckoutForm({
         deliveryAddress: "",
         serviceMaintenanceAddress: "",
@@ -402,8 +411,10 @@ export function CartPage() {
         deliveryPlaceId: "",
         deliveryFormattedAddress: "",
       });
-      // Redirect to purchases tab after 2s
-      setTimeout(() => navigate("/account?section=purchases"), 2000);
+      setCheckoutModalOpen(false);
+      setCheckoutDone(true);
+      // Redirect to purchases tab after 3.5s
+      setTimeout(() => { setCheckoutDone(false); navigate("/account?section=purchases"); }, 3500);
     } catch (err) {
       setError(err instanceof ApiError ? ((err.data as { error?: string })?.error ?? t('cart.checkoutError')) : t('cart.checkoutError'));
     } finally {
@@ -870,16 +881,18 @@ export function CartPage() {
               </div>
             )}
 
-            {/* ── IA Commande – Conseil checkout ── */}
+            {/* ── IA Commande – Conseil checkout (collapsible + animated) ── */}
             {iaOrderActive && (adviceLoading || checkoutAdviceData) && (
-              <div className="cart-ai-panel glass-container">
-                <div className="cart-ai-header">
+              <div className={`cart-ai-panel glass-container${checkoutAdviceData && !adviceLoading ? ' cart-ai-panel--ready' : ''}${adviceLoading ? ' cart-ai-panel--loading' : ''}`}>
+                <button type="button" className="cart-ai-header" onClick={() => setAiCommandeCollapsed(!aiCommandeCollapsed)}>
                   <span className="cart-ai-icon">🤖</span>
                   <span className="cart-ai-title">IA Commande</span>
-                  {adviceLoading && <span className="cart-ai-loading">Analyse…</span>}
-                </div>
-                {checkoutAdviceData && (
-                  <div className="cart-ai-body">
+                  {adviceLoading && <span className="cart-ai-loading-dots"><span /><span /><span /></span>}
+                  {checkoutAdviceData && !adviceLoading && aiCommandeCollapsed && <span className="cart-ai-dot" />}
+                  <span className="cart-ai-arrow">{aiCommandeCollapsed ? '▲' : '▼'}</span>
+                </button>
+                {!aiCommandeCollapsed && checkoutAdviceData && (
+                  <div className="cart-ai-body cart-ai-body--animated">
                     {checkoutAdviceData.bundles.length > 0 && (
                       <div className="cart-ai-section">
                         <strong>📦 Offres groupées</strong>
@@ -892,7 +905,7 @@ export function CartPage() {
                       </div>
                     )}
                     {checkoutAdviceData.urgency?.active && (
-                      <div className="cart-ai-urgency">⚡ {checkoutAdviceData.urgency.message}</div>
+                      <div className="cart-ai-urgency cart-ai-urgency--pulse">⚡ {checkoutAdviceData.urgency.message}</div>
                     )}
                     {checkoutAdviceData.shippingEstimate && (
                       <div className="cart-ai-section">
@@ -910,6 +923,11 @@ export function CartPage() {
                     )}
                   </div>
                 )}
+                {!aiCommandeCollapsed && adviceLoading && (
+                  <div className="cart-ai-body">
+                    <div className="cart-ai-skeleton"><div className="cart-ai-skeleton-line" style={{ width: '75%' }} /><div className="cart-ai-skeleton-line" style={{ width: '55%' }} /><div className="cart-ai-skeleton-line" style={{ width: '85%' }} /></div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -922,8 +940,12 @@ export function CartPage() {
               maxLength={500}
             />
 
-            <button type="button" className="cart-checkout-btn" disabled={checkoutBusy || busy || allNegotiating} onClick={() => void handleOpenCheckoutModal()}>
-              {checkoutBusy ? "Validation en cours..." : allNegotiating ? "🤝 Négociations en cours..." : hasNegotiatingItems ? `✅ Commander ${readyItemsCount} article${readyItemsCount > 1 ? "s" : ""}` : "✅ Valider la commande"}
+            <button type="button" className={`cart-checkout-btn${checkoutBusy ? ' cart-checkout-btn--busy' : ''}${!allNegotiating && readyItemsCount > 0 ? ' cart-checkout-btn--ready' : ''}`} disabled={checkoutBusy || busy || allNegotiating} onClick={() => void handleOpenCheckoutModal()}>
+              {checkoutBusy ? (
+                <span className="cart-checkout-btn-sending">
+                  <span className="cart-checkout-btn-dots"><span /><span /><span /></span> Validation…
+                </span>
+              ) : allNegotiating ? "🤝 Négociations en cours..." : hasNegotiatingItems ? `✅ Commander ${readyItemsCount} article${readyItemsCount > 1 ? "s" : ""}` : "✅ Valider la commande"}
             </button>
 
             <p className="cart-checkout-info">
@@ -1370,10 +1392,48 @@ export function CartPage() {
             </label>
 
             <div className="cart-checkout-modal-actions">
-              <button type="button" className="cart-btn cart-btn--secondary" onClick={() => setCheckoutModalOpen(false)} disabled={checkoutBusy}>Annuler</button>
-              <button type="button" className="cart-btn cart-btn--primary" onClick={() => void handleSubmitCheckoutModal()} disabled={checkoutBusy}>
-                {checkoutBusy ? "Validation..." : "✅ Confirmer"}
+              <button type="button" className="cart-btn cart-btn--secondary" onClick={() => { setCheckoutModalOpen(false); setCheckoutStep(0); }} disabled={checkoutBusy}>Annuler</button>
+              <button type="button" className={`cart-btn cart-btn--primary${checkoutBusy ? ' cart-btn--confirming' : ''}`} onClick={() => void handleSubmitCheckoutModal()} disabled={checkoutBusy}>
+                {checkoutBusy ? (
+                  <span className="cart-checkout-btn-sending">
+                    <span className="cart-checkout-btn-dots"><span /><span /><span /></span> Validation…
+                  </span>
+                ) : "✅ Confirmer"}
               </button>
+            </div>
+
+            {/* Checkout steps progress */}
+            {checkoutBusy && (
+              <div className="cart-checkout-steps">
+                <div className={`cart-checkout-step ${checkoutStep >= 1 ? 'cart-checkout-step--active' : ''}`}>
+                  <span className="cart-checkout-step-dot" />
+                  <span>Vérification…</span>
+                </div>
+                <div className={`cart-checkout-step ${checkoutStep >= 2 ? 'cart-checkout-step--active' : ''}`}>
+                  <span className="cart-checkout-step-dot" />
+                  <span>Commande créée</span>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Checkout celebration overlay ── */}
+      {checkoutDone && (
+        <div className="cart-checkout-celebrate-overlay">
+          <div className="cart-checkout-celebrate glass-container">
+            <div className="cart-celebrate-confetti">🎊</div>
+            <div className="cart-celebrate-icon">✅</div>
+            <h2 className="cart-celebrate-title">Commande validée !</h2>
+            <p className="cart-celebrate-sub">{checkoutDoneMsg}</p>
+            <div className="cart-celebrate-badges">
+              <span className="cart-celebrate-badge">📦 En route</span>
+              <span className="cart-celebrate-badge">🔔 Suivi actif</span>
+            </div>
+            <p className="cart-celebrate-hint">Redirection vers vos achats…</p>
+            <div className="cart-celebrate-progress">
+              <div className="cart-celebrate-progress-bar" />
             </div>
           </div>
         </div>

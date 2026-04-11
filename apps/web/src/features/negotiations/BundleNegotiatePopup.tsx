@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useLocaleCurrency } from "../../app/providers/LocaleCurrencyProvider";
 import { DEFAULT_CURRENCY_RATES } from "../../shared/constants/currencies";
 import { negotiations, resolveMediaUrl, type NegotiationSummary, type BundleNegotiationResult, ApiError } from "../../lib/api-client";
@@ -35,6 +35,8 @@ export function BundleNegotiatePopup({ sellerDisplayName, listings, onClose, onS
   const [minBuyers, setMinBuyers] = useState(2);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sent, setSent] = useState(false);
+  const sentResultRef = useRef<NegotiationSummary | null>(null);
 
   const selectedItems = items.filter((i) => i.selected);
   const totalOriginalCents = selectedItems.reduce((sum, item) => {
@@ -75,7 +77,9 @@ export function BundleNegotiatePopup({ sellerDisplayName, listings, onClose, onS
         type: mode,
         ...(mode === "GROUPED" ? { minBuyers } : {}),
       });
-      onSuccess(result);
+      sentResultRef.current = result;
+      setSent(true);
+      setTimeout(() => onSuccess(result), 1200);
     } catch (err) {
       const msg = err instanceof ApiError
         ? ((err.data as { error?: string })?.error ?? t("error.negotiationFailed"))
@@ -88,11 +92,32 @@ export function BundleNegotiatePopup({ sellerDisplayName, listings, onClose, onS
 
   const proposedCents = Math.round(((parseFloat(totalDollars) || 0) / negRate) * 100);
 
+  // Savings calculation
+  const savingsPercent = proposedCents > 0 && totalOriginalCents > 0
+    ? Math.max(0, Math.round((1 - proposedCents / totalOriginalCents) * 100))
+    : 0;
+
   const modeLabels: Record<BundleMode, { icon: string; label: string }> = {
     SIMPLE: { icon: "🤝", label: t("negotiation.modeSimple") },
     QUANTITY: { icon: "📦", label: t("negotiation.modeQuantity") },
     GROUPED: { icon: "👥", label: t("negotiation.modeGrouped") },
   };
+
+  // Celebration overlay
+  if (sent) {
+    return (
+      <div className="neg-overlay" onClick={onClose}>
+        <div className="neg-send-done glass-container" onClick={(e) => e.stopPropagation()}>
+          <div className="neg-send-done-icon">🎉</div>
+          <h3 className="neg-send-done-title">Offre lot envoyée !</h3>
+          <p className="neg-send-done-sub">
+            {selectedItems.length} articles négociés auprès de {sellerDisplayName}
+          </p>
+          <p className="neg-send-done-hint">⏳ Le vendeur a {mode === 'GROUPED' ? '72h' : '48h'} pour répondre</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="neg-overlay" onClick={onClose}>
@@ -226,13 +251,30 @@ export function BundleNegotiatePopup({ sellerDisplayName, listings, onClose, onS
           </div>
         )}
 
+        {/* Savings progress bar */}
+        {savingsPercent > 0 && (
+          <div className="neg-savings-bar">
+            <div className="neg-savings-bar-track">
+              <div
+                className={`neg-savings-bar-fill${savingsPercent > 40 ? ' neg-savings-bar-fill--high' : ''}`}
+                style={{ width: `${Math.min(savingsPercent, 100)}%` }}
+              />
+            </div>
+            <span className="neg-savings-bar-label">💰 {savingsPercent}% d'économie</span>
+          </div>
+        )}
+
         <button
           type="button"
-          className="neg-submit"
+          className={`neg-submit${busy ? ' neg-submit--busy' : ''}`}
           disabled={busy || !totalDollars || selectedItems.length < 2}
           onClick={() => void handleSubmit()}
         >
-          {busy ? "Envoi en cours..." : `?? Negocier le lot (${selectedItems.length} articles)`}
+          {busy ? (
+            <span className="neg-submit-sending">
+              <span className="neg-submit-dots"><span /><span /><span /></span> Envoi…
+            </span>
+          ) : `🤝 Négocier le lot (${selectedItems.length} articles)`}
         </button>
 
         <p className="neg-info">
