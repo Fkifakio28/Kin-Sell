@@ -88,7 +88,7 @@ export async function subscribeToPush(): Promise<boolean> {
     const appServerKey = urlBase64ToUint8Array(publicKey);
     sub = await reg.pushManager.subscribe({
       userVisibleOnly: true,
-      applicationServerKey: appServerKey,
+      applicationServerKey: appServerKey.buffer as ArrayBuffer,
     });
   }
 

@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { createPortal } from "react-dom";
 import { useAuth } from "./AuthProvider";
 import { useSocketContext } from "./SocketProvider";
-import { playCallSound, stopCallSound, refreshCallSoundIfNeeded } from "../../utils/call-sound";
+import { playCallSound, stopCallSound } from "../../utils/call-sound";
 import {
   getNotificationPermission,
   isPushSupported,
