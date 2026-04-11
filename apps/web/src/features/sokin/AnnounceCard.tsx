@@ -14,6 +14,7 @@ import {
   type SoKinReactionType,
   type SoKinReportReason,
 } from '../../lib/api-client';
+import { API_BASE } from '../../lib/api-core';
 import { useSoKinToast } from '../../components/feedback/SoKinToast';
 import { observePostView, trackSoKinEvent } from '../../lib/services/sokin-tracking.service';
 import { resolveBackgroundCss } from './sokin-backgrounds';
@@ -98,12 +99,50 @@ export function categorizeMedia(urls: string[]): MediaItem[] {
   return items;
 }
 
+const tagTargetCache = new Map<string, string>();
+
+async function resolvePublicTagTarget(handleRaw: string): Promise<string> {
+  const handle = handleRaw.replace(/^@/, '').trim();
+  if (!handle) return '/';
+  const cached = tagTargetCache.get(handle);
+  if (cached) return cached;
+
+  try {
+    const encoded = encodeURIComponent(handle);
+    const userByUsername = await fetch(`${API_BASE}/users/public/${encoded}`, { credentials: 'include' });
+    if (userByUsername.ok) {
+      const path = `/user/${handle}`;
+      tagTargetCache.set(handle, path);
+      return path;
+    }
+    const userById = await fetch(`${API_BASE}/users/${encoded}/public`, { credentials: 'include' });
+    if (userById.ok) {
+      const path = `/user/${handle}`;
+      tagTargetCache.set(handle, path);
+      return path;
+    }
+    const businessBySlug = await fetch(`${API_BASE}/business-accounts/${encoded}`, { credentials: 'include' });
+    if (businessBySlug.ok) {
+      const path = `/business/${handle}`;
+      tagTargetCache.set(handle, path);
+      return path;
+    }
+  } catch {
+    // ignore and fallback below
+  }
+
+  const fallback = `/user/${handle}`;
+  tagTargetCache.set(handle, fallback);
+  return fallback;
+}
+
 /**
  * Parse le texte d'un post et transforme les @mentions et #hashtags en éléments cliquables.
  */
 function renderPostText(
   text: string,
-  navigate: (path: string) => void,
+  onMention: (handle: string) => void,
+  onHashtag: (tag: string) => void,
 ): React.ReactNode[] {
   const parts = text.split(/(@[\w.]+|#[\w\u00C0-\u024F]+)/g);
   return parts.map((part, i) => {
@@ -114,7 +153,7 @@ function renderPostText(
           key={i}
           type="button"
           className="sk-inline-mention"
-          onClick={(e) => { e.stopPropagation(); navigate(`/user/${handle}`); }}
+          onClick={(e) => { e.stopPropagation(); onMention(handle); }}
         >
           {part}
         </button>
@@ -127,7 +166,7 @@ function renderPostText(
           key={i}
           type="button"
           className="sk-inline-hashtag"
-          onClick={(e) => { e.stopPropagation(); navigate(`/sokin?tag=${encodeURIComponent(tag)}`); }}
+          onClick={(e) => { e.stopPropagation(); onHashtag(tag); }}
         >
           {part}
         </button>
@@ -382,6 +421,14 @@ export function AnnounceCard({
     }
   }, [isLoggedIn, saved, post.id, cardToast]);
 
+  const handleMentionClick = useCallback((rawHandle: string) => {
+    void resolvePublicTagTarget(rawHandle).then((path) => navigate(path));
+  }, [navigate]);
+
+  const handleHashtagClick = useCallback((tag: string) => {
+    navigate(`/sokin?tag=${encodeURIComponent(tag)}`);
+  }, [navigate]);
+
   return (
     <article ref={cardRef} className={`sk-card${isCommercialType ? ' sk-card--commercial' : ''}${localStatus === 'HIDDEN' ? ' sk-card--hidden' : ''}`}>
 
@@ -397,7 +444,7 @@ export function AnnounceCard({
         <button
           type="button"
           className="sk-card-author"
-          onClick={() => { trackEv('PROFILE_CLICK'); navigate(`/user/${cleanHandle}`); }}
+          onClick={() => { trackEv('PROFILE_CLICK'); handleMentionClick(cleanHandle); }}
           aria-label={`Voir le profil de ${authorName}`}
         >
           <div className="sk-card-avatar-wrap">
@@ -560,10 +607,10 @@ export function AnnounceCard({
 
       {post.text ? (
         mediaItems.length > 0
-          ? <p className="sk-card-text">{renderPostText(post.text, navigate)}</p>
+          ? <p className="sk-card-text">{renderPostText(post.text, handleMentionClick, handleHashtagClick)}</p>
           : (
             <div className="sk-card-text-only" style={{ background: resolveBackgroundCss((post as any).backgroundStyle) }}>
-              <p className="sk-card-text sk-card-text--centered">{renderPostText(post.text, navigate)}</p>
+              <p className="sk-card-text sk-card-text--centered">{renderPostText(post.text, handleMentionClick, handleHashtagClick)}</p>
             </div>
           )
       ) : null}
@@ -571,12 +618,12 @@ export function AnnounceCard({
       {((postHashtags && postHashtags.length > 0) || (postTags && postTags.length > 0)) && (
         <div className="sk-card-tags">
           {postHashtags?.map((h) => (
-            <button key={h} type="button" className="sk-card-hashtag" onClick={() => navigate(`/sokin?tag=${encodeURIComponent(h)}`)}>
+            <button key={h} type="button" className="sk-card-hashtag" onClick={() => handleHashtagClick(h)}>
               #{h}
             </button>
           ))}
           {postTags?.map((tag) => (
-            <button key={tag} type="button" className="sk-card-tag" onClick={() => navigate(`/user/${tag}`)}>
+            <button key={tag} type="button" className="sk-card-tag" onClick={() => handleMentionClick(tag)}>
               @{tag}
             </button>
           ))}
@@ -610,7 +657,7 @@ export function AnnounceCard({
                 <span className="sk-repost-embed-time"> · {relTime(orig.createdAt, t)}</span>
               </div>
             </div>
-            {orig.text && <p className="sk-repost-embed-text">{renderPostText(orig.text.length > 200 ? orig.text.slice(0, 200) + '…' : orig.text, navigate)}</p>}
+            {orig.text && <p className="sk-repost-embed-text">{renderPostText(orig.text.length > 200 ? orig.text.slice(0, 200) + '…' : orig.text, handleMentionClick, handleHashtagClick)}</p>}
             {origMediaItems.length > 0 && (
               <div className="sk-repost-embed-media">
                 {origMediaItems[0].type === 'image' ? (
@@ -859,7 +906,7 @@ export function AnnounceCard({
             <button
               type="button"
               className="sk-card-commerce-action"
-              onClick={() => navigate(`/user/${cleanHandle}`)}
+              onClick={() => handleMentionClick(cleanHandle)}
             >
               👤 Profil vendeur
             </button>
