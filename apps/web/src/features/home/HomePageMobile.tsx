@@ -25,6 +25,7 @@ import {
   orders as ordersApi,
   messaging,
   users as usersApi,
+  businesses as businessesApi,
   resolveMediaUrl,
   ApiError,
   type PublicListing,
@@ -70,13 +71,10 @@ const DRAWER_LINKS = {
 };
 
 function getUserDrawerLinks(role: string | undefined | null): { icon: string; labelKey: string; href: string }[] {
-  if (role === "BUSINESS") {
-    return [{ icon: "\uD83C\uDFE2", labelKey: "home.drawerBusinessOrders", href: "/business/dashboard" }];
-  }
   if (role === "ADMIN" || role === "SUPER_ADMIN") {
     return [{ icon: "\u2699\uFE0F", labelKey: "home.drawerAdminPanel", href: "/admin/dashboard" }];
   }
-  return [{ icon: "\uD83D\uDCCB", labelKey: "home.drawerMyPage", href: "/account" }];
+  return [];
 }
 
 /* ────────────── Hook: scroll direction ────────────── */
@@ -132,6 +130,23 @@ function SideDrawer({
   const displayName =
     user?.profile?.displayName || user?.profile?.username || null;
   const activeCountry = getCountryConfig(effectiveCountry);
+
+  /* ── Public page link for "Ma page Kin-Sell" ── */
+  const [businessSlug, setBusinessSlug] = useState<string | null>(null);
+  useEffect(() => {
+    if (user?.role === "BUSINESS") {
+      businessesApi.me().then((b) => setBusinessSlug(b.slug)).catch(() => {});
+    }
+  }, [user?.role]);
+
+  const myPageLink = (() => {
+    if (!user) return null;
+    if (user.role === "BUSINESS") {
+      return businessSlug ? `/business/${businessSlug}` : null;
+    }
+    if (user.role === "ADMIN" || user.role === "SUPER_ADMIN") return null;
+    return user.profile?.username ? `/user/${user.profile.username}` : null;
+  })();
 
   const handleLogout = async () => {
     await logout();
@@ -250,12 +265,23 @@ function SideDrawer({
             t={t}
           />
           {isLoggedIn && (
-            <DrawerSection
-              title={t("home.drawerUserSection")}
-              links={getUserDrawerLinks(user?.role)}
-              onClose={onClose}
-              t={t}
-            />
+            <div className="hm-drawer-section">
+              <p className="hm-drawer-section-title">{t("home.drawerUserSection")}</p>
+              {myPageLink ? (
+                <Link to={myPageLink} className="hm-drawer-link" onClick={onClose}>
+                  {user?.role === "BUSINESS" ? "\uD83C\uDFE2" : "\uD83D\uDCCB"} {t("home.drawerMyPage")}
+                </Link>
+              ) : (user?.role !== "ADMIN" && user?.role !== "SUPER_ADMIN") ? (
+                <span className="hm-drawer-link hm-drawer-link--disabled">
+                  {"\uD83D\uDCCB"} {t("home.drawerMyPage")}
+                </span>
+              ) : null}
+              {getUserDrawerLinks(user?.role).map((l) => (
+                <Link key={l.href} to={l.href} className="hm-drawer-link" onClick={onClose}>
+                  {l.icon} {t(l.labelKey)}
+                </Link>
+              ))}
+            </div>
           )}
           <DrawerSection
             title={t("home.drawerPublicSection")}

@@ -1094,6 +1094,12 @@
   background: var(--color-glass-bg, rgba(255, 255, 255, 0.06));
 }
 
+.hm-drawer-link--disabled {
+  opacity: 0.4;
+  pointer-events: none;
+  cursor: default;
+}
+
 /* Drawer Footer */
 .hm-drawer-footer {
   padding: 8px 12px 12px;
