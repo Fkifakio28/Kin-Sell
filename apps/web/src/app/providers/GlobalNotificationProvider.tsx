@@ -153,7 +153,7 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
   }, []);
 
   /* ── Shared socket from SocketProvider (NO duplicate connection) ── */
-  const { socketRef } = useSocketContext();
+  const { socketRef, isConnected } = useSocketContext();
 
   useEffect(() => {
     messagingActiveRef.current = messagingActive;
@@ -171,6 +171,8 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
   } | null>(null);
   const incomingCallTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const vibrationIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  /** Track which calls were accepted so we can detect missed calls */
+  const acceptedCallsRef = useRef<Set<string>>(new Set());
 
   const navigateInApp = useCallback((targetUrl: string) => {
     if (!targetUrl) return;
@@ -282,7 +284,7 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
   /* ── Socket event listeners ── */
   useEffect(() => {
     const socket = socketRef.current;
-    if (!socket || !isLoggedIn) return;
+    if (!socket || !isLoggedIn || !isConnected) return;
 
     const handleNewMessage = (data: {
       message: {
@@ -324,6 +326,11 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
 
     const handleIncomingCall = (data: { conversationId: string; callerId: string; callType: "audio" | "video" }) => {
       presentIncomingCall(data);
+      // Push a "pending" incoming call notification (will become missed if not accepted)
+      pushMissed(
+        { kind: "message", title: "📞 Appel entrant", content: data.callType === "video" ? "Appel vidéo" : "Appel audio", icon: "📞", targetUrl: `/messaging?incomingConvId=${data.conversationId}&incomingCallerId=${data.callerId}&incomingCallType=${data.callType}` },
+        `call-incoming-${data.conversationId}-${data.callerId}`,
+      );
     };
 
     /* ── Clear incoming call overlay when caller cancels, call is accepted, or rejected ── */
@@ -338,9 +345,36 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
       });
     };
 
-    const handleCallEnded = (data: { conversationId: string }) => clearIncomingCallFor(data);
-    const handleCallAccepted = (data: { conversationId: string }) => clearIncomingCallFor(data);
-    const handleCallRejected = (data: { conversationId: string }) => clearIncomingCallFor(data);
+    const handleCallEnded = (data: { conversationId: string; callerId?: string }) => {
+      clearIncomingCallFor(data);
+      // If we never accepted this call, convert the incoming notif to "missed"
+      const callKey = `call-incoming-${data.conversationId}-${data.callerId ?? ""}`;
+      if (!acceptedCallsRef.current.has(data.conversationId)) {
+        // Remove the "incoming" entry and replace with "missed"
+        setMissedNotifications((prev) => prev.filter((n) => n.id !== callKey));
+        pushMissed(
+          { kind: "message", title: "📞 Appel manqué", content: "Vous avez manqué un appel", icon: "📞", targetUrl: "/messaging" },
+          `call-missed-${data.conversationId}-${Date.now()}`,
+        );
+      } else {
+        // Call was answered, remove the incoming entry
+        setMissedNotifications((prev) => prev.filter((n) => n.id !== callKey));
+        acceptedCallsRef.current.delete(data.conversationId);
+      }
+    };
+    const handleCallAccepted = (data: { conversationId: string }) => {
+      clearIncomingCallFor(data);
+      acceptedCallsRef.current.add(data.conversationId);
+      // Remove the "incoming" entry since call is active
+      const callKey = `call-incoming-${data.conversationId}`;
+      setMissedNotifications((prev) => prev.filter((n) => n.id.startsWith(callKey)));
+    };
+    const handleCallRejected = (data: { conversationId: string; callerId?: string }) => {
+      clearIncomingCallFor(data);
+      // Rejected by the other party — also counts as non-answered for the callee
+      const callKey = `call-incoming-${data.conversationId}-${data.callerId ?? ""}`;
+      setMissedNotifications((prev) => prev.filter((n) => n.id === callKey));
+    };
 
     const handleOrderCreated = (data: { type: string; orderId: string; buyerUserId: string; sellerUserId: string; itemsCount?: number; fromNegotiation?: boolean; createdAt: string }) => {
       if (data.buyerUserId === user?.id && !data.fromNegotiation) return; // buyer already knows from checkout
@@ -496,7 +530,7 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
       socket.off("negotiation:expired", handleNegotiationExpired);
       socket.off("sokin:post-created", handleSokinPostCreated);
     };
-  }, [isLoggedIn, user?.id, playMessageSound, presentIncomingCall]);
+  }, [isLoggedIn, isConnected, user?.id, playMessageSound, presentIncomingCall, pushMissed]);
 
   /* ── Reconnect catch-up: notify pages to refetch data on socket reconnection ── */
   useEffect(() => {

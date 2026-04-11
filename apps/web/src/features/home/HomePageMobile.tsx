@@ -48,6 +48,8 @@ import "../sokin/sokin.css";
 import { InlineSearchResults } from "../../components/InlineSearchResults";
 import { BundlePromoCard } from "../../components/BundlePromoCard";
 import { type PromotionSummary } from "../../lib/api-client";
+import NotificationCenter from "../../components/NotificationCenter";
+import { useGlobalNotification } from "../../app/providers/GlobalNotificationProvider";
 import "./home-mobile.css";
 
 /* ────────────── Static data ────────────── */
@@ -1267,8 +1269,10 @@ function BottomNav({
   t: (k: string) => string;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [ncOpen, setNcOpen] = useState(false);
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { missedCount } = useGlobalNotification();
   const location = window.location.pathname;
 
   const go = (path: string) => {
@@ -1315,16 +1319,20 @@ function BottomNav({
         </button>
 
         {/* Notifications */}
-        <Link
-          to={isLoggedIn ? getDashboardPath(user?.role) : "/login"}
+        <button
           className="hm-bnav-item"
+          style={{ position: 'relative' }}
+          onClick={() => { if (!isLoggedIn) { void navigate("/login"); } else { setNcOpen(true); } }}
+          aria-label={t("nav.notifications")}
         >
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
             <path d="M13.73 21a2 2 0 0 1-3.46 0" />
           </svg>
+          {missedCount > 0 && <span className="nc-badge">{missedCount}</span>}
           <span className="hm-bnav-label">{t("nav.notifications")}</span>
-        </Link>
+        </button>
+        <NotificationCenter open={ncOpen} onClose={() => setNcOpen(false)} />
 
         {/* Compte */}
         <Link
