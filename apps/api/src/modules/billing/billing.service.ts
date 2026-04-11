@@ -148,6 +148,13 @@ const serializePlan = (
   const planCode = subscription?.planCode ?? fallbackCode;
   const plan = getPlanOrThrow(planCode, scope);
 
+  // USER scope: cumulate FREE base features so upgrades never lose them
+  let mergedFeatures = plan.features;
+  if (scope === "USER" && planCode !== "FREE") {
+    const baseFree = getPlanOrThrow("FREE", "USER");
+    mergedFeatures = [...new Set([...baseFree.features, ...plan.features])];
+  }
+
   return {
     id: subscription?.id ?? null,
     scope,
@@ -159,7 +166,7 @@ const serializePlan = (
     billingCycle: subscription?.billingCycle ?? "MONTHLY",
     startsAt: subscription?.startsAt?.toISOString() ?? null,
     endsAt: subscription?.endsAt?.toISOString() ?? null,
-    features: plan.features,
+    features: mergedFeatures,
     addOns: (subscription?.addons ?? [])
       .filter((addon) => addon.status === "ACTIVE" && (addon.endsAt === null || addon.endsAt > new Date()))
       .map((addon) => ({
