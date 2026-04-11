@@ -1151,6 +1151,8 @@ export const ar: Record<string, string> = {
     "home.adminNoNegotiate": "لا يمكن للمشرفين التفاوض.",
     "home.cannotBuyOwn": "لا يمكنك شراء مقالاتك الخاصة.",
     "home.addedToCart": "تمت الإضافة إلى السلة",
+    "home.addBundleToCart": "أضف الحزمة للسلة",
+    "home.negotiateBundle": "تفاوض على الحزمة",
     "home.errorGeneric": "خطأ",
     "home.tip1": "🛡️ تحقق من الملفات — قبل أي معاملة، تحقق من ملف البائع أو مزوّد الخدمة. اطّلع على التقييمات.",
     "home.tip2": "💬 فضّل المحادثات المتتبّعة — استخدم رسائل Kin-Sell للحفاظ على سجل تبادلاتك.",

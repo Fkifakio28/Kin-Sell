@@ -1152,6 +1152,8 @@ export const fr: Record<string, string> = {
     "home.adminNoNegotiate": "Les administrateurs ne peuvent pas négocier.",
     "home.cannotBuyOwn": "Vous ne pouvez pas acheter vos propres articles.",
     "home.addedToCart": "Ajouté au panier",
+    "home.addBundleToCart": "Ajouter le lot",
+    "home.negotiateBundle": "Négocier le lot",
     "home.errorGeneric": "Erreur",
     "home.tip1": "🛡️ Vérifiez les profils — Avant toute transaction, consultez le profil du vendeur ou prestataire. Regardez les avis disponibles.",
     "home.tip2": "💬 Privilégiez les échanges tracés — Utilisez la messagerie Kin-Sell pour garder une trace de vos échanges. Évitez les canaux externes.",

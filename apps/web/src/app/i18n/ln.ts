@@ -1162,6 +1162,8 @@ export const ln: Record<string, string> = {
     "home.adminNoNegotiate": "Ba administrateurs bakoki ko négocier te.",
     "home.cannotBuyOwn": "Okoki kosomba biloko na yo moko te.",
     "home.addedToCart": "Ebakisami na panier",
+    "home.addBundleToCart": "Bakisa lot na panier",
+    "home.negotiateBundle": "Solola mpo na lot",
     "home.errorGeneric": "Erreur",
     "home.tip1": "🛡️ Talá ba profils — Liboso ya transaction nionso, talá profil ya moteki to mopeseli mosala. Talá ba avis oyo ezali.",
     "home.tip2": "💬 Salelá ba échanges ya kotala — Salelá messagerie ya Kin-Sell po obatela trace ya ba échanges na yo. Boboyá ba canaux ya libanda.",

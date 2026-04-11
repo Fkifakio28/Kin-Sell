@@ -1162,6 +1162,8 @@ export const en: Record<string, string> = {
     "home.adminNoNegotiate": "Administrators cannot negotiate.",
     "home.cannotBuyOwn": "You cannot buy your own items.",
     "home.addedToCart": "Added to cart",
+    "home.addBundleToCart": "Add bundle to cart",
+    "home.negotiateBundle": "Negotiate bundle",
     "home.errorGeneric": "Error",
     "home.tip1": "🛡️ Check profiles — Before any transaction, check the seller's or provider's profile. Look at available reviews.",
     "home.tip2": "💬 Use tracked exchanges — Use Kin-Sell messaging to keep a record of your exchanges. Avoid external channels.",

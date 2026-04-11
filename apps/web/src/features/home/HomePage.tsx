@@ -10,6 +10,7 @@ import { useSocket } from "../../hooks/useSocket";
 import { useRealtimeSync } from "../../hooks/useRealtimeSync";
 import { useMarketPreference } from "../../app/providers/MarketPreferenceProvider";
 import { NegotiatePopup } from "../negotiations/NegotiatePopup";
+import { BundleNegotiatePopup, type BundleListingItem } from "../negotiations/BundleNegotiatePopup";
 import { getUrgencyLabel } from "../../shared/promo/promo-engine";
 import { useLockedCategories, isCategoryLocked } from "../../hooks/useLockedCategories";
 import { AdBanner } from "../../components/AdBanner";
@@ -104,6 +105,9 @@ export function HomePage() {
   const navigate = useNavigate();
   const articleHover = useHoverPopup<ArticleHoverData>();
   const [negotiateListing, setNegotiateListing] = useState<PublicListing | null>(null);
+  const [bundleNegData, setBundleNegData] = useState<{ seller: string; items: BundleListingItem[] } | null>(null);
+  const [bundleCartBusy, setBundleCartBusy] = useState<string | null>(null);
+  const [bundleCartFeedback, setBundleCartFeedback] = useState<{ id: string; msg: string } | null>(null);
   const [cardCartBusy, setCardCartBusy] = useState<string | null>(null);
   const [cardCartFeedback, setCardCartFeedback] = useState<{ id: string; msg: string } | null>(null);
   const [cardQty, setCardQty] = useState<Record<string, number>>({});
@@ -498,6 +502,42 @@ export function HomePage() {
     if (!isLoggedIn) { navigate('/login'); return; }
     if (isAdmin) { setCardCartFeedback({ id: listing.id, msg: `🔒 ${t('home.adminNoNegotiate')}` }); setTimeout(() => setCardCartFeedback(null), 3000); return; }
     setNegotiateListing(listing);
+  };
+
+  /* ── Bundle card actions ── */
+  const handleBundleAddToCart = async (bundle: PromotionSummary, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isLoggedIn) { navigate('/login'); return; }
+    if (isAdmin) { setBundleCartFeedback({ id: bundle.id, msg: `🔒 ${t('home.adminNoTransact')}` }); setTimeout(() => setBundleCartFeedback(null), 3000); return; }
+    if (bundleCartBusy) return;
+    setBundleCartBusy(bundle.id);
+    try {
+      for (const item of bundle.items) {
+        await ordersApi.addCartItem({ listingId: item.listing.id, quantity: item.quantity });
+      }
+      setBundleCartFeedback({ id: bundle.id, msg: `✓ ${bundle.items.length} articles ${t('home.addedToCart')}` });
+    } catch {
+      setBundleCartFeedback({ id: bundle.id, msg: `✗ ${t('home.errorGeneric')}` });
+    } finally {
+      setBundleCartBusy(null);
+      setTimeout(() => setBundleCartFeedback(null), 3000);
+    }
+  };
+
+  const handleBundleNegotiate = (bundle: PromotionSummary, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isLoggedIn) { navigate('/login'); return; }
+    if (isAdmin) { setBundleCartFeedback({ id: bundle.id, msg: `🔒 ${t('home.adminNoNegotiate')}` }); setTimeout(() => setBundleCartFeedback(null), 3000); return; }
+    const items: BundleListingItem[] = bundle.items.map((it) => ({
+      id: it.listing.id,
+      title: it.listing.title,
+      imageUrl: it.listing.imageUrl,
+      type: 'PRODUIT',
+      priceUsdCents: it.promoPriceUsdCents ?? it.originalPriceUsdCents,
+    }));
+    setBundleNegData({ seller: bundle.title || 'Vendeur', items });
   };
 
   const navigateToArticle = (p: PublicListing) => {
@@ -1003,6 +1043,11 @@ export function HomePage() {
                           <s className="ks-price-old">{formatPriceLabelFromUsdCents(b.bundleOriginalUsdCents ?? 0)}</s>
                           <span className="h-bundle-price">{formatPriceLabelFromUsdCents(b.bundlePriceUsdCents ?? 0)}</span>
                         </div>
+                        <div className="h-bundle-actions">
+                          <button type="button" className="h-bundle-cta h-bundle-cta--cart" disabled={bundleCartBusy === b.id} onClick={(e) => void handleBundleAddToCart(b, e)}>🛒 {t('home.addBundleToCart')}</button>
+                          <button type="button" className="h-bundle-cta h-bundle-cta--nego" onClick={(e) => handleBundleNegotiate(b, e)}>🤝 {t('home.negotiateBundle')}</button>
+                        </div>
+                        {bundleCartFeedback?.id === b.id && <span className="h-bundle-feedback">{bundleCartFeedback.msg}</span>}
                       </div>
                     </div>
                   );
@@ -1232,6 +1277,18 @@ export function HomePage() {
           onClose={() => setNegotiateListing(null)}
           onSuccess={() => {
             setNegotiateListing(null);
+            navigate('/cart');
+          }}
+        />
+      ) : null}
+
+      {bundleNegData ? (
+        <BundleNegotiatePopup
+          sellerDisplayName={bundleNegData.seller}
+          listings={bundleNegData.items}
+          onClose={() => setBundleNegData(null)}
+          onSuccess={() => {
+            setBundleNegData(null);
             navigate('/cart');
           }}
         />
