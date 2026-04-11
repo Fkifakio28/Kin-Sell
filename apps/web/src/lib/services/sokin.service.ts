@@ -20,6 +20,7 @@ export type SoKinApiPost = {
   repostOfId: string | null;
   backgroundStyle: string | null;
   status: 'ACTIVE' | 'HIDDEN' | 'ARCHIVED' | 'FLAGGED' | 'DELETED';
+  sponsored: boolean;
   createdAt: string;
   updatedAt: string;
 };

@@ -463,6 +463,7 @@ export function AnnounceCard({
                 <span>{ptMeta.icon}</span>
                 <span>{ptMeta.label}</span>
               </span>
+              {post.sponsored && <span className="sk-card-sponsored">🚀 Sponsorisé</span>}
             </div>
             <span className="sk-card-author-meta">
               <span className="sk-card-author-handle">@{cleanHandle || post.author.id}</span>
