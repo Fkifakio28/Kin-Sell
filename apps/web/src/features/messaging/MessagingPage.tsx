@@ -683,6 +683,7 @@ export function MessagingPage() {
         setMessages(data.messages);
         void messaging.markRead(activeConv.id);
         emit("conversation:read", { conversationId: activeConv.id });
+        setConversations((prev) => prev.map((c) => c.id === activeConv.id ? { ...c, unreadCount: 0 } : c));
       })
       .catch(() => {})
       .finally(() => setLoadingMsgs(false));
@@ -705,7 +706,7 @@ export function MessagingPage() {
         const exists = prev.some((c) => c.id === msg.conversationId);
         if (exists) {
           return prev.map((c) =>
-            c.id === msg.conversationId ? { ...c, messages: [msg], updatedAt: msg.createdAt, unreadCount: c.id === activeConv?.id ? c.unreadCount : (c.unreadCount ?? 0) + 1 } : c
+            c.id === msg.conversationId ? { ...c, messages: [msg], updatedAt: msg.createdAt, unreadCount: c.id === activeConv?.id ? 0 : (c.unreadCount ?? 0) + 1 } : c
           ).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
         }
         // New conversation not in list — fetch it from API
@@ -738,6 +739,9 @@ export function MessagingPage() {
       if (data.lastSeenAt) setLastSeenMap((prev) => new Map(prev).set(data.userId, data.lastSeenAt!));
     };
     const handleConvRead = (data: { conversationId: string; userId: string }) => {
+      if (data.userId === myId) {
+        setConversations((prev) => prev.map((c) => c.id === data.conversationId ? { ...c, unreadCount: 0 } : c));
+      }
       if (data.conversationId === activeConv?.id) {
         setMessages((prev) =>
           prev.map((m) => ({

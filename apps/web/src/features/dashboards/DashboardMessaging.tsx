@@ -235,7 +235,7 @@ export function DashboardMessaging() {
   useEffect(() => {
     if (!activeConv) { setMessages([]); return; }
     setLoadingMsgs(true);
-    messaging.messages(activeConv.id).then((d) => { setMessages(d.messages); void messaging.markRead(activeConv.id); emit("conversation:read", { conversationId: activeConv.id }); }).catch(() => {}).finally(() => setLoadingMsgs(false));
+    messaging.messages(activeConv.id).then((d) => { setMessages(d.messages); void messaging.markRead(activeConv.id); emit("conversation:read", { conversationId: activeConv.id }); setConversations((prev) => prev.map((c) => c.id === activeConv.id ? { ...c, unreadCount: 0 } : c)); }).catch(() => {}).finally(() => setLoadingMsgs(false));
   }, [activeConv?.id, emit]);
 
   /* ── Scroll ── */
@@ -246,7 +246,7 @@ export function DashboardMessaging() {
     const handleNew = (data: { message: ChatMessage }) => {
       const msg = data.message;
       setMessages((p) => p.some((m) => m.id === msg.id) ? p : [...p, msg]);
-      setConversations((p) => p.map((c) => c.id === msg.conversationId ? { ...c, messages: [msg], updatedAt: msg.createdAt, unreadCount: c.id === activeConv?.id ? c.unreadCount : (c.unreadCount ?? 0) + 1 } : c).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()));
+      setConversations((p) => p.map((c) => c.id === msg.conversationId ? { ...c, messages: [msg], updatedAt: msg.createdAt, unreadCount: c.id === activeConv?.id ? 0 : (c.unreadCount ?? 0) + 1 } : c).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()));
       if (msg.conversationId === activeConv?.id && msg.senderId !== myId) { void messaging.markRead(msg.conversationId); emit("conversation:read", { conversationId: msg.conversationId }); }
     };
     const handleEdited = (data: { message: ChatMessage }) => { setMessages((p) => p.map((m) => m.id === data.message.id ? data.message : m)); };
@@ -256,7 +256,7 @@ export function DashboardMessaging() {
     const handlePresenceSnapshot = (data: { userIds: string[] }) => { setOnlineUserIds(new Set(data.userIds)); };
     const handleOnline = (data: { userId: string }) => { setOnlineUserIds((p) => new Set(p).add(data.userId)); };
     const handleOffline = (data: { userId: string }) => { setOnlineUserIds((p) => { const n = new Set(p); n.delete(data.userId); return n; }); };
-    const handleRead = (data: { conversationId: string; userId: string }) => { if (data.conversationId === activeConv?.id) { setMessages((p) => p.map((m) => ({ ...m, readReceipts: m.senderId === myId && !m.readReceipts.some((r) => r.userId === data.userId) ? [...m.readReceipts, { userId: data.userId, readAt: new Date().toISOString() }] : m.readReceipts }))); } };
+    const handleRead = (data: { conversationId: string; userId: string }) => { if (data.userId === myId) { setConversations((p) => p.map((c) => c.id === data.conversationId ? { ...c, unreadCount: 0 } : c)); } if (data.conversationId === activeConv?.id) { setMessages((p) => p.map((m) => ({ ...m, readReceipts: m.senderId === myId && !m.readReceipts.some((r) => r.userId === data.userId) ? [...m.readReceipts, { userId: data.userId, readAt: new Date().toISOString() }] : m.readReceipts }))); } };
 
     on("message:new", handleNew); on("message:edited", handleEdited); on("message:deleted", handleDeleted);
     on("typing:start", handleTypingStart); on("typing:stop", handleTypingStop);
