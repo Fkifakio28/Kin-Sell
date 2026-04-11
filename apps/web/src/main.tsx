@@ -11,22 +11,12 @@ import { LocaleCurrencyProvider } from "./app/providers/LocaleCurrencyProvider";
 import { MarketPreferenceProvider } from "./app/providers/MarketPreferenceProvider";
 import { SocketProvider } from "./app/providers/SocketProvider";
 import ErrorBoundary from "./components/ErrorBoundary";
+import { registerServiceWorker } from "./utils/push-notifications";
 import "./styles/index.css";
 
-// ── Unregister all existing Service Workers & clear caches (transition period) ──
+// ── Register Service Worker for push notifications (web only) ──
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.getRegistrations().then((registrations) => {
-    for (const reg of registrations) {
-      reg.unregister().catch(() => {});
-    }
-  });
-}
-if ("caches" in window) {
-  caches.keys().then((names) => {
-    for (const name of names) {
-      caches.delete(name).catch(() => {});
-    }
-  });
+  registerServiceWorker().catch(() => {});
 }
 
 // ── Native platform setup ──
@@ -83,3 +73,4 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     </ErrorBoundary>
   </React.StrictMode>
 );
+

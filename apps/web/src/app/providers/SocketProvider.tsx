@@ -61,23 +61,6 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     };
   }, [isLoggedIn]);
 
-  /* ── Visibility-based socket pause (économie batterie mobile) ── */
-  useEffect(() => {
-    const handleVisibility = () => {
-      const s = socketRef.current;
-      if (!s) return;
-      if (document.visibilityState === "hidden") {
-        (s as any).__visPauseTimer = setTimeout(() => {
-          if (document.visibilityState === "hidden") s.disconnect();
-        }, 60_000);
-      } else {
-        clearTimeout((s as any).__visPauseTimer);
-        if (s.disconnected) s.connect();
-      }
-    };
-    document.addEventListener("visibilitychange", handleVisibility);
-    return () => document.removeEventListener("visibilitychange", handleVisibility);
-  }, [isLoggedIn]);
 
   /* ── Reconnexion réseau (offline → online) ── */
   useEffect(() => {
@@ -135,3 +118,4 @@ export function useSocketContext() {
   if (!ctx) throw new Error("useSocketContext must be used within SocketProvider");
   return ctx;
 }
+

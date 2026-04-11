@@ -18,7 +18,7 @@ import { API_BASE } from '../../lib/api-core';
 import { useSoKinToast } from '../../components/feedback/SoKinToast';
 import { observePostView, trackSoKinEvent } from '../../lib/services/sokin-tracking.service';
 import { resolveBackgroundCss } from './sokin-backgrounds';
-import type { PostInsight, PostInsightCard } from '../../lib/services/sokin-analytics.service';
+import type { PostInsight, PostInsightCard, BoostPostStats } from '../../lib/services/sokin-analytics.service';
 
 /* ─────────────────────────────────────────────────────── */
 /* TYPES                                                    */
@@ -315,6 +315,7 @@ export type AnnounceCardProps = {
   initialReaction?: SoKinReactionType | null;
   initialSaved?: boolean;
   onScoring?: (postId: string) => void;
+  boostStats?: BoostPostStats | null;
 };
 
 export function AnnounceCard({
@@ -335,6 +336,7 @@ export function AnnounceCard({
   initialReaction,
   initialSaved,
   onScoring,
+  boostStats,
 }: AnnounceCardProps) {
   const navigate = useNavigate();
   const cardRef = useRef<HTMLElement>(null);
@@ -588,6 +590,27 @@ export function AnnounceCard({
           )}
         </div>
       </header>
+
+      {/* ═══ BOOST STATS — mini-compteurs pour l'auteur ═══ */}
+      {post.sponsored && isAuthor && boostStats && (
+        <div className="sk-boost-stats-bar">
+          <div className="sk-boost-stat">
+            <span className="sk-boost-stat-icon">👁</span>
+            <span className="sk-boost-stat-val">{boostStats.views}</span>
+            <span className="sk-boost-stat-lbl">vues</span>
+          </div>
+          <div className="sk-boost-stat">
+            <span className="sk-boost-stat-icon">👤</span>
+            <span className="sk-boost-stat-val">{boostStats.profileClicks}</span>
+            <span className="sk-boost-stat-lbl">profil</span>
+          </div>
+          <div className="sk-boost-stat">
+            <span className="sk-boost-stat-icon">📨</span>
+            <span className="sk-boost-stat-val">{boostStats.contactClicks + boostStats.dmOpens}</span>
+            <span className="sk-boost-stat-lbl">contacts</span>
+          </div>
+        </div>
+      )}
 
       {/* ═══ REPOST ATTRIBUTION — affiche l'auteur original ═══ */}
       {(post as any).repostOf && (

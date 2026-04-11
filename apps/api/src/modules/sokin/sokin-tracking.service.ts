@@ -187,3 +187,67 @@ export async function getAuthorSourceBreakdown(authorId: string) {
     views: g._count.id,
   }));
 }
+
+// ── Boost stats batch ──
+
+export interface BoostPostStats {
+  views: number;
+  profileClicks: number;
+  contactClicks: number;
+  dmOpens: number;
+}
+
+/**
+ * Stats agrégées par post pour un lot de posts sponsorisés.
+ * Retourne uniquement les posts appartenant à l'auteur donné.
+ */
+export async function getBoostStatsForPosts(
+  postIds: string[],
+  authorId: string
+): Promise<Record<string, BoostPostStats>> {
+  if (postIds.length === 0) return {};
+
+  const safeIds = postIds.slice(0, 30);
+
+  // Vérifier l'ownership + récupérer views
+  const ownedPosts = await prisma.soKinPost.findMany({
+    where: { id: { in: safeIds }, authorId, sponsored: true },
+    select: { id: true, views: true },
+  });
+
+  if (ownedPosts.length === 0) return {};
+
+  const ownedIds = ownedPosts.map((p) => p.id);
+  const viewsMap = new Map(ownedPosts.map((p) => [p.id, (p as any).views ?? 0]));
+
+  // Agrégats SoKinEvent
+  const grouped: any[] = await (prisma as any).soKinEvent.groupBy({
+    by: ["postId", "event"],
+    where: {
+      postId: { in: ownedIds },
+      event: { in: ["PROFILE_CLICK", "CONTACT_CLICK", "DM_OPEN"] },
+    },
+    _count: { id: true },
+  });
+
+  const result: Record<string, BoostPostStats> = {};
+
+  for (const id of ownedIds) {
+    result[id] = {
+      views: viewsMap.get(id) ?? 0,
+      profileClicks: 0,
+      contactClicks: 0,
+      dmOpens: 0,
+    };
+  }
+
+  for (const g of grouped) {
+    const entry = result[g.postId];
+    if (!entry) continue;
+    if (g.event === "PROFILE_CLICK") entry.profileClicks = g._count.id;
+    else if (g.event === "CONTACT_CLICK") entry.contactClicks = g._count.id;
+    else if (g.event === "DM_OPEN") entry.dmOpens = g._count.id;
+  }
+
+  return result;
+}

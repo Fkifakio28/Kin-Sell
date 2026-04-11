@@ -17,6 +17,7 @@ export type SoKinApiPost = {
   likes: number;
   comments: number;
   shares: number;
+  views: number;
   repostOfId: string | null;
   backgroundStyle: string | null;
   status: 'ACTIVE' | 'HIDDEN' | 'ARCHIVED' | 'FLAGGED' | 'DELETED';

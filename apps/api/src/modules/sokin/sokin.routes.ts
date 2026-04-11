@@ -39,7 +39,7 @@ import {
 } from "./sokin-social.service.js";
 import { emitToAll } from "../messaging/socket.js";
 import { rateLimit, RateLimits } from "../../shared/middleware/rate-limit.middleware.js";
-import { trackEvents, VALID_EVENTS, getAuthorTrackingStats, type SoKinEventType } from "./sokin-tracking.service.js";
+import { trackEvents, VALID_EVENTS, getAuthorTrackingStats, getBoostStatsForPosts, type SoKinEventType } from "./sokin-tracking.service.js";
 import { scorePost, scoreAndPersist, batchRecalculate, getTopBoostCandidates, getTopSocialPosts, getTopBusinessPosts } from "./sokin-scoring.service.js";
 import { analyzePost, getAuthorTips, getAdminOpportunities, dismissTip, acceptTip, batchAnalyze } from "../ads/sokin-ads-advisor.service.js";
 import { requireSoKinAnalytics, requireSoKinAds, requireSoKinAdmin } from "./sokin-gating.service.js";
@@ -697,6 +697,27 @@ router.post(
     const city = (req.query.city as string)?.slice(0, 100);
     const result = await batchAnalyze(limit, city);
     res.json({ result });
+  })
+);
+
+// ═══════ Boost Stats ═══════
+
+/**
+ * POST /boost-stats
+ * Stats temps réel pour les posts sponsorisés de l'auteur connecté.
+ * Body: { postIds: string[] }
+ */
+router.post(
+  "/boost-stats",
+  requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const postIds = req.body?.postIds;
+    if (!Array.isArray(postIds) || postIds.length === 0) {
+      res.json({ stats: {} });
+      return;
+    }
+    const stats = await getBoostStatsForPosts(postIds.slice(0, 30), req.auth!.userId);
+    res.json({ stats });
   })
 );
 

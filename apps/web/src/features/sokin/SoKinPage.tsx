@@ -45,7 +45,7 @@ import { SeoMeta } from '../../components/SeoMeta';
 import { BoostFlowModal } from '../../components/BoostFlowModal';
 import { buildSoKinFeedItems } from './ad-cadence';
 import { observePostView, trackSoKinEvent, flushTracking } from '../../lib/services/sokin-tracking.service';
-import { sokinTrends, sokinAnalytics, type TrendingTopic, type TrendingHashtag, type SuggestedProfile, type PostInsight, type PostInsightCard, type AuthorTip, type SmartFeedBlocks, type SoKinAccessInfo, type SoKinTier, type ScoredPost } from '../../lib/services/sokin-analytics.service';
+import { sokinTrends, sokinAnalytics, type TrendingTopic, type TrendingHashtag, type SuggestedProfile, type PostInsight, type PostInsightCard, type AuthorTip, type SmartFeedBlocks, type SoKinAccessInfo, type SoKinTier, type ScoredPost, type BoostPostStats } from '../../lib/services/sokin-analytics.service';
 import {
   AnnounceCard,
   MediaCollage,
@@ -469,6 +469,22 @@ function AnnouncesFeed({
 }) {
   const feedItems = useMemo(() => buildSoKinFeedItems(posts, 4), [posts]);
   const [resolvedAdsBySlot, setResolvedAdsBySlot] = useState<Record<string, string | null>>({});
+  const [boostStatsCache, setBoostStatsCache] = useState<Record<string, BoostPostStats>>({});
+
+  // Fetch boost stats pour les posts sponsorisés de l'auteur
+  useEffect(() => {
+    if (!currentUserId) return;
+    const sponsoredIds = posts
+      .filter((p) => p.sponsored && p.authorId === currentUserId)
+      .map((p) => p.id)
+      .filter((id) => !boostStatsCache[id]);
+    if (sponsoredIds.length === 0) return;
+    sokinTrends.boostStats(sponsoredIds).then((res) => {
+      if (res?.stats) {
+        setBoostStatsCache((prev) => ({ ...prev, ...res.stats }));
+      }
+    }).catch(() => {});
+  }, [posts, currentUserId]);
 
   const getPreviousAdId = useCallback((sequence: number) => {
     if (sequence <= 1) return null;
@@ -518,6 +534,7 @@ function AnnouncesFeed({
           initialReaction={socialState?.reactions[post.id] ?? null}
           initialSaved={socialState?.bookmarks.has(post.id) ?? false}
           onScoring={onScoring}
+          boostStats={boostStatsCache[post.id] ?? null}
         />
       );
 

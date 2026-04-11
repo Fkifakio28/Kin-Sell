@@ -197,6 +197,13 @@ export type AuthorTip = {
   createdAt: string;
 };
 
+export type BoostPostStats = {
+  views: number;
+  profileClicks: number;
+  contactClicks: number;
+  dmOpens: number;
+};
+
 // ── Types — Smart Feed Blocks ──
 
 export type SmartHotHashtag = {
@@ -425,5 +432,12 @@ export const sokinTrends = {
   globalTrends: (city?: string) =>
     request<GlobalTrends>('/sokin/trends/analytics/global', {
       params: city ? { city } as Record<string, string> : undefined,
+    }),
+
+  /** Stats boost temps réel pour posts sponsorisés (batch) */
+  boostStats: (postIds: string[]) =>
+    request<{ stats: Record<string, BoostPostStats> }>('/sokin/boost-stats', {
+      method: 'POST',
+      body: { postIds },
     }),
 };

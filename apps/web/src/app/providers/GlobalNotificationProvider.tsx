@@ -3,6 +3,15 @@ import { createPortal } from "react-dom";
 import { useAuth } from "./AuthProvider";
 import { useSocketContext } from "./SocketProvider";
 import { playCallSound, stopCallSound, refreshCallSoundIfNeeded } from "../../utils/call-sound";
+import {
+  getNotificationPermission,
+  isPushSupported,
+  isSubscribedToPush,
+  onServiceWorkerMessage,
+  registerServiceWorker,
+  subscribeToPush,
+} from "../../utils/push-notifications";
+import { SK_PUSH_BANNER_DISMISSED } from "../../shared/constants/storage-keys";
 import "../../styles/global-notifications.css";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:4000";
@@ -117,6 +126,8 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
   const { user, isLoggedIn } = useAuth();
   const [messagingActive, setMessagingActive] = useState(false);
   const messagingActiveRef = useRef(false);
+  const [pushEnabled, setPushEnabled] = useState(false);
+  const [showPushBanner, setShowPushBanner] = useState(false);
 
   /* ── Missed notifications (persisted) ── */
   const MISSED_KEY = "ks-missed-notifs";
@@ -159,6 +170,43 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
     messagingActiveRef.current = messagingActive;
   }, [messagingActive]);
 
+  /* â”€â”€ Push notifications setup â”€â”€ */
+  useEffect(() => {
+    if (!isLoggedIn || !isPushSupported()) {
+      setPushEnabled(false);
+      setShowPushBanner(false);
+      return;
+    }
+
+    let canceled = false;
+    const initPush = async () => {
+      await registerServiceWorker();
+      const permission = getNotificationPermission();
+      if (permission === "granted") {
+        const subscribed = await isSubscribedToPush();
+        if (!subscribed) {
+          await subscribeToPush();
+        }
+        if (!canceled) setPushEnabled(true);
+      } else {
+        if (!canceled) setPushEnabled(false);
+      }
+
+      if (!canceled) {
+        if (permission === "default") {
+          let dismissed = false;
+          try { dismissed = !!localStorage.getItem(SK_PUSH_BANNER_DISMISSED); } catch {}
+          setShowPushBanner(!dismissed);
+        } else {
+          setShowPushBanner(false);
+        }
+      }
+    };
+
+    void initPush();
+    return () => { canceled = true; };
+  }, [isLoggedIn]);
+
   /* ── Message toasts ── */
   const [toasts, setToasts] = useState<MessageToast[]>([]);
 
@@ -184,6 +232,24 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
     if (current === targetUrl) return;
     window.history.pushState({}, "", targetUrl);
     window.dispatchEvent(new PopStateEvent("popstate"));
+  }, []);
+
+  const maybeShowSystemNotification = useCallback(async (toast: MessageToast, data?: PushPayloadData) => {
+    if (!isPushSupported()) return;
+    if (document.visibilityState === "visible") return;
+    if (getNotificationPermission() !== "granted") return;
+    const reg = await registerServiceWorker();
+    if (!reg) return;
+    const payloadData = { ...(data ?? {}), url: toast.targetUrl };
+    try {
+      await reg.showNotification(toast.title, {
+        body: toast.content,
+        icon: "/apple-touch-icon.png",
+        badge: "/favicon-32.png",
+        tag: toast.id,
+        data: payloadData,
+      });
+    } catch {}
   }, []);
 
   const presentIncomingCall = useCallback((data: { conversationId: string; callerId: string; callType: "audio" | "video" }) => {
@@ -226,7 +292,19 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
   }, []);
 
   const requestPushPermission = useCallback(async () => {
-    return false;
+    if (!isPushSupported()) return false;
+    const ok = await subscribeToPush();
+    setPushEnabled(ok);
+    if (ok) {
+      setShowPushBanner(false);
+      try { localStorage.removeItem(SK_PUSH_BANNER_DISMISSED); } catch {}
+    }
+    return ok;
+  }, []);
+
+  const dismissPushBanner = useCallback(() => {
+    setShowPushBanner(false);
+    try { localStorage.setItem(SK_PUSH_BANNER_DISMISSED, new Date().toISOString()); } catch {}
   }, []);
 
   /* ── Notification sound for messages ── */
@@ -281,6 +359,41 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
     setIncomingCall(null);
   }, [incomingCall]);
 
+  /* ── Service Worker push messages (background/outside browser) ── */
+  useEffect(() => {
+    if (!isLoggedIn || !isPushSupported()) return;
+    return onServiceWorkerMessage((msg) => {
+      if (msg?.type === "navigate" && typeof msg.targetUrl === "string") {
+        navigateInApp(msg.targetUrl);
+        return;
+      }
+      if (msg?.type !== "push") return;
+      const payload = (msg.payload ?? {}) as {
+        title?: string;
+        body?: string;
+        tag?: string;
+        data?: PushPayloadData;
+      };
+      const data = (payload.data ?? {}) as PushPayloadData;
+      const kind = resolveNotificationKind(data);
+      const icon = resolveNotificationIcon(kind);
+      const targetUrl = resolveNotificationTarget({ ...data, url: data.url });
+      const toast: MessageToast = {
+        id: `push-${payload.tag ?? Date.now()}`,
+        kind,
+        title: payload.title ?? "Notification",
+        content: payload.body ?? "",
+        icon,
+        targetUrl,
+        timestamp: Date.now(),
+      };
+      pushMissed({ kind: toast.kind, title: toast.title, content: toast.content, icon: toast.icon, targetUrl: toast.targetUrl }, payload.tag ? `push-${payload.tag}` : undefined);
+      if (document.visibilityState === "visible" && !(kind === "message" && messagingActiveRef.current)) {
+        setToasts((p) => [toast, ...p].slice(0, 4));
+        setTimeout(() => setToasts((p) => p.filter((t) => t.id !== toast.id)), 6000);
+      }
+    });
+  }, [isLoggedIn, navigateInApp, pushMissed]);
   /* ── Socket event listeners ── */
   useEffect(() => {
     const socket = socketRef.current;
@@ -322,6 +435,7 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
       setToasts((p) => [toast, ...p].slice(0, 4));
       setTimeout(() => setToasts((p) => p.filter((t) => t.id !== toast.id)), 6000);
       pushMissed({ kind: toast.kind, title: toast.title, content: toast.content, icon: toast.icon, targetUrl: toast.targetUrl });
+      void maybeShowSystemNotification(toast, { type: "message", conversationId: (msg as any).conversationId, url: toast.targetUrl });
     };
 
     const handleIncomingCall = (data: { conversationId: string; callerId: string; callType: "audio" | "video" }) => {
@@ -330,6 +444,18 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
       pushMissed(
         { kind: "message", title: "📞 Appel entrant", content: data.callType === "video" ? "Appel vidéo" : "Appel audio", icon: "📞", targetUrl: `/messaging?incomingConvId=${data.conversationId}&incomingCallerId=${data.callerId}&incomingCallType=${data.callType}` },
         `call-incoming-${data.conversationId}-${data.callerId}`,
+      );
+      void maybeShowSystemNotification(
+        {
+          id: `call-${data.conversationId}-${Date.now()}`,
+          kind: "message",
+          title: "Appel entrant",
+          content: data.callType === "video" ? "Appel video" : "Appel audio",
+          icon: "📞",
+          targetUrl: `/messaging?incomingConvId=${data.conversationId}&incomingCallerId=${data.callerId}&incomingCallType=${data.callType}`,
+          timestamp: Date.now(),
+        },
+        { type: "call", conversationId: data.conversationId, callerId: data.callerId, callType: data.callType },
       );
     };
 
@@ -393,6 +519,7 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
       setToasts((p) => [toast, ...p].slice(0, 4));
       setTimeout(() => setToasts((p) => p.filter((t) => t.id !== toast.id)), 6000);
       pushMissed({ kind: toast.kind, title: toast.title, content: toast.content, icon: toast.icon, targetUrl: toast.targetUrl });
+      void maybeShowSystemNotification(toast, { type: "order", orderId: data.orderId, url: toast.targetUrl });
       playMessageSound();
     };
 
@@ -412,6 +539,7 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
       setToasts((p) => [toast, ...p].slice(0, 4));
       setTimeout(() => setToasts((p) => p.filter((t) => t.id !== toast.id)), 6000);
       pushMissed({ kind: toast.kind, title: toast.title, content: toast.content, icon: toast.icon, targetUrl: toast.targetUrl });
+      void maybeShowSystemNotification(toast, { type: "order", orderId: data.orderId, url: toast.targetUrl });
       playMessageSound();
     };
 
@@ -429,6 +557,7 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
       setToasts((p) => [toast, ...p].slice(0, 4));
       setTimeout(() => setToasts((p) => p.filter((t) => t.id !== toast.id)), 6000);
       pushMissed({ kind: toast.kind, title: toast.title, content: toast.content, icon: toast.icon, targetUrl: toast.targetUrl });
+      void maybeShowSystemNotification(toast, { type: "order", orderId: data.orderId, url: toast.targetUrl });
       playMessageSound();
     };
 
@@ -471,6 +600,7 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
       setToasts((p) => [toast, ...p].slice(0, 4));
       setTimeout(() => setToasts((p) => p.filter((t) => t.id !== toast.id)), 6000);
       pushMissed({ kind: toast.kind, title: toast.title, content: toast.content, icon: toast.icon, targetUrl: toast.targetUrl });
+      void maybeShowSystemNotification(toast, { type: "negotiation", negotiationId: data.negotiationId, url: toast.targetUrl });
       playMessageSound();
     };
 
@@ -487,6 +617,7 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
       setToasts((p) => [toast, ...p].slice(0, 4));
       setTimeout(() => setToasts((p) => p.filter((t) => t.id !== toast.id)), 6000);
       pushMissed({ kind: toast.kind, title: toast.title, content: toast.content, icon: toast.icon, targetUrl: toast.targetUrl });
+      void maybeShowSystemNotification(toast, { type: "negotiation", negotiationId: data.negotiationId, url: toast.targetUrl });
     };
 
     const handleSokinPostCreated = (data: { postId: string; authorId: string; sourceUserId: string }) => {
@@ -503,6 +634,7 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
       setToasts((p) => [toast, ...p].slice(0, 4));
       setTimeout(() => setToasts((p) => p.filter((t) => t.id !== toast.id)), 6000);
       pushMissed({ kind: toast.kind, title: toast.title, content: toast.content, icon: toast.icon, targetUrl: toast.targetUrl });
+      void maybeShowSystemNotification(toast, { type: "sokin", postId: data.postId, url: toast.targetUrl });
     };
 
     socket.on("message:new", handleNewMessage);
@@ -530,7 +662,7 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
       socket.off("negotiation:expired", handleNegotiationExpired);
       socket.off("sokin:post-created", handleSokinPostCreated);
     };
-  }, [isLoggedIn, isConnected, user?.id, playMessageSound, presentIncomingCall, pushMissed]);
+  }, [isLoggedIn, isConnected, user?.id, playMessageSound, presentIncomingCall, pushMissed, maybeShowSystemNotification]);
 
   /* ── Reconnect catch-up: notify pages to refetch data on socket reconnection ── */
   useEffect(() => {
@@ -555,15 +687,34 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
 
   /* ── Context value ── */
   const ctxValue = useMemo(
-    () => ({ messagingActive, setMessagingActive, pushEnabled: false, requestPushPermission, missedNotifications, missedCount, markSeen, markAllSeen }),
-    [messagingActive, requestPushPermission, missedNotifications, missedCount, markSeen, markAllSeen],
+    () => ({ messagingActive, setMessagingActive, pushEnabled, requestPushPermission, missedNotifications, missedCount, markSeen, markAllSeen }),
+    [messagingActive, pushEnabled, requestPushPermission, missedNotifications, missedCount, markSeen, markAllSeen],
   );
 
   return (
     <GlobalNotifContext.Provider value={ctxValue}>
       {children}
+      {showPushBanner &&
+        createPortal(
+          <div className="gn-push-banner" role="dialog" aria-live="polite">
+            <div className="gn-push-banner-icon">🔔</div>
+            <div className="gn-push-banner-text">
+              <strong>Activez les notifications</strong>
+              <p>Recevez les messages, commandes et marchandages même quand l&apos;app est en arrière-plan.</p>
+            </div>
+            <div className="gn-push-banner-actions">
+              <button className="gn-push-banner-btn gn-push-banner-btn--accept" onClick={() => void requestPushPermission()}>
+                Activer
+              </button>
+              <button className="gn-push-banner-btn gn-push-banner-btn--dismiss" onClick={dismissPushBanner}>
+                Plus tard
+              </button>
+            </div>
+          </div>,
+          document.body,
+        )}
 
-      {/* ── Message toasts (portal) ── */}
+{/* ── Message toasts (portal) ── */}
       {toasts.length > 0 &&
         createPortal(
           <div className="gn-toast-container">
@@ -643,3 +794,6 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
     </GlobalNotifContext.Provider>
   );
 }
+
+
+
