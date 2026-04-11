@@ -629,6 +629,66 @@
   flex-wrap: wrap;
 }
 
+/* ── Validation mode switch (Manuel / Scanner QR) ── */
+.cart-validation-mode-switch {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.cart-validation-mode-btn {
+  flex: 1;
+  padding: 8px 10px;
+  border: 1px solid rgba(185, 166, 255, 0.25);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--color-text-muted, rgba(255, 255, 255, 0.6));
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.cart-validation-mode-btn--active {
+  background: rgba(111, 88, 255, 0.18);
+  border-color: rgba(111, 88, 255, 0.5);
+  color: var(--color-text, #fff);
+  font-weight: 600;
+}
+
+.cart-validation-scan-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.cart-validation-scanner {
+  width: 100%;
+  max-width: 280px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 2px solid rgba(111, 88, 255, 0.3);
+}
+
+.cart-validation-scan-msg {
+  font-size: 0.82rem;
+  text-align: center;
+  margin: 0;
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+
+.cart-validation-scan-msg--ok {
+  color: #34d399;
+  background: rgba(52, 211, 153, 0.08);
+}
+
+.cart-validation-scan-msg--err {
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.08);
+}
+
 @keyframes cart-fade-in {
   from { opacity: 0; }
   to { opacity: 1; }

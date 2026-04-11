@@ -82,6 +82,60 @@ export function CartPage() {
   const [buyerConfirmBusy, setBuyerConfirmBusy] = useState(false);
   const [buyerConfirmMode, setBuyerConfirmMode] = useState<"manual" | "scan">("manual");
   const [buyerConfirmScanError, setBuyerConfirmScanError] = useState<string | null>(null);
+  const [buyerConfirmScanMessage, setBuyerConfirmScanMessage] = useState<string | null>(null);
+
+  /* ── QR scanner for buyer delivery confirmation ── */
+  useEffect(() => {
+    if (!buyerConfirmOrderId || buyerConfirmMode !== 'scan') return;
+
+    let scanner: any = null;
+    let cancelled = false;
+
+    setBuyerConfirmScanError(null);
+    setBuyerConfirmScanMessage(null);
+
+    const startScanner = async () => {
+      try {
+        const { Html5Qrcode } = await import('html5-qrcode');
+        if (cancelled) return;
+
+        scanner = new Html5Qrcode('ks-cart-validation-reader', { verbose: false });
+        await scanner.start(
+          { facingMode: 'environment' },
+          { fps: 10, qrbox: { width: 220, height: 220 }, aspectRatio: 1 },
+          (decodedText: string) => {
+            const scannedCode = extractValidationCodeFromQrPayload(decodedText, buyerConfirmOrderId);
+            if (!scannedCode) {
+              setBuyerConfirmScanError(t('cart.invalidCode'));
+              return;
+            }
+            setBuyerConfirmCode(scannedCode);
+            setBuyerConfirmMode('manual');
+            setBuyerConfirmScanMessage('Code détecté !');
+            setBuyerConfirmScanError(null);
+          },
+          () => {}
+        );
+
+        if (!cancelled) {
+          setBuyerConfirmScanMessage('Scanner prêt — présentez le QR code');
+        }
+      } catch {
+        if (!cancelled) {
+          setBuyerConfirmScanError('Impossible d\'accéder à la caméra');
+        }
+      }
+    };
+
+    void startScanner();
+
+    return () => {
+      cancelled = true;
+      if (scanner) {
+        void scanner.stop().catch(() => {}).finally(() => { scanner?.clear(); });
+      }
+    };
+  }, [buyerConfirmMode, buyerConfirmOrderId, t]);
 
   const reloadCart = useCallback(async () => {
     try {
@@ -544,6 +598,7 @@ export function CartPage() {
     setBuyerConfirmCode("");
     setBuyerConfirmMode("manual");
     setBuyerConfirmScanError(null);
+    setBuyerConfirmScanMessage(null);
   }, []);
 
   // Check items breakdown: COMMANDE vs MARCHANDAGE
@@ -1449,6 +1504,34 @@ export function CartPage() {
               {t('cart.orderRef')}: <strong>#{buyerConfirmOrderId.slice(0, 8).toUpperCase()}</strong>
             </p>
 
+            {/* Mode switch: Manuel / Scanner */}
+            <div className="cart-validation-mode-switch">
+              <button
+                type="button"
+                className={`cart-validation-mode-btn${buyerConfirmMode === 'manual' ? ' cart-validation-mode-btn--active' : ''}`}
+                onClick={() => { setBuyerConfirmMode('manual'); setBuyerConfirmScanError(null); }}
+              >
+                ⌨️ Code manuel
+              </button>
+              <button
+                type="button"
+                className={`cart-validation-mode-btn${buyerConfirmMode === 'scan' ? ' cart-validation-mode-btn--active' : ''}`}
+                onClick={() => { setBuyerConfirmMode('scan'); setBuyerConfirmScanMessage(null); setBuyerConfirmScanError(null); }}
+              >
+                📷 Scanner QR
+              </button>
+            </div>
+
+            {/* QR Scanner panel */}
+            {buyerConfirmMode === 'scan' && (
+              <div className="cart-validation-scan-panel">
+                <p style={{ opacity: 0.7, fontSize: '.85rem', textAlign: 'center' }}>Présentez le QR code du vendeur devant la caméra</p>
+                <div id="ks-cart-validation-reader" className="cart-validation-scanner" />
+                {buyerConfirmScanMessage && <p className="cart-validation-scan-msg cart-validation-scan-msg--ok">{buyerConfirmScanMessage}</p>}
+                {buyerConfirmScanError && <p className="cart-validation-scan-msg cart-validation-scan-msg--err">{buyerConfirmScanError}</p>}
+              </div>
+            )}
+
             <label className="cart-checkout-modal-field">
               <span>{t('cart.validationCodeLabel')}</span>
               <input
@@ -1462,6 +1545,9 @@ export function CartPage() {
               />
             </label>
 
+            {buyerConfirmScanMessage && buyerConfirmMode === 'manual' && (
+              <div className="cart-feedback cart-feedback--ok">{buyerConfirmScanMessage}</div>
+            )}
             {buyerConfirmScanError && (
               <div className="cart-feedback cart-feedback--error">{buyerConfirmScanError}</div>
             )}
