@@ -1185,14 +1185,16 @@ function SoKinFeed({
           feedSource="home"
         />,
       );
-      if (idx === 9) {
-        const block = renderReinjectedListings();
-        if (block) elements.push(<div key="reinjected-listings">{block}</div>);
-      }
-      if ((idx + 1) % 4 === 0) {
+      // Règle: 4 posts → 1 pub
+      if (idx === 3) {
         elements.push(
           <AdBanner key={"ad-" + idx} page="home" variant="slim" hideWhenEmpty />,
         );
+      }
+      // Règle: 10 posts après la pub (post 14 au total) → annonces récentes
+      if (idx === 13) {
+        const block = renderReinjectedListings();
+        if (block) elements.push(<div key="reinjected-listings">{block}</div>);
       }
     });
     return elements;
