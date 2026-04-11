@@ -1130,7 +1130,7 @@ export const en: Record<string, string> = {
     "home.homeAria": "Kin-Sell Home",
     "home.notifications": "Notifications",
     "home.metaTitle": "Kin-Sell — African marketplace",
-    "home.metaDescription": "Buy, sell and discover the best offers in Kinshasa. Local shops, services, and So-Kin announcements.",
+    "home.metaDescription": "Buy, sell and discover offers across Africa. Local shops, services, and So-Kin announcements.",
     "home.heroGuestTitle": "Kin-Sell — African marketplace",
     "home.heroWelcome": "Welcome, {name}",
     "home.heroSubtitle": "Buy, sell and discover the best deals",

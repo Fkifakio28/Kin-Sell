@@ -446,8 +446,8 @@ export function ExplorerPageDesktop() {
     <Header />
     <div className="explorer-shell">
       <SeoMeta
-        title="Explorer — Boutiques et services à Kinshasa"
-        description="Parcourez les boutiques, produits et services disponibles à Kinshasa et partout en RDC. Recherchez par catégorie, prix et localité."
+        title="Explorer — Boutiques et services en Afrique"
+        description="Parcourez les boutiques, produits et services disponibles en Afrique. Recherchez par catégorie, prix et localité."
         canonical="https://kin-sell.com/explorer"
       />
       {/* ═══════════════════════════════════════════════

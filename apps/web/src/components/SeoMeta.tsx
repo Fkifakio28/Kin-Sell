@@ -98,7 +98,7 @@ export function SeoMeta({ title, description, canonical, ogImage, noIndex }: Seo
 
     return () => {
       // Restaurer le titre par défaut au démontage
-      document.title = "Kin-Sell — La marketplace de Kinshasa";
+      document.title = "Kin-Sell — Le marché africain";
     };
   }, [title, description, canonical, ogImage, noIndex]);
 

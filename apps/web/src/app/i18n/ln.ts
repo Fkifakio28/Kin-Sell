@@ -1130,7 +1130,7 @@ export const ln: Record<string, string> = {
     "home.homeAria": "Ndako Kin-Sell",
     "home.notifications": "Ba notifications",
     "home.metaTitle": "Kin-Sell — Zando ya Afrika",
-    "home.metaDescription": "Sombá, téká mpe moná ba offres ya kitoko na Kinshasa. Ba boutiques, ba services, mpe ba annonces So-Kin.",
+    "home.metaDescription": "Sombá, téká mpe moná ba offres na Afrika mobimba. Ba boutiques, ba services, mpe ba annonces So-Kin.",
     "home.heroGuestTitle": "Kin-Sell — Zando ya Afrika",
     "home.heroWelcome": "Boyei malamu, {name}",
     "home.heroSubtitle": "Sombá, téká mpe moná ba affaires ya kitoko",

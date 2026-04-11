@@ -11,7 +11,7 @@
         android:usesCleartextTraffic="false"
         android:networkSecurityConfig="@xml/network_security_config">
 
-        <!-- Notification channel metadata -->
+        <!-- Firebase notification defaults -->
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_icon"
             android:resource="@drawable/ic_notification" />

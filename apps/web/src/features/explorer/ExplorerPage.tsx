@@ -429,7 +429,7 @@ function ExplorerPageMobile() {
   /* ── Render ── */
   return (
     <div className="ex-root">
-      <SeoMeta title="Explorer — Boutiques et services à Kinshasa" description="Parcourez les boutiques, produits et services disponibles à Kinshasa et partout en RDC." canonical="https://kin-sell.com/explorer" />
+      <SeoMeta title="Explorer — Boutiques et services en Afrique" description="Parcourez les boutiques, produits et services disponibles en Afrique." canonical="https://kin-sell.com/explorer" />
 
       <ExDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} t={t} isLoggedIn={isLoggedIn} user={user} logout={logout} />
       <ExSearchOverlay open={searchOpen} onClose={() => setSearchOpen(false)} value={searchQuery} onChange={handleSearch} />
