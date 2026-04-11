@@ -396,6 +396,8 @@ export function AnnounceCard({
   const postHashtags = (post as any).hashtags as string[] | undefined;
   const postLocation = (post as any).location as string | undefined;
   const liked = myReaction !== null;
+  const [likeBurst, setLikeBurst] = useState(false);
+  const [saveBurst, setSaveBurst] = useState(false);
 
   const handleLike = useCallback(async () => {
     if (!isLoggedIn || reacting) return;
@@ -403,25 +405,30 @@ export function AnnounceCard({
     const wasLiked = myReaction !== null;
     setMyReaction(wasLiked ? null : 'LIKE');
     setLikeCount((c) => wasLiked ? Math.max(0, c - 1) : c + 1);
+    if (!wasLiked) { setLikeBurst(true); setTimeout(() => setLikeBurst(false), 600); }
     try {
       await sokinApi.react(post.id, 'LIKE');
+      if (wasLiked) cardToast.info('Like retiré');
     } catch {
       setMyReaction(wasLiked ? 'LIKE' : null);
       setLikeCount((c) => wasLiked ? c + 1 : Math.max(0, c - 1));
+      cardToast.error('Erreur réseau — réessayez');
     } finally {
       setReacting(false);
     }
-  }, [isLoggedIn, reacting, myReaction, post.id]);
+  }, [isLoggedIn, reacting, myReaction, post.id, cardToast]);
 
   const handleSave = useCallback(async () => {
     if (!isLoggedIn) return;
     const wasSaved = saved;
     setSaved(!wasSaved);
+    if (!wasSaved) { setSaveBurst(true); setTimeout(() => setSaveBurst(false), 500); }
     try {
       await sokinApi.bookmark(post.id);
-      cardToast.success(wasSaved ? 'Retiré des favoris' : 'Ajouté aux favoris');
+      cardToast.success(wasSaved ? 'Retiré des favoris' : 'Ajouté aux favoris ✨');
     } catch {
       setSaved(wasSaved);
+      cardToast.error('Erreur réseau — réessayez');
     }
   }, [isLoggedIn, saved, post.id, cardToast]);
 
@@ -874,12 +881,13 @@ export function AnnounceCard({
       <div className="sk-card-social-bar">
         <button
           type="button"
-          className={`sk-social-btn sk-social-btn--like${liked ? ' sk-social-btn--active' : ''}`}
+          className={`sk-social-btn sk-social-btn--like${liked ? ' sk-social-btn--active' : ''}${likeBurst ? ' sk-social-btn--burst' : ''}`}
           onClick={handleLike}
           aria-label={liked ? 'Ne plus aimer' : 'Aimer'}
           aria-pressed={liked}
         >
           <span className="sk-social-icon"><IconHeart filled={liked} /></span>
+          {likeBurst && <span className="sk-burst-particles" aria-hidden="true"><span /><span /><span /><span /><span /><span /></span>}
           <span>J\u2019aime</span>
         </button>
 
@@ -906,7 +914,7 @@ export function AnnounceCard({
 
         <button
           type="button"
-          className={`sk-social-btn sk-social-btn--save${saved ? ' sk-social-btn--active' : ''}`}
+          className={`sk-social-btn sk-social-btn--save${saved ? ' sk-social-btn--active' : ''}${saveBurst ? ' sk-social-btn--burst' : ''}`}
           onClick={handleSave}
           aria-label={saved ? 'Retirer des favoris' : 'Sauvegarder'}
           aria-pressed={saved}
