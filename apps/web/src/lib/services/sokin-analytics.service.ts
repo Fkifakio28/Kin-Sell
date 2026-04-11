@@ -401,6 +401,12 @@ export const sokinTrends = {
       params: { limit } as unknown as Record<string, string>,
     }),
 
+  /** Accepter un tip IA */
+  acceptTip: (tipId: string) =>
+    request<{ ok: boolean }>(`/sokin/advisor/tips/${encodeURIComponent(tipId)}/accept`, {
+      method: "POST",
+    }),
+
   /** Smart Feed Blocks — vue combinée tendances + formats + idées */
   smartFeed: (params?: { city?: string }) =>
     request<SmartFeedBlocks>("/sokin/trends/smart/feed", {

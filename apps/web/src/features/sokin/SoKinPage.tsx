@@ -439,6 +439,7 @@ function AnnouncesFeed({
   onToggle,
   socialState,
   onScoring,
+  onBoostTip,
 }: {
   posts: SoKinApiFeedPost[];
   hasMore: boolean;
@@ -463,6 +464,7 @@ function AnnouncesFeed({
   onToggle?: (postId: string) => void;
   socialState?: { reactions: Record<string, SoKinReactionType>; bookmarks: Set<string> };
   onScoring?: (postId: string) => void;
+  onBoostTip?: (tip: AuthorTip) => void;
 }) {
   const feedItems = useMemo(() => buildSoKinFeedItems(posts, 4), [posts]);
   const [resolvedAdsBySlot, setResolvedAdsBySlot] = useState<Record<string, string | null>>({});
@@ -558,11 +560,16 @@ function AnnouncesFeed({
     const pos = tipSlots[i] + injected; // adjust for already-inserted
     if (pos < items.length) {
       const tip = visibleTips[injected];
+      const isBoostTip = tip.actionType === 'BOOST_POST' || tip.triggerType === 'BOOST_SUGGESTION';
+      const boostScore = (tip.actionData?.boostScore as number) ?? null;
       items.splice(pos, 0, (
-        <div key={`tip-${tip.id}`} className="sk-tip-card">
+        <div key={`tip-${tip.id}`} className={`sk-tip-card${isBoostTip ? ' sk-tip-card--boost' : ''}`}>
           <div className="sk-tip-card-header">
-            <span className="sk-tip-card-icon">🤖</span>
-            <span className="sk-tip-card-label">Conseil IA</span>
+            <span className="sk-tip-card-icon">{isBoostTip ? '🚀' : '🤖'}</span>
+            <span className="sk-tip-card-label">{isBoostTip ? 'Opportunité Boost' : 'Conseil IA'}</span>
+            {isBoostTip && boostScore !== null && (
+              <span className="sk-tip-card-score">Score {boostScore}/100</span>
+            )}
             {onDismissTip && (
               <button
                 type="button"
@@ -576,9 +583,17 @@ function AnnouncesFeed({
           </div>
           <h3 className="sk-tip-card-title">{tip.title}</h3>
           <p className="sk-tip-card-msg">{tip.message}</p>
-          {tip.actionType && (
-            <span className="sk-tip-card-action">{tip.actionType === 'open_boost_dialog' ? '🚀 Booster' : '💡 Appliquer'}</span>
-          )}
+          {isBoostTip ? (
+            <button
+              type="button"
+              className="sk-tip-card-cta"
+              onClick={() => onBoostTip?.(tip)}
+            >
+              🚀 Booster maintenant
+            </button>
+          ) : tip.actionType ? (
+            <span className="sk-tip-card-action">💡 Appliquer</span>
+          ) : null}
         </div>
       ));
       injected++;
@@ -2343,6 +2358,17 @@ function SoKinPageInner() {
     setDismissedTipIds((prev) => new Set(prev).add(tipId));
   }, []);
 
+  // ── Boost tip CTA — navigate to post then mark as accepted ──
+  const handleBoostTip = useCallback((tip: AuthorTip) => {
+    const postId = (tip.actionData?.postId as string) ?? '';
+    if (postId) {
+      navigate(`/sokin/post/${postId}?boost=1`);
+    }
+    setDismissedTipIds((prev) => new Set(prev).add(tip.id));
+    // Accept tip in backend (fire & forget)
+    sokinTrends.acceptTip(tip.id).catch(() => {});
+  }, [navigate]);
+
   // ── Repost ──
   const [repostTarget, setRepostTarget] = useState<SoKinApiFeedPost | null>(null);
   const [repostComment, setRepostComment] = useState('');
@@ -3132,6 +3158,7 @@ function SoKinPageInner() {
               advisorTips={advisorTips}
               dismissedTipIds={dismissedTipIds}
               onDismissTip={handleDismissTip}
+              onBoostTip={handleBoostTip}
               onRepost={handleOpenRepost}
               onToggle={handleToggleFromFeed}
               socialState={socialStateMap}
@@ -3477,6 +3504,7 @@ function SoKinPageInner() {
                 advisorTips={advisorTips}
                 dismissedTipIds={dismissedTipIds}
                 onDismissTip={handleDismissTip}
+                onBoostTip={handleBoostTip}
                 onRepost={handleOpenRepost}
                 onToggle={handleToggleFromFeed}
                 socialState={socialStateMap}
