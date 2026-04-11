@@ -1169,6 +1169,43 @@
 }
 .sk-card-tag:hover { text-decoration: underline; }
 
+/* ── Inline mentions & hashtags dans le texte ── */
+.sk-inline-mention,
+.sk-inline-hashtag {
+  all: unset;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: inherit;
+}
+.sk-inline-mention {
+  color: var(--sk-accent-social, #23c4ff);
+}
+.sk-inline-mention:hover { text-decoration: underline; }
+.sk-inline-hashtag {
+  color: var(--sk-brand, #7c5cff);
+}
+.sk-inline-hashtag:hover { text-decoration: underline; }
+
+/* ── Tags/hashtags badges cliquables ── */
+.sk-card-tags button.sk-card-hashtag,
+.sk-card-tags button.sk-card-tag {
+  all: unset;
+  cursor: pointer;
+}
+.sk-card-tags button.sk-card-hashtag {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--sk-brand, #7c5cff);
+}
+.sk-card-tags button.sk-card-hashtag:hover { text-decoration: underline; }
+.sk-card-tags button.sk-card-tag {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--sk-accent-social, #23c4ff);
+  opacity: 0.75;
+}
+.sk-card-tags button.sk-card-tag:hover { text-decoration: underline; opacity: 1; }
+
 /* ── Compteurs sociaux ── */
 .sk-card-counters {
   display: flex;

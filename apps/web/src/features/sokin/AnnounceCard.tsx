@@ -98,6 +98,45 @@ export function categorizeMedia(urls: string[]): MediaItem[] {
   return items;
 }
 
+/**
+ * Parse le texte d'un post et transforme les @mentions et #hashtags en éléments cliquables.
+ */
+function renderPostText(
+  text: string,
+  navigate: (path: string) => void,
+): React.ReactNode[] {
+  const parts = text.split(/(@[\w.]+|#[\w\u00C0-\u024F]+)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith('@') && part.length > 1) {
+      const handle = part.slice(1);
+      return (
+        <button
+          key={i}
+          type="button"
+          className="sk-inline-mention"
+          onClick={(e) => { e.stopPropagation(); navigate(`/user/${handle}`); }}
+        >
+          {part}
+        </button>
+      );
+    }
+    if (part.startsWith('#') && part.length > 1) {
+      const tag = part.slice(1);
+      return (
+        <button
+          key={i}
+          type="button"
+          className="sk-inline-hashtag"
+          onClick={(e) => { e.stopPropagation(); navigate(`/sokin?tag=${encodeURIComponent(tag)}`); }}
+        >
+          {part}
+        </button>
+      );
+    }
+    return <span key={i}>{part}</span>;
+  });
+}
+
 /* ─────────────────────────────────────────────────────── */
 /* ICÔNES SVG INLINE                                        */
 /* ─────────────────────────────────────────────────────── */
@@ -521,10 +560,10 @@ export function AnnounceCard({
 
       {post.text ? (
         mediaItems.length > 0
-          ? <p className="sk-card-text">{post.text}</p>
+          ? <p className="sk-card-text">{renderPostText(post.text, navigate)}</p>
           : (
             <div className="sk-card-text-only" style={{ background: resolveBackgroundCss((post as any).backgroundStyle) }}>
-              <p className="sk-card-text sk-card-text--centered">{post.text}</p>
+              <p className="sk-card-text sk-card-text--centered">{renderPostText(post.text, navigate)}</p>
             </div>
           )
       ) : null}
@@ -532,10 +571,14 @@ export function AnnounceCard({
       {((postHashtags && postHashtags.length > 0) || (postTags && postTags.length > 0)) && (
         <div className="sk-card-tags">
           {postHashtags?.map((h) => (
-            <span key={h} className="sk-card-hashtag">#{h}</span>
+            <button key={h} type="button" className="sk-card-hashtag" onClick={() => navigate(`/sokin?tag=${encodeURIComponent(h)}`)}>
+              #{h}
+            </button>
           ))}
           {postTags?.map((tag) => (
-            <span key={tag} className="sk-card-tag">@{tag}</span>
+            <button key={tag} type="button" className="sk-card-tag" onClick={() => navigate(`/user/${tag}`)}>
+              @{tag}
+            </button>
           ))}
         </div>
       )}
@@ -567,7 +610,7 @@ export function AnnounceCard({
                 <span className="sk-repost-embed-time"> · {relTime(orig.createdAt, t)}</span>
               </div>
             </div>
-            {orig.text && <p className="sk-repost-embed-text">{orig.text.length > 200 ? orig.text.slice(0, 200) + '…' : orig.text}</p>}
+            {orig.text && <p className="sk-repost-embed-text">{renderPostText(orig.text.length > 200 ? orig.text.slice(0, 200) + '…' : orig.text, navigate)}</p>}
             {origMediaItems.length > 0 && (
               <div className="sk-repost-embed-media">
                 {origMediaItems[0].type === 'image' ? (
