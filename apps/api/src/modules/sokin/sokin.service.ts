@@ -17,13 +17,14 @@ const normalizeMediaUrls = (mediaUrls: string[]): string[] =>
     .map((value) => value.trim())
     .filter((value) => value.length > 0);
 
-/** Types visuels qui exigent au moins 1 média */
-const MEDIA_REQUIRED_TYPES = ["SHOWCASE", "SELLING", "PROMO"];
+/**
+ * Types visuels qui exigent au moins 1 média
+ * UPDATE (11/04/2026): Texte seul autorisé pour tous types avec backgrounds
+ */
+const MEDIA_REQUIRED_TYPES = [];
 
 const validatePostMediaUrls = (mediaUrls: string[], postType: string) => {
-  if (MEDIA_REQUIRED_TYPES.includes(postType) && mediaUrls.length < 1) {
-    throw new HttpError(400, "Ce type de publication nécessite au moins 1 média");
-  }
+  // UPDATE (11/04/2026): Texte seul autorisé (pas de check MEDIA_REQUIRED_TYPES)
   if (mediaUrls.length > 5) {
     throw new HttpError(400, "Maximum 5 médias par publication");
   }
@@ -34,9 +35,10 @@ const validatePostMediaUrls = (mediaUrls: string[], postType: string) => {
 };
 
 /** Vérifier qu'une publication contient au moins texte OU média */
-const validatePostContent = (text: string, mediaUrls: string[]) => {
-  if (text.trim().length === 0 && mediaUrls.length === 0) {
-    throw new HttpError(400, "Une publication doit contenir du texte ou au moins 1 média");
+const validatePostContent = (text: string, mediaUrls: string[], backgroundStyle?: string) => {
+  // UPDATE (11/04/2026): Texte + background seul accepté (pas besoin de média)
+  if (text.trim().length === 0 && mediaUrls.length === 0 && !backgroundStyle) {
+    throw new HttpError(400, "Une publication doit contenir du texte, un média ou un fond personnalisé");
   }
 };
 
@@ -487,9 +489,7 @@ export const updateSoKinPost = async (
 
   // Valider média requis pour le type final
   const finalType = (data.postType || post.postType) as string;
-  if (MEDIA_REQUIRED_TYPES.includes(finalType) && finalMedia.length < 1) {
-    throw new HttpError(400, "Ce type de publication nécessite au moins 1 média");
-  }
+  // UPDATE (11/04/2026): Validation globale suffisante, pas de check par type
 
   const updated = await prisma.soKinPost.update({
     where: { id: postId },

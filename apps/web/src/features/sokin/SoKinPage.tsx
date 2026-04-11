@@ -94,8 +94,11 @@ type SoKinPublishPayload = {
   backgroundStyle?: string;
 };
 
-/** Types visuels qui exigent au moins 1 média */
-const MEDIA_REQUIRED_TYPES: SoKinPostType[] = ['SHOWCASE', 'SELLING', 'PROMO'];
+/**
+ * Types visuels qui exigent au moins 1 média
+ * UPDATE (11/04/2026): Texte seul autorisé pour tous types avec backgrounds
+ */
+const MEDIA_REQUIRED_TYPES: SoKinPostType[] = [];
 
 /** Badge visuel du tier premium */
 const TIER_BADGE: Record<string, { label: string; cls: string }> = {

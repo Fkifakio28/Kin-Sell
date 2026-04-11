@@ -46,8 +46,12 @@ import { requireSoKinAnalytics, requireSoKinAds, requireSoKinAdmin } from "./sok
 
 const isVideoMediaUrl = (value: string) => /\.(mp4|webm|mov|ogg)(\?.*)?$/i.test(value);
 
-/** Types de publication qui exigent au moins 1 média */
-const MEDIA_REQUIRED_TYPES = ["SHOWCASE", "SELLING", "PROMO"] as const;
+/**
+ * Types de publication qui exigent au moins 1 média
+ * UPDATE (11/04/2026): Texte seul autorisé pour tous types avec backgrounds
+ * Les utilisateurs peuvent choisir media OU fond personnalisé
+ */
+const MEDIA_REQUIRED_TYPES = [] as const;
 
 const SOKIN_POST_TYPES = [
   "SHOWCASE", "DISCUSSION", "QUESTION", "SELLING",
