@@ -493,13 +493,13 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
       acceptedCallsRef.current.add(data.conversationId);
       // Remove the "incoming" entry since call is active
       const callKey = `call-incoming-${data.conversationId}`;
-      setMissedNotifications((prev) => prev.filter((n) => n.id.startsWith(callKey)));
+      setMissedNotifications((prev) => prev.filter((n) => !n.id.startsWith(callKey)));
     };
     const handleCallRejected = (data: { conversationId: string; callerId?: string }) => {
       clearIncomingCallFor(data);
-      // Rejected by the other party — also counts as non-answered for the callee
+      // Rejected by the other party — remove the incoming call notification
       const callKey = `call-incoming-${data.conversationId}-${data.callerId ?? ""}`;
-      setMissedNotifications((prev) => prev.filter((n) => n.id === callKey));
+      setMissedNotifications((prev) => prev.filter((n) => n.id !== callKey));
     };
 
     const handleOrderCreated = (data: { type: string; orderId: string; buyerUserId: string; sellerUserId: string; itemsCount?: number; fromNegotiation?: boolean; createdAt: string }) => {

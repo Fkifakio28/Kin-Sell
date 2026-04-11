@@ -337,15 +337,98 @@ export async function activateHighlight(
 // ─────────────────────────────────────────────
 
 export async function expireBoosts(): Promise<number> {
-  const result = await prisma.listing.updateMany({
+  // 1. Trouver les listings qui expirent AVANT de les mettre à jour (pour notifier les owners)
+  const expiring = await prisma.listing.findMany({
     where: {
       isBoosted: true,
       boostExpiresAt: { lte: new Date() },
+    },
+    select: { id: true, title: true, ownerUserId: true },
+  });
+
+  if (expiring.length === 0) return 0;
+
+  // 2. Désactiver les boosts
+  const result = await prisma.listing.updateMany({
+    where: {
+      id: { in: expiring.map((l) => l.id) },
     },
     data: {
       isBoosted: false,
       boostExpiresAt: null,
     },
   });
+
+  // 3. Notifier chaque propriétaire (push + socket, non-bloquant)
+  const { sendPushToUser } = await import("../notifications/push.service.js");
+  const uniqueOwners = new Map<string, string[]>();
+  for (const l of expiring) {
+    const titles = uniqueOwners.get(l.ownerUserId) ?? [];
+    titles.push(l.title);
+    uniqueOwners.set(l.ownerUserId, titles);
+  }
+
+  for (const [userId, titles] of uniqueOwners) {
+    const count = titles.length;
+    const label = count === 1
+      ? `Le boost de « ${titles[0]} » a expiré`
+      : `${count} boosts ont expiré`;
+
+    sendPushToUser(userId, {
+      title: "⏰ Boost expiré",
+      body: `${label}. Reboostez pour rester visible !`,
+      tag: `boost-expired-${Date.now()}`,
+      data: { type: "boost_expired", url: "/account?section=listings" },
+    }).catch(() => {});
+  }
+
+  if (result.count > 0) {
+    logger.info(`[Boost] ${result.count} boost(s) expiré(s) — ${uniqueOwners.size} propriétaire(s) notifié(s)`);
+  }
+
   return result.count;
+}
+
+// ─────────────────────────────────────────────
+// Notifications pré-expiration (3h avant)
+// ─────────────────────────────────────────────
+
+export async function notifyBoostExpiringSoon(): Promise<number> {
+  const now = new Date();
+  const in3h = new Date(now.getTime() + 3 * 60 * 60 * 1000);
+  // Fenêtre = expire dans les 3 prochaines heures mais pas encore expiré
+  // On utilise un tag unique par listing pour éviter les doublons
+  const expiringSoon = await prisma.listing.findMany({
+    where: {
+      isBoosted: true,
+      boostExpiresAt: {
+        gt: now,
+        lte: in3h,
+      },
+    },
+    select: { id: true, title: true, ownerUserId: true, boostExpiresAt: true },
+  });
+
+  if (expiringSoon.length === 0) return 0;
+
+  const { sendPushToUser } = await import("../notifications/push.service.js");
+
+  for (const listing of expiringSoon) {
+    const remaining = listing.boostExpiresAt
+      ? Math.max(0, Math.round((listing.boostExpiresAt.getTime() - now.getTime()) / 60_000))
+      : 0;
+    const timeLabel = remaining >= 60
+      ? `${Math.round(remaining / 60)}h`
+      : `${remaining} min`;
+
+    sendPushToUser(listing.ownerUserId, {
+      title: "⚡ Boost bientôt terminé",
+      body: `« ${listing.title} » expire dans ${timeLabel}. Reboostez maintenant !`,
+      tag: `boost-warning-${listing.id}`,
+      data: { type: "boost_expiring", url: "/account?section=listings", listingId: listing.id },
+    }).catch(() => {});
+  }
+
+  logger.info(`[Boost] ${expiringSoon.length} pré-notification(s) envoyée(s)`);
+  return expiringSoon.length;
 }

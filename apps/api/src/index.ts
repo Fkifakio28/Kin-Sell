@@ -49,6 +49,7 @@ import { startAdOrchestrator } from "./modules/ads/kinsell-internal-ads-orchestr
 import { runSubscriptionExpiryCheck, clearSubscriptionCache } from "./shared/billing/subscription-guard.js";
 import { startScoringScheduler } from "./modules/sokin/sokin-scoring.service.js";
 import { startAiAutonomyScheduler } from "./modules/analytics/ai-autonomy.service.js";
+import { expireBoosts, notifyBoostExpiringSoon } from "./modules/ads/ads-boost.service.js";
 
 const app = express();
 const httpServer = createServer(app);
@@ -299,6 +300,22 @@ httpServer.listen(env.API_PORT, async () => {
   setTimeout(() => { void runPromoScheduler(); }, 30_000);
   setInterval(() => { void runPromoScheduler(); }, 5 * 60 * 1000);
   logger.info("[Promo] Scheduler démarré (toutes les 5 min)");
+
+  // ── Boost expiration scheduler (every 10 min) ──
+  const runBoostScheduler = async () => {
+    try {
+      const expired = await expireBoosts();
+      const warned = await notifyBoostExpiringSoon();
+      if (expired > 0 || warned > 0) {
+        logger.info(`[Boost] Scheduler: ${expired} expiré(s), ${warned} pré-notif(s)`);
+      }
+    } catch (err) {
+      logger.error(err, "[Boost] Scheduler error");
+    }
+  };
+  setTimeout(() => { void runBoostScheduler(); }, 45_000);
+  setInterval(() => { void runBoostScheduler(); }, 10 * 60 * 1000);
+  logger.info("[Boost] Expiration scheduler démarré (toutes les 10 min)");
 });
 
 // ── Graceful shutdown ──
