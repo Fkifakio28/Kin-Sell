@@ -116,6 +116,7 @@ export type AdminUserListParams = {
   search?: string;
   role?: string;
   status?: string;
+  country?: string;
 };
 
 export const listUsers = async (params: AdminUserListParams) => {
@@ -139,6 +140,9 @@ export const listUsers = async (params: AdminUserListParams) => {
       { profile: { username: { contains: s, mode: "insensitive" } } },
       { id: { contains: s } },
     ];
+  }
+  if (params.country && params.country !== "ALL") {
+    where.profile = { ...(where.profile as any), country: { equals: params.country, mode: "insensitive" } };
   }
 
   const [total, users] = await Promise.all([

@@ -492,7 +492,7 @@ export const admin = {
   stats: () => request<AdminStats>("/admin/stats"),
 
   // Users
-  users: (params?: { page?: number; limit?: number; search?: string; role?: string; status?: string }) =>
+  users: (params?: { page?: number; limit?: number; search?: string; role?: string; status?: string; country?: string }) =>
     request<{ total: number; page: number; totalPages: number; users: AdminUser[] }>("/admin/users", { params: params as Record<string, string | number | undefined> }),
   userDetail: (id: string) => request<AdminUserDetail>(`/admin/users/${encodeURIComponent(id)}`),
   changeUserRole: (id: string, role: string) =>

@@ -177,6 +177,7 @@ export function AdminDashboard() {
   const [usersSearch, setUsersSearch] = useState('');
   const [usersRoleFilter, setUsersRoleFilter] = useState('ALL');
   const [usersStatusFilter, setUsersStatusFilter] = useState('ALL');
+  const [usersCountryFilter, setUsersCountryFilter] = useState('ALL');
   const [selectedUsers, setSelectedUsers] = useState<Set<string>>(new Set());
 
   // User modals
@@ -284,6 +285,10 @@ export function AdminDashboard() {
   const [subSubTab, setSubSubTab] = useState<'kpi' | 'subs' | 'trials' | 'orders' | 'activate'>('kpi');
   const [activateForm, setActivateForm] = useState({ userId: '', planCode: 'BOOST', durationDays: 30, reason: '', exempt: false });
   const [activateMsg, setActivateMsg] = useState<string | null>(null);
+  const [activateUserSearch, setActivateUserSearch] = useState('');
+  const [activateUserResults, setActivateUserResults] = useState<AdminUser[]>([]);
+  const [activateUserLoading, setActivateUserLoading] = useState(false);
+  const [activateSelectedUser, setActivateSelectedUser] = useState<AdminUser | null>(null);
   // Subscription filters
   const [subFilterEmail, setSubFilterEmail] = useState('');
   const [subFilterStatus, setSubFilterStatus] = useState('ALL');
@@ -410,7 +415,7 @@ export function AdminDashboard() {
           break;
         }
         case 'users': {
-          const res = await admin.users({ page: usersPage, limit: 20, search: usersSearch || undefined, role: usersRoleFilter !== 'ALL' ? usersRoleFilter : undefined, status: usersStatusFilter !== 'ALL' ? usersStatusFilter : undefined });
+          const res = await admin.users({ page: usersPage, limit: 20, search: usersSearch || undefined, role: usersRoleFilter !== 'ALL' ? usersRoleFilter : undefined, status: usersStatusFilter !== 'ALL' ? usersStatusFilter : undefined, country: usersCountryFilter !== 'ALL' ? usersCountryFilter : undefined });
           setUsersList(res.users);
           setUsersTotal(res.total);
           break;
@@ -586,9 +591,23 @@ export function AdminDashboard() {
     } catch (e: any) {
       setError(e?.message ?? 'Erreur de chargement');
     }
-  }, [activeSection, usersPage, usersSearch, usersRoleFilter, usersStatusFilter, blogPage, blogStatusFilter, blogCategoryFilter, blogSearch, blogSortBy, txPage, txStatusFilter, reportsPage, reportsStatusFilter, rankPeriod, rankType, auditPage, secEventsPage, fraudPage, fraudFilter, restrictionsPage, restrictionsFilter, mgLogsPage, mgVerdictFilter, aiStatusFilter, aiDomainFilter, aiTypeFilter, feedPage, feedStatusFilter, feedSearch, donationsPage, donationsStatusFilter, donationsTypeFilter, advPage, advStatusFilter, advTypeFilter, advSearch, adminListingsPage, adminListingsStatusFilter, adminListingsTypeFilter, adminListingsSearch, appealsPage, subPage, trialPage, orderPage, orderStatusFilter, subFilterEmail, subFilterStatus, subFilterScope, subFilterPlan, subFilterSource]);
+  }, [activeSection, usersPage, usersSearch, usersRoleFilter, usersStatusFilter, usersCountryFilter, blogPage, blogStatusFilter, blogCategoryFilter, blogSearch, blogSortBy, txPage, txStatusFilter, reportsPage, reportsStatusFilter, rankPeriod, rankType, auditPage, secEventsPage, fraudPage, fraudFilter, restrictionsPage, restrictionsFilter, mgLogsPage, mgVerdictFilter, aiStatusFilter, aiDomainFilter, aiTypeFilter, feedPage, feedStatusFilter, feedSearch, donationsPage, donationsStatusFilter, donationsTypeFilter, advPage, advStatusFilter, advTypeFilter, advSearch, adminListingsPage, adminListingsStatusFilter, adminListingsTypeFilter, adminListingsSearch, appealsPage, subPage, trialPage, orderPage, orderStatusFilter, subFilterEmail, subFilterStatus, subFilterScope, subFilterPlan, subFilterSource]);
 
   useEffect(() => { if (isLoggedIn) loadSectionData(); }, [loadSectionData, isLoggedIn]);
+
+  // ── User search for activate tab ──
+  useEffect(() => {
+    if (!activateUserSearch || activateUserSearch.length < 2) { setActivateUserResults([]); return; }
+    const timer = setTimeout(async () => {
+      setActivateUserLoading(true);
+      try {
+        const res = await admin.users({ search: activateUserSearch, limit: 10 });
+        setActivateUserResults(res.users);
+      } catch { setActivateUserResults([]); }
+      setActivateUserLoading(false);
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [activateUserSearch]);
 
   // ── Auth guard ──
   if (isLoading) return <div className="ad-shell" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}><p>Chargement…</p></div>;
@@ -1042,12 +1061,23 @@ export function AdminDashboard() {
           <option value="SUSPENDED">Suspendu</option>
           <option value="PENDING_DELETION">En instance de suppression</option>
         </select>
+        <select className="ad-select" value={usersCountryFilter} onChange={e => { setUsersCountryFilter(e.target.value); setUsersPage(1); }}>
+          <option value="ALL">🌍 Tous les pays</option>
+          <option value="RDC">🇨🇩 RD Congo</option>
+          <option value="Congo">🇨🇬 Congo-Brazza</option>
+          <option value="Cameroun">🇨🇲 Cameroun</option>
+          <option value="Côte d'Ivoire">🇨🇮 Côte d'Ivoire</option>
+          <option value="Sénégal">🇸🇳 Sénégal</option>
+          <option value="France">🇫🇷 France</option>
+          <option value="Belgique">🇧🇪 Belgique</option>
+          <option value="Canada">🇨🇦 Canada</option>
+        </select>
         <button className="ad-btn ad-btn--primary" onClick={() => { setCreateUserForm({ email: '', password: '', displayName: '', role: 'USER' }); setModal('user-create'); }}>+ Créer</button>
       </div>
 
       <div className="ad-panel">
         <div className="ad-panel-head">
-          <h3 className="ad-panel-title">{usersTotal} utilisateur{usersTotal > 1 ? 's' : ''}</h3>
+          <h3 className="ad-panel-title">{usersTotal} utilisateur{usersTotal > 1 ? 's' : ''}{usersCountryFilter !== 'ALL' ? ` — ${usersCountryFilter}` : ''}</h3>
           {selectedUsers.size > 0 && <span className="ad-badge">{selectedUsers.size} sélectionné{selectedUsers.size > 1 ? 's' : ''}</span>}
         </div>
         <div className="ad-table-wrap">
@@ -1056,6 +1086,7 @@ export function AdminDashboard() {
               <tr>
                 <th><input type="checkbox" className="ad-checkbox" checked={selectedUsers.size === usersList.length && usersList.length > 0} onChange={toggleSelectAll} /></th>
                 <th>Utilisateur</th>
+                <th>Pays</th>
                 <th>Rôle</th>
                 <th>Statut</th>
                 <th>Inscrit le</th>
@@ -1077,6 +1108,7 @@ export function AdminDashboard() {
                       </div>
                     </div>
                   </td>
+                  <td><span style={{ fontSize: 11, color: 'var(--ad-text-2)', whiteSpace: 'nowrap' }}>{u.country ? `${u.country}${u.city ? `, ${u.city}` : ''}` : '—'}</span></td>
                   <td><span className={roleBadgeClass(u.role)}>{u.role}</span></td>
                   <td><span className={statusBadgeClass(u.accountStatus)}>{u.accountStatus === 'ACTIVE' ? 'Actif' : u.accountStatus === 'SUSPENDED' ? 'Suspendu' : u.accountStatus === 'PENDING_DELETION' ? 'Suppression en cours' : u.accountStatus}</span></td>
                   <td>{fmtDate(u.createdAt)}</td>
@@ -1094,7 +1126,7 @@ export function AdminDashboard() {
                 </tr>
               ))}
               {usersList.length === 0 && (
-                <tr><td colSpan={6} style={{ textAlign: 'center', padding: 24, color: 'var(--ad-text-3)' }}>Aucun utilisateur trouvé</td></tr>
+                <tr><td colSpan={7} style={{ textAlign: 'center', padding: 24, color: 'var(--ad-text-3)' }}>Aucun utilisateur trouvé</td></tr>
               )}
             </tbody>
           </table>
@@ -2809,6 +2841,8 @@ export function AdminDashboard() {
         await admin.activatePlan(activateForm);
         setActivateMsg('✅ Forfait activé avec succès');
         setActivateForm({ userId: '', planCode: 'BOOST', durationDays: 30, reason: '', exempt: false });
+        setActivateSelectedUser(null);
+        setActivateUserSearch('');
         loadSectionData();
       } catch (e: any) {
         setActivateMsg('❌ ' + (e?.message || 'Erreur'));
@@ -3359,10 +3393,52 @@ export function AdminDashboard() {
 
         {/* ── Manual activate ── */}
         {subSubTab === 'activate' && (
-          <div style={{ maxWidth: 480 }}>
+          <div style={{ maxWidth: 560 }}>
             <h3 style={{ fontSize: 14, color: C.text, fontWeight: 700, marginBottom: 12 }}>🔑 Activer un forfait manuellement</h3>
+
+            {/* User search picker */}
+            <div style={{ marginBottom: 14, position: 'relative' }}>
+              <label style={{ fontSize: 12, fontWeight: 600, color: C.textSec, marginBottom: 4, display: 'block' }}>👤 Sélectionner un utilisateur</label>
+              {activateSelectedUser ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: '#F0FDF4', border: `1px solid ${C.success}`, borderRadius: 8 }}>
+                  <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'rgba(111,88,255,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: '#6f58ff', overflow: 'hidden' }}>
+                    {activateSelectedUser.avatarUrl ? <img src={resolveMediaUrl(activateSelectedUser.avatarUrl)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (activateSelectedUser.displayName?.slice(0, 2).toUpperCase() ?? '?')}
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 600, fontSize: 13, color: C.text }}>{activateSelectedUser.displayName}</div>
+                    <div style={{ fontSize: 11, color: C.textSec }}>{activateSelectedUser.email ?? activateSelectedUser.phone ?? activateSelectedUser.id.slice(0, 8)} — {activateSelectedUser.role}{activateSelectedUser.country ? ` — ${activateSelectedUser.country}` : ''}</div>
+                  </div>
+                  <button onClick={() => { setActivateSelectedUser(null); setActivateForm(f => ({ ...f, userId: '' })); setActivateUserSearch(''); }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: C.danger }}>✕</button>
+                </div>
+              ) : (
+                <>
+                  <input placeholder="🔍 Rechercher par nom, email ou ID…" value={activateUserSearch} onChange={e => setActivateUserSearch(e.target.value)} style={{ ...inputStyle, width: '100%' }} />
+                  {activateUserLoading && <div style={{ fontSize: 11, color: C.textSec, marginTop: 4 }}>Recherche…</div>}
+                  {activateUserResults.length > 0 && (
+                    <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 10, background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, maxHeight: 240, overflowY: 'auto', boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}>
+                      {activateUserResults.map(u => (
+                        <div key={u.id} onClick={() => { setActivateSelectedUser(u); setActivateForm(f => ({ ...f, userId: u.id })); setActivateUserSearch(''); setActivateUserResults([]); }}
+                          style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', cursor: 'pointer', borderBottom: `1px solid ${C.border}`, transition: 'background 120ms' }}
+                          onMouseEnter={e => (e.currentTarget.style.background = '#F1F5F9')} onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                          <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'rgba(111,88,255,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#6f58ff', overflow: 'hidden', flexShrink: 0 }}>
+                            {u.avatarUrl ? <img src={resolveMediaUrl(u.avatarUrl)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (u.displayName?.slice(0, 2).toUpperCase() ?? '?')}
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontWeight: 600, fontSize: 12, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.displayName}</div>
+                            <div style={{ fontSize: 10, color: C.textSec, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.email ?? u.phone ?? u.id.slice(0, 8)} · {u.role}{u.country ? ` · ${u.country}` : ''}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {activateUserSearch.length >= 2 && !activateUserLoading && activateUserResults.length === 0 && (
+                    <div style={{ fontSize: 11, color: C.textSec, marginTop: 4 }}>Aucun utilisateur trouvé</div>
+                  )}
+                </>
+              )}
+            </div>
+
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <input placeholder="ID utilisateur" value={activateForm.userId} onChange={e => setActivateForm(f => ({ ...f, userId: e.target.value }))} style={inputStyle} />
               <select value={activateForm.planCode} onChange={e => setActivateForm(f => ({ ...f, planCode: e.target.value }))} style={selectStyle}>
                 {['FREE', 'BOOST', 'AUTO', 'PRO_VENDOR', 'STARTER', 'BUSINESS', 'SCALE'].map(p => <option key={p} value={p}>{p}</option>)}
               </select>

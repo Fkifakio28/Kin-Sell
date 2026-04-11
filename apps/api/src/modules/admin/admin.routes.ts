@@ -55,6 +55,7 @@ const userSearchSchema = z.object({
   search: z.string().optional(),
   role: z.string().optional(),
   status: z.string().optional(),
+  country: z.string().optional(),
 });
 
 router.get("/users", asyncHandler(async (req: AuthenticatedRequest, res) => {
