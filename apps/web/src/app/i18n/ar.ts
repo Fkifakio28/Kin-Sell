@@ -154,9 +154,14 @@ export const ar: Record<string, string> = {
     "auth.termsCheckbox.privacyLink": "سياسة الخصوصية",
     "auth.termsCheckbox.required": "يجب قبول الشروط لإنشاء حساب.",
 
-    "cookie.title": "نستخدم ملفات تعريف الارتباط",
-    "cookie.text": "يستخدم Kin-Sell ملفات تعريف الارتباط الأساسية للمصادقة وعمل الموقع. لا يتم استخدام ملفات إعلانية.",
-    "cookie.accept": "أوافق",
+    "cookie.title": "معلومات حول ملفات تعريف الارتباط والتخزين المحلي",
+    "cookie.text": "يستخدم Kin-Sell تقنيات التخزين لتأمين جلستك وتحسين تجربتك. هذه العناصر ضرورية لعمل المنصة.",
+    "cookie.accept": "حسنًا، فهمت",
+    "cookie.showDetails": "عرض التفاصيل",
+    "cookie.hideDetails": "إخفاء",
+    "cookie.detail1": "تخزين محلي لجلستك وتفضيلاتك (اللغة، المظهر)",
+    "cookie.detail2": "ملفات أمان واستقرار — لا ملفات إعلانية",
+    "cookie.detail3": "لا يتم بيع بياناتك الشخصية لأطراف ثالثة",
     "cookie.termsLink": "شروط الاستخدام",
     "cookie.privacyLink": "سياسة الخصوصية",
 

@@ -154,9 +154,14 @@ export const ln: Record<string, string> = {
     "auth.termsCheckbox.required": "Osengeli kondima masɛngami mpo ofungola compte.",
 
     // ── Cookie Consent ──
-    "cookie.title": "Tosaleláká cookies",
-    "cookie.text": "Kin-Sell esaleláká cookies ya ntina mpo na authentification mpe fonctionnement ya site. Cookie ya pub ezali te.",
-    "cookie.accept": "Nandimi",
+    "cookie.title": "Nsango ya cookies mpe stockage local",
+    "cookie.text": "Kin-Sell esaleláká ba technologies ya stockage mpo na kobatela session na yo mpe kolakisa malamu. Biloko oyo ezali na ntina mpo plateforme esala.",
+    "cookie.accept": "OK, nayebi",
+    "cookie.showDetails": "Tala makambo",
+    "cookie.hideDetails": "Bómba",
+    "cookie.detail1": "Stockage local mpo na session mpe ba préférences na yo (monɔkɔ, thème)",
+    "cookie.detail2": "Cookies ya sécurité mpe stabilité — cookie ya pub ezali te",
+    "cookie.detail3": "Ba données na yo ekotɛkama te na bato mosusu",
     "cookie.termsLink": "Masɛngami ya kosalela",
     "cookie.privacyLink": "Politique ya confidentialité",
 

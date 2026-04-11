@@ -154,9 +154,14 @@ export const fr: Record<string, string> = {
     "auth.termsCheckbox.required": "Vous devez accepter les conditions pour créer un compte.",
 
     // ── Cookie Consent ──
-    "cookie.title": "Nous utilisons des cookies",
-    "cookie.text": "Kin-Sell utilise des cookies essentiels pour l'authentification et le bon fonctionnement du site. Aucun cookie publicitaire n'est utilisé.",
-    "cookie.accept": "J'accepte",
+    "cookie.title": "Information sur les cookies et stockage local",
+    "cookie.text": "Kin-Sell utilise des technologies de stockage pour sécuriser votre session et améliorer l'expérience. Ces éléments sont nécessaires au fonctionnement de la plateforme.",
+    "cookie.accept": "OK, j'ai compris",
+    "cookie.showDetails": "Voir les détails",
+    "cookie.hideDetails": "Masquer",
+    "cookie.detail1": "Stockage local pour votre session et vos préférences (langue, thème)",
+    "cookie.detail2": "Cookies de sécurité et de stabilité — aucun cookie publicitaire",
+    "cookie.detail3": "Aucune vente de vos données personnelles à des tiers",
     "cookie.termsLink": "Conditions d'utilisation",
     "cookie.privacyLink": "Politique de confidentialité",
 
