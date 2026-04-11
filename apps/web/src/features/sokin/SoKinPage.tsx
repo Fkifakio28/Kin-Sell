@@ -2906,12 +2906,29 @@ function SoKinPageInner() {
 
   // ── Mobile manage posts drawer ──
   const [showMobileManage, setShowMobileManage] = useState(false);
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+  const mobileSearchRef = useRef<HTMLInputElement>(null);
+  const [mobileSearchQuery, setMobileSearchQuery] = useState('');
+
+  useEffect(() => {
+    if (mobileSearchOpen && mobileSearchRef.current) mobileSearchRef.current.focus();
+  }, [mobileSearchOpen]);
+
+  const handleMobileSearch = useCallback((e: React.FormEvent) => {
+    e.preventDefault();
+    const q = mobileSearchQuery.trim();
+    if (!q) return;
+    setMobileSearchOpen(false);
+    setMobileSearchQuery('');
+    navigate(`/explorer?q=${encodeURIComponent(q)}`);
+  }, [mobileSearchQuery, navigate]);
 
   // ── Visibility des barres (top bar + FAB) ──
   const hasActiveOverlay = showCreateScreen || Boolean(openCommentsPostId) || Boolean(viewerItem) || showMobileManage;
   const fabVisible = !showCreateScreen && !openCommentsPostId && !viewerItem && !showMobileManage && (overlayUiLock || scrollDir === 'up');
   const barsVisible =
     hasActiveOverlay ||
+    mobileSearchOpen ||
     overlayUiLock ||
     scrollDir === 'up';
 
@@ -2945,6 +2962,9 @@ function SoKinPageInner() {
                 )}
               </div>
               <div className="sk-topbar-end">
+                <button type="button" className="sk-topbar-action" onClick={() => setMobileSearchOpen(true)} aria-label={t('common.search')}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                </button>
                 {isLoggedIn && (
                   <>
                     <button type="button" className="sk-topbar-action" onClick={() => navigate('/messaging')} aria-label="Messages">
@@ -2957,6 +2977,27 @@ function SoKinPageInner() {
                 )}
               </div>
             </header>
+
+            {/* ── Mobile Search Overlay ── */}
+            {mobileSearchOpen && (
+              <div className="sk-search-overlay">
+                <form className="sk-search-form" onSubmit={handleMobileSearch}>
+                  <input
+                    ref={mobileSearchRef}
+                    type="search"
+                    className="sk-search-input"
+                    placeholder={t('sokin.searchPlaceholder')}
+                    value={mobileSearchQuery}
+                    onChange={(e) => setMobileSearchQuery(e.target.value)}
+                    aria-label={t('common.search')}
+                  />
+                  <button type="submit" className="sk-search-btn" aria-label={t('common.search')}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                  </button>
+                  <button type="button" className="sk-search-cancel" onClick={() => { setMobileSearchOpen(false); setMobileSearchQuery(''); }} aria-label={t('common.close')}>&times;</button>
+                </form>
+              </div>
+            )}
 
             {/* ── Onglets de feed (4 tabs) ── */}
             <nav className="sk-feed-tabs" aria-label="Onglets du fil">
