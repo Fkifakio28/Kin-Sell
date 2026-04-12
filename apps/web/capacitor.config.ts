@@ -9,14 +9,22 @@ const config: CapacitorConfig = {
   server: {
     url: 'https://kin-sell.com',
     cleartext: false,
-    // Garde les liens internes dans la WebView, ouvre les externes en navigateur
     androidScheme: 'https',
+    iosScheme: 'https',
   },
 
   android: {
     allowMixedContent: false,
-    // Gestion des URL externes dans le navigateur système
     appendUserAgent: 'KinSellApp',
+  },
+
+  ios: {
+    contentInset: 'automatic',
+    allowsLinkPreview: true,
+    scrollEnabled: true,
+    appendUserAgent: 'KinSellApp',
+    // Le schéma custom pour deep-links OAuth
+    scheme: 'kinsell',
   },
 
   plugins: {
@@ -26,6 +34,7 @@ const config: CapacitorConfig = {
       backgroundColor: '#120B2B',
       showSpinner: false,
       androidScaleType: 'CENTER_CROP',
+      iosSpinnerStyle: 'large',
     },
     Browser: {
       // Les liens OAuth s'ouvrent dans le navigateur système

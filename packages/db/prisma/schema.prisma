@@ -107,6 +107,8 @@ enum PaymentMethod {
   ORANGE_MONEY
   MPESA
   PAYPAL
+  APPLE_IAP
+  GOOGLE_PLAY
 }
 
 enum MomoStatus {

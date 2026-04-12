@@ -49,6 +49,20 @@ export async function sendFcmToToken(
           channelId: "kin-sell-default",
         },
       },
+      apns: {
+        payload: {
+          aps: {
+            alert: { title: payload.title, body: payload.body },
+            sound: "default",
+            badge: 1,
+            "mutable-content": 1,
+          },
+        },
+        headers: {
+          "apns-priority": "10",
+          "apns-push-type": "alert",
+        },
+      },
     });
     return true;
   } catch (err: unknown) {

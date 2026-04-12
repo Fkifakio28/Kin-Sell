@@ -812,6 +812,7 @@
 
 .ks-mobile-login  { color: var(--color-primary-hover); font-weight: var(--font-weight-semibold); }
 .ks-mobile-logout { color: #ff6b6b; }
+.ks-mobile-download { color: #4ADE80; font-weight: var(--font-weight-semibold); }
 
 .ks-mobile-divider {
   height: 1px;

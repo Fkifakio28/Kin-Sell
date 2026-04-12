@@ -1,8 +1,10 @@
 ﻿import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import { Capacitor } from "@capacitor/core";
 import { useAuth } from "../../app/providers/AuthProvider";
 import { useLocaleCurrency } from "../../app/providers/LocaleCurrencyProvider";
 import { billing, type BillingPlanSummary, ApiError } from "../../lib/api-client";
+import { isIAPAvailable, purchasePlan } from "../../utils/iap";
 import { SeoMeta } from "../../components/SeoMeta";
 import {
   parsePricingParams,
@@ -366,6 +368,25 @@ export function PricingPage() {
     setBusyPlanCode(pendingPlanCode);
 
     try {
+      // iOS native → Apple In-App Purchase
+      if (isIAPAvailable()) {
+        const scope = activeTab === "business" ? "BUSINESS" : "USER";
+        const iapResult = await purchasePlan(scope as "USER" | "BUSINESS", pendingPlanCode);
+        if (iapResult.ok) {
+          setInfoMessage("Achat Apple réussi ! Votre forfait est en cours d'activation…");
+          // Refresh plan after IAP
+          try {
+            const plan = await billing.myPlan();
+            setCurrentPlan(plan);
+          } catch { /* will be refreshed on next load */ }
+          setPendingPlanCode(null);
+        } else {
+          setErrorMessage(iapResult.error);
+        }
+        return;
+      }
+
+      // Web / Android → PayPal
       const result = await billing.createPaypalCheckout({ planCode: pendingPlanCode, billingCycle: "MONTHLY" });
       setLatestCheckout(result);
       // Redirection vers PayPal
@@ -401,7 +422,7 @@ export function PricingPage() {
 
 
   const faqData = [
-    { q: 'Comment fonctionne le paiement ?', a: 'Tous les paiements passent par PayPal. Votre forfait est activé automatiquement dès la confirmation du paiement. Aucune intervention manuelle requise.' },
+    { q: 'Comment fonctionne le paiement ?', a: 'Sur le web et Android, les paiements passent par PayPal. Sur iPhone, les abonnements sont traités via l\'App Store d\'Apple. Votre forfait est activé automatiquement dès la confirmation du paiement.' },
     { q: 'Puis-je changer de forfait à tout moment ?', a: 'Oui. Vous pouvez upgrader à tout moment. Le nouveau forfait prend effet immédiatement après paiement.' },
     { q: 'Qu\'est-ce qu\'un add-on ?', a: 'Un add-on est une fonctionnalité supplémentaire que vous pouvez ajouter à n\'importe quel forfait (ex : Boost Visibilité, IA Commande). Les add-ons sont indépendants du forfait choisi.' },
     { q: 'L\'IA Marchande est-elle vraiment gratuite ?', a: 'Oui. L\'IA Marchande (conseils de prix, aide à la négociation) est incluse dans tous les forfaits, y compris FREE. Aucun coût caché.' },
@@ -527,9 +548,13 @@ export function PricingPage() {
 
       {pendingPlanCode ? (
         <section className="pricing-payment">
-          <h2 className="pricing-payment__title">Paiement PayPal — {pendingPlanCode}</h2>
+          <h2 className="pricing-payment__title">
+            {isIAPAvailable() ? "Achat via App Store" : "Paiement PayPal"} — {pendingPlanCode}
+          </h2>
           <p className="pricing-payment__text">
-            Vous serez redirigé vers PayPal pour effectuer le paiement. Votre forfait sera activé automatiquement après confirmation.
+            {isIAPAvailable()
+              ? "Votre achat sera traité via l'App Store d'Apple. Votre forfait sera activé automatiquement."
+              : "Vous serez redirigé vers PayPal pour effectuer le paiement. Votre forfait sera activé automatiquement après confirmation."}
           </p>
           <button
             type="button"
@@ -537,7 +562,11 @@ export function PricingPage() {
             disabled={busyPlanCode !== null}
             onClick={() => void handlePay()}
           >
-            {busyPlanCode ? "Traitement…" : "💳 Payer avec PayPal"}
+            {busyPlanCode
+              ? "Traitement…"
+              : isIAPAvailable()
+                ? "🍎 Acheter via App Store"
+                : "💳 Payer avec PayPal"}
           </button>
           <br />
           <button type="button" className="pricing-payment__cancel" onClick={() => setPendingPlanCode(null)}>

@@ -5,6 +5,7 @@ import { requireAuth, requireRoles, type AuthenticatedRequest } from "../../shar
 import { asyncHandler } from "../../shared/utils/async-handler.js";
 import { Role } from "../../types/roles.js";
 import * as billingService from "./billing.service.js";
+import * as appleIap from "./apple-iap.service.js";
 import { prisma } from "../../shared/db/prisma.js";
 import express from "express";
 
@@ -147,6 +148,31 @@ router.post(
 // L'activation se fait UNIQUEMENT via :
 //   1. PayPal capture automatique (/paypal/capture)
 //   2. Validation admin (/admin/billing/validate-order)
+//   3. Apple IAP verification (/apple/verify)
 // Voir admin.routes.ts pour l'endpoint admin.
+
+// ── Apple In-App Purchase ──────────────────────────────────────────────────
+// Returns Apple product ID mapping so the iOS app knows which product to request
+router.get("/apple/products", (_req, res) => {
+  res.json(appleIap.getAppleProductIds());
+});
+
+// Verify Apple receipt/transaction and activate subscription
+router.post(
+  "/apple/verify",
+  requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const payload = z.object({
+      receiptData: z.string().optional(),
+      transactionJws: z.string().optional(),
+      productId: z.string().optional(),
+    }).refine(d => d.receiptData || d.transactionJws, {
+      message: "receiptData ou transactionJws requis",
+    }).parse(req.body);
+
+    const result = await appleIap.verifyAndActivateApplePurchase(req.userId!, payload);
+    res.json(result);
+  })
+);
 
 export default router;

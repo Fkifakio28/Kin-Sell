@@ -354,46 +354,7 @@ export function ContactPage() {
         </div>
       </section>
 
-      {/* ══════ 5. ESPACE DON ══════ */}
-      <section className="contact-donation">
-        <div className="contact-donation-card glass-container">
-          <div className="contact-donation-head">
-            <span className="contact-donation-icon"><IconGift /></span>
-            <div>
-              <h2 className="contact-donation-title">Soutenir Kin-Sell</h2>
-              <p className="contact-donation-subtitle">
-                Vous pouvez faire un don pour soutenir la plateforme, la sécurité et les améliorations produit.
-              </p>
-            </div>
-          </div>
-
-          <div className="contact-donation-actions">
-            <a
-              href={paypalDonationUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="glass-button"
-            >
-              Faire un don via PayPal
-            </a>
-
-            {isAdmin && (
-              <a
-                href="/admin/dashboard?section=donations"
-                className="glass-button glass-button--outline"
-              >
-                Ouvrir l'onglet Dons (Super Admin)
-              </a>
-            )}
-          </div>
-
-          <p className="contact-donation-note">
-            Transparence: les dons sont consultables et pilotables dans le dashboard admin, section <strong>Dons & Montants</strong>.
-          </p>
-        </div>
-      </section>
-
-      {/* ══════ 6. MESSAGE RASSURANT ══════ */}
+      {/* ══════ 5. MESSAGE RASSURANT ══════ */
       <section className="contact-reassurance glass-container">
         <div className="contact-reassurance-icon"><IconShield /></div>
         <div>
@@ -420,7 +381,7 @@ export function ContactPage() {
         </div>
       </section>
 
-      {/* ══════ 7. TIPS AVANT CONTACT ══════ */}
+      {/* ══════ 6. TIPS AVANT CONTACT ══════ */
       <section className="contact-tips">
         <h2 className="contact-section-title">Avant de nous contacter</h2>
         <div className="contact-tips-grid">
@@ -439,6 +400,61 @@ export function ContactPage() {
             <h3>Comment ça marche</h3>
             <p>Découvrez le fonctionnement de Kin-Sell étape par étape.</p>
           </a>
+        </div>
+      </section>
+
+      {/* ══════ 7. ESPACE DON ══════ */}
+      <section className="contact-donation">
+        <div className="contact-donation-card glass-container">
+          <div className="contact-donation-head">
+            <span className="contact-donation-icon"><IconGift /></span>
+            <div>
+              <h2 className="contact-donation-title">Soutenir Kin-Sell</h2>
+              <p className="contact-donation-subtitle">
+                Kin-Sell est un projet indépendant construit avec passion. Chaque don nous aide
+                à améliorer la plateforme, renforcer la sécurité et développer de nouvelles
+                fonctionnalités pour toute la communauté.
+              </p>
+            </div>
+          </div>
+
+          <div className="contact-donation-amounts">
+            {[2, 5, 10, 25, 50].map((amount) => (
+              <a
+                key={amount}
+                href={`${paypalDonationUrl}&amount=${amount}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="contact-donation-amount glass-card"
+              >
+                <span className="contact-donation-amount-value">${amount}</span>
+              </a>
+            ))}
+          </div>
+
+          <div className="contact-donation-actions">
+            <a
+              href={paypalDonationUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="glass-button"
+            >
+              <IconGift /> Montant libre via PayPal
+            </a>
+
+            {isAdmin && (
+              <a
+                href="/admin/dashboard?section=donations"
+                className="glass-button glass-button--outline"
+              >
+                Ouvrir l'onglet Dons (Super Admin)
+              </a>
+            )}
+          </div>
+
+          <p className="contact-donation-note">
+            <IconShield /> 100% sécurisé via PayPal — Kin-Sell ne stocke aucune donnée bancaire.
+          </p>
         </div>
       </section>
 

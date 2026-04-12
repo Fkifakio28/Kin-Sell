@@ -17,7 +17,7 @@ const { mockPrisma, mockLogger } = vi.hoisted(() => ({
       create: vi.fn(), update: vi.fn(), delete: vi.fn(), deleteMany: vi.fn(),
     },
     listing: { findUnique: vi.fn(), update: vi.fn() },
-    order: { findUnique: vi.fn(), findMany: vi.fn(), create: vi.fn(), update: vi.fn(), count: vi.fn() },
+    order: { findFirst: vi.fn(), findUnique: vi.fn(), findMany: vi.fn(), create: vi.fn(), update: vi.fn(), count: vi.fn() },
     orderItem: { create: vi.fn(), createMany: vi.fn() },
     negotiation: { update: vi.fn() },
     businessAccount: { findMany: vi.fn() },
@@ -244,5 +244,271 @@ describe("getBuyerCart()", () => {
 
     expect(cart.subtotalUsdCents).toBe(7000); // (2*1000) + (1*5000)
     expect(cart.itemsCount).toBe(2);
+  });
+});
+
+// ════════════════════════════════════════════════════════════
+// CHECKOUT — stock validation
+// ════════════════════════════════════════════════════════════
+
+describe("checkoutBuyerCart() — stock validation", () => {
+  const makeCartWithStock = (stockQuantity: number | null, itemQty: number) => ({
+    id: "cart-stock",
+    buyerUserId: "buyer-stock",
+    status: "OPEN",
+    currency: "USD",
+    items: [
+      {
+        id: "ci-1",
+        listingId: "listing-stock",
+        quantity: itemQty,
+        unitPriceUsdCents: 1000,
+        negotiationId: null,
+        negotiation: null,
+        listing: {
+          id: "listing-stock",
+          type: "PRODUIT",
+          title: "Produit Stock",
+          category: "electronics",
+          city: "Kinshasa",
+          imageUrl: null,
+          priceUsdCents: 1000,
+          isNegotiable: false,
+          isPublished: true,
+          stockQuantity,
+          ownerUserId: "seller-stock",
+          businessId: null,
+        },
+      },
+    ],
+  });
+
+  it("rejette le checkout si le stock est à 0 (400)", async () => {
+    mockPrisma.cart.findFirst.mockResolvedValue(makeCartWithStock(0, 1));
+
+    await expect(
+      ordersService.checkoutBuyerCart("buyer-stock"),
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      message: expect.stringContaining("rupture de stock"),
+    });
+  });
+
+  it("rejette le checkout si quantité > stock (400)", async () => {
+    mockPrisma.cart.findFirst.mockResolvedValue(makeCartWithStock(2, 5));
+
+    await expect(
+      ordersService.checkoutBuyerCart("buyer-stock"),
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      message: expect.stringContaining("Stock insuffisant"),
+    });
+  });
+
+  it("accepte le checkout si stock illimité (null)", async () => {
+    const cart = makeCartWithStock(null, 100);
+    mockPrisma.cart.findFirst.mockResolvedValue(cart);
+    mockPrisma.order.create.mockResolvedValue({ id: "order-unlimited" });
+    mockPrisma.cart.update.mockResolvedValue({});
+    mockPrisma.cart.create.mockResolvedValue({ id: "new-cart" });
+    mockPrisma.order.findMany.mockResolvedValue([
+      {
+        id: "order-unlimited",
+        status: "PENDING",
+        currency: "USD",
+        totalUsdCents: 100000,
+        notes: null,
+        createdAt: new Date(),
+        confirmedAt: null,
+        deliveredAt: null,
+        canceledAt: null,
+        buyer: { id: "buyer-stock", profile: { displayName: "Buyer", username: null } },
+        seller: { id: "seller-stock", profile: { displayName: "Seller", username: null } },
+        sellerBusiness: null,
+        items: [],
+      },
+    ]);
+
+    const result = await ordersService.checkoutBuyerCart("buyer-stock");
+
+    expect(result.orders).toHaveLength(1);
+  });
+
+  it("accepte le checkout si quantité <= stock", async () => {
+    const cart = makeCartWithStock(10, 3);
+    mockPrisma.cart.findFirst.mockResolvedValue(cart);
+    mockPrisma.order.create.mockResolvedValue({ id: "order-ok" });
+    mockPrisma.cart.update.mockResolvedValue({});
+    mockPrisma.cart.create.mockResolvedValue({ id: "new-cart" });
+    mockPrisma.order.findMany.mockResolvedValue([
+      {
+        id: "order-ok",
+        status: "PENDING",
+        currency: "USD",
+        totalUsdCents: 3000,
+        notes: null,
+        createdAt: new Date(),
+        confirmedAt: null,
+        deliveredAt: null,
+        canceledAt: null,
+        buyer: { id: "buyer-stock", profile: { displayName: "Buyer", username: null } },
+        seller: { id: "seller-stock", profile: { displayName: "Seller", username: null } },
+        sellerBusiness: null,
+        items: [],
+      },
+    ]);
+
+    const result = await ordersService.checkoutBuyerCart("buyer-stock");
+
+    expect(result.orders).toHaveLength(1);
+  });
+});
+
+// ════════════════════════════════════════════════════════════
+// STATUS UPDATE — stock decrement
+// ════════════════════════════════════════════════════════════
+
+describe("updateSellerOrderStatus() — stock decrement", () => {
+  it("décremente le stock quand le vendeur confirme (CONFIRMED)", async () => {
+    mockPrisma.businessAccount.findMany.mockResolvedValue([]);
+    mockPrisma.order.findFirst.mockResolvedValue({
+      id: "order-dec",
+      status: "PENDING",
+    });
+    mockPrisma.order.update.mockResolvedValue({
+      id: "order-dec",
+      status: "CONFIRMED",
+      currency: "USD",
+      totalUsdCents: 2000,
+      notes: null,
+      createdAt: new Date(),
+      confirmedAt: new Date(),
+      deliveredAt: null,
+      canceledAt: null,
+      buyer: { id: "buyer-1", profile: { displayName: "Buyer", username: null } },
+      seller: { id: "seller-1", profile: { displayName: "Seller", username: null } },
+      sellerBusiness: null,
+      items: [
+        {
+          id: "oi-1",
+          listingId: "listing-dec",
+          listingType: "PRODUIT",
+          title: "Article A",
+          category: "cat",
+          city: "Kinshasa",
+          quantity: 3,
+          unitPriceUsdCents: 500,
+          lineTotalUsdCents: 1500,
+          listing: { imageUrl: null, stockQuantity: 10 },
+        },
+      ],
+    });
+    mockPrisma.listing.findUnique.mockResolvedValue({
+      id: "listing-dec",
+      title: "Article A",
+      stockQuantity: 10,
+    });
+    mockPrisma.listing.update.mockResolvedValue({});
+
+    const result = await ordersService.updateSellerOrderStatus("seller-1", "order-dec", "CONFIRMED" as any);
+
+    expect(mockPrisma.listing.update).toHaveBeenCalledWith({
+      where: { id: "listing-dec" },
+      data: { stockQuantity: 7 }, // 10 - 3
+    });
+    expect((result as any)._exhaustedListings).toEqual([]);
+  });
+
+  it("retourne les listings épuisés quand le stock tombe à 0", async () => {
+    mockPrisma.businessAccount.findMany.mockResolvedValue([]);
+    mockPrisma.order.findFirst.mockResolvedValue({
+      id: "order-exhaust",
+      status: "PENDING",
+    });
+    mockPrisma.order.update.mockResolvedValue({
+      id: "order-exhaust",
+      status: "CONFIRMED",
+      currency: "USD",
+      totalUsdCents: 2000,
+      notes: null,
+      createdAt: new Date(),
+      confirmedAt: new Date(),
+      deliveredAt: null,
+      canceledAt: null,
+      buyer: { id: "buyer-1", profile: { displayName: "Buyer", username: null } },
+      seller: { id: "seller-1", profile: { displayName: "Seller", username: null } },
+      sellerBusiness: null,
+      items: [
+        {
+          id: "oi-2",
+          listingId: "listing-exhaust",
+          listingType: "PRODUIT",
+          title: "Article B",
+          category: "cat",
+          city: "Kinshasa",
+          quantity: 5,
+          unitPriceUsdCents: 400,
+          lineTotalUsdCents: 2000,
+          listing: { imageUrl: null, stockQuantity: 5 },
+        },
+      ],
+    });
+    mockPrisma.listing.findUnique.mockResolvedValue({
+      id: "listing-exhaust",
+      title: "Article B",
+      stockQuantity: 5,
+    });
+    mockPrisma.listing.update.mockResolvedValue({});
+
+    const result = await ordersService.updateSellerOrderStatus("seller-1", "order-exhaust", "CONFIRMED" as any);
+
+    expect(mockPrisma.listing.update).toHaveBeenCalledWith({
+      where: { id: "listing-exhaust" },
+      data: { stockQuantity: 0 }, // 5 - 5
+    });
+    expect((result as any)._exhaustedListings).toEqual([
+      { id: "listing-exhaust", title: "Article B" },
+    ]);
+  });
+
+  it("ne décremente pas le stock pour un status autre que CONFIRMED", async () => {
+    mockPrisma.businessAccount.findMany.mockResolvedValue([]);
+    mockPrisma.order.findFirst.mockResolvedValue({
+      id: "order-ship",
+      status: "CONFIRMED",
+    });
+    mockPrisma.order.update.mockResolvedValue({
+      id: "order-ship",
+      status: "PROCESSING",
+      currency: "USD",
+      totalUsdCents: 1000,
+      notes: null,
+      createdAt: new Date(),
+      confirmedAt: new Date(),
+      deliveredAt: null,
+      canceledAt: null,
+      buyer: { id: "buyer-1", profile: { displayName: "Buyer", username: null } },
+      seller: { id: "seller-1", profile: { displayName: "Seller", username: null } },
+      sellerBusiness: null,
+      items: [
+        {
+          id: "oi-3",
+          listingId: "listing-ship",
+          listingType: "PRODUIT",
+          title: "Article C",
+          category: "cat",
+          city: "Kinshasa",
+          quantity: 2,
+          unitPriceUsdCents: 500,
+          lineTotalUsdCents: 1000,
+          listing: { imageUrl: null, stockQuantity: 8 },
+        },
+      ],
+    });
+
+    await ordersService.updateSellerOrderStatus("seller-1", "order-ship", "PROCESSING" as any);
+
+    expect(mockPrisma.listing.findUnique).not.toHaveBeenCalled();
+    expect(mockPrisma.listing.update).not.toHaveBeenCalled();
   });
 });

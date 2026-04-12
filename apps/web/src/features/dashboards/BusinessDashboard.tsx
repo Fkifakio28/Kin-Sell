@@ -1550,8 +1550,8 @@ export function BusinessDashboard() {
                           <strong>{p.title}</strong>
                           <span>{formatMoneyFromUsdCents(p.priceUsdCents)} · {p.category}</span>
                         </div>
-                        <span className={`bz-stock-badge${(p.stockQuantity ?? 99) <= 5 ? ' bz-stock-badge--low' : ''}`}>
-                          {p.stockQuantity != null ? `${p.stockQuantity} ${t('biz.inStock')}` : '∞'}
+                        <span className={`bz-stock-badge${p.stockQuantity === 0 ? ' bz-stock-badge--exhausted' : (p.stockQuantity ?? 99) <= 5 ? ' bz-stock-badge--low' : ''}`}>
+                          {p.stockQuantity === 0 ? t('biz.outOfStock', 'Rupture de stock') : p.stockQuantity != null ? `${p.stockQuantity} ${t('biz.inStock')}` : '∞'}
                         </span>
                       </li>
                     ))}

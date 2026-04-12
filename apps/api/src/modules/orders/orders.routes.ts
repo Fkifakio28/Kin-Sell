@@ -266,7 +266,30 @@ router.patch(
       sourceUserId: request.auth!.userId,
       updatedAt: new Date().toISOString(),
     });
-    response.json(data);
+
+    // ── Notification stock épuisé au vendeur ──
+    const exhausted = (data as any)._exhaustedListings as Array<{ id: string; title: string }> | undefined;
+    if (exhausted && exhausted.length > 0) {
+      const sellerUserId = data.seller.userId;
+      for (const listing of exhausted) {
+        void sendPushToUser(sellerUserId, {
+          title: "⚠️ Stock épuisé",
+          body: `Votre article "${listing.title}" est en rupture de stock`,
+          tag: `stock-exhausted-${listing.id}`,
+          data: { type: "stock", listingId: listing.id },
+        });
+      }
+      emitToUser(sellerUserId, "listing:stock-exhausted", {
+        type: "LISTING_STOCK_EXHAUSTED",
+        listings: exhausted,
+        orderId: data.id,
+        updatedAt: new Date().toISOString(),
+      });
+    }
+
+    // Remove internal field from response
+    const { _exhaustedListings, ...responseData } = data as any;
+    response.json(responseData);
   })
 );
 

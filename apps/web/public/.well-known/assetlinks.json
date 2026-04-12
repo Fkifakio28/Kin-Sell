@@ -1,0 +1,14 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.kinsell.app",
+      "sha256_cert_fingerprints": [
+        "A7:D0:A7:09:77:4C:0C:5A:47:5C:91:44:0B:C3:CB:FA:3C:9C:74:AB:E3:05:44:03:90:90:BF:97:2C:F8:B7:0C"
+      ]
+    }
+  }
+]

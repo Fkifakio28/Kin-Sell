@@ -145,15 +145,16 @@ export function onServiceWorkerMessage(
 }
 
 /* ══════════════════════════════════════════════════
-   Native Capacitor Push (FCM) — Android
+   Native Capacitor Push (FCM / APNs) — Android & iOS
    ══════════════════════════════════════════════════ */
 
 async function sendFcmTokenToServer(token: string): Promise<void> {
+  const platform = Capacitor.getPlatform(); // "android" | "ios"
   await fetch(`${API_BASE}/notifications/fcm/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
-    body: JSON.stringify({ token, platform: "android" }),
+    body: JSON.stringify({ token, platform }),
   }).catch(() => {});
 }
 

@@ -778,6 +778,21 @@
   white-space: nowrap;
 }
 .bz-stock-badge--low { background: rgba(248,113,113,0.12); color: #F87171; border-color: rgba(248,113,113,0.2); }
+.bz-stock-badge--exhausted {
+  background: rgba(239,68,68,0.18);
+  color: #EF4444;
+  border-color: rgba(239,68,68,0.35);
+  animation: stock-pulse 2s ease-in-out infinite;
+}
+@keyframes stock-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.ud-art-card-stock--exhausted {
+  color: #EF4444 !important;
+  font-weight: 600;
+}
 
 .bz-action-tile:hover { border-color: var(--ud-gold); }
 .bz-stat-card { border-color: rgba(213,178,95,0.2); }

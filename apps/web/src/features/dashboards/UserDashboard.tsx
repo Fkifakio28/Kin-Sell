@@ -2668,8 +2668,8 @@ export function UserDashboard() {
                         </p>
                         {article.promoActive && <span className="ud-art-promo-badge">🏷 Promo</span>}
                         {article.type === 'PRODUIT' && (
-                          <p className="ud-art-card-stock">
-                            {t('user.stockLabel')}: {article.stockQuantity !== null ? article.stockQuantity : '∞'}
+                          <p className={`ud-art-card-stock${article.stockQuantity === 0 ? ' ud-art-card-stock--exhausted' : ''}`}>
+                            {article.stockQuantity === 0 ? `⚠️ ${t('biz.outOfStock', 'Rupture de stock')}` : `${t('user.stockLabel')}: ${article.stockQuantity !== null ? article.stockQuantity : '∞'}`}
                           </p>
                         )}
                       </div>

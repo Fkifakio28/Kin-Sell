@@ -409,6 +409,19 @@ export const checkoutBuyerCart = async (userId: string, notes?: string, delivery
     throw new HttpError(400, `L'article "${unpublishedItem.listing.title}" n'est plus disponible. Retirez-le du panier.`);
   }
 
+  // ── Vérifier le stock disponible ──
+  for (const item of readyItems) {
+    const stock = item.listing.stockQuantity;
+    if (stock !== null && stock !== undefined) {
+      if (stock <= 0) {
+        throw new HttpError(400, `L'article "${item.listing.title}" est en rupture de stock.`);
+      }
+      if (item.quantity > stock) {
+        throw new HttpError(400, `Stock insuffisant pour "${item.listing.title}" (demandé: ${item.quantity}, disponible: ${stock}).`);
+      }
+    }
+  }
+
   // ── Grouper les articles prêts par vendeur ──
   const grouped = new Map<string, typeof cart.items>();
   for (const item of readyItems) {
@@ -810,9 +823,33 @@ export const updateSellerOrderStatus = async (userId: string, orderId: string, n
       buyer: { include: { profile: true } },
       seller: { include: { profile: true } },
       sellerBusiness: true,
-      items: { orderBy: { createdAt: "asc" }, include: { listing: { select: { imageUrl: true } } } }
+      items: { orderBy: { createdAt: "asc" }, include: { listing: { select: { imageUrl: true, stockQuantity: true } } } }
     }
   });
 
-  return mapOrder(updated);
+  // ── Décrémenter le stock quand le vendeur confirme la commande ──
+  const exhaustedListings: Array<{ id: string; title: string }> = [];
+  if (nextStatus === OrderStatus.CONFIRMED) {
+    for (const item of updated.items) {
+      if (!item.listingId) continue;
+      const listing = await prisma.listing.findUnique({
+        where: { id: item.listingId },
+        select: { id: true, title: true, stockQuantity: true }
+      });
+      if (!listing || listing.stockQuantity === null) continue;
+
+      const newStock = Math.max(0, listing.stockQuantity - item.quantity);
+      await prisma.listing.update({
+        where: { id: listing.id },
+        data: { stockQuantity: newStock }
+      });
+
+      if (newStock === 0) {
+        exhaustedListings.push({ id: listing.id, title: listing.title });
+      }
+    }
+  }
+
+  const mapped = mapOrder(updated);
+  return { ...mapped, _exhaustedListings: exhaustedListings };
 };

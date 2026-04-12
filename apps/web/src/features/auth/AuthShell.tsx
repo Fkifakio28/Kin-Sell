@@ -10,7 +10,7 @@ type AuthShellProps = {
   role?: "user" | "business";
   onRoleChange?: (role: "user" | "business") => void;
   socialMessage: string | null;
-  onSocialClick: (provider: "google" | "facebook") => void;
+  onSocialClick: (provider: "google" | "facebook" | "apple") => void;
   children: ReactNode;
 };
 
@@ -27,6 +27,12 @@ const FacebookIcon = () => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
     <path d="M24 12.073C24 5.405 18.627 0 12 0S0 5.405 0 12.073c0 6.026 4.388 11.022 10.125 11.927v-8.437H7.078v-3.49h3.047V9.412c0-3.029 1.792-4.702 4.533-4.702 1.313 0 2.686.236 2.686.236v2.973H15.83c-1.491 0-1.956.931-1.956 1.887v2.267h3.328l-.532 3.49h-2.796V24C19.612 23.095 24 18.099 24 12.073Z" fill="#1877F2" />
     <path d="M16.671 15.563l.532-3.49h-3.328V9.806c0-.956.465-1.887 1.956-1.887h1.513V4.946s-1.373-.236-2.686-.236c-2.74 0-4.533 1.673-4.533 4.702v2.661H7.078v3.49h3.047V24a12.2 12.2 0 0 0 3.75 0v-8.437h2.796Z" fill="#fff" />
+  </svg>
+);
+
+const AppleIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.53-3.23 0-1.44.62-2.2.44-3.06-.4C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09ZM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25Z" />
   </svg>
 );
 
@@ -113,6 +119,10 @@ export function AuthShell({
             <button type="button" className="auth-social-button auth-social-button--facebook" onClick={() => onSocialClick("facebook")}>
               <FacebookIcon />
               <span>{t("auth.socialFacebook")}</span>
+            </button>
+            <button type="button" className="auth-social-button auth-social-button--apple" onClick={() => onSocialClick("apple")}>
+              <AppleIcon />
+              <span>{t("auth.socialApple")}</span>
             </button>
           </div>
 

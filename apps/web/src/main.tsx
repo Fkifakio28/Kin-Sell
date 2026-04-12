@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { App as CapacitorApp, type URLOpenListenerEvent } from "@capacitor/app";
 import { Browser } from "@capacitor/browser";
 import { Capacitor } from "@capacitor/core";
+import { StatusBar, Style } from "@capacitor/status-bar";
 import App from "./App";
 import { ThemeProvider } from "./app/providers/ThemeProvider";
 import { AuthProvider } from "./app/providers/AuthProvider";
@@ -12,6 +13,7 @@ import { MarketPreferenceProvider } from "./app/providers/MarketPreferenceProvid
 import { SocketProvider } from "./app/providers/SocketProvider";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { registerServiceWorker } from "./utils/push-notifications";
+import { initializeIAP } from "./utils/iap";
 import "./styles/index.css";
 
 // ── Register Service Worker for push notifications (web only) ──
@@ -21,6 +23,11 @@ if ("serviceWorker" in navigator) {
 
 // ── Native platform setup ──
 if (Capacitor.isNativePlatform()) {
+  // Status bar: ne pas chevaucher le contenu web
+  StatusBar.setOverlaysWebView({ overlay: false }).catch(() => {});
+  StatusBar.setBackgroundColor({ color: "#120B2B" }).catch(() => {});
+  StatusBar.setStyle({ style: Style.Dark }).catch(() => {});
+
   // Deep-link handler: intercept OAuth callback
   CapacitorApp.addListener("appUrlOpen", async ({ url }: URLOpenListenerEvent) => {
     if (!url) return;
@@ -52,6 +59,9 @@ if (Capacitor.isNativePlatform()) {
       CapacitorApp.exitApp();
     }
   });
+
+  // Initialize In-App Purchases (iOS only)
+  initializeIAP().catch(() => {});
 }
 
 ReactDOM.createRoot(document.getElementById("root")!).render(

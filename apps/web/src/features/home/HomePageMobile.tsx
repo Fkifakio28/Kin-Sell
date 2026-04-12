@@ -52,6 +52,7 @@ import NotificationCenter from "../../components/NotificationCenter";
 import { useGlobalNotification } from "../../app/providers/GlobalNotificationProvider";
 import TutorialOverlay, { useTutorial, TutorialRelaunchBtn } from "../../components/TutorialOverlay";
 import { homeMobileSteps } from "../../components/tutorial-steps";
+import { Capacitor } from "@capacitor/core";
 import "./home-mobile.css";
 
 /* ────────────── Static data ────────────── */
@@ -244,6 +245,26 @@ function SideDrawer({
           >
             {"\uD83D\uDCDD " + t("publish.publishArticle")}
           </button>
+          {!Capacitor.isNativePlatform() && /android/i.test(navigator.userAgent) && import.meta.env.VITE_ANDROID_APK_URL && (
+            <a
+              href={import.meta.env.VITE_ANDROID_APK_URL}
+              className="hm-drawer-download-btn"
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={onClose}
+            >
+              📲 {t("home.downloadAndroid", "Télécharger l'app Android")}
+            </a>
+          )}
+        </div>
+
+        <div className="hm-drawer-quick-links">
+          <Link to="/forfaits" className="hm-drawer-quick-link" onClick={onClose}>
+            💳 {t("nav.plans")}
+          </Link>
+          <Link to="/contact" className="hm-drawer-quick-link" onClick={onClose}>
+            📞 {t("home.contact")}
+          </Link>
         </div>
 
         <div className="hm-drawer-market-prefs">

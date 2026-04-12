@@ -63,6 +63,17 @@ const schema = z.object({
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   GOOGLE_CALLBACK_URL: z.string().default("https://api.kin-sell.com/auth/google/callback"),
+
+  // ── Apple OAuth ──
+  APPLE_CLIENT_ID: z.string().optional(),
+  APPLE_TEAM_ID: z.string().optional(),
+  APPLE_KEY_ID: z.string().optional(),
+  APPLE_PRIVATE_KEY: z.string().optional(),
+  APPLE_CALLBACK_URL: z.string().default("https://api.kin-sell.com/auth/apple/callback"),
+
+  // ── Apple In-App Purchase ──
+  APPLE_IAP_SHARED_SECRET: z.string().optional(),
+
   FRONTEND_URL: z.string().default("https://kin-sell.com"),
   MOBILE_APP_AUTH_CALLBACK: z.string().default("com.kinsell.app://auth/callback"),
 

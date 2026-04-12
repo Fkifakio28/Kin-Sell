@@ -675,6 +675,25 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
       void maybeShowSystemNotification(toast, { type: "sokin", postId: data.postId, url: toast.targetUrl });
     };
 
+    const handleStockExhausted = (data: { listings: Array<{ id: string; title: string }>; orderId: string }) => {
+      for (const listing of data.listings) {
+        const toast: MessageToast = {
+          id: `stock-exhausted-${listing.id}-${Date.now()}`,
+          kind: "system",
+          title: "⚠️ Stock épuisé",
+          content: `Votre article "${listing.title}" est en rupture de stock`,
+          icon: "⚠️",
+          targetUrl: "/account?section=articles",
+          timestamp: Date.now(),
+        };
+        setToasts((p) => [toast, ...p].slice(0, 4));
+        setTimeout(() => setToasts((p) => p.filter((t) => t.id !== toast.id)), 8000);
+        pushMissed({ kind: toast.kind, title: toast.title, content: toast.content, icon: toast.icon, targetUrl: toast.targetUrl });
+        void maybeShowSystemNotification(toast, { type: "stock", listingId: listing.id, url: toast.targetUrl });
+        playMessageSound();
+      }
+    };
+
     socket.on("message:new", handleNewMessage);
     socket.on("call:incoming", handleIncomingCall);
     socket.on("call:ended", handleCallEnded);
@@ -686,6 +705,7 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
     socket.on("negotiation:updated", handleNegotiationUpdated);
     socket.on("negotiation:expired", handleNegotiationExpired);
     socket.on("sokin:post-created", handleSokinPostCreated);
+    socket.on("listing:stock-exhausted", handleStockExhausted);
 
     return () => {
       socket.off("message:new", handleNewMessage);
@@ -699,6 +719,7 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
       socket.off("negotiation:updated", handleNegotiationUpdated);
       socket.off("negotiation:expired", handleNegotiationExpired);
       socket.off("sokin:post-created", handleSokinPostCreated);
+      socket.off("listing:stock-exhausted", handleStockExhausted);
     };
   }, [isLoggedIn, isConnected, user?.id, playMessageSound, presentIncomingCall, pushMissed, maybeShowSystemNotification]);
 

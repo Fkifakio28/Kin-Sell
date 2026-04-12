@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import crypto from "crypto";
 import { Role } from "../../types/roles.js";
 import { requireAuth, type AuthenticatedRequest } from "../../shared/auth/auth-middleware.js";
 import { asyncHandler } from "../../shared/utils/async-handler.js";
@@ -8,9 +9,30 @@ import { logSecurityEvent, checkMultiAccount, createFraudSignal } from "../secur
 import { setAuthCookies } from "../../shared/auth/session.js";
 import * as authService from "./auth.service.js";
 import { getGoogleAuthUrl, handleGoogleCallback } from "./google-oauth.service.js";
+import { getAppleAuthUrl, handleAppleCallback } from "./apple-oauth.service.js";
 import { verifyTurnstile } from "../../shared/utils/turnstile.js";
 import { env } from "../../config/env.js";
 import { logger } from "../../shared/logger.js";
+
+/* ── App-code store (ephemeral codes for native app OAuth) ── */
+interface AppCodeEntry {
+  accessToken: string;
+  refreshToken: string;
+  sessionId: string;
+  userId: string;
+  role: string;
+  displayName: string;
+  expiresAt: number;
+}
+const appCodeStore = new Map<string, AppCodeEntry>();
+
+// Purge expired codes every 60s
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of appCodeStore) {
+    if (v.expiresAt < now) appCodeStore.delete(k);
+  }
+}, 60_000);
 
 const registerSchema = z.object({
   email: z.string().email(),
@@ -140,27 +162,184 @@ router.get("/google/callback", asyncHandler(async (req, res) => {
   try {
     const result = await handleGoogleCallback(code);
 
-    // Set httpOnly cookies — tokens no longer sent in URL
-    setAuthCookies(res, {
-      accessToken: result.accessToken,
-      refreshToken: result.refreshToken,
-      sessionId: result.sessionId,
-    });
+    if (source === "app") {
+      // Native app: generate ephemeral one-time code (5 min TTL)
+      // Cookies set in the external browser won't reach the WebView,
+      // so we pass a code via deep-link that the app exchanges later.
+      const appCode = crypto.randomBytes(32).toString("hex");
+      appCodeStore.set(appCode, {
+        accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
+        sessionId: result.sessionId,
+        userId: result.user.id,
+        role: result.user.role,
+        displayName: result.user.displayName ?? "",
+        expiresAt: Date.now() + 5 * 60 * 1000, // 5 min
+      });
+      const params = new URLSearchParams({
+        appCode,
+        authSuccess: "1",
+        role: result.user.role,
+      });
+      res.redirect(`${callbackBase}?${params.toString()}`);
+    } else {
+      // Web: set httpOnly cookies directly
+      setAuthCookies(res, {
+        accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
+        sessionId: result.sessionId,
+      });
 
-    // Only send non-secret metadata in URL
-    const params = new URLSearchParams({
-      authSuccess: "1",
-      userId: result.user.id,
-      displayName: result.user.displayName ?? "",
-      role: result.user.role,
-      isNew: result.isNewUser ? "1" : "0",
-    });
-    res.redirect(`${callbackBase}?${params.toString()}`);
+      const params = new URLSearchParams({
+        authSuccess: "1",
+        userId: result.user.id,
+        displayName: result.user.displayName ?? "",
+        role: result.user.role,
+        isNew: result.isNewUser ? "1" : "0",
+      });
+      res.redirect(`${callbackBase}?${params.toString()}`);
+    }
   } catch (error) {
     logger.error({ err: error }, "[Google OAuth] Callback failed");
     const params = new URLSearchParams({ error: "google_failed" });
     res.redirect(`${callbackBase}?${params.toString()}`);
   }
+}));
+
+// ── Apple Sign In ──
+router.get("/apple", (req, res) => {
+  if (!env.APPLE_CLIENT_ID) {
+    res.status(501).json({ error: "Apple Sign In non configuré" });
+    return;
+  }
+  const source = req.query.source === "app" ? "app" : "web";
+  res.redirect(getAppleAuthUrl(source));
+});
+
+// Apple uses form_post — callback is a POST
+router.post("/apple/callback", asyncHandler(async (req, res) => {
+  const code = req.body?.code as string | undefined;
+  const idToken = req.body?.id_token as string | undefined;
+  const state = req.body?.state === "app" ? "app" : "web";
+  const callbackBase = state === "app" ? env.MOBILE_APP_AUTH_CALLBACK : `${env.FRONTEND_URL}/auth/callback`;
+
+  if (!code) {
+    const params = new URLSearchParams({ error: "apple_no_code" });
+    res.redirect(`${callbackBase}?${params.toString()}`);
+    return;
+  }
+
+  // Apple may send user info (name/email) as JSON string on first login only
+  let userInfo: { name?: { firstName?: string; lastName?: string }; email?: string } | undefined;
+  if (req.body?.user) {
+    try {
+      userInfo = typeof req.body.user === "string" ? JSON.parse(req.body.user) : req.body.user;
+    } catch { /* ignore parse errors */ }
+  }
+
+  try {
+    const result = await handleAppleCallback(code, idToken ?? undefined, userInfo);
+
+    if (state === "app") {
+      const appCode = crypto.randomBytes(32).toString("hex");
+      appCodeStore.set(appCode, {
+        accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
+        sessionId: result.sessionId,
+        userId: result.user.id,
+        role: result.user.role,
+        displayName: result.user.displayName ?? "",
+        expiresAt: Date.now() + 5 * 60 * 1000,
+      });
+      const params = new URLSearchParams({
+        appCode,
+        authSuccess: "1",
+        role: result.user.role,
+      });
+      res.redirect(`${callbackBase}?${params.toString()}`);
+    } else {
+      setAuthCookies(res, {
+        accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
+        sessionId: result.sessionId,
+      });
+
+      const params = new URLSearchParams({
+        authSuccess: "1",
+        userId: result.user.id,
+        displayName: result.user.displayName ?? "",
+        role: result.user.role,
+        isNew: result.isNewUser ? "1" : "0",
+      });
+      res.redirect(`${callbackBase}?${params.toString()}`);
+    }
+  } catch (error) {
+    logger.error({ err: error }, "[Apple OAuth] Callback failed");
+    const params = new URLSearchParams({ error: "apple_failed" });
+    res.redirect(`${callbackBase}?${params.toString()}`);
+  }
+}));
+
+// Apple native SDK: verify identity token from iOS Sign in with Apple
+router.post("/apple/native", rateLimit(RateLimits.LOGIN), asyncHandler(async (req, res) => {
+  const { identityToken, authorizationCode, fullName } = z.object({
+    identityToken: z.string(),
+    authorizationCode: z.string(),
+    fullName: z.object({
+      givenName: z.string().optional(),
+      familyName: z.string().optional(),
+    }).optional(),
+  }).parse(req.body);
+
+  const userInfo = fullName ? {
+    name: { firstName: fullName.givenName, lastName: fullName.familyName },
+  } : undefined;
+
+  const result = await handleAppleCallback(authorizationCode, identityToken, userInfo);
+
+  setAuthCookies(res, {
+    accessToken: result.accessToken,
+    refreshToken: result.refreshToken,
+    sessionId: result.sessionId,
+  });
+
+  res.json({
+    ok: true,
+    userId: result.user.id,
+    role: result.user.role,
+    displayName: result.user.displayName,
+    isNew: result.isNewUser,
+  });
+}));
+
+// ── App code exchange (native app only) ──
+// The WebView calls this to exchange the one-time appCode for httpOnly cookies.
+router.post("/app/exchange", rateLimit(RateLimits.LOGIN), asyncHandler(async (req, res) => {
+  const { appCode } = z.object({ appCode: z.string().length(64) }).parse(req.body);
+
+  const entry = appCodeStore.get(appCode);
+  if (!entry || entry.expiresAt < Date.now()) {
+    appCodeStore.delete(appCode);
+    res.status(401).json({ error: "Code invalide ou expiré" });
+    return;
+  }
+
+  // One-time use — delete immediately
+  appCodeStore.delete(appCode);
+
+  // Set httpOnly cookies in the WebView context
+  setAuthCookies(res, {
+    accessToken: entry.accessToken,
+    refreshToken: entry.refreshToken,
+    sessionId: entry.sessionId,
+  });
+
+  res.json({
+    ok: true,
+    userId: entry.userId,
+    role: entry.role,
+    displayName: entry.displayName,
+  });
 }));
 
 export default router;

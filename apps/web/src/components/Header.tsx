@@ -1,6 +1,7 @@
 ﻿import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Capacitor } from "@capacitor/core";
 import { useAuth } from "../app/providers/AuthProvider";
 import { useLocaleCurrency } from "../app/providers/LocaleCurrencyProvider";
 import { getDashboardPath } from "../utils/role-routing";
@@ -262,6 +263,9 @@ export const Header = React.memo(function Header() {
             <Link to="/forfaits" className="ks-mobile-link" onClick={() => setMobileOpen(false)}>{t('nav.plans')}</Link>
             <Link to="/sokin" className="ks-mobile-link" onClick={() => setMobileOpen(false)}>{t('nav.sokin')}</Link>
             <Link to="/contact" className="ks-mobile-link" onClick={() => setMobileOpen(false)}>{t('nav.contact')}</Link>
+            {!Capacitor.isNativePlatform() && /android/i.test(navigator.userAgent) && import.meta.env.VITE_ANDROID_APK_URL && (
+              <a href={import.meta.env.VITE_ANDROID_APK_URL} className="ks-mobile-link ks-mobile-download" target="_blank" rel="noopener noreferrer" onClick={() => setMobileOpen(false)}>📲 {t('home.downloadAndroid', "Télécharger l'app Android")}</a>
+            )}
             <div className="ks-mobile-divider" />
             <RegionLanguageCurrencySelector className="ks-mobile-rlc" />
             <div className="ks-mobile-divider" />

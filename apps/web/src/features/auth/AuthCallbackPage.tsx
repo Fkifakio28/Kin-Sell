@@ -1,12 +1,22 @@
 import { useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
-import { clearAuthSession } from "../../lib/api-client";
+import { clearAuthSession, request } from "../../lib/api-client";
 import { useLocaleCurrency } from "../../app/providers/LocaleCurrencyProvider";
+
+function redirectByRole(role: string | null) {
+  if (role === "ADMIN" || role === "SUPER_ADMIN") {
+    window.location.replace("/admin/dashboard");
+  } else if (role === "BUSINESS") {
+    window.location.replace("/business/dashboard");
+  } else {
+    window.location.replace("/account");
+  }
+}
 
 /**
  * Page de callback OAuth.
- * L'API sets httpOnly cookies during the redirect — no tokens in URL anymore.
- * We just read metadata (role, authSuccess) and redirect to the appropriate dashboard.
+ * - Web: l'API set httpOnly cookies pendant le redirect, on lit juste les métadonnées.
+ * - App native: on reçoit un appCode éphémère qu'on échange contre des cookies via POST.
  */
 export function AuthCallbackPage() {
   const [searchParams] = useSearchParams();
@@ -20,6 +30,7 @@ export function AuthCallbackPage() {
     const authSuccess = searchParams.get("authSuccess");
     const role = searchParams.get("role");
     const error = searchParams.get("error");
+    const appCode = searchParams.get("appCode");
 
     // Clear any legacy localStorage tokens
     clearAuthSession();
@@ -29,14 +40,20 @@ export function AuthCallbackPage() {
       return;
     }
 
-    // Full page reload pour que AuthProvider bootstrap avec les cookies httpOnly
-    if (role === "ADMIN" || role === "SUPER_ADMIN") {
-      window.location.replace("/admin/dashboard");
-    } else if (role === "BUSINESS") {
-      window.location.replace("/business/dashboard");
-    } else {
-      window.location.replace("/account");
+    // Native app flow: exchange appCode for httpOnly cookies in the WebView
+    if (appCode) {
+      request<{ ok: boolean; role: string }>("/auth/app/exchange", {
+        method: "POST",
+        body: JSON.stringify({ appCode }),
+        headers: { "Content-Type": "application/json" },
+      })
+        .then((res) => redirectByRole(res.role))
+        .catch(() => window.location.replace("/login"));
+      return;
     }
+
+    // Web flow: cookies already set by the redirect
+    redirectByRole(role);
   }, [searchParams]);
 
   return (

@@ -7,6 +7,7 @@ import {
   admin,
   invalidateCache,
   resolveMediaUrl,
+  request,
   type AdminStats,
   type AdminUser,
   type AdminUserDetail,
@@ -63,7 +64,8 @@ type AdminSection =
   | 'security' | 'antifraud' | 'security-ai' | 'ai-management'
   | 'rankings' | 'admins' | 'currency' | 'audit'
   | 'settings' | 'messaging' | 'appeals' | 'subscriptions' | 'verification'
-  | 'ia-analytique' | 'ia-marchande' | 'ia-commande' | 'ia-ads' | 'ia-message';
+  | 'ia-analytique' | 'ia-marchande' | 'ia-commande' | 'ia-ads' | 'ia-message'
+  | 'app-version';
 
 type ModalType =
   | null | 'user-detail' | 'user-role' | 'user-message' | 'user-suspend'
@@ -114,6 +116,7 @@ const SECTION_DEFS: Array<{
   { key: 'currency',      label: 'Devis',              icon: '💱', permission: 'CURRENCY',      group: 'Outils' },
   { key: 'audit',         label: "Journal d'audit",    icon: '📋', permission: 'AUDIT',         group: 'Outils' },
   { key: 'appeals',       label: 'Appels',             icon: '📩', permission: 'USERS',         group: 'Général' },
+  { key: 'app-version',   label: 'App Mobile',         icon: '📱', permission: 'SETTINGS',      group: 'Système' },
   { key: 'settings',      label: 'Paramètres',         icon: '⚙️', permission: 'SETTINGS',      group: 'Système' },
   { key: 'messaging',     label: 'Messagerie',         icon: '💬', permission: 'MESSAGING',     group: 'Système' },
   { key: 'subscriptions',  label: 'Abonnements & IA',   icon: '💳', permission: 'SUBSCRIPTIONS', group: 'Outils' },
@@ -331,6 +334,12 @@ export function AdminDashboard() {
   // Settings
   const [siteSettings, setSiteSettings] = useState<Record<string, string>>({});
 
+  // App Version
+  const [appVersionInfo, setAppVersionInfo] = useState<{ version: string | null; build: number | null; apkUrl: string | null; forceUpdate: boolean; releaseNotes: string | null } | null>(null);
+  const [appVersionForm, setAppVersionForm] = useState({ version: '', build: 1, apkUrl: '', forceUpdate: false, releaseNotes: '' });
+  const [appVersionSaving, setAppVersionSaving] = useState(false);
+  const [appVersionMsg, setAppVersionMsg] = useState<string | null>(null);
+
   // Feed (So-Kin)
   const [feedPosts, setFeedPosts] = useState<AdminFeedPost[]>([]);
   const [feedTotal, setFeedTotal] = useState(0);
@@ -547,6 +556,14 @@ export function AdminDashboard() {
         case 'settings': {
           const res = await admin.siteSettings();
           setSiteSettings(res);
+          break;
+        }
+        case 'app-version': {
+          const av = await request<{ version: string | null; build: number | null; apkUrl: string | null; forceUpdate: boolean; releaseNotes: string | null }>('/app-version/android');
+          setAppVersionInfo(av);
+          if (av.version) {
+            setAppVersionForm({ version: av.version ?? '', build: av.build ?? 1, apkUrl: av.apkUrl ?? '', forceUpdate: av.forceUpdate, releaseNotes: av.releaseNotes ?? '' });
+          }
           break;
         }
         case 'security': {
@@ -2374,6 +2391,136 @@ export function AdminDashboard() {
     </>
   );
 
+  /* ── App Version (Mobile) ── */
+  const handleAppVersionSave = async () => {
+    setAppVersionSaving(true);
+    setAppVersionMsg(null);
+    try {
+      await request('/app-version/android', { method: 'PUT', body: JSON.stringify(appVersionForm), headers: { 'Content-Type': 'application/json' } });
+      const av = await request<{ version: string | null; build: number | null; apkUrl: string | null; forceUpdate: boolean; releaseNotes: string | null }>('/app-version/android');
+      setAppVersionInfo(av);
+      setAppVersionMsg('✅ Version mise à jour avec succès');
+    } catch (e: any) {
+      setAppVersionMsg('❌ ' + (e.message ?? 'Erreur'));
+    } finally {
+      setAppVersionSaving(false);
+    }
+  };
+
+  const renderAppVersion = () => (
+    <div className="ad-section-panel">
+      <div className="ad-section-head">
+        <h2 className="ad-section-title">📱 App Mobile — Version Android</h2>
+      </div>
+
+      {/* Current version info */}
+      <div className="ad-settings-grid">
+        <div className="ad-settings-box">
+          <h3 className="ad-settings-box-title">📊 Version actuelle configurée</h3>
+          {appVersionInfo ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span className={`ad-status-dot ${appVersionInfo.version ? 'ad-status-dot--green' : 'ad-status-dot--amber'}`} />
+                <span style={{ fontSize: 14, fontWeight: 600 }}>
+                  {appVersionInfo.version ? `v${appVersionInfo.version} (build ${appVersionInfo.build})` : 'Non configurée'}
+                </span>
+              </div>
+              {appVersionInfo.apkUrl && (
+                <div style={{ fontSize: 12, color: 'var(--ad-text-2)' }}>
+                  APK : <a href={appVersionInfo.apkUrl} target="_blank" rel="noreferrer" style={{ color: 'var(--ad-accent)' }}>{appVersionInfo.apkUrl.slice(0, 60)}…</a>
+                </div>
+              )}
+              <div style={{ fontSize: 12, color: 'var(--ad-text-3)' }}>
+                Mise à jour obligatoire : {appVersionInfo.forceUpdate ? '🔴 Oui' : '🟢 Non'}
+              </div>
+              {appVersionInfo.releaseNotes && (
+                <div style={{ fontSize: 12, color: 'var(--ad-text-3)', whiteSpace: 'pre-wrap' }}>
+                  📝 {appVersionInfo.releaseNotes}
+                </div>
+              )}
+              <button
+                className="ad-btn"
+                style={{ marginTop: 8, width: 'fit-content' }}
+                onClick={() => loadSectionData()}
+                disabled={busy}
+              >
+                🔄 Vérifier le statut
+              </button>
+            </div>
+          ) : (
+            <div style={{ fontSize: 13, color: 'var(--ad-text-3)' }}>Chargement…</div>
+          )}
+        </div>
+
+        <div className="ad-settings-box">
+          <h3 className="ad-settings-box-title">✏️ Configurer la version</h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <label style={{ fontSize: 12, color: 'var(--ad-text-2)' }}>
+              Version (ex: 1.2.0)
+              <input
+                className="ad-search"
+                style={{ display: 'block', marginTop: 4, width: '100%' }}
+                value={appVersionForm.version}
+                onChange={e => setAppVersionForm(f => ({ ...f, version: e.target.value }))}
+                placeholder="1.0.0"
+              />
+            </label>
+            <label style={{ fontSize: 12, color: 'var(--ad-text-2)' }}>
+              Build number
+              <input
+                className="ad-search"
+                type="number"
+                style={{ display: 'block', marginTop: 4, width: '100%' }}
+                value={appVersionForm.build}
+                onChange={e => setAppVersionForm(f => ({ ...f, build: Number(e.target.value) }))}
+                min={1}
+              />
+            </label>
+            <label style={{ fontSize: 12, color: 'var(--ad-text-2)' }}>
+              Lien APK
+              <input
+                className="ad-search"
+                style={{ display: 'block', marginTop: 4, width: '100%' }}
+                value={appVersionForm.apkUrl}
+                onChange={e => setAppVersionForm(f => ({ ...f, apkUrl: e.target.value }))}
+                placeholder="https://..."
+              />
+            </label>
+            <label style={{ fontSize: 12, color: 'var(--ad-text-2)', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input
+                type="checkbox"
+                checked={appVersionForm.forceUpdate}
+                onChange={e => setAppVersionForm(f => ({ ...f, forceUpdate: e.target.checked }))}
+              />
+              Mise à jour obligatoire (bloquante)
+            </label>
+            <label style={{ fontSize: 12, color: 'var(--ad-text-2)' }}>
+              Notes de version
+              <textarea
+                className="ad-search"
+                style={{ display: 'block', marginTop: 4, width: '100%', minHeight: 60, resize: 'vertical' }}
+                value={appVersionForm.releaseNotes}
+                onChange={e => setAppVersionForm(f => ({ ...f, releaseNotes: e.target.value }))}
+                placeholder="Nouveautés de cette version…"
+              />
+            </label>
+            <button
+              className="ad-btn ad-btn--primary"
+              onClick={handleAppVersionSave}
+              disabled={appVersionSaving || !appVersionForm.version || !appVersionForm.apkUrl}
+              style={{ width: 'fit-content' }}
+            >
+              {appVersionSaving ? '⏳ Sauvegarde…' : '💾 Sauvegarder'}
+            </button>
+            {appVersionMsg && (
+              <div style={{ fontSize: 13, marginTop: 4 }}>{appVersionMsg}</div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
   const renderSettings = () => (
     <div className="ad-settings-grid">
       {isSuperAdmin && (
@@ -4075,6 +4222,7 @@ export function AdminDashboard() {
       case 'currency': return renderCurrency();
       case 'audit': return renderAudit();
       case 'settings': return renderSettings();
+      case 'app-version': return renderAppVersion();
       case 'messaging': return renderMessaging();
       case 'subscriptions': return renderSubscriptions();
       case 'verification': return renderVerification();

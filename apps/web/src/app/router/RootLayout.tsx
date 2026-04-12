@@ -1,14 +1,10 @@
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useState } from "react";
 import { Outlet, ScrollRestoration, useLocation } from "react-router-dom";
-import { BackgroundMusic } from "../../components/BackgroundMusic";
 import { CookieConsent } from "../../components/CookieConsent";
 import { Footer } from "../../components/Footer";
 import { shouldShowSplash, SplashScreen } from "../../components/SplashScreen";
 import { SuspensionGuard } from "../providers/AuthProvider";
 import { useIsMobile } from "../../hooks/useIsMobile";
-
-/** Routes où la musique de fond doit être stoppée (expérience immersion So-Kin). */
-const MUSIC_OFF_ROUTES = ["/sokin"];
 
 /**
  * Root layout — wraps all pages with background shell + footer.
@@ -22,17 +18,9 @@ export function RootLayout() {
     || location.pathname === "/suspended";
 
   const [splashVisible, setSplashVisible] = useState(() => shouldShowSplash());
-  const [musicPlaying, setMusicPlaying] = useState(() => !shouldShowSplash());
-
-  // Stop musique sur la page So-Kin (tous appareils)
-  useEffect(() => {
-    const onMusicOffRoute = MUSIC_OFF_ROUTES.includes(location.pathname);
-    setMusicPlaying((prev) => onMusicOffRoute ? false : prev || !shouldShowSplash());
-  }, [location.pathname]);
 
   function handleSplashDismiss() {
     setSplashVisible(false);
-    setMusicPlaying(true);
   }
 
   return (
@@ -60,7 +48,6 @@ export function RootLayout() {
       <ScrollRestoration />
       {splashVisible && <SplashScreen onDismiss={handleSplashDismiss} />}
       <CookieConsent />
-      <BackgroundMusic playing={musicPlaying} />
     </div>
   );
 }

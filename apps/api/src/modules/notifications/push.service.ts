@@ -49,7 +49,7 @@ export async function unsubscribeAllPush(userId: string) {
   return prisma.pushSubscription.deleteMany({ where: { userId } });
 }
 
-/* ── FCM Token registration (Android native) ── */
+/* ── FCM Token registration (Android & iOS native) ── */
 export async function registerFcmToken(userId: string, token: string, platform = "android") {
   return prisma.fcmToken.upsert({
     where: { token },

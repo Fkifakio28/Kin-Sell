@@ -23,6 +23,7 @@ import {
   ICE_RESTART_DELAYS, ICE_MAX_ATTEMPTS,
 } from "../../utils/webrtc-config";
 import { useWakeLock } from "../../hooks/useWakeLock";
+import { setEarpiece, setSpeaker, resetAudioRoute } from "../../utils/audio-route";
 import TutorialOverlay, { useTutorial, TutorialRelaunchBtn } from '../../components/TutorialOverlay';
 import { messagingSteps } from '../../components/tutorial-steps';
 import "./messaging.css";
@@ -952,6 +953,7 @@ export function MessagingPage() {
     setConnectionQuality("unknown");
     qualityPoorStreakRef.current = 0; qualityGoodStreakRef.current = 0;
     iceRestartAttemptRef.current = 0;
+    void resetAudioRoute();
   }, []);
 
   const applyVideoProfile = useCallback(async (profile: VideoProfile) => {
@@ -1034,8 +1036,17 @@ export function MessagingPage() {
   const toggleSpeaker = useCallback(() => {
     setIsSpeakerOn((prev) => {
       const next = !prev;
-      if (remoteAudioRef.current) remoteAudioRef.current.muted = !next;
-      if (remoteVideoRef.current) remoteVideoRef.current.muted = !next;
+      if (next) {
+        // Activer haut-parleur : unmute audio, route vers speaker
+        if (remoteAudioRef.current) remoteAudioRef.current.muted = false;
+        if (remoteVideoRef.current) remoteVideoRef.current.muted = false;
+        setIsEarMode(false);
+        void setSpeaker();
+      } else {
+        // Couper le son : mute audio
+        if (remoteAudioRef.current) remoteAudioRef.current.muted = true;
+        if (remoteVideoRef.current) remoteVideoRef.current.muted = true;
+      }
       return next;
     });
   }, []);
@@ -1497,7 +1508,7 @@ export function MessagingPage() {
                 <span className="mg-call-ctrl-label">HP</span>
               </button>
               {callState.type === "audio" && (
-                <button className={`mg-call-ctrl${isEarMode ? " mg-call-ctrl--active" : ""}`} onClick={() => setIsEarMode((p) => !p)}>
+                <button className={`mg-call-ctrl${isEarMode ? " mg-call-ctrl--active" : ""}`} onClick={() => { setIsEarMode((p) => { const next = !p; if (next) { void setEarpiece(); setIsSpeakerOn(false); if (remoteAudioRef.current) remoteAudioRef.current.muted = false; } else { void setSpeaker(); setIsSpeakerOn(true); } return next; }); }}>
                   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9a6 6 0 0 1 12 0c0 7-3 9-6 9s-6-2-6-9z"/><path d="M12 22v-4"/></svg>
                   <span className="mg-call-ctrl-label">Oreille</span>
                 </button>

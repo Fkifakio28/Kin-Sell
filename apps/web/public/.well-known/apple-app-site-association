@@ -1,0 +1,66 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": [
+          "APPLE_TEAM_ID.com.kinsell.app"
+        ],
+        "components": [
+          {
+            "/": "/messaging/*",
+            "comment": "Conversations et appels"
+          },
+          {
+            "/": "/listing/*",
+            "comment": "Page détail annonce"
+          },
+          {
+            "/": "/explorer",
+            "comment": "Explorer les marchés"
+          },
+          {
+            "/": "/explorer/*",
+            "comment": "Explorer - sous-pages"
+          },
+          {
+            "/": "/sokin",
+            "comment": "Feed social"
+          },
+          {
+            "/": "/sokin/*",
+            "comment": "Posts et interactions"
+          },
+          {
+            "/": "/account",
+            "comment": "Mon compte"
+          },
+          {
+            "/": "/account/*",
+            "comment": "Sous-sections du compte"
+          },
+          {
+            "/": "/forfaits",
+            "comment": "Page pricing"
+          },
+          {
+            "/": "/auth/callback*",
+            "comment": "OAuth callback"
+          },
+          {
+            "/": "/blog/*",
+            "comment": "Articles du blog"
+          },
+          {
+            "/": "/notifications",
+            "comment": "Mes notifications"
+          }
+        ]
+      }
+    ]
+  },
+  "webcredentials": {
+    "apps": [
+      "APPLE_TEAM_ID.com.kinsell.app"
+    ]
+  }
+}

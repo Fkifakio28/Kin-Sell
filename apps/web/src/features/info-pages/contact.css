@@ -360,10 +360,51 @@
   flex-wrap: wrap;
 }
 
+.contact-donation-amounts {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.contact-donation-amount {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 70px;
+  padding: 0.75rem 1.25rem;
+  text-decoration: none;
+  font-family: var(--font-family-display);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+  transition: all 0.25s ease;
+  cursor: pointer;
+}
+
+.contact-donation-amount:hover {
+  transform: translateY(-3px);
+  border-color: var(--color-primary);
+  box-shadow: 0 4px 20px rgba(111, 88, 255, 0.25);
+  color: var(--color-primary);
+}
+
+.contact-donation-amount-value {
+  pointer-events: none;
+}
+
 .contact-donation-note {
   margin: 0;
   font-size: var(--font-size-sm);
   color: var(--color-text-tertiary);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.contact-donation-note svg {
+  flex-shrink: 0;
+  color: var(--color-primary);
 }
 
 /* ══════ REASSURANCE ══════ */
