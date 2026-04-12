@@ -75,16 +75,7 @@ const createPostSchema = z.object({
   scheduledAt: z.string().datetime().optional(),
   backgroundStyle: z.string().max(100).optional(),
 }).refine((data) => {
-  // Règle 1 : les types visuels exigent au moins 1 média
-  if ((MEDIA_REQUIRED_TYPES as readonly string[]).includes(data.postType) && data.mediaUrls.length < 1) {
-    return false;
-  }
-  return true;
-}, {
-  message: "Ce type de publication nécessite au moins 1 média",
-  path: ["mediaUrls"],
-}).refine((data) => {
-  // Règle 2 : une publication doit contenir au moins du texte OU au moins 1 média
+  // Une publication doit contenir du texte OU au moins 1 média
   const hasText = data.text.trim().length > 0;
   const hasMedia = data.mediaUrls.length > 0;
   return hasText || hasMedia;

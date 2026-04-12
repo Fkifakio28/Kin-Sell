@@ -685,13 +685,12 @@ function DesktopStudioComposer({
 
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const mediaRequired = MEDIA_REQUIRED_TYPES.includes(postType);
   const typeMeta = POST_TYPE_META[postType];
   const canPreview = text.trim().length > 0 || mediaFiles.length > 0;
   const hasText = text.trim().length > 0;
   const hasMedia = mediaFiles.length > 0;
-  const showBgSelector = hasText && !hasMedia && !mediaRequired;
-  const canPublish = (hasText || hasMedia) && (!mediaRequired || hasMedia);
+  const showBgSelector = hasText && !hasMedia;
+  const canPublish = hasText || hasMedia;
 
   useEffect(() => {
     const urls = mediaFiles.map((f) => URL.createObjectURL(f));
@@ -862,11 +861,7 @@ function DesktopStudioComposer({
   const submit = () => {
     setLocalError(null);
     if (!canPublish) {
-      if (mediaRequired && mediaFiles.length < 1) {
-        setLocalError('Ce type de publication nécessite au moins 1 média.');
-      } else {
-        setLocalError('Ajoutez du texte ou au moins 1 média.');
-      }
+      setLocalError('Ajoutez du texte ou au moins 1 média.');
       return;
     }
     const schedErr = validateDesktopSchedule(scheduledAt);
@@ -1206,14 +1201,13 @@ function CreateAnnounceScreen({
   const fileRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const mediaRequired = MEDIA_REQUIRED_TYPES.includes(postType);
   const typeMeta = POST_TYPE_META[postType];
   const totalMediaCount = mediaFiles.length + existingMediaUrls.length;
   const canPreview = text.trim().length > 0 || totalMediaCount > 0;
   const hasText = text.trim().length > 0;
   const hasMedia = totalMediaCount > 0;
-  const showBgSelector = hasText && !hasMedia && !mediaRequired;
-  const canPublish = (hasText || hasMedia) && (!mediaRequired || hasMedia);
+  const showBgSelector = hasText && !hasMedia;
+  const canPublish = hasText || hasMedia;
   const imageCount = mediaFiles.filter((f) => !f.type.startsWith('video/')).length;
   const videoCount = mediaFiles.filter((f) => f.type.startsWith('video/')).length;
   const hasUnsavedInput =
@@ -1248,7 +1242,6 @@ function CreateAnnounceScreen({
 
   const validateMediaSelection = (files: File[]) => {
     const total = files.length + existingMediaUrls.length;
-    if (mediaRequired && total < 1) return 'Ajoutez au moins 1 média pour ce type de publication.';
     if (total > 5) return 'Maximum 5 médias par publication.';
     const vc = files.filter((f) => f.type.startsWith('video/')).length;
     if (vc > 2) return 'Maximum 2 vidéos par publication.';
@@ -1839,7 +1832,7 @@ function CreateAnnounceScreen({
             )}
 
             <div className="sk-modal-media-row">
-              <span className="sk-modal-media-hint">Médias: {totalMediaCount}/5 {mediaRequired ? '(obligatoire)' : '(optionnel)'}</span>
+              <span className="sk-modal-media-hint">Médias: {totalMediaCount}/5 (optionnel)</span>
               <span className="sk-modal-media-hint">Jusqu'à 5 médias, dont 2 vidéos max</span>
               <span className="sk-media-counter" aria-live="polite">
                 {imageCount} image{imageCount > 1 ? 's' : ''} / {videoCount} vidéo{videoCount > 1 ? 's' : ''}

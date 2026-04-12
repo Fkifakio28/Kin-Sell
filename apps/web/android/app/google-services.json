@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "581029730967",
+    "project_id": "kin-sell-40a36",
+    "storage_bucket": "kin-sell-40a36.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:581029730967:android:bb7ea8e469ee54d728a7d2",
+        "android_client_info": {
+          "package_name": "com.kinsell.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCpZvge8IR7kwVUZLAC6f70e_cJ8nb-INs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

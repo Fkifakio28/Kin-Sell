@@ -76,6 +76,11 @@ const schema = z.object({
   ENABLE_GEMINI: z.enum(["true", "false"]).default("true").transform(v => v === "true"),
   MAX_AI_ADS_PER_DAY: z.coerce.number().min(0).max(20).default(2),
   AI_MODE: z.enum(["ECONOMY", "STANDARD", "FULL"]).default("ECONOMY"),
+
+  // ── Firebase (FCM push) ──
+  FIREBASE_PROJECT_ID: z.string().optional(),
+  FIREBASE_CLIENT_EMAIL: z.string().optional(),
+  FIREBASE_PRIVATE_KEY: z.string().optional(),
 });
 
 export const env = schema.parse(process.env);

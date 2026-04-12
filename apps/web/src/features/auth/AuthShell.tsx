@@ -70,7 +70,7 @@ export function AuthShell({
         <div className="auth-card glass-container">
           <div className="auth-card-glow" aria-hidden="true" />
           <a href="/" className="auth-brand" aria-label={t("auth.backToHome")}>
-            <img src="/assets/kin-sell/Logo%20Kin-Sell.png" alt="Kin-Sell" className="auth-brand-logo" />
+            <img src="/assets/kin-sell/logo-kinsell.png" alt="Kin-Sell" className="auth-brand-logo" />
             <div>
               <span className="auth-brand-name">Kin-Sell</span>
               <span className="auth-brand-tag">{t("auth.shellBrandTag")}</span>

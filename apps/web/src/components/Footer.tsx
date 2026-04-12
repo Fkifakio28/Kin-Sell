@@ -53,7 +53,7 @@ export const Footer = React.memo(function Footer() {
           {/* Logo */}
           <div className="ks-footer-logo-wrap">
             <img
-              src="/assets/kin-sell/Logo%20Kin-Sell.png"
+              src="/assets/kin-sell/logo-kinsell.png"
               alt="Kin-Sell"
               className="ks-footer-logo"
               onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}

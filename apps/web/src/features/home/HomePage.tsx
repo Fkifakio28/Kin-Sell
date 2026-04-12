@@ -34,6 +34,7 @@ import "./home.css";
 const LETTERS = ["K", "I", "N", "-", "S", "E", "L", "L"];
 
 const INFO_ITEMS = [
+  { titleKey: "nav.plans", href: "/forfaits" },
   { titleKey: "home.aboutUs", href: "/about" },
   { titleKey: "home.terms", href: "/terms" },
   { titleKey: "home.usageTips", href: "/guide" },
@@ -754,7 +755,7 @@ export function HomePage() {
             title={t('home.homeAria')}
             style={{ cursor: 'pointer' }}
           >
-            <img src="/assets/kin-sell/Logo%20Kin-Sell.png" alt="Kin-Sell" />
+            <img src="/assets/kin-sell/logo-kinsell.png" alt="Kin-Sell" />
           </div>
         </div>
       </header>

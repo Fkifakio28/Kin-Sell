@@ -312,6 +312,60 @@
   border-radius: 100px;
 }
 
+/* ══════ DONATION ══════ */
+.contact-donation {
+  display: flex;
+  justify-content: center;
+}
+
+.contact-donation-card {
+  width: 100%;
+  max-width: 820px;
+  padding: 1.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  border: 1px solid rgba(111, 88, 255, 0.24);
+}
+
+.contact-donation-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.8rem;
+}
+
+.contact-donation-icon {
+  color: var(--color-primary);
+  display: inline-flex;
+  margin-top: 0.1rem;
+}
+
+.contact-donation-title {
+  margin: 0;
+  font-family: var(--font-family-display);
+  font-size: var(--font-size-xl);
+  color: var(--color-text-primary);
+}
+
+.contact-donation-subtitle {
+  margin: 0.35rem 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  line-height: 1.6;
+}
+
+.contact-donation-actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.contact-donation-note {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-tertiary);
+}
+
 /* ══════ REASSURANCE ══════ */
 .contact-reassurance {
   display: flex;
@@ -482,6 +536,9 @@
   .contact-reassurance {
     flex-direction: column;
     padding: 1.5rem 1.2rem;
+  }
+  .contact-donation-card {
+    padding: 1.2rem;
   }
   .contact-tips-grid {
     grid-template-columns: 1fr;

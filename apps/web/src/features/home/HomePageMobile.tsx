@@ -67,6 +67,7 @@ const DRAWER_LINKS = {
     { icon: "\uD83C\uDFEC", labelKey: "home.sokinMarket", href: "/explorer/shops-online" },
   ],
   info: [
+    { icon: "\uD83D\uDCB3", labelKey: "nav.plans", href: "/forfaits" },
     { icon: "\u2139\uFE0F", labelKey: "home.aboutUs", href: "/about" },
     { icon: "\u2753", labelKey: "home.faq", href: "/faq" },
     { icon: "\uD83D\uDCD6", labelKey: "nav.guide", href: "/guide" },

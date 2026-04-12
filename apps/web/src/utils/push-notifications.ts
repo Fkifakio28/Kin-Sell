@@ -1,9 +1,16 @@
 import { API_BASE } from "../lib/api-core";
+import { Capacitor } from "@capacitor/core";
+import { PushNotifications } from "@capacitor/push-notifications";
 
 const SW_URL = "/sw.js";
 
+/* ── Helpers ── */
 function isBrowser(): boolean {
   return typeof window !== "undefined";
+}
+
+function isNativeApp(): boolean {
+  return Capacitor.isNativePlatform();
 }
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
@@ -136,3 +143,80 @@ export function onServiceWorkerMessage(
   navigator.serviceWorker.addEventListener("message", handler);
   return () => navigator.serviceWorker.removeEventListener("message", handler);
 }
+
+/* ══════════════════════════════════════════════════
+   Native Capacitor Push (FCM) — Android
+   ══════════════════════════════════════════════════ */
+
+async function sendFcmTokenToServer(token: string): Promise<void> {
+  await fetch(`${API_BASE}/notifications/fcm/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ token, platform: "android" }),
+  }).catch(() => {});
+}
+
+/**
+ * Initialize native push notifications (FCM via Capacitor).
+ * Returns a cleanup function to remove listeners.
+ */
+export async function initNativePush(
+  onNotification?: (data: Record<string, string>) => void,
+): Promise<(() => void) | null> {
+  if (!isNativeApp()) return null;
+
+  try {
+    let permStatus = await PushNotifications.checkPermissions();
+    if (permStatus.receive === "prompt") {
+      permStatus = await PushNotifications.requestPermissions();
+    }
+    if (permStatus.receive !== "granted") return null;
+
+    await PushNotifications.register();
+
+    const regListener = await PushNotifications.addListener("registration", (token) => {
+      void sendFcmTokenToServer(token.value);
+    });
+
+    const regErrorListener = await PushNotifications.addListener("registrationError", (err) => {
+      console.warn("[FCM] Registration error:", err);
+    });
+
+    const receivedListener = await PushNotifications.addListener(
+      "pushNotificationReceived",
+      (notification) => {
+        // Notification received while app is in foreground
+        if (onNotification && notification.data) {
+          onNotification(notification.data as Record<string, string>);
+        }
+      },
+    );
+
+    const actionListener = await PushNotifications.addListener(
+      "pushNotificationActionPerformed",
+      (action) => {
+        // User tapped the notification (app was in background)
+        const data = action.notification.data as Record<string, string> | undefined;
+        if (data?.url) {
+          window.location.href = data.url;
+        } else if (data?.type === "message") {
+          window.location.href = "/messaging";
+        } else if (data?.type === "order") {
+          window.location.href = "/account?tab=commandes";
+        }
+      },
+    );
+
+    return () => {
+      void regListener.remove();
+      void regErrorListener.remove();
+      void receivedListener.remove();
+      void actionListener.remove();
+    };
+  } catch {
+    return null;
+  }
+}
+
+export { isNativeApp };

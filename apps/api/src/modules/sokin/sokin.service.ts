@@ -17,13 +17,7 @@ const normalizeMediaUrls = (mediaUrls: string[]): string[] =>
     .map((value) => value.trim())
     .filter((value) => value.length > 0);
 
-/**
- * Types visuels qui exigent au moins 1 média
- * UPDATE (11/04/2026): Texte seul autorisé pour tous types avec backgrounds
- */
-const MEDIA_REQUIRED_TYPES = [];
-
-const validatePostMediaUrls = (mediaUrls: string[], postType: string) => {
+const validatePostMediaUrls = (mediaUrls: string[]) => {
   // UPDATE (11/04/2026): Texte seul autorisé (pas de check MEDIA_REQUIRED_TYPES)
   if (mediaUrls.length > 5) {
     throw new HttpError(400, "Maximum 5 médias par publication");
@@ -101,8 +95,8 @@ export const createSoKinPost = async (
   backgroundStyle?: string
 ) => {
   const normalizedMediaUrls = normalizeMediaUrls(mediaUrls);
-  validatePostContent(text, normalizedMediaUrls);
-  validatePostMediaUrls(normalizedMediaUrls, postType);
+  validatePostContent(text, normalizedMediaUrls, backgroundStyle);
+  validatePostMediaUrls(normalizedMediaUrls);
 
   const post = await prisma.soKinPost.create({
     data: {
@@ -475,8 +469,7 @@ export const updateSoKinPost = async (
 
   if (data.mediaUrls !== undefined) {
     const normalized = normalizeMediaUrls(data.mediaUrls);
-    const effectiveType = (data.postType || post.postType) as string;
-    validatePostMediaUrls(normalized, effectiveType);
+    validatePostMediaUrls(normalized);
     updatePayload.mediaUrls = normalized;
   }
 
@@ -485,11 +478,8 @@ export const updateSoKinPost = async (
   const finalMedia = data.mediaUrls !== undefined
     ? normalizeMediaUrls(data.mediaUrls)
     : (post.mediaUrls as string[]);
-  validatePostContent(finalText, finalMedia);
-
-  // Valider média requis pour le type final
-  const finalType = (data.postType || post.postType) as string;
-  // UPDATE (11/04/2026): Validation globale suffisante, pas de check par type
+  const finalBackgroundStyle = data.backgroundStyle !== undefined ? data.backgroundStyle : post.backgroundStyle;
+  validatePostContent(finalText, finalMedia, finalBackgroundStyle ?? undefined);
 
   const updated = await prisma.soKinPost.update({
     where: { id: postId },

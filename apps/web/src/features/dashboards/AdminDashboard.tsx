@@ -155,6 +155,11 @@ export function AdminDashboard() {
 
   const [adminMe, setAdminMe] = useState<AdminMe | null>(null);
   const [activeSection, setActiveSection] = useState<AdminSection>(() => {
+    if (typeof window !== 'undefined') {
+      const urlSection = new URLSearchParams(window.location.search).get('section');
+      if (urlSection === 'messages') return 'messaging';
+      if (urlSection && ALL_SECTIONS.includes(urlSection as any)) return urlSection as AdminSection;
+    }
     const stored = sessionStorage.getItem('ud-section');
     if (stored) {
       sessionStorage.removeItem('ud-section');

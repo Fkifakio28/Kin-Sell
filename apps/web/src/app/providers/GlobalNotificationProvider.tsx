@@ -6,7 +6,9 @@ import { playCallSound, stopCallSound } from "../../utils/call-sound";
 import {
   getNotificationPermission,
   isPushSupported,
+  isNativeApp,
   isSubscribedToPush,
+  initNativePush,
   onServiceWorkerMessage,
   registerServiceWorker,
   subscribeToPush,
@@ -170,16 +172,49 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
     messagingActiveRef.current = messagingActive;
   }, [messagingActive]);
 
-  /* â”€â”€ Push notifications setup â”€â”€ */
+
+  /* ── Push notifications setup ── */
   useEffect(() => {
-    if (!isLoggedIn || !isPushSupported()) {
+    if (!isLoggedIn) {
       setPushEnabled(false);
       setShowPushBanner(false);
       return;
     }
 
     let canceled = false;
+    let nativeCleanup: (() => void) | null = null;
+
     const initPush = async () => {
+      // ── Native Android (FCM via Capacitor) ──
+      if (isNativeApp()) {
+        nativeCleanup = await initNativePush((data) => {
+          // Foreground notification received → show in-app toast
+          const kind = resolveNotificationKind(data as PushPayloadData);
+          const icon = resolveNotificationIcon(kind);
+          const targetUrl = resolveNotificationTarget(data as PushPayloadData);
+          const toast: MessageToast = {
+            id: `fcm-${Date.now()}`,
+            kind,
+            title: (data as Record<string, string>).title ?? "Kin-Sell",
+            content: (data as Record<string, string>).body ?? "",
+            icon,
+            targetUrl,
+            timestamp: Date.now(),
+          };
+          setToasts((prev) => [...prev, toast]);
+          pushMissed({ kind, title: toast.title, content: toast.content, icon, targetUrl }, toast.id);
+        });
+        if (!canceled && nativeCleanup) setPushEnabled(true);
+        return;
+      }
+
+      // ── Web Push (VAPID) ──
+      if (!isPushSupported()) {
+        setPushEnabled(false);
+        setShowPushBanner(false);
+        return;
+      }
+
       await registerServiceWorker();
       const permission = getNotificationPermission();
       if (permission === "granted") {
@@ -204,8 +239,11 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
     };
 
     void initPush();
-    return () => { canceled = true; };
-  }, [isLoggedIn]);
+    return () => {
+      canceled = true;
+      nativeCleanup?.();
+    };
+  }, [isLoggedIn, pushMissed]);
 
   /* ── Message toasts ── */
   const [toasts, setToasts] = useState<MessageToast[]>([]);

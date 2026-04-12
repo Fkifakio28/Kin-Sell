@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useAuth } from "../../app/providers/AuthProvider";
 import "./contact.css";
 
 /* ── SVG icon helpers ── */
@@ -31,6 +32,9 @@ const IconCheck = () => (
 );
 const IconInfo = () => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+);
+const IconGift = () => (
+  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 1 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 1 0 0-5C13 2 12 7 12 7z"/></svg>
 );
 
 /* ── Data ── */
@@ -90,6 +94,11 @@ const FORM_PROBLEM_OPTIONS = [
    ═══════════════════════════════════════════ */
 
 export function ContactPage() {
+  const { user } = useAuth();
+  const paypalDonationUrl = import.meta.env.VITE_PAYPAL_DONATION_URL
+    ?? "https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=filikifakio%40gmail.com&currency_code=USD";
+  const isAdmin = user?.role === "ADMIN" || user?.role === "SUPER_ADMIN";
+
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -345,7 +354,46 @@ export function ContactPage() {
         </div>
       </section>
 
-      {/* ══════ 5. MESSAGE RASSURANT ══════ */}
+      {/* ══════ 5. ESPACE DON ══════ */}
+      <section className="contact-donation">
+        <div className="contact-donation-card glass-container">
+          <div className="contact-donation-head">
+            <span className="contact-donation-icon"><IconGift /></span>
+            <div>
+              <h2 className="contact-donation-title">Soutenir Kin-Sell</h2>
+              <p className="contact-donation-subtitle">
+                Vous pouvez faire un don pour soutenir la plateforme, la sécurité et les améliorations produit.
+              </p>
+            </div>
+          </div>
+
+          <div className="contact-donation-actions">
+            <a
+              href={paypalDonationUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="glass-button"
+            >
+              Faire un don via PayPal
+            </a>
+
+            {isAdmin && (
+              <a
+                href="/admin/dashboard?section=donations"
+                className="glass-button glass-button--outline"
+              >
+                Ouvrir l'onglet Dons (Super Admin)
+              </a>
+            )}
+          </div>
+
+          <p className="contact-donation-note">
+            Transparence: les dons sont consultables et pilotables dans le dashboard admin, section <strong>Dons & Montants</strong>.
+          </p>
+        </div>
+      </section>
+
+      {/* ══════ 6. MESSAGE RASSURANT ══════ */}
       <section className="contact-reassurance glass-container">
         <div className="contact-reassurance-icon"><IconShield /></div>
         <div>
@@ -372,7 +420,7 @@ export function ContactPage() {
         </div>
       </section>
 
-      {/* ══════ 6. TIPS AVANT CONTACT ══════ */}
+      {/* ══════ 7. TIPS AVANT CONTACT ══════ */}
       <section className="contact-tips">
         <h2 className="contact-section-title">Avant de nous contacter</h2>
         <div className="contact-tips-grid">
@@ -394,7 +442,7 @@ export function ContactPage() {
         </div>
       </section>
 
-      {/* ══════ 7. CTA FINAL ══════ */}
+      {/* ══════ 8. CTA FINAL ══════ */}
       <section className="contact-cta">
         <div className="contact-cta-block glass-container">
           <h2 className="contact-cta-title">

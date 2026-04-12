@@ -2,6 +2,7 @@ import webpush from "web-push";
 import { prisma } from "../../shared/db/prisma.js";
 import { env } from "../../config/env.js";
 import { logger } from "../../shared/logger.js";
+import { isFcmConfigured, sendFcmToToken } from "./fcm.service.js";
 
 /* ── VAPID setup ── */
 let vapidConfigured = false;
@@ -48,6 +49,19 @@ export async function unsubscribeAllPush(userId: string) {
   return prisma.pushSubscription.deleteMany({ where: { userId } });
 }
 
+/* ── FCM Token registration (Android native) ── */
+export async function registerFcmToken(userId: string, token: string, platform = "android") {
+  return prisma.fcmToken.upsert({
+    where: { token },
+    create: { userId, token, platform },
+    update: { userId, platform, updatedAt: new Date() },
+  });
+}
+
+export async function unregisterFcmToken(token: string) {
+  return prisma.fcmToken.deleteMany({ where: { token } });
+}
+
 /* ── Send push to a specific user (with retry on transient errors) ── */
 async function trySendNotification(
   sub: { endpoint: string; p256dh: string; auth: string; id: string },
@@ -88,20 +102,51 @@ export async function sendPushToUser(
     actions?: Array<{ action: string; title: string; icon?: string }>;
   },
 ) {
-  if (!vapidConfigured) return;
+  // ── Web Push (VAPID) ──
+  if (vapidConfigured) {
+    const subscriptions = await prisma.pushSubscription.findMany({ where: { userId } });
+    if (subscriptions.length > 0) {
+      const payloadStr = JSON.stringify(payload);
+      const results = await Promise.allSettled(
+        subscriptions.map((sub) => trySendNotification(sub, payloadStr)),
+      );
+      const failed = results.filter((r) => r.status === "rejected").length;
+      if (failed > 0) {
+        logger.warn({ userId, failed, total: subscriptions.length }, "[Push] Web Push échouées");
+      }
+    }
+  }
 
-  const subscriptions = await prisma.pushSubscription.findMany({ where: { userId } });
-  if (subscriptions.length === 0) return;
+  // ── FCM (Android native) ──
+  if (isFcmConfigured()) {
+    const fcmTokens = await prisma.fcmToken.findMany({ where: { userId } });
+    if (fcmTokens.length > 0) {
+      const dataStrings: Record<string, string> = {};
+      if (payload.data) {
+        for (const [k, v] of Object.entries(payload.data)) {
+          dataStrings[k] = String(v);
+        }
+      }
+      if (payload.tag) dataStrings.tag = payload.tag;
 
-  const payloadStr = JSON.stringify(payload);
-
-  const results = await Promise.allSettled(
-    subscriptions.map((sub) => trySendNotification(sub, payloadStr)),
-  );
-
-  const failed = results.filter((r) => r.status === "rejected").length;
-  if (failed > 0) {
-    logger.warn({ userId, failed, total: subscriptions.length }, "[Push] notifications échouées");
+      const results = await Promise.allSettled(
+        fcmTokens.map(async (t) => {
+          const ok = await sendFcmToToken(t.token, {
+            title: payload.title,
+            body: payload.body,
+            data: dataStrings,
+          });
+          // Token invalide → nettoyage
+          if (!ok) {
+            await prisma.fcmToken.delete({ where: { id: t.id } }).catch(() => {});
+          }
+        }),
+      );
+      const failed = results.filter((r) => r.status === "rejected").length;
+      if (failed > 0) {
+        logger.warn({ userId, failed, total: fcmTokens.length }, "[Push] FCM échouées");
+      }
+    }
   }
 }
 

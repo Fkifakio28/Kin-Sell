@@ -62,4 +62,48 @@ router.post(
   }),
 );
 
+/* POST /notifications/fcm/register — Register a FCM token (Android native) */
+router.post(
+  "/fcm/register",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const userId = (req as AuthenticatedRequest).auth?.userId;
+    if (!userId) {
+      res.status(401).json({ error: "Authentification requise" });
+      return;
+    }
+
+    const { token, platform } = req.body as { token?: string; platform?: string };
+    if (!token || typeof token !== "string" || token.length < 20) {
+      res.status(400).json({ error: "Token FCM invalide" });
+      return;
+    }
+
+    await pushService.registerFcmToken(userId, token, platform ?? "android");
+    res.json({ ok: true });
+  }),
+);
+
+/* POST /notifications/fcm/unregister — Unregister a FCM token */
+router.post(
+  "/fcm/unregister",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const userId = (req as AuthenticatedRequest).auth?.userId;
+    if (!userId) {
+      res.status(401).json({ error: "Authentification requise" });
+      return;
+    }
+
+    const { token } = req.body as { token?: string };
+    if (!token) {
+      res.status(400).json({ error: "Token requis" });
+      return;
+    }
+
+    await pushService.unregisterFcmToken(token);
+    res.json({ ok: true });
+  }),
+);
+
 export default router;
