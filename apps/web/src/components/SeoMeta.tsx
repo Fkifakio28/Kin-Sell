@@ -98,7 +98,7 @@ export function SeoMeta({ title, description, canonical, ogImage, noIndex }: Seo
 
     return () => {
       // Restaurer le titre par défaut au démontage
-      document.title = "Kin-Sell — Le marché africain";
+      document.title = "Kin-Sell — Marketplace Afrique | Achetez et Vendez en ligne";
     };
   }, [title, description, canonical, ogImage, noIndex]);
 
