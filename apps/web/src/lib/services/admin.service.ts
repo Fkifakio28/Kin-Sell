@@ -192,6 +192,12 @@ export type BlogAnalytics = {
   categories: Array<{ category: string; count: number }>;
 };
 
+export type BlogGenerateResult = {
+  created: number;
+  ids: string[];
+  source: string;
+};
+
 export type AdminAdOffer = {
   id: string;
   name: string;
@@ -517,6 +523,8 @@ export const admin = {
     tags?: string[]; language?: string; metaTitle?: string; metaDescription?: string; status?: string;
   }) =>
     request<AdminBlogPost>("/admin/blog", { method: "POST", body }),
+  generateBlogAnnouncements: (body?: { count?: number }) =>
+    request<BlogGenerateResult>("/admin/blog/generate-announcements", { method: "POST", body: body ?? {} }),
   updateBlogPost: (id: string, body: Record<string, unknown>) =>
     request<AdminBlogPost>(`/admin/blog/${encodeURIComponent(id)}`, { method: "PATCH", body }),
   deleteBlogPost: (id: string) =>

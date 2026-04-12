@@ -166,6 +166,16 @@ router.post("/blog", asyncHandler(async (req: AuthenticatedRequest, res) => {
   res.json(result);
 }));
 
+router.post("/blog/generate-announcements", asyncHandler(async (req: AuthenticatedRequest, res) => {
+  await checkPermission(req, "BLOG");
+  if (req.auth!.role !== Role.SUPER_ADMIN) {
+    throw new HttpError(403, "Operation reservee au super admin");
+  }
+  const body = z.object({ count: z.number().int().min(1).max(30).optional() }).parse(req.body ?? {});
+  const result = await adminService.generateBlogAnnouncementsFromGemini(req.auth!.userId, body.count ?? 15);
+  res.json(result);
+}));
+
 router.patch("/blog/:id", asyncHandler(async (req: AuthenticatedRequest, res) => {
   await checkPermission(req, "BLOG");
   const body = z.object({

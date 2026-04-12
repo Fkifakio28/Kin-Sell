@@ -98,7 +98,7 @@ const SECTION_DEFS: Array<{
 }> = [
   { key: 'dashboard',     label: 'Dashboard',          icon: '📊', permission: 'DASHBOARD',     group: 'Général' },
   { key: 'users',         label: 'Utilisateurs',       icon: '👥', permission: 'USERS',         group: 'Général' },
-  { key: 'blog',          label: 'Kin-Sell Blog',      icon: '📰', permission: 'BLOG',          group: 'Général' },
+  { key: 'blog',          label: 'Annonces Blog IA',   icon: '📰', permission: 'BLOG',          group: 'Général' },
   { key: 'transactions',  label: 'Transactions',       icon: '💳', permission: 'TRANSACTIONS',  group: 'Général' },
   { key: 'reports',       label: 'Signalements',       icon: '🚨', permission: 'REPORTS',       group: 'Général' },
   { key: 'feed',          label: "Fil d'actualité",    icon: '📢', permission: 'FEED',          group: 'Contenu' },
@@ -772,6 +772,25 @@ export function AdminDashboard() {
     } catch (e: any) { setError(e?.message); } finally { setBusy(false); }
   };
 
+  const handleGenerateBlogAnnouncements = async () => {
+    if (!isSuperAdmin) {
+      setError('Action réservée au super admin');
+      return;
+    }
+    if (!confirm('Générer automatiquement 15 annonces publiées pour le blog ?')) return;
+    setBusy(true);
+    try {
+      const result = await admin.generateBlogAnnouncements({ count: 15 });
+      invalidateCache('/admin/blog');
+      await loadSectionData();
+      setSuccess(`${result.created} annonces générées (${result.source})`);
+    } catch (e: any) {
+      setError(e?.message ?? 'Impossible de générer les annonces');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const handleUploadBlogMedia = async (file: File, field: 'coverImage' | 'mediaUrl' | 'gifUrl') => {
     setBlogUploadBusy(true);
     try {
@@ -1197,7 +1216,12 @@ export function AdminDashboard() {
 
       <div className="ad-panel-head">
         <h3 className="ad-panel-title">Kin-Sell Blog — {blogTotal} article{blogTotal > 1 ? 's' : ''}</h3>
-        <button className="ad-btn ad-btn--primary" onClick={() => { resetBlogForm(); setModal('blog-edit'); }}>+ Nouvel article</button>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {isSuperAdmin && (
+            <button className="ad-btn" onClick={handleGenerateBlogAnnouncements} disabled={busy}>✨ Générer 15 annonces IA</button>
+          )}
+          <button className="ad-btn ad-btn--primary" onClick={() => { resetBlogForm(); setModal('blog-edit'); }}>+ Nouvel article</button>
+        </div>
       </div>
 
       {/* Filters */}
