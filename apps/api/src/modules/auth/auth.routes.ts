@@ -152,7 +152,9 @@ router.get("/google", (req, res) => {
 router.get("/google/callback", asyncHandler(async (req, res) => {
   const code = req.query.code as string;
   const source = req.query.state === "app" ? "app" : "web";
-  const callbackBase = source === "app" ? env.MOBILE_APP_AUTH_CALLBACK : `${env.FRONTEND_URL}/auth/callback`;
+  const callbackBase = source === "app"
+    ? `${env.FRONTEND_URL}/auth/app-redirect.html`
+    : `${env.FRONTEND_URL}/auth/callback`;
   if (!code) {
     const params = new URLSearchParams({ error: "google_no_code" });
     res.redirect(`${callbackBase}?${params.toString()}`);
@@ -221,7 +223,9 @@ router.post("/apple/callback", asyncHandler(async (req, res) => {
   const code = req.body?.code as string | undefined;
   const idToken = req.body?.id_token as string | undefined;
   const state = req.body?.state === "app" ? "app" : "web";
-  const callbackBase = state === "app" ? env.MOBILE_APP_AUTH_CALLBACK : `${env.FRONTEND_URL}/auth/callback`;
+  const callbackBase = state === "app"
+    ? `${env.FRONTEND_URL}/auth/app-redirect.html`
+    : `${env.FRONTEND_URL}/auth/callback`;
 
   if (!code) {
     const params = new URLSearchParams({ error: "apple_no_code" });

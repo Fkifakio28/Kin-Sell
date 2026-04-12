@@ -33,7 +33,7 @@ if (Capacitor.isNativePlatform()) {
   CapacitorApp.addListener("appUrlOpen", async ({ url }: URLOpenListenerEvent) => {
     if (!url) return;
 
-    // OAuth deep-link callback
+    // OAuth deep-link callback (custom scheme)
     if (url.startsWith("com.kinsell.app://auth/callback")) {
       const query = url.includes("?") ? url.slice(url.indexOf("?")) : "";
       await Browser.close().catch(() => undefined);
@@ -45,6 +45,10 @@ if (Capacitor.isNativePlatform()) {
     try {
       const parsed = new URL(url);
       if (parsed.hostname === "kin-sell.com") {
+        // Close in-app browser if this is an auth callback
+        if (parsed.pathname.startsWith("/auth/")) {
+          await Browser.close().catch(() => undefined);
+        }
         window.location.href = parsed.pathname + parsed.search + parsed.hash;
       }
     } catch {

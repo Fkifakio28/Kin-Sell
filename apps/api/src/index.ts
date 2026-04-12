@@ -69,7 +69,12 @@ app.use(compression());
 app.use(pinoHttp({ logger, genReqId: genRequestId, autoLogging: { ignore: (req: any) => req.url === "/health" } }) as any);
 app.use(express.json({ limit: "2mb" }));
 app.use(cookieParser());
-app.use(cors({ origin: env.CORS_ORIGIN, credentials: true }));
+
+// Parse comma-separated CORS origins into array for proper matching
+const corsOrigins = env.CORS_ORIGIN.includes(",")
+  ? env.CORS_ORIGIN.split(",").map((s) => s.trim())
+  : env.CORS_ORIGIN;
+app.use(cors({ origin: corsOrigins, credentials: true }));
 
 // ── Global scrape guard (block bots/scrapers on all routes) ──
 import { scrapeGuard } from "./shared/middleware/scrape-guard.middleware.js";
