@@ -51,6 +51,7 @@ type PushPayloadData = {
   orderId?: string;
   negotiationId?: string;
   postId?: string;
+  listingId?: string;
 };
 
 const GlobalNotifContext = createContext<GlobalNotifContextValue>({
