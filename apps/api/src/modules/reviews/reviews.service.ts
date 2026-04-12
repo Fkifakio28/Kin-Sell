@@ -1,5 +1,6 @@
 import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
+import { sendPushToUser } from "../notifications/push.service.js";
 
 export const getReviewsForUser = async (targetId: string, limit = 20, offset = 0) => {
   const safeLimit = Math.min(Math.max(1, limit), 50);
@@ -91,6 +92,17 @@ export const createOrderReview = async (
     },
   });
 
+  // Notifier la cible de l'avis
+  const author = await prisma.userProfile.findUnique({ where: { userId: authorId }, select: { displayName: true } });
+  const name = author?.displayName ?? "Un utilisateur";
+  const stars = "⭐".repeat(Math.min(rating, 5));
+  sendPushToUser(targetId, {
+    title: "Kin-Sell • Avis ⭐",
+    body: `${name} vous a donné ${rating}/5 ${stars}`,
+    tag: `review-${review.id}`,
+    data: { type: "order", reviewId: review.id, url: "/account" },
+  }).catch(() => {});
+
   return review;
 };
 
@@ -123,9 +135,20 @@ export const createReview = async (
     });
   }
 
-  return prisma.userReview.create({
+  const review = await prisma.userReview.create({
     data: { authorId, targetId, rating, text: text ?? null, verified: false },
   });
+
+  const authorProfile = await prisma.userProfile.findUnique({ where: { userId: authorId }, select: { displayName: true } });
+  const name = authorProfile?.displayName ?? "Un utilisateur";
+  sendPushToUser(targetId, {
+    title: "Kin-Sell • Avis ⭐",
+    body: `${name} vous a évalué ${rating}/5`,
+    tag: `review-${review.id}`,
+    data: { type: "order", reviewId: review.id, url: "/account" },
+  }).catch(() => {});
+
+  return review;
 };
 
 /**

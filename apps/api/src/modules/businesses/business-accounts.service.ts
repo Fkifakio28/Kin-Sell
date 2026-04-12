@@ -2,6 +2,7 @@ import { Role } from "../../types/roles.js";
 import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
 import { normalizeImageInput, normalizeImageInputs } from "../../shared/utils/media-storage.js";
+import { sendPushToUser } from "../notifications/push.service.js";
 
 type CreateBusinessInput = {
   legalName: string;
@@ -262,6 +263,19 @@ export const followBusiness = async (userId: string, businessId: string) => {
   });
 
   const count = await prisma.businessFollow.count({ where: { businessId } });
+
+  // Notifier le propriétaire de la boutique
+  if (business.ownerUserId && business.ownerUserId !== userId) {
+    const follower = await prisma.userProfile.findUnique({ where: { userId }, select: { displayName: true } });
+    const name = follower?.displayName ?? "Quelqu'un";
+    sendPushToUser(business.ownerUserId, {
+      title: "Kin-Sell • Nouveau follower 👤",
+      body: `${name} suit maintenant votre boutique`,
+      tag: `follow-${businessId}`,
+      data: { type: "sokin", businessId, url: "/account?tab=business" },
+    }).catch(() => {});
+  }
+
   return { following: true, followersCount: count };
 };
 

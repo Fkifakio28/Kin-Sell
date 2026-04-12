@@ -1,6 +1,7 @@
 import { prisma } from "../../shared/db/prisma.js";
 import { VerificationStatus, type Prisma } from "@prisma/client";
 import { logger } from "../../shared/logger.js";
+import { sendPushToUser } from "../notifications/push.service.js";
 
 // ══════════════════════════════════════════════
 // VERIFICATION BADGE SERVICE
@@ -282,6 +283,28 @@ async function adminAction(
 
     return updatedRequest;
   });
+
+  // Notifier l'utilisateur du changement de statut
+  const notifyUserId = request.userId;
+  if (notifyUserId) {
+    const verificationNotifs: Record<string, { title: string; body: string }> = {
+      VERIFIED: { title: "Kin-Sell • Compte vérifié ✅", body: "Félicitations ! Votre compte a été vérifié." },
+      REJECTED: { title: "Kin-Sell • Vérification refusée ❌", body: "Votre demande de vérification a été refusée." },
+      REVOKED: { title: "Kin-Sell • Badge révoqué ⚠️", body: "Votre badge de vérification a été révoqué." },
+      AI_ELIGIBLE: { title: "Kin-Sell • Éligible 🔍", body: "Vous êtes éligible au badge vérifié !" },
+      ADMIN_LOCKED_VERIFIED: { title: "Kin-Sell • Compte vérifié 🔒", body: "Votre vérification a été verrouillée par un administrateur." },
+      ADMIN_LOCKED_REVOKED: { title: "Kin-Sell • Badge révoqué 🔒", body: "Votre badge a été révoqué et verrouillé." },
+    };
+    const notif = verificationNotifs[newStatus];
+    if (notif) {
+      sendPushToUser(notifyUserId, {
+        title: notif.title,
+        body: notif.body,
+        tag: `verification-${requestId}`,
+        data: { type: "default", url: "/account" },
+      }).catch(() => {});
+    }
+  }
 
   return updated;
 }

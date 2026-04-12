@@ -8,6 +8,7 @@ import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
 import * as orangeMoney from "../../shared/payment/orange-money.provider.js";
 import * as mpesa from "../../shared/payment/mpesa.provider.js";
+import { sendPushToUser } from "../notifications/push.service.js";
 
 const PAYMENT_TTL_MINUTES = 30;
 
@@ -334,5 +335,23 @@ async function handlePaymentSuccess(record: {
       where: { id: order.id },
       data: { status: "CONFIRMED" },
     });
+
+    // Notifier l'acheteur (paiement confirmé)
+    sendPushToUser(record.userId, {
+      title: "Kin-Sell • Paiement confirmé ✅",
+      body: "Votre paiement Mobile Money a été accepté.",
+      tag: `momo-${record.id}`,
+      data: { type: "order", orderId: order.id, url: "/account?tab=commandes" },
+    }).catch(() => {});
+
+    // Notifier le vendeur (nouvelle commande)
+    if (order.sellerUserId && order.sellerUserId !== record.userId) {
+      sendPushToUser(order.sellerUserId, {
+        title: "Kin-Sell • 🛒 Commande",
+        body: "Nouvelle commande confirmée par paiement Mobile Money !",
+        tag: `order-momo-${order.id}`,
+        data: { type: "order", orderId: order.id, url: "/account?tab=commandes" },
+      }).catch(() => {});
+    }
   }
 }

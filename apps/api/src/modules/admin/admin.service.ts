@@ -2,6 +2,7 @@ import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
 import { hashPassword, verifyPassword } from "../../shared/auth/password.js";
 import * as messagingService from "../messaging/messaging.service.js";
+import { sendPushToUser, sendPushToUsers } from "../notifications/push.service.js";
 
 // ── Admin Level → Default Permissions mapping ──
 const LEVEL_PERMISSIONS: Record<string, string[]> = {
@@ -483,6 +484,21 @@ export const createBlogPost = async (authorId: string, data: {
       publishedAt: data.status === "PUBLISHED" ? new Date() : undefined,
     },
   });
+
+  // Notifier tous les utilisateurs si l'article est publié
+  if (data.status === "PUBLISHED") {
+    const allUsers = await prisma.user.findMany({ select: { id: true } });
+    const userIds = allUsers.map(u => u.id);
+    if (userIds.length > 0) {
+      sendPushToUsers(userIds, {
+        title: "Kin-Sell • Blog 📰",
+        body: data.title,
+        tag: `blog-${post.id}`,
+        data: { type: "default", slug: post.slug, url: `/blog/${post.slug}` },
+      }).catch(() => {});
+    }
+  }
+
   return post;
 };
 
@@ -527,6 +543,21 @@ export const updateBlogPost = async (postId: string, data: {
     where: { id: postId },
     data: updateData as any,
   });
+
+  // Notifier si l'article vient d'être publié (première publication)
+  if (data.status === "PUBLISHED") {
+    const allUsers = await prisma.user.findMany({ select: { id: true } });
+    const userIds = allUsers.map(u => u.id);
+    if (userIds.length > 0) {
+      sendPushToUsers(userIds, {
+        title: "Kin-Sell • Blog 📰",
+        body: post.title,
+        tag: `blog-${post.id}`,
+        data: { type: "default", slug: post.slug, url: `/blog/${post.slug}` },
+      }).catch(() => {});
+    }
+  }
+
   return post;
 };
 
@@ -1504,6 +1535,24 @@ export const adminChangeListingStatus = async (listingId: string, status: string
       entityId: listingId,
     },
   });
+
+  // Notifier le propriétaire de l'annonce
+  if (listing.ownerUserId) {
+    const statusLabels: Record<string, { title: string; body: string }> = {
+      DELETED: { title: "Kin-Sell • Annonce supprimée 🚫", body: "Votre annonce a été retirée par un administrateur." },
+      INACTIVE: { title: "Kin-Sell • Annonce désactivée ⚠️", body: "Votre annonce a été désactivée par un modérateur." },
+      ACTIVE: { title: "Kin-Sell • Annonce réactivée ✅", body: "Votre annonce a été réactivée." },
+    };
+    const notif = statusLabels[status];
+    if (notif) {
+      sendPushToUser(listing.ownerUserId, {
+        title: notif.title,
+        body: notif.body,
+        tag: `listing-mod-${listingId}`,
+        data: { type: "default", url: "/account?tab=listings" },
+      }).catch(() => {});
+    }
+  }
 
   return updated;
 };

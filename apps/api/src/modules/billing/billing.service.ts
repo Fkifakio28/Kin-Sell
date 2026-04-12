@@ -5,6 +5,7 @@ import { HttpError } from "../../shared/errors/http-error.js";
 import { ADDON_CATALOG, getPlanOrThrow, PLAN_CATALOG } from "./billing.catalog.js";
 import * as paypal from "../../shared/payment/paypal.provider.js";
 import { clearSubscriptionCache } from "../../shared/billing/subscription-guard.js";
+import { sendPushToUser } from "../notifications/push.service.js";
 
 type RoleScope = "USER" | "BUSINESS";
 
@@ -525,6 +526,17 @@ async function activateSubscriptionFromOrder(
 
   // Invalidate subscription guard cache after activation
   clearSubscriptionCache();
+
+  // Notifier l'utilisateur de l'activation
+  const notifyUserId = order.userId;
+  if (notifyUserId) {
+    sendPushToUser(notifyUserId, {
+      title: "Kin-Sell • Forfait activé 🎉",
+      body: `Votre forfait ${order.planCode} a été activé avec succès !`,
+      tag: `billing-${order.id}`,
+      data: { type: "default", url: "/account?tab=forfait" },
+    }).catch(() => {});
+  }
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

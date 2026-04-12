@@ -99,7 +99,8 @@ function resolveChannelId(type: string): string {
     case "message": return "kin-sell-messages";
     case "call": return "kin-sell-calls";
     case "order":
-    case "negotiation": return "kin-sell-orders";
+    case "negotiation":
+    case "stock": return "kin-sell-orders";
     case "like":
     case "publication":
     case "sokin": return "kin-sell-social";

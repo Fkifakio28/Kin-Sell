@@ -174,6 +174,7 @@ public class KinSellMessagingService extends FirebaseMessagingService {
                 return NotificationChannels.CHANNEL_CALLS;
             case "order":
             case "negotiation":
+            case "stock":
                 return NotificationChannels.CHANNEL_ORDERS;
             case "like":
             case "publication":

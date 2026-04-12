@@ -9,6 +9,7 @@
 
 import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
+import { sendPushToUser } from "../notifications/push.service.js";
 
 const isVideoMediaUrl = (value: string) => /\.(mp4|webm|mov|ogg)(\?.*)?$/i.test(value);
 
@@ -378,7 +379,7 @@ export const createPostComment = async (
 ) => {
   const post = await prisma.soKinPost.findUnique({
     where: { id: postId },
-    select: { id: true, status: true },
+    select: { id: true, status: true, authorId: true },
   });
 
   if (!post || post.status === "DELETED") {
@@ -388,7 +389,7 @@ export const createPostComment = async (
   if (parentCommentId) {
     const parent = await prisma.soKinComment.findUnique({
       where: { id: parentCommentId },
-      select: { id: true, postId: true },
+      select: { id: true, postId: true, authorId: true },
     });
     if (!parent || parent.postId !== postId) {
       throw new HttpError(400, "Commentaire parent invalide");
@@ -419,6 +420,33 @@ export const createPostComment = async (
 
     return comment;
   });
+
+  // Notifications push
+  const commenterProfile = await prisma.userProfile.findUnique({ where: { userId }, select: { displayName: true } });
+  const commenterName = commenterProfile?.displayName ?? "Quelqu'un";
+
+  if (parentCommentId) {
+    // Réponse à un commentaire → notifier l'auteur du commentaire parent
+    const parent = await prisma.soKinComment.findUnique({ where: { id: parentCommentId }, select: { authorId: true } });
+    if (parent && parent.authorId !== userId) {
+      sendPushToUser(parent.authorId, {
+        title: "Kin-Sell • So-Kin",
+        body: `${commenterName} a répondu à votre commentaire 💬`,
+        tag: `comment-reply-${parentCommentId}`,
+        data: { type: "publication", postId, url: "/sokin" },
+      }).catch(() => {});
+    }
+  }
+
+  // Notifier l'auteur du post (sauf auto-commentaire)
+  if (post.authorId !== userId) {
+    sendPushToUser(post.authorId, {
+      title: "Kin-Sell • So-Kin",
+      body: `${commenterName} a commenté votre publication 💬`,
+      tag: `comment-${postId}`,
+      data: { type: "publication", postId, url: "/sokin" },
+    }).catch(() => {});
+  }
 
   return created;
 };
