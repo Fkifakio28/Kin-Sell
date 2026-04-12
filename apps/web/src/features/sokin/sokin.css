@@ -1618,34 +1618,26 @@
 
 .sk-media-grid {
   display: grid;
-  gap: 2px;
+  gap: 1px;
   overflow: hidden;
-  /* Bords arrondis uniquement si la carte n'a pas de footer visible dessous */
 }
 
-/* ── 1 média : format adaptatif selon le ratio du média ── */
+/* ── 1 média : format adaptatif (aspectRatio inline depuis JS) ── */
 .sk-media-grid--1 {
   grid-template-columns: 1fr;
   width: 100%;
   max-width: 100%;
+  /* Defaut carré avant détection JS; remplacé par style inline */
   aspect-ratio: 1 / 1;
   max-height: 70vh;
   height: auto;
 }
 
-.sk-media-grid--1.sk-media-grid--single-portrait {
-  aspect-ratio: 9 / 16;
-  max-height: 75vh;
+/* Quand le ratio réel est appliqué via inline style, le conteneur s'adapte */
+.sk-media-grid--single {
+  aspect-ratio: auto;
 }
 
-.sk-media-grid--1.sk-media-grid--single-landscape {
-  aspect-ratio: 16 / 9;
-  max-height: 56vh;
-}
-
-.sk-media-grid--1.sk-media-grid--single-square {
-  aspect-ratio: 1 / 1;
-}
 .sk-media-grid--1 .sk-media-item {
   height: 100%;
 }
@@ -1703,7 +1695,7 @@
 .sk-media-item {
   position: relative;
   overflow: hidden;
-  background: rgba(18, 11, 43, 0.6);
+  background: #000;
   cursor: pointer;
   border: none;
   padding: 0;
@@ -1726,7 +1718,7 @@
 .sk-media-item video {
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  object-fit: cover;
   display: block;
 }
 

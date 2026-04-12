@@ -305,31 +305,34 @@ export function MediaCollage({
   autoPlayVideoIndex?: number;
 }) {
   const count = items.length;
-  const [singleMediaLayout, setSingleMediaLayout] = useState<'portrait' | 'landscape' | 'square' | null>(null);
+  // Store the real aspect ratio of the media for a pixel-perfect container
+  const [singleAspectRatio, setSingleAspectRatio] = useState<number | null>(null);
 
   useEffect(() => {
-    setSingleMediaLayout(null);
+    setSingleAspectRatio(null);
   }, [items]);
 
   const updateSingleLayout = useCallback((width: number, height: number) => {
     if (count !== 1 || width <= 0 || height <= 0) return;
-    const ratio = width / height;
-    if (ratio > 1.08) {
-      setSingleMediaLayout('landscape');
-      return;
-    }
-    if (ratio < 0.92) {
-      setSingleMediaLayout('portrait');
-      return;
-    }
-    setSingleMediaLayout('square');
+    setSingleAspectRatio(width / height);
   }, [count]);
 
   if (count === 0) return null;
 
+  // Clamp ratio for safety: min 9/16 (0.5625), max 16/9 (1.78)
+  const clampedRatio = singleAspectRatio
+    ? Math.max(0.5625, Math.min(1.78, singleAspectRatio))
+    : null;
+
+  // Determine max-height based on orientation
+  const singleMaxHeight = clampedRatio
+    ? clampedRatio < 0.92 ? '80vh' : clampedRatio > 1.08 ? '56vh' : '70vh'
+    : undefined;
+
   return (
     <div
-      className={`sk-media-grid sk-media-grid--${count}${count === 1 && singleMediaLayout ? ` sk-media-grid--single-${singleMediaLayout}` : ''}`}
+      className={`sk-media-grid sk-media-grid--${count}${count === 1 ? ' sk-media-grid--single' : ''}`}
+      style={count === 1 && clampedRatio ? { aspectRatio: `${clampedRatio}`, maxHeight: singleMaxHeight } : undefined}
       role="group"
       aria-label="Médias de l'annonce"
     >
