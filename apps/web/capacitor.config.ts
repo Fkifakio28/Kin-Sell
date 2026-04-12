@@ -33,7 +33,7 @@ const config: CapacitorConfig = {
       launchShowDuration: 2000,
       backgroundColor: '#120B2B',
       showSpinner: false,
-      androidScaleType: 'CENTER_CROP',
+      androidScaleType: 'CENTER_INSIDE',
       iosSpinnerStyle: 'large',
     },
     Browser: {
