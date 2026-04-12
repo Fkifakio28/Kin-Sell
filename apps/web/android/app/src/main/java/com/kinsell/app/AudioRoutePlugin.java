@@ -33,7 +33,7 @@ public class AudioRoutePlugin extends Plugin implements SensorEventListener {
         Context ctx = getContext();
         audioManager = (AudioManager) ctx.getSystemService(Context.AUDIO_SERVICE);
         sensorManager = (SensorManager) ctx.getSystemService(Context.SENSOR_SERVICE);
-        proximitySensor = sensorManager.getSensor(Sensor.TYPE_PROXIMITY);
+        proximitySensor = sensorManager.getDefaultSensor(Sensor.TYPE_PROXIMITY);
 
         PowerManager pm = (PowerManager) ctx.getSystemService(Context.POWER_SERVICE);
         if (pm.isWakeLockLevelSupported(PowerManager.PROXIMITY_SCREEN_OFF_WAKE_LOCK)) {

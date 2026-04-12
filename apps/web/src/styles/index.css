@@ -26,6 +26,8 @@
 
 html {
   scroll-behavior: smooth;
+  color-scheme: dark only;
+  background: #120b2b;
 }
 
 body {
