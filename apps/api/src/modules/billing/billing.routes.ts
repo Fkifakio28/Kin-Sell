@@ -170,7 +170,7 @@ router.post(
       message: "receiptData ou transactionJws requis",
     }).parse(req.body);
 
-    const result = await appleIap.verifyAndActivateApplePurchase(req.userId!, payload);
+    const result = await appleIap.verifyAndActivateApplePurchase(req.auth!.userId, payload);
     res.json(result);
   })
 );

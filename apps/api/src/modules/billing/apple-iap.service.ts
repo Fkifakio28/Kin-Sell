@@ -146,7 +146,7 @@ async function resolveContext(userId: string) {
   let businessId: string | null = null;
   if (scope === "BUSINESS") {
     const biz = await prisma.businessAccount.findFirst({
-      where: { ownerId: userId },
+      where: { ownerUserId: userId },
       select: { id: true },
     });
     if (!biz) throw new HttpError(400, "Aucun compte business trouvé");
