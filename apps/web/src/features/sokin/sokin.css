@@ -1622,26 +1622,26 @@
   /* Bords arrondis uniquement si la carte n'a pas de footer visible dessous */
 }
 
-/* ── 1 média : pleine largeur, ratio 4:3 ── */
+/* ── 1 média : pleine largeur, hauteur fixe ── */
 .sk-media-grid--1 {
   grid-template-columns: 1fr;
+  height: 300px;
 }
 .sk-media-grid--1 .sk-media-item {
-  aspect-ratio: 4 / 3;
-  max-height: 360px;
+  height: 100%;
 }
 
 /* ── 2 médias : 50/50 côte à côte ── */
 .sk-media-grid--2 {
   grid-template-columns: 1fr 1fr;
-  height: 220px;
+  height: 300px;
 }
 
 /* ── 3 médias : grand à gauche, 2 empilés à droite ── */
 .sk-media-grid--3 {
   grid-template-columns: 1fr 1fr;
   grid-template-rows: 1fr 1fr;
-  height: 280px;
+  height: 300px;
 }
 .sk-media-grid--3 .sk-media-item:nth-child(1) {
   grid-column: 1;
@@ -1659,7 +1659,7 @@
 /* ── 4 médias : grille 2×2 ── */
 .sk-media-grid--4 {
   grid-template-columns: 1fr 1fr;
-  height: 280px;
+  height: 300px;
 }
 
 /* ── 5 médias : 2 en haut, 3 en bas ── */
@@ -1711,6 +1711,15 @@
   display: block;
 }
 
+/* GPU compositing pour vidéos fluides */
+.sk-media-item video {
+  will-change: transform;
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
 .sk-media-item img {
   pointer-events: none;
 }
@@ -1726,11 +1735,39 @@
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  font-size: 28px;
-  color: rgba(255, 255, 255, 0.9);
+  font-size: 36px;
+  width: 52px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.45);
+  color: rgba(255, 255, 255, 0.95);
   text-shadow: 0 2px 8px rgba(0,0,0,0.5);
   pointer-events: none;
   line-height: 1;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+/* Masquer le play icon quand la vidéo joue */
+.sk-media-item--video.sk-video-playing .sk-media-play-icon {
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.7);
+}
+
+/* Barre de progression vidéo */
+.sk-video-progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+  background: var(--color-primary, #6f58ff);
+  border-radius: 0 2px 0 0;
+  transition: width 0.25s linear;
+  z-index: 2;
 }
 
 /* ════════════════════════════════════════
@@ -2851,14 +2888,11 @@
     font-size: 0.82rem;
   }
 
-  .sk-media-grid--1 .sk-media-item {
-    max-height: 420px;
-  }
-
-  .sk-media-grid--2 { height: 260px; }
-  .sk-media-grid--3 { height: 320px; }
-  .sk-media-grid--4 { height: 320px; }
-  .sk-media-grid--5 { height: 360px; }
+  .sk-media-grid--1 { height: 340px; }
+  .sk-media-grid--2 { height: 340px; }
+  .sk-media-grid--3 { height: 340px; }
+  .sk-media-grid--4 { height: 340px; }
+  .sk-media-grid--5 { height: 340px; }
 }
 
 /* Tablet center feed — 600..1023px */

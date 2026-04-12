@@ -25,10 +25,14 @@ let visibilityListenerAttached = false;
 
 function safePlayVideo(video: HTMLVideoElement): void {
   try {
+    // Pré-charger avant de jouer
+    if (video.preload !== 'auto') video.preload = 'auto';
     const maybePromise = video.play();
     if (maybePromise && typeof (maybePromise as Promise<void>).catch === 'function') {
       (maybePromise as Promise<void>).catch(() => undefined);
     }
+    // Ajouter la classe playing pour masquer l'icône play
+    video.closest('.sk-media-item--video')?.classList.add('sk-video-playing');
   } catch {
     // ignore autoplay errors
   }
@@ -37,6 +41,7 @@ function safePlayVideo(video: HTMLVideoElement): void {
 function pauseVideo(video: HTMLVideoElement): void {
   try {
     video.pause();
+    video.closest('.sk-media-item--video')?.classList.remove('sk-video-playing');
   } catch {
     // ignore pause errors
   }
@@ -321,13 +326,22 @@ export function MediaCollage({
                     e.stopPropagation();
                     if (onVideoToggle) onVideoToggle(e.currentTarget, item);
                   }}
+                  onTimeUpdate={(e) => {
+                    const v = e.currentTarget;
+                    const bar = v.parentElement?.querySelector('.sk-video-progress') as HTMLElement | null;
+                    if (bar && v.duration) {
+                      bar.style.width = `${(v.currentTime / v.duration) * 100}%`;
+                    }
+                  }}
                   data-autoplay={isAutoPlay ? 'true' : undefined}
                   muted
                   playsInline
-                  preload="metadata"
+                  preload="none"
+                  disablePictureInPicture
                   tabIndex={-1}
                 />
                 <span className="sk-media-play-icon" aria-hidden="true">&#9654;</span>
+                <div className="sk-video-progress" style={{ width: 0 }} />
               </>
             ) : (
               <img
@@ -483,13 +497,20 @@ export function AnnounceCard({
     const observer = new IntersectionObserver((entries) => {
       entries.forEach((entry) => {
         if (entry.target !== cardEl) return;
-        if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
-          if (!userPausedRef.current) {
-            if (activeVideoEl && activeVideoEl !== videoEl) {
-              pauseVideo(activeVideoEl);
+
+        if (entry.isIntersecting) {
+          // Pré-charger les métadonnées dès que la card entre dans le viewport
+          if (videoEl.preload === 'none') videoEl.preload = 'metadata';
+
+          if (entry.intersectionRatio >= 0.5) {
+            // Autoplay quand ≥50% visible
+            if (!userPausedRef.current) {
+              if (activeVideoEl && activeVideoEl !== videoEl) {
+                pauseVideo(activeVideoEl);
+              }
+              activeVideoEl = videoEl;
+              safePlayVideo(videoEl);
             }
-            activeVideoEl = videoEl;
-            safePlayVideo(videoEl);
           }
         } else {
           if (activeVideoEl === videoEl) {
@@ -501,7 +522,7 @@ export function AnnounceCard({
           userPausedRef.current = false;
         }
       });
-    }, { threshold: [0, 0.5] });
+    }, { threshold: [0, 0.25, 0.5], rootMargin: '200px 0px' });
 
     observer.observe(cardEl);
 
