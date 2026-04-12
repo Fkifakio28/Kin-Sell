@@ -288,6 +288,162 @@ export function IconMoreHoriz() {
 }
 
 /* ─────────────────────────────────────────────────────── */
+/* VIDEO ITEM — boucle, vitesse ×1.5, double-tap ±10s      */
+/* ─────────────────────────────────────────────────────── */
+
+function VideoItem({
+  item,
+  index,
+  isAutoPlay,
+  onVideoRef,
+  onVideoToggle,
+  updateSingleLayout,
+}: {
+  item: MediaItem;
+  index: number;
+  isAutoPlay: boolean;
+  onVideoRef?: (el: HTMLVideoElement | null, item: MediaItem, index: number) => void;
+  onVideoToggle?: (videoEl: HTMLVideoElement, item: MediaItem) => void;
+  updateSingleLayout: (w: number, h: number) => void;
+}) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const tapTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const lastTapRef = useRef<{ time: number; side: 'left' | 'right' }>();
+  const holdTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const isSpeedingRef = useRef(false);
+  const downXRef = useRef(0);
+  const speedRef = useRef<HTMLDivElement>(null);
+  const skipRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    return () => {
+      if (tapTimerRef.current) clearTimeout(tapTimerRef.current);
+      if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
+    };
+  }, []);
+
+  const setVideoRef = useCallback((el: HTMLVideoElement | null) => {
+    videoRef.current = el;
+    onVideoRef?.(el, item, index);
+  }, [onVideoRef, item, index]);
+
+  const getSide = useCallback((clientX: number, el: HTMLElement): 'left' | 'right' => {
+    const rect = el.getBoundingClientRect();
+    return clientX < rect.left + rect.width / 2 ? 'left' : 'right';
+  }, []);
+
+  const showSkip = useCallback((text: string, side: 'left' | 'right') => {
+    const el = skipRef.current;
+    if (!el) return;
+    el.textContent = text;
+    el.dataset.side = side;
+    el.classList.remove('sk-skip-active');
+    void el.offsetWidth; // force reflow for re-trigger
+    el.classList.add('sk-skip-active');
+  }, []);
+
+  const releaseSpeed = useCallback(() => {
+    if (!isSpeedingRef.current) return;
+    isSpeedingRef.current = false;
+    const v = videoRef.current;
+    if (v) v.playbackRate = 1.0;
+    speedRef.current?.classList.remove('sk-speed-active');
+  }, []);
+
+  const handlePointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    downXRef.current = e.clientX;
+    const video = videoRef.current;
+    if (!video || video.paused) return;
+    holdTimerRef.current = setTimeout(() => {
+      isSpeedingRef.current = true;
+      video.playbackRate = 1.5;
+      speedRef.current?.classList.add('sk-speed-active');
+    }, 300);
+  }, []);
+
+  const handlePointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    if (holdTimerRef.current) { clearTimeout(holdTimerRef.current); holdTimerRef.current = undefined; }
+    const video = videoRef.current;
+    if (!video) return;
+
+    if (isSpeedingRef.current) { releaseSpeed(); return; }
+
+    const side = getSide(downXRef.current, e.currentTarget);
+    const now = Date.now();
+    const last = lastTapRef.current;
+
+    if (last && now - last.time < 300 && last.side === side) {
+      lastTapRef.current = undefined;
+      if (tapTimerRef.current) { clearTimeout(tapTimerRef.current); tapTimerRef.current = undefined; }
+      if (side === 'left') {
+        video.currentTime = Math.max(0, video.currentTime - 10);
+        showSkip('-10s', 'left');
+      } else {
+        video.currentTime = Math.min(video.duration || Infinity, video.currentTime + 10);
+        showSkip('+10s', 'right');
+      }
+      return;
+    }
+
+    lastTapRef.current = { time: now, side };
+    tapTimerRef.current = setTimeout(() => {
+      lastTapRef.current = undefined;
+      tapTimerRef.current = undefined;
+      if (onVideoToggle) onVideoToggle(video, item);
+    }, 300);
+  }, [getSide, releaseSpeed, onVideoToggle, item, showSkip]);
+
+  const handleProgressSeek = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    const video = videoRef.current;
+    if (!video || !video.duration) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    video.currentTime = ratio * video.duration;
+  }, []);
+
+  return (
+    <>
+      <video
+        src={resolveMediaUrl(item.url)}
+        ref={setVideoRef}
+        loop
+        onTimeUpdate={(e) => {
+          const v = e.currentTarget;
+          const fill = v.parentElement?.querySelector('.sk-video-progress') as HTMLElement | null;
+          if (fill && v.duration) fill.style.width = `${(v.currentTime / v.duration) * 100}%`;
+        }}
+        onLoadedMetadata={(e) => {
+          const v = e.currentTarget;
+          updateSingleLayout(v.videoWidth, v.videoHeight);
+        }}
+        data-autoplay={isAutoPlay ? 'true' : undefined}
+        playsInline
+        preload="none"
+        disablePictureInPicture
+        tabIndex={-1}
+      />
+      <div
+        className="sk-video-gesture-overlay"
+        onPointerDown={handlePointerDown}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={() => { if (holdTimerRef.current) clearTimeout(holdTimerRef.current); releaseSpeed(); }}
+        onPointerLeave={() => { if (holdTimerRef.current) clearTimeout(holdTimerRef.current); releaseSpeed(); }}
+        onClick={(e) => e.stopPropagation()}
+      />
+      <div ref={speedRef} className="sk-speed-indicator">▶▶ 1.5×</div>
+      <div ref={skipRef} className="sk-skip-indicator" />
+      <span className="sk-media-play-icon" aria-hidden="true">&#9654;</span>
+      <div className="sk-video-progress-bar" onPointerDown={handleProgressSeek} onClick={(e) => e.stopPropagation()}>
+        <div className="sk-video-progress" style={{ width: 0 }} />
+      </div>
+    </>
+  );
+}
+
+/* ─────────────────────────────────────────────────────── */
 /* MEDIA COLLAGE                                            */
 /* ─────────────────────────────────────────────────────── */
 
@@ -350,34 +506,14 @@ export function MediaCollage({
             aria-label={item.type === 'video' ? 'Voir la vidéo' : item.type === 'audio' ? "Écouter l'audio" : "Voir l'image"}
           >
             {item.type === 'video' ? (
-              <>
-                <video
-                  src={resolveMediaUrl(item.url)}
-                  ref={(el) => onVideoRef?.(el, item, i)}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (onVideoToggle) onVideoToggle(e.currentTarget, item);
-                  }}
-                  onTimeUpdate={(e) => {
-                    const v = e.currentTarget;
-                    const bar = v.parentElement?.querySelector('.sk-video-progress') as HTMLElement | null;
-                    if (bar && v.duration) {
-                      bar.style.width = `${(v.currentTime / v.duration) * 100}%`;
-                    }
-                  }}
-                  onLoadedMetadata={(e) => {
-                    const v = e.currentTarget;
-                    updateSingleLayout(v.videoWidth, v.videoHeight);
-                  }}
-                  data-autoplay={isAutoPlay ? 'true' : undefined}
-                  playsInline
-                  preload="none"
-                  disablePictureInPicture
-                  tabIndex={-1}
-                />
-                <span className="sk-media-play-icon" aria-hidden="true">&#9654;</span>
-                <div className="sk-video-progress" style={{ width: 0 }} />
-              </>
+              <VideoItem
+                item={item}
+                index={i}
+                isAutoPlay={isAutoPlay}
+                onVideoRef={onVideoRef}
+                onVideoToggle={onVideoToggle}
+                updateSingleLayout={updateSingleLayout}
+              />
             ) : item.type === 'audio' ? (
               <audio
                 src={resolveMediaUrl(item.url)}

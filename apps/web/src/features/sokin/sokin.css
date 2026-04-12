@@ -1773,6 +1773,7 @@
   transition: opacity 0.2s ease, transform 0.2s ease;
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
+  z-index: 4;
 }
 
 /* Masquer le play icon quand la vidéo joue */
@@ -1781,16 +1782,90 @@
   transform: translate(-50%, -50%) scale(0.7);
 }
 
-/* Barre de progression vidéo */
-.sk-video-progress {
+/* Gesture overlay — capte tap, double-tap, hold */
+.sk-video-gesture-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+/* Speed indicator ×1.5 */
+.sk-speed-indicator {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%) scale(0.8);
+  background: rgba(0, 0, 0, 0.7);
+  color: #fff;
+  padding: 4px 14px;
+  border-radius: 16px;
+  font-size: 13px;
+  font-weight: 600;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  z-index: 5;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+.sk-speed-indicator.sk-speed-active {
+  opacity: 1;
+  transform: translateX(-50%) scale(1);
+}
+
+/* Skip indicator ±10s */
+.sk-skip-indicator {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%) scale(0.7);
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  font-size: 13px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 5;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+.sk-skip-indicator[data-side="left"] { left: 18%; }
+.sk-skip-indicator[data-side="right"] { right: 18%; left: auto; }
+.sk-skip-indicator.sk-skip-active {
+  animation: skSkipPop 0.6s ease forwards;
+}
+@keyframes skSkipPop {
+  0%   { opacity: 0; transform: translateY(-50%) scale(0.7); }
+  20%  { opacity: 1; transform: translateY(-50%) scale(1.1); }
+  50%  { opacity: 1; transform: translateY(-50%) scale(1); }
+  100% { opacity: 0; transform: translateY(-50%) scale(0.9); }
+}
+
+/* Barre de progression vidéo — cliquable pour seeking */
+.sk-video-progress-bar {
   position: absolute;
   bottom: 0;
   left: 0;
+  right: 0;
+  height: 16px;
+  z-index: 4;
+  cursor: pointer;
+  display: flex;
+  align-items: flex-end;
+}
+
+.sk-video-progress {
   height: 3px;
   background: var(--color-primary, #6f58ff);
   border-radius: 0 2px 0 0;
   transition: width 0.25s linear;
-  z-index: 2;
 }
 
 /* ════════════════════════════════════════
