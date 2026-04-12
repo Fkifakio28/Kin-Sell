@@ -64,7 +64,7 @@ import {
   IconMoreHoriz,
 } from './AnnounceCard';
 import { MediaViewer, CommentsDrawer, type CommentProfileState, type MissingPublicProfile } from './SoKinShared';
-import { SOKIN_POST_BACKGROUNDS, DEFAULT_BG_ID } from './sokin-backgrounds';
+import { SOKIN_POST_BACKGROUNDS, DEFAULT_BG_ID, resolveBackgroundCss } from './sokin-backgrounds';
 import './sokin.css';
 
 /* ─────────────────────────────────────────────────────── */
@@ -943,12 +943,13 @@ function DesktopStudioComposer({
         <p className="sk-studio-question">{typeMeta.icon} {typeMeta.label}</p>
 
         <textarea
-          className="sk-modal-textarea sk-modal-textarea--studio"
+          className={`sk-modal-textarea sk-modal-textarea--studio${showBgSelector ? ' sk-modal-textarea--bg-active' : ''}`}
           placeholder={typeMeta.placeholder}
           value={text}
           maxLength={500}
           onChange={(e) => setText(e.target.value)}
           rows={7}
+          style={showBgSelector ? { background: resolveBackgroundCss(backgroundStyle) } : undefined}
         />
 
         {/* ── Sélecteur de fond (texte seul) ── */}
@@ -1108,7 +1109,13 @@ function DesktopStudioComposer({
               </button>
             </header>
             {subject.trim() && <p className="sk-create-preview-subject"><strong>{subject}</strong></p>}
-            <p className="sk-create-preview-text">{text || 'Aucun texte saisi.'}</p>
+            {showBgSelector ? (
+              <div className="sk-card-text-only" style={{ background: resolveBackgroundCss(backgroundStyle) }}>
+                <p>{text || 'Aucun texte saisi.'}</p>
+              </div>
+            ) : (
+              <p className="sk-create-preview-text">{text || 'Aucun texte saisi.'}</p>
+            )}
             {previewUrls.length > 0 ? (
               <div className="sk-modal-previews">
                 {previewUrls.map((url, i) => (
@@ -1727,7 +1734,7 @@ function CreateAnnounceScreen({
               <div className="sk-studio-text-wrap">
                 <textarea
                   ref={textareaRef}
-                  className="sk-modal-textarea sk-modal-textarea--studio"
+                  className={`sk-modal-textarea sk-modal-textarea--studio${showBgSelector ? ' sk-modal-textarea--bg-active' : ''}`}
                   placeholder={typeMeta.placeholder}
                   value={text}
                   onChange={(e) => {
@@ -1737,6 +1744,7 @@ function CreateAnnounceScreen({
                   rows={7}
                   maxLength={500}
                   autoFocus
+                  style={showBgSelector ? { background: resolveBackgroundCss(backgroundStyle) } : undefined}
                 />
                 <button
                   type="button"
@@ -2028,7 +2036,13 @@ function CreateAnnounceScreen({
             </header>
             <h3 className="sk-create-preview-title">{typeMeta.icon} {typeMeta.label} — Publication prête</h3>
             {subject.trim() && <p className="sk-create-preview-subject"><strong>{subject}</strong></p>}
-            <p className="sk-create-preview-text">{text.trim() || 'Aucun texte saisi.'}</p>
+            {showBgSelector ? (
+              <div className="sk-card-text-only" style={{ background: resolveBackgroundCss(backgroundStyle) }}>
+                <p>{text.trim() || 'Aucun texte saisi.'}</p>
+              </div>
+            ) : (
+              <p className="sk-create-preview-text">{text.trim() || 'Aucun texte saisi.'}</p>
+            )}
             {mediaFiles.length > 0 ? (
               <div className="sk-modal-previews">
                 {mediaFiles.map((f, i) => (

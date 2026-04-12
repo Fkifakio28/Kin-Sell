@@ -2385,6 +2385,18 @@
   min-height: 140px;
 }
 
+/* Textarea avec fond personnalisé actif */
+.sk-modal-textarea--bg-active {
+  border-radius: 14px;
+  color: #fff;
+  font-weight: 600;
+  font-size: 17px;
+  text-align: center;
+  min-height: 160px;
+  border-color: rgba(255, 255, 255, 0.15);
+  transition: background 0.3s ease;
+}
+
 .sk-studio-media-btn {
   position: absolute;
   right: 10px;
