@@ -62,38 +62,57 @@
         }
       }
 
-      openApp.href = customUrl;
-      openIntent.href = intentUrl;
+      openApp.href = intentUrl;
+      openIntent.href = customUrl;
 
-      openApp.addEventListener("click", function() { emit("manual-open-app", customUrl); });
-      openIntent.addEventListener("click", function() { emit("manual-open-intent", intentUrl); });
+      openApp.addEventListener("click", function() { emit("manual-open-intent", intentUrl); });
+      openIntent.addEventListener("click", function() { emit("manual-open-custom", customUrl); });
+
+      var timers = [];
+      var appOpened = false;
+
+      function cancelTimers() {
+        for (var i = 0; i < timers.length; i++) clearTimeout(timers[i]);
+        timers = [];
+      }
+
+      // Detect when user leaves this page (app opened successfully)
+      document.addEventListener("visibilitychange", function() {
+        if (document.hidden && !appOpened) {
+          appOpened = true;
+          cancelTimers();
+          emit("app-opened", "page hidden - app likely opened");
+        }
+      });
 
       function jump(url) {
+        if (appOpened) return;
         try {
           emit("jump", url);
           window.location.href = url;
         } catch (e) {
           emit("jump-error", String(e && e.message ? e.message : e));
-          // ignore
         }
       }
 
-      // Sequence robuste: custom scheme -> intent -> applink https
+      // Sequence: intent URI (most reliable in Chrome Custom Tab) -> custom scheme -> HTTPS App Link
       emit("loaded", "start sequence");
-      jump(customUrl);
+      jump(intentUrl);
 
-      setTimeout(function() {
-        jump(intentUrl);
-      }, 800);
+      timers.push(setTimeout(function() {
+        jump(customUrl);
+      }, 800));
 
-      setTimeout(function() {
+      timers.push(setTimeout(function() {
         jump(httpsAppLink);
-      }, 1700);
+      }, 1700));
 
-      setTimeout(function() {
-        statusEl.textContent = "Si l'application ne s'ouvre pas automatiquement, appuyez sur un bouton.";
-        emit("timeout-manual", "automatic open did not complete in time");
-      }, 2600);
+      timers.push(setTimeout(function() {
+        if (!appOpened) {
+          statusEl.textContent = "Si l'application ne s'ouvre pas automatiquement, appuyez sur un bouton.";
+          emit("timeout-manual", "automatic open did not complete in time");
+        }
+      }, 2600));
     })();
   </script>
 </body>

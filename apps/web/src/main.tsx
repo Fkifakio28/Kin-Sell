@@ -17,19 +17,6 @@ import { registerServiceWorker } from "./utils/push-notifications";
 import { initializeIAP } from "./utils/iap";
 import "./styles/index.css";
 
-let lastOAuthDeepLink = "";
-let lastOAuthDeepLinkAt = 0;
-
-function isDuplicateOAuthDeepLink(url: string): boolean {
-  const now = Date.now();
-  const isOAuth = url.includes("/auth/callback") || url.includes("com.kinsell.app://auth/callback");
-  if (!isOAuth) return false;
-  const duplicate = lastOAuthDeepLink === url && now - lastOAuthDeepLinkAt < 5000;
-  lastOAuthDeepLink = url;
-  lastOAuthDeepLinkAt = now;
-  return duplicate;
-}
-
 // ── Register Service Worker for push notifications (web only) ──
 if ("serviceWorker" in navigator) {
   registerServiceWorker().catch(() => {});
@@ -43,12 +30,16 @@ if (Capacitor.isNativePlatform()) {
   StatusBar.setStyle({ style: Style.Dark }).catch(() => {});
 
   // Deep-link handler: intercept OAuth callback
+  // Guard against duplicate deep-links from the redirect page
+  let _authCallbackHandled = false;
+
   CapacitorApp.addListener("appUrlOpen", async ({ url }: URLOpenListenerEvent) => {
     if (!url) return;
-    if (isDuplicateOAuthDeepLink(url)) return;
 
     // OAuth deep-link callback (custom scheme)
     if (url.startsWith("com.kinsell.app://auth/callback")) {
+      if (_authCallbackHandled) return; // ignore duplicate deep-links
+      _authCallbackHandled = true;
       const query = url.includes("?") ? url.slice(url.indexOf("?")) : "";
       await Browser.close().catch(() => undefined);
       window.location.href = `/auth/callback${query}`;
@@ -61,6 +52,8 @@ if (Capacitor.isNativePlatform()) {
       if (parsed.hostname === "kin-sell.com") {
         // Close in-app browser if this is an auth callback
         if (parsed.pathname.startsWith("/auth/")) {
+          if (_authCallbackHandled) return; // ignore duplicate
+          _authCallbackHandled = true;
           await Browser.close().catch(() => undefined);
         }
         window.location.href = parsed.pathname + parsed.search + parsed.hash;

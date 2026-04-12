@@ -23,6 +23,7 @@ interface AppCodeEntry {
   role: string;
   displayName: string;
   expiresAt: number;
+  consumed?: boolean;
 }
 const appCodeStore = new Map<string, AppCodeEntry>();
 
@@ -343,7 +344,9 @@ router.post("/apple/native", rateLimit(RateLimits.LOGIN), asyncHandler(async (re
 }));
 
 // ── App code exchange (native app only) ──
-// The WebView calls this to exchange the one-time appCode for httpOnly cookies.
+// The WebView calls this to exchange the appCode for httpOnly cookies.
+// Idempotent: multiple calls with the same code return the same result
+// within the TTL window (handles duplicate deep-link race conditions).
 router.post("/app/exchange", rateLimit(RateLimits.LOGIN), asyncHandler(async (req, res) => {
   const { appCode } = z.object({ appCode: z.string().length(64) }).parse(req.body);
 
@@ -354,15 +357,18 @@ router.post("/app/exchange", rateLimit(RateLimits.LOGIN), asyncHandler(async (re
     return;
   }
 
-  // One-time use — delete immediately
-  appCodeStore.delete(appCode);
-
   // Set httpOnly cookies in the WebView context
   setAuthCookies(res, {
     accessToken: entry.accessToken,
     refreshToken: entry.refreshToken,
     sessionId: entry.sessionId,
   });
+
+  // Shorten TTL to 30s after first exchange (allow retries but limit window)
+  if (!entry.consumed) {
+    entry.consumed = true;
+    entry.expiresAt = Math.min(entry.expiresAt, Date.now() + 30_000);
+  }
 
   res.json({
     ok: true,

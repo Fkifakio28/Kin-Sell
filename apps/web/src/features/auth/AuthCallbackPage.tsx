@@ -3,24 +3,6 @@ import { useSearchParams } from "react-router-dom";
 import { clearAuthSession, request } from "../../lib/api-client";
 import { useLocaleCurrency } from "../../app/providers/LocaleCurrencyProvider";
 
-const APP_CODE_ROLE_KEY_PREFIX = "kin-sell.oauth.app-code.role.";
-
-function getConsumedAppCodeRole(appCode: string): string | null {
-  try {
-    return sessionStorage.getItem(`${APP_CODE_ROLE_KEY_PREFIX}${appCode}`);
-  } catch {
-    return null;
-  }
-}
-
-function markAppCodeConsumed(appCode: string, role: string): void {
-  try {
-    sessionStorage.setItem(`${APP_CODE_ROLE_KEY_PREFIX}${appCode}`, role);
-  } catch {
-    // ignore storage failures
-  }
-}
-
 function logOAuthDebug(stage: string, info?: string) {
   try {
     fetch("/api/auth/oauth/debug", {
@@ -84,13 +66,6 @@ export function AuthCallbackPage() {
 
     // Native app flow: exchange appCode for httpOnly cookies in the WebView
     if (appCode) {
-      const consumedRole = getConsumedAppCodeRole(appCode);
-      if (consumedRole) {
-        logOAuthDebug("app-exchange-skip-duplicate", `role=${consumedRole}`);
-        redirectByRole(consumedRole);
-        return;
-      }
-
       logOAuthDebug("app-exchange-start", `appCode.length=${appCode.length}`);
       request<{ ok: boolean; role: string }>("/auth/app/exchange", {
         method: "POST",
@@ -98,17 +73,10 @@ export function AuthCallbackPage() {
         headers: { "Content-Type": "application/json" },
       })
         .then((res) => {
-          markAppCodeConsumed(appCode, res.role);
           logOAuthDebug("app-exchange-success", `role=${res.role}`);
           redirectByRole(res.role);
         })
         .catch((err: unknown) => {
-          const duplicatedRole = getConsumedAppCodeRole(appCode);
-          if (duplicatedRole) {
-            logOAuthDebug("app-exchange-duplicate-recovered", `role=${duplicatedRole}`);
-            redirectByRole(duplicatedRole);
-            return;
-          }
           const message = err instanceof Error ? err.message : "exchange failed";
           logOAuthDebug("app-exchange-failed", message);
           window.location.replace("/login");
