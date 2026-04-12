@@ -52,6 +52,32 @@ const refreshSchema = z.object({
 
 const router = Router();
 
+router.post("/oauth/debug", rateLimit(RateLimits.LOGIN), asyncHandler(async (req, res) => {
+  const payload = z.object({
+    stage: z.string().min(1).max(80),
+    source: z.string().max(40).optional(),
+    info: z.string().max(500).optional(),
+    url: z.string().max(2000).optional(),
+    ua: z.string().max(500).optional(),
+    ts: z.number().optional(),
+  }).safeParse(req.body ?? {});
+
+  if (!payload.success) {
+    res.status(400).json({ ok: false });
+    return;
+  }
+
+  logger.info({
+    oauthDebug: {
+      ...payload.data,
+      ip: req.ip,
+      serverTs: Date.now(),
+    },
+  }, "[OAuth Debug]");
+
+  res.json({ ok: true });
+}));
+
 router.post("/register", rateLimit(RateLimits.REGISTER), asyncHandler(async (request, response) => {
   // Turnstile CAPTCHA verification
   const cfToken = request.body?.cfTurnstileToken;

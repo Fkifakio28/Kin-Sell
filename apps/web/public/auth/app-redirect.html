@@ -35,18 +35,51 @@
       var openApp = document.getElementById("openApp");
       var openIntent = document.getElementById("openIntent");
 
-      openApp.href = customUrl;
-      openIntent.href = intentUrl;
-
-      function jump(url) {
+      function emit(stage, info) {
+        var payload = {
+          stage: stage,
+          source: "app-redirect",
+          info: info || "",
+          url: window.location.href,
+          ua: navigator.userAgent,
+          ts: Date.now()
+        };
         try {
-          window.location.href = url;
+          var body = JSON.stringify(payload);
+          if (navigator.sendBeacon) {
+            navigator.sendBeacon("/api/auth/oauth/debug", new Blob([body], { type: "application/json" }));
+          } else {
+            fetch("/api/auth/oauth/debug", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              credentials: "include",
+              keepalive: true,
+              body: body
+            }).catch(function() {});
+          }
         } catch (e) {
           // ignore
         }
       }
 
+      openApp.href = customUrl;
+      openIntent.href = intentUrl;
+
+      openApp.addEventListener("click", function() { emit("manual-open-app", customUrl); });
+      openIntent.addEventListener("click", function() { emit("manual-open-intent", intentUrl); });
+
+      function jump(url) {
+        try {
+          emit("jump", url);
+          window.location.href = url;
+        } catch (e) {
+          emit("jump-error", String(e && e.message ? e.message : e));
+          // ignore
+        }
+      }
+
       // Sequence robuste: custom scheme -> intent -> applink https
+      emit("loaded", "start sequence");
       jump(customUrl);
 
       setTimeout(function() {
@@ -59,6 +92,7 @@
 
       setTimeout(function() {
         statusEl.textContent = "Si l'application ne s'ouvre pas automatiquement, appuyez sur un bouton.";
+        emit("timeout-manual", "automatic open did not complete in time");
       }, 2600);
     })();
   </script>
