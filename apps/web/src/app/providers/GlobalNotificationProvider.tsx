@@ -9,6 +9,7 @@ import {
   isNativeApp,
   isSubscribedToPush,
   initNativePush,
+  listenForPendingFcmToken,
   onServiceWorkerMessage,
   registerServiceWorker,
   subscribeToPush,
@@ -184,10 +185,12 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
 
     let canceled = false;
     let nativeCleanup: (() => void) | null = null;
+    let tokenCleanup: (() => void) | null = null;
 
     const initPush = async () => {
       // ── Native Android (FCM via Capacitor) ──
       if (isNativeApp()) {
+        tokenCleanup = listenForPendingFcmToken();
         nativeCleanup = await initNativePush((data) => {
           // Foreground notification received → show in-app toast
           const kind = resolveNotificationKind(data as PushPayloadData);
@@ -243,6 +246,7 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
     return () => {
       canceled = true;
       nativeCleanup?.();
+      tokenCleanup?.();
     };
   }, [isLoggedIn, pushMissed]);
 
@@ -327,7 +331,7 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
       stopCallSound();
       if (vibrationIntervalRef.current) { clearInterval(vibrationIntervalRef.current); vibrationIntervalRef.current = null; }
       if ("vibrate" in navigator) navigator.vibrate(0);
-    }, 45_000);
+    }, 30_000);
   }, []);
 
   const requestPushPermission = useCallback(async () => {
@@ -541,6 +545,16 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
       setMissedNotifications((prev) => prev.filter((n) => n.id !== callKey));
     };
 
+    const handleCallNoAnswer = (data: { conversationId: string }) => {
+      clearIncomingCallFor(data);
+      // Remove incoming notif, push missed
+      setMissedNotifications((prev) => prev.filter((n) => !n.id.startsWith(`call-incoming-${data.conversationId}`)));
+      pushMissed(
+        { kind: "message", title: "📞 Appel manqué", content: "Pas de réponse", icon: "📞", targetUrl: "/messaging" },
+        `call-missed-${data.conversationId}-${Date.now()}`,
+      );
+    };
+
     const handleOrderCreated = (data: { type: string; orderId: string; buyerUserId: string; sellerUserId: string; itemsCount?: number; fromNegotiation?: boolean; createdAt: string }) => {
       if (data.buyerUserId === user?.id && !data.fromNegotiation) return; // buyer already knows from checkout
       const isSeller = data.sellerUserId === user?.id;
@@ -700,6 +714,7 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
     socket.on("call:ended", handleCallEnded);
     socket.on("call:accepted", handleCallAccepted);
     socket.on("call:rejected", handleCallRejected);
+    socket.on("call:no-answer", handleCallNoAnswer);
     socket.on("order:created", handleOrderCreated);
     socket.on("order:status-updated", handleOrderStatusUpdated);
     socket.on("order:delivery-confirmed", handleDeliveryConfirmed);
@@ -714,6 +729,7 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
       socket.off("call:ended", handleCallEnded);
       socket.off("call:accepted", handleCallAccepted);
       socket.off("call:rejected", handleCallRejected);
+      socket.off("call:no-answer", handleCallNoAnswer);
       socket.off("order:created", handleOrderCreated);
       socket.off("order:status-updated", handleOrderStatusUpdated);
       socket.off("order:delivery-confirmed", handleDeliveryConfirmed);

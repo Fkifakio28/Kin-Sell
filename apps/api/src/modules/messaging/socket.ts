@@ -23,6 +23,39 @@ const TYPING_MIN_INTERVAL_MS = 2_000; // max 1 typing event par 2s
 
 /** conversationId → active call log ID (tracks in-progress calls) */
 const activeCallLogs = new Map<string, string>();
+/** conversationId → server-side 30s no-answer timer */
+const activeCallTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const CALL_TIMEOUT_MS = 30_000;
+
+/** Create a SYSTEM message in the conversation to log a call event */
+async function createCallEventMessage(
+  io: SocketIOServer,
+  conversationId: string,
+  senderId: string,
+  callType: string,
+  status: string,
+  durationSeconds?: number | null,
+) {
+  try {
+    const msg = await prisma.message.create({
+      data: {
+        conversationId,
+        senderId,
+        type: "SYSTEM",
+        content: JSON.stringify({ source: "call", callType, status, durationSeconds: durationSeconds ?? null }),
+      },
+      include: {
+        sender: { select: { id: true, profile: { select: { displayName: true, avatarUrl: true, username: true } } } },
+        replyTo: { select: { id: true, content: true, type: true, sender: { select: { profile: { select: { displayName: true } } } } } },
+        readReceipts: { select: { userId: true, readAt: true } },
+      },
+    });
+    io.to(`conv:${conversationId}`).emit("message:new", { message: msg });
+  } catch (e) {
+    logger.error({ err: e }, "[CallEvent] Failed to create call event message");
+  }
+}
+
 /** userId → pending offline timeout (grace period for mobile/background transitions) */
 const pendingOfflineTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const OFFLINE_GRACE_MS = 120_000;
@@ -289,9 +322,32 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
           ],
         });
       })();
+
+      // ── 30s server-side timeout → NO_ANSWER ──
+      if (activeCallTimers.has(data.conversationId)) clearTimeout(activeCallTimers.get(data.conversationId)!);
+      activeCallTimers.set(data.conversationId, setTimeout(() => {
+        activeCallTimers.delete(data.conversationId);
+        // Notify both parties
+        const callerSockets = onlineUsers.get(userId);
+        if (callerSockets) { for (const sid of callerSockets) io.to(sid).emit("call:no-answer", { conversationId: data.conversationId }); }
+        const receiverSockets = onlineUsers.get(data.targetUserId);
+        if (receiverSockets) { for (const sid of receiverSockets) io.to(sid).emit("call:no-answer", { conversationId: data.conversationId }); }
+        // Update call log → NO_ANSWER + system message
+        const logId = activeCallLogs.get(data.conversationId);
+        if (logId) {
+          activeCallLogs.delete(data.conversationId);
+          void callLogService.updateCallLogStatus(logId, "NO_ANSWER", { endedAt: new Date() })
+            .then((log) => createCallEventMessage(io, data.conversationId, log.callerUserId, log.callType, "NO_ANSWER"))
+            .catch((e) => console.error("[CallLog] no-answer error", e));
+        }
+      }, CALL_TIMEOUT_MS));
     });
 
     socket.on("call:accept", (data: { conversationId: string; callerId: string }) => {
+      // Cancel no-answer timer
+      const timer = activeCallTimers.get(data.conversationId);
+      if (timer) { clearTimeout(timer); activeCallTimers.delete(data.conversationId); }
+
       const callerSockets = onlineUsers.get(data.callerId);
       if (callerSockets) {
         for (const sid of callerSockets) {
@@ -307,6 +363,10 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
     });
 
     socket.on("call:reject", (data: { conversationId: string; callerId: string }) => {
+      // Cancel no-answer timer
+      const timer = activeCallTimers.get(data.conversationId);
+      if (timer) { clearTimeout(timer); activeCallTimers.delete(data.conversationId); }
+
       const callerSockets = onlineUsers.get(data.callerId);
       if (callerSockets) {
         for (const sid of callerSockets) {
@@ -314,15 +374,21 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
         }
       }
 
-      // Update call log → REJECTED
+      // Update call log → REJECTED + system message
       const logId = activeCallLogs.get(data.conversationId);
       if (logId) {
-        void callLogService.updateCallLogStatus(logId, "REJECTED", { endedAt: new Date() }).catch((e) => console.error("[CallLog] reject error", e));
+        void callLogService.updateCallLogStatus(logId, "REJECTED", { endedAt: new Date() })
+          .then((log) => createCallEventMessage(io, data.conversationId, log.callerUserId, log.callType, "REJECTED"))
+          .catch((e) => console.error("[CallLog] reject error", e));
         activeCallLogs.delete(data.conversationId);
       }
     });
 
     socket.on("call:end", (data: { conversationId: string; targetUserId: string }) => {
+      // Cancel no-answer timer
+      const noAnswerTimer = activeCallTimers.get(data.conversationId);
+      if (noAnswerTimer) { clearTimeout(noAnswerTimer); activeCallTimers.delete(data.conversationId); }
+
       // Always emit call:ended to the other side — even if call log already processed
       const targetSockets = onlineUsers.get(data.targetUserId);
       if (targetSockets) {
@@ -341,18 +407,18 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
         }
       }
 
-      // Update call log → set endedAt + compute duration (idempotent)
+      // Update call log → set endedAt + compute duration + system message
       const logId = activeCallLogs.get(data.conversationId);
       if (logId) {
         activeCallLogs.delete(data.conversationId);
         void (async () => {
           try {
-            await prisma.$transaction(async (tx) => {
-              const existing = await tx.callLog.findUnique({ where: { id: logId }, select: { answeredAt: true } });
-              const endedAt = new Date();
-              const durationSeconds = existing?.answeredAt ? Math.round((endedAt.getTime() - existing.answeredAt.getTime()) / 1000) : undefined;
-              await callLogService.updateCallLogStatus(logId, existing?.answeredAt ? "ANSWERED" : "MISSED", { endedAt, durationSeconds });
-            });
+            const existing = await prisma.callLog.findUnique({ where: { id: logId }, select: { answeredAt: true, callType: true, callerUserId: true } });
+            const endedAt = new Date();
+            const durationSeconds = existing?.answeredAt ? Math.round((endedAt.getTime() - existing.answeredAt.getTime()) / 1000) : undefined;
+            const status = existing?.answeredAt ? "ANSWERED" : "MISSED";
+            await callLogService.updateCallLogStatus(logId, status, { endedAt, durationSeconds });
+            await createCallEventMessage(io, data.conversationId, existing?.callerUserId ?? userId, existing?.callType ?? "AUDIO", status, durationSeconds);
           } catch (e) { logger.error({ err: e, logId }, "[CallLog] end error"); }
         })();
       }

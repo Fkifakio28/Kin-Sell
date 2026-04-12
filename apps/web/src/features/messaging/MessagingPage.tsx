@@ -144,6 +144,19 @@ function canEditMessage(msg: ChatMessage): boolean {
   return Date.now() - new Date(msg.createdAt).getTime() < 30 * 60 * 1000;
 }
 
+type CallEventData = { source: "call"; callType: "AUDIO" | "VIDEO"; status: string; durationSeconds: number | null };
+
+function parseCallEventFromSystemMessage(msg: ChatMessage): CallEventData | null {
+  if (msg.type !== "SYSTEM" || !msg.content) return null;
+  try {
+    const data = JSON.parse(msg.content);
+    if (data?.source === "call") return data as CallEventData;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 /* ═══ Audio Player ═══ */
 function AudioPlayer({ src }: { src: string }) {
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -344,6 +357,8 @@ export function MessagingPage() {
 
   /* ── Call state ── */
   const [callState, setCallState] = useState<null | { type: "audio" | "video"; conversationId: string; remoteUserId: string; direction: "incoming" | "outgoing"; status: "ringing" | "connected" | "ended" }>(null);
+  const [callSummary, setCallSummary] = useState<null | { type: "audio" | "video"; duration: number; status: string; direction: "incoming" | "outgoing" }>(null);
+  const callDurationRef = useRef(0);
 
   // Keep screen awake during active calls (ringing or connected)
   useWakeLock(callState != null && callState.status !== "ended");
@@ -455,7 +470,8 @@ export function MessagingPage() {
   useEffect(() => {
     if (callState?.status === "connected") {
       setCallDuration(0);
-      callTimerRef.current = setInterval(() => setCallDuration((t) => t + 1), 1000);
+      callDurationRef.current = 0;
+      callTimerRef.current = setInterval(() => setCallDuration((t) => { callDurationRef.current = t + 1; return t + 1; }), 1000);
     } else {
       if (callTimerRef.current) { clearInterval(callTimerRef.current); callTimerRef.current = null; }
       setCallDuration(0);
@@ -842,8 +858,21 @@ export function MessagingPage() {
         emit("webrtc:offer", { targetUserId: data.accepterId, sdp: offer });
       }
     };
-    const handleCallRejected = () => { cleanupCall(); setCallState(null); };
-    const handleCallEnded = () => { cleanupCall(); setCallState(null); };
+    const handleCallRejected = () => {
+      const prev = callStateRef.current;
+      if (prev) setCallSummary({ type: prev.type, duration: 0, status: "REJECTED", direction: prev.direction });
+      cleanupCall(); setCallState(null);
+    };
+    const handleCallEnded = () => {
+      const prev = callStateRef.current;
+      if (prev) setCallSummary({ type: prev.type, duration: callDurationRef.current, status: prev.status === "connected" ? "ANSWERED" : "MISSED", direction: prev.direction });
+      cleanupCall(); setCallState(null);
+    };
+    const handleCallNoAnswer = () => {
+      const prev = callStateRef.current;
+      if (prev) setCallSummary({ type: prev.type, duration: 0, status: "NO_ANSWER", direction: prev.direction });
+      cleanupCall(); setCallState(null);
+    };
     const handleOffer = async (data: { callerId: string; sdp: RTCSessionDescriptionInit }) => {
       if (!peerConnectionRef.current) return;
       await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(data.sdp));
@@ -864,6 +893,7 @@ export function MessagingPage() {
     on("call:accepted", handleCallAccepted as any);
     on("call:rejected", handleCallRejected as any);
     on("call:ended", handleCallEnded as any);
+    on("call:no-answer", handleCallNoAnswer as any);
     on("webrtc:offer", handleOffer as any);
     on("webrtc:answer", handleAnswer as any);
     on("webrtc:ice-candidate", handleIceCandidate as any);
@@ -872,6 +902,7 @@ export function MessagingPage() {
       off("call:accepted", handleCallAccepted as any);
       off("call:rejected", handleCallRejected as any);
       off("call:ended", handleCallEnded as any);
+      off("call:no-answer", handleCallNoAnswer as any);
       off("webrtc:offer", handleOffer as any);
       off("webrtc:answer", handleAnswer as any);
       off("webrtc:ice-candidate", handleIceCandidate as any);
@@ -1037,19 +1068,17 @@ export function MessagingPage() {
     setIsSpeakerOn((prev) => {
       const next = !prev;
       if (next) {
-        // Activer haut-parleur : unmute audio, route vers speaker
-        if (remoteAudioRef.current) remoteAudioRef.current.muted = false;
-        if (remoteVideoRef.current) remoteVideoRef.current.muted = false;
-        setIsEarMode(false);
-        void setSpeaker();
-      } else {
-        // Couper le son : mute audio
-        if (remoteAudioRef.current) remoteAudioRef.current.muted = true;
-        if (remoteVideoRef.current) remoteVideoRef.current.muted = true;
-      }
-      return next;
-    });
-  }, []);
+      // Route to loudspeaker
+      void setSpeaker();
+      setIsEarMode(false);
+      if (remoteAudioRef.current) remoteAudioRef.current.muted = false;
+      if (remoteVideoRef.current) remoteVideoRef.current.muted = false;
+    } else {
+      // Route to earpiece
+      void setEarpiece();
+      setIsEarMode(true);
+      if (remoteAudioRef.current) remoteAudioRef.current.muted = false;
+      if (remoteVideoRef.current) remoteVideoRef.current.muted = false;
 
   const switchCamera = useCallback(async () => {
     if (!callState || callState.type !== "video" || !localStreamRef.current || !peerConnectionRef.current) return;
@@ -1086,6 +1115,12 @@ export function MessagingPage() {
       await applyVideoProfile(initProf);
       startQualityMonitor(pc);
       setCallState({ type: callType, conversationId: activeConv.id, remoteUserId, direction: "outgoing", status: "ringing" });
+      // Auto-route audio calls to earpiece
+      if (callType === "audio") {
+        void setEarpiece();
+        setIsEarMode(true);
+        setIsSpeakerOn(false);
+      }
       emit("call:initiate", { conversationId: activeConv.id, targetUserId: remoteUserId, callType });
     } catch { alert(t("msg.callMediaAccessError")); }
   }, [activeConv, myId, createPeerConnection, emit, optimizePeerSenders, getCallMedia, startQualityMonitor, applyVideoProfile, t]);
@@ -1106,20 +1141,35 @@ export function MessagingPage() {
       startQualityMonitor(pc);
       emit("call:accept", { conversationId: callState.conversationId, callerId: callState.remoteUserId });
       setCallState((prev) => prev ? { ...prev, type: acceptedType, status: "connected" } : null);
+      // Auto-route audio calls to earpiece
+      if (acceptedType === "audio") {
+        void setEarpiece();
+        setIsEarMode(true);
+        setIsSpeakerOn(false);
+      }
     } catch { alert(t("msg.callMediaAccessError")); }
   }, [callState, createPeerConnection, emit, optimizePeerSenders, getCallMedia, startQualityMonitor, applyVideoProfile, t]);
 
   const rejectCall = useCallback(() => {
     if (!callState) return;
+    setCallSummary({ type: callState.type, duration: 0, status: "REJECTED", direction: callState.direction });
     emit("call:reject", { conversationId: callState.conversationId, callerId: callState.remoteUserId });
     cleanupCall(); setCallState(null);
   }, [callState, emit, cleanupCall]);
 
   const endCall = useCallback(() => {
     if (!callState) return;
+    setCallSummary({ type: callState.type, duration: callDuration, status: callState.status === "connected" ? "ANSWERED" : "MISSED", direction: callState.direction });
     emit("call:end", { conversationId: callState.conversationId, targetUserId: callState.remoteUserId });
     cleanupCall(); setCallState(null);
-  }, [callState, emit, cleanupCall]);
+  }, [callState, callDuration, emit, cleanupCall]);
+
+  /* ── Auto-dismiss call summary after 5s ── */
+  useEffect(() => {
+    if (!callSummary) return;
+    const t = setTimeout(() => setCallSummary(null), 5000);
+    return () => clearTimeout(t);
+  }, [callSummary]);
 
   /* ── beforeunload: nettoyer appel actif si tab fermé ── */
   const callStateRef = useRef(callState);
@@ -1503,21 +1553,16 @@ export function MessagingPage() {
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">{isMuted ? <><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2c0 .76-.13 1.48-.35 2.17"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></> : <><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></>}</svg>
                 <span className="mg-call-ctrl-label">{isMuted ? "Muet" : "Micro"}</span>
               </button>
-              <button className={`mg-call-ctrl${!isSpeakerOn ? " mg-call-ctrl--active" : ""}`} onClick={toggleSpeaker}>
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">{isSpeakerOn ? <><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></> : <><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></>}</svg>
-                <span className="mg-call-ctrl-label">HP</span>
+              <button className={`mg-call-ctrl${isSpeakerOn ? " mg-call-ctrl--speaker-on" : ""}`} onClick={toggleSpeaker}>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">{isSpeakerOn ? <><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></> : <><path d="M6 9a6 6 0 0 1 12 0c0 7-3 9-6 9s-6-2-6-9z"/><path d="M12 22v-4"/></>}</svg>
+                <span className="mg-call-ctrl-label">{isSpeakerOn ? "HP" : "Oreille"}</span>
               </button>
-              {callState.type === "audio" && (
-                <button className={`mg-call-ctrl${isEarMode ? " mg-call-ctrl--active" : ""}`} onClick={() => { setIsEarMode((p) => { const next = !p; if (next) { void setEarpiece(); setIsSpeakerOn(false); if (remoteAudioRef.current) remoteAudioRef.current.muted = false; } else { void setSpeaker(); setIsSpeakerOn(true); } return next; }); }}>
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9a6 6 0 0 1 12 0c0 7-3 9-6 9s-6-2-6-9z"/><path d="M12 22v-4"/></svg>
-                  <span className="mg-call-ctrl-label">Oreille</span>
+              {callState.type === "video" && (
+                <button className={`mg-call-ctrl${isCameraOff ? " mg-call-ctrl--active" : ""}`} onClick={toggleCamera}>
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">{isCameraOff ? <><line x1="1" y1="1" x2="23" y2="23"/><path d="M21 21H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3l2-3h6l2 3h3a2 2 0 0 1 2 2v9"/></> : <><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></>}</svg>
+                  <span className="mg-call-ctrl-label">{isCameraOff ? "Cam off" : "Caméra"}</span>
                 </button>
               )}
-
-              <button className="mg-call-ctrl" onClick={() => setShowAddPeople(true)}>
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="17" y1="11" x2="23" y2="11"/></svg>
-                <span className="mg-call-ctrl-label">Ajouter</span>
-              </button>
               <button className="mg-call-ctrl mg-call-ctrl--hangup" onClick={endCall}>
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
                 <span className="mg-call-ctrl-label">Fin</span>
@@ -1591,6 +1636,19 @@ export function MessagingPage() {
               ))}
               {inviteCandidates.length === 0 && <p className="mg-empty-sm">{t("msg.noAvailableContact")}</p>}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══ Call summary banner ══ */}
+      {callSummary && (
+        <div className={`mg-call-summary${callSummary.status !== "ANSWERED" ? " mg-call-summary--missed" : ""}`} onClick={() => setCallSummary(null)}>
+          <span className="mg-call-summary-icon">{callSummary.type === "video" ? "📹" : "📞"}</span>
+          <div className="mg-call-summary-info">
+            <strong>{callSummary.status === "ANSWERED" ? "Appel terminé" : callSummary.status === "NO_ANSWER" ? "Pas de réponse" : callSummary.status === "REJECTED" ? "Appel refusé" : "Appel manqué"}</strong>
+            {callSummary.duration > 0 && (
+              <span>{Math.floor(callSummary.duration / 60).toString().padStart(2, "0")}:{(callSummary.duration % 60).toString().padStart(2, "0")}</span>
+            )}
           </div>
         </div>
       )}
@@ -1860,6 +1918,21 @@ export function MessagingPage() {
                 const readByOthers = msg.readReceipts.filter((r) => r.userId !== myId);
                 const isSelected = selectedMsgIds.has(msg.id);
                 const pinnedFromMsg = parseSoKinPostRefFromSystemMessage(msg);
+                const callEvent = parseCallEventFromSystemMessage(msg);
+
+                if (callEvent) {
+                  const cIcon = callEvent.callType === "VIDEO" ? "📹" : "📞";
+                  const cDur = callEvent.durationSeconds ? `${Math.floor(callEvent.durationSeconds / 60).toString().padStart(2, "0")}:${(callEvent.durationSeconds % 60).toString().padStart(2, "0")}` : null;
+                  const cLabel = callEvent.status === "ANSWERED" ? `Appel terminé${cDur ? ` • ${cDur}` : ""}` : callEvent.status === "NO_ANSWER" ? "Pas de réponse" : callEvent.status === "REJECTED" ? "Appel refusé" : "Appel manqué";
+                  const cMissed = callEvent.status !== "ANSWERED";
+                  return (
+                    <div key={msg.id} className={`mg-call-event${cMissed ? " mg-call-event--missed" : ""}`}>
+                      <span className="mg-call-event-icon">{cIcon}</span>
+                      <span className="mg-call-event-label">{cLabel}</span>
+                      <span className="mg-call-event-time">{new Date(msg.createdAt).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })}</span>
+                    </div>
+                  );
+                }
 
                 return (
                   <div

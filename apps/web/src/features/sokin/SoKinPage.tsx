@@ -64,7 +64,7 @@ import {
   IconBookmark,
   IconMoreHoriz,
 } from './AnnounceCard';
-import { MediaViewer, CommentsDrawer, type CommentProfileState, type MissingPublicProfile } from './SoKinShared';
+import { MediaViewer, CommentsDrawer, type CommentProfileState, type MissingPublicProfile, type ViewerState } from './SoKinShared';
 import { SOKIN_POST_BACKGROUNDS, DEFAULT_BG_ID, resolveBackgroundCss } from './sokin-backgrounds';
 import './sokin.css';
 
@@ -496,7 +496,7 @@ function AnnouncesFeed({
   isLoggedIn: boolean;
   openCommentsPostId: string | null;
   onOpenComments: (postId: string) => void;
-  onMediaClick: (item: MediaItem) => void;
+  onMediaClick: (items: MediaItem[], index: number) => void;
   onContact: (post: SoKinApiFeedPost) => void;
   contactingPostId: string | null;
   immersiveDesktop?: boolean;
@@ -2218,7 +2218,7 @@ function SoKinPageInner() {
   const [feedTab, setFeedTab] = useState<FeedTab>('pour-toi');
 
   // Viewer (géré au niveau page : un seul à la fois)
-  const [viewerItem, setViewerItem] = useState<MediaItem | null>(null);
+  const [viewerItem, setViewerItem] = useState<ViewerState | null>(null);
   // Commentaires
   const [openCommentsPostId, setOpenCommentsPostId] = useState<string | null>(null);
   const [commentsByPost, setCommentsByPost] = useState<Record<string, SoKinApiComment[]>>({});
@@ -3291,7 +3291,7 @@ function SoKinPageInner() {
               isLoggedIn={isLoggedIn}
               openCommentsPostId={openCommentsPostId}
               onOpenComments={handleOpenComments}
-              onMediaClick={(item) => setViewerItem(item)}
+              onMediaClick={(items, idx) => setViewerItem({ items, index: idx })}
               onContact={handleContact}
               contactingPostId={contactingPostId}
               currentUserId={user?.id}
@@ -3637,7 +3637,7 @@ function SoKinPageInner() {
                 isLoggedIn={isLoggedIn}
                 openCommentsPostId={openCommentsPostId}
                 onOpenComments={handleOpenComments}
-                onMediaClick={(item) => setViewerItem(item)}
+                onMediaClick={(items, idx) => setViewerItem({ items, index: idx })}
                 onContact={handleContact}
                 contactingPostId={contactingPostId}
                 immersiveDesktop
@@ -3981,7 +3981,7 @@ function SoKinPageInner() {
       )}
 
       {viewerItem && (
-        <MediaViewer item={viewerItem} onClose={() => setViewerItem(null)} />
+        <MediaViewer items={viewerItem.items} startIndex={viewerItem.index} onClose={() => setViewerItem(null)} />
       )}
 
       {/* ═══ MODAL BOOST FLOW ═══ */}

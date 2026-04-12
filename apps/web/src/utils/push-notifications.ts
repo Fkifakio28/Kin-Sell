@@ -160,6 +160,21 @@ async function sendFcmTokenToServer(token: string): Promise<void> {
 }
 
 /**
+ * Listen for pending FCM tokens flushed from native (SharedPreferences).
+ * When KinSellMessagingService.onNewToken() fires in background, the token
+ * is saved and pushed to JS via ks:fcm-token when MainActivity resumes.
+ */
+export function listenForPendingFcmToken(): () => void {
+  if (!isNativeApp()) return () => {};
+  const handler = (e: Event) => {
+    const token = (e as CustomEvent<{ token: string }>).detail?.token;
+    if (token) void sendFcmTokenToServer(token);
+  };
+  window.addEventListener("ks:fcm-token", handler);
+  return () => window.removeEventListener("ks:fcm-token", handler);
+}
+
+/**
  * Initialize native push notifications (FCM via Capacitor).
  * Returns a cleanup function to remove listeners.
  */

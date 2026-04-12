@@ -4,7 +4,7 @@
  * Extraits pour être réutilisés dans SoKinPage et HomePage.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   resolveMediaUrl,
   type SoKinApiFeedPost,
@@ -25,13 +25,31 @@ export function IconSend() {
 }
 
 /* ─────────────────────────────────────────────────────── */
-/* MEDIA VIEWER — popup simple (1 média à la fois)         */
+/* MEDIA VIEWER — slider multi-média (swipe + flèches)     */
 /* ─────────────────────────────────────────────────────── */
 
-export function MediaViewer({ item, onClose }: { item: MediaItem; onClose: () => void }) {
+export type ViewerState = { items: MediaItem[]; index: number };
+
+export function MediaViewer({ items, startIndex, onClose }: { items: MediaItem[]; startIndex: number; onClose: () => void }) {
+  const [currentIndex, setCurrentIndex] = useState(startIndex);
+  const touchStartX = useRef(0);
+  const touchDeltaX = useRef(0);
+  const isDragging = useRef(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const item = items[currentIndex];
+  const hasPrev = currentIndex > 0;
+  const hasNext = currentIndex < items.length - 1;
+  const multi = items.length > 1;
+
+  const goPrev = useCallback(() => setCurrentIndex((i) => Math.max(0, i - 1)), []);
+  const goNext = useCallback(() => setCurrentIndex((i) => Math.min(items.length - 1, i + 1)), [items.length]);
+
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
+      if (e.key === 'ArrowLeft') goPrev();
+      if (e.key === 'ArrowRight') goNext();
     };
     document.addEventListener('keydown', handleKey);
     document.body.style.overflow = 'hidden';
@@ -39,7 +57,53 @@ export function MediaViewer({ item, onClose }: { item: MediaItem; onClose: () =>
       document.removeEventListener('keydown', handleKey);
       document.body.style.overflow = '';
     };
-  }, [onClose]);
+  }, [onClose, goPrev, goNext]);
+
+  /* ── Touch / swipe ── */
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+    touchDeltaX.current = 0;
+    isDragging.current = true;
+  }, []);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (!isDragging.current) return;
+    touchDeltaX.current = e.touches[0].clientX - touchStartX.current;
+  }, []);
+
+  const handleTouchEnd = useCallback(() => {
+    if (!isDragging.current) return;
+    isDragging.current = false;
+    const threshold = 50;
+    if (touchDeltaX.current < -threshold) goNext();
+    else if (touchDeltaX.current > threshold) goPrev();
+    touchDeltaX.current = 0;
+  }, [goNext, goPrev]);
+
+  const renderMedia = (mi: MediaItem) => {
+    if (mi.type === 'video') {
+      return (
+        <video
+          src={resolveMediaUrl(mi.url)}
+          controls
+          autoPlay
+          playsInline
+          className="sk-viewer-media"
+        />
+      );
+    }
+    if (mi.type === 'audio') {
+      return (
+        <audio
+          src={resolveMediaUrl(mi.url)}
+          controls
+          autoPlay
+          className="sk-viewer-audio"
+        />
+      );
+    }
+    return <img src={resolveMediaUrl(mi.url)} alt="" className="sk-viewer-media" />;
+  };
 
   return (
     <div
@@ -49,38 +113,49 @@ export function MediaViewer({ item, onClose }: { item: MediaItem; onClose: () =>
       aria-modal="true"
       aria-label="Média en plein écran"
     >
-      <button
-        type="button"
-        className="sk-viewer-close"
-        onClick={onClose}
-        aria-label="Fermer le media"
+      <button type="button" className="sk-viewer-close" onClick={onClose} aria-label="Fermer le media">✕</button>
+
+      {/* Counter */}
+      {multi && <span className="sk-viewer-counter">{currentIndex + 1} / {items.length}</span>}
+
+      {/* Arrows */}
+      {multi && hasPrev && (
+        <button type="button" className="sk-viewer-arrow sk-viewer-arrow--left" onClick={(e) => { e.stopPropagation(); goPrev(); }} aria-label="Précédent">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+      )}
+      {multi && hasNext && (
+        <button type="button" className="sk-viewer-arrow sk-viewer-arrow--right" onClick={(e) => { e.stopPropagation(); goNext(); }} aria-label="Suivant">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+      )}
+
+      {/* Media content */}
+      <div
+        ref={containerRef}
+        className="sk-viewer-content"
+        onClick={(e) => e.stopPropagation()}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
       >
-        ✕
-      </button>
-      <div className="sk-viewer-content" onClick={(e) => e.stopPropagation()}>
-        {item.type === 'video' ? (
-          <video
-            src={resolveMediaUrl(item.url)}
-            controls
-            autoPlay
-            playsInline
-            className="sk-viewer-media"
-          />
-        ) : item.type === 'audio' ? (
-          <audio
-            src={resolveMediaUrl(item.url)}
-            controls
-            autoPlay
-            className="sk-viewer-audio"
-          />
-        ) : (
-          <img
-            src={resolveMediaUrl(item.url)}
-            alt=""
-            className="sk-viewer-media"
-          />
-        )}
+        {renderMedia(item)}
       </div>
+
+      {/* Dots */}
+      {multi && (
+        <div className="sk-viewer-dots" onClick={(e) => e.stopPropagation()}>
+          {items.map((_, i) => (
+            <button
+              key={i}
+              type="button"
+              className={`sk-viewer-dot${i === currentIndex ? ' sk-viewer-dot--active' : ''}`}
+              onClick={() => setCurrentIndex(i)}
+              aria-label={`Média ${i + 1}`}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

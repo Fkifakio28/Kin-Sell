@@ -19,7 +19,7 @@ import { InlineSearchResults } from "../../components/InlineSearchResults";
 import { HOME_PRODUCT_CATEGORIES, HOME_SERVICE_CATEGORIES } from "../../shared/constants/categories";
 import { SoKinToastProvider } from "../../components/feedback/SoKinToast";
 import { AnnounceCard, type MediaItem } from "../sokin/AnnounceCard";
-import { MediaViewer, CommentsDrawer, type CommentProfileState, type MissingPublicProfile } from "../sokin/SoKinShared";
+import { MediaViewer, CommentsDrawer, type CommentProfileState, type MissingPublicProfile, type ViewerState } from "../sokin/SoKinShared";
 import NotificationCenter from "../../components/NotificationCenter";
 import { useGlobalNotification } from "../../app/providers/GlobalNotificationProvider";
 import TutorialOverlay, { useTutorial, TutorialRelaunchBtn } from "../../components/TutorialOverlay";
@@ -86,7 +86,7 @@ export function HomePage() {
   const [trendingProfiles, setTrendingProfiles] = useState<ExplorerProfileApi[]>([]);
   const [sokinFeed, setSokinFeed] = useState<SoKinApiFeedPost[]>([]);
   /* So-Kin interaction state (media viewer, comments, contact) */
-  const [viewerItem, setViewerItem] = useState<MediaItem | null>(null);
+  const [viewerItem, setViewerItem] = useState<ViewerState | null>(null);
   const [openCommentsPostId, setOpenCommentsPostId] = useState<string | null>(null);
   const [commentsByPost, setCommentsByPost] = useState<Record<string, SoKinApiComment[]>>({});
   const [loadingCommentsPostId, setLoadingCommentsPostId] = useState<string | null>(null);
@@ -1127,7 +1127,7 @@ export function HomePage() {
                           post={post}
                           t={t}
                           isLoggedIn={isLoggedIn}
-                          onMediaClick={(item) => setViewerItem(item)}
+                          onMediaClick={(items, idx) => setViewerItem({ items, index: idx })}
                           isCommentsOpen={openCommentsPostId === post.id}
                           onOpenComments={() => handleOpenComments(post.id)}
                           onContact={() => void handleSokinContact(post)}
@@ -1288,7 +1288,7 @@ export function HomePage() {
       ) : null}
 
       {/* So-Kin Media Viewer */}
-      {viewerItem && <MediaViewer item={viewerItem} onClose={() => setViewerItem(null)} />}
+      {viewerItem && <MediaViewer items={viewerItem.items} startIndex={viewerItem.index} onClose={() => setViewerItem(null)} />}
 
       {/* So-Kin Comments Drawer */}
       <CommentsDrawer

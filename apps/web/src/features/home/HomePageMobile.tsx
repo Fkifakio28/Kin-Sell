@@ -43,7 +43,7 @@ import {
 import { useSocket } from "../../hooks/useSocket";
 import { SoKinToastProvider } from "../../components/feedback/SoKinToast";
 import { AnnounceCard, type MediaItem } from "../sokin/AnnounceCard";
-import { MediaViewer, CommentsDrawer, type CommentProfileState, type MissingPublicProfile } from "../sokin/SoKinShared";
+import { MediaViewer, CommentsDrawer, type CommentProfileState, type MissingPublicProfile, type ViewerState } from "../sokin/SoKinShared";
 import "../sokin/sokin.css";
 import { InlineSearchResults } from "../../components/InlineSearchResults";
 import { BundlePromoCard } from "../../components/BundlePromoCard";
@@ -952,7 +952,7 @@ function SoKinFeed({
   const touchStart = useRef<{ x: number; y: number } | null>(null);
 
   /* ── So-Kin interaction state ── */
-  const [viewerItem, setViewerItem] = useState<MediaItem | null>(null);
+  const [viewerItem, setViewerItem] = useState<ViewerState | null>(null);
   const [openCommentsPostId, setOpenCommentsPostId] = useState<string | null>(null);
   const [commentsByPost, setCommentsByPost] = useState<Record<string, SoKinApiComment[]>>({});
   const [loadingCommentsPostId, setLoadingCommentsPostId] = useState<string | null>(null);
@@ -1211,7 +1211,7 @@ function SoKinFeed({
           post={post}
           t={t}
           isLoggedIn={isLoggedIn}
-          onMediaClick={(item) => setViewerItem(item)}
+          onMediaClick={(items, idx) => setViewerItem({ items, index: idx })}
           isCommentsOpen={openCommentsPostId === post.id}
           onOpenComments={() => handleOpenComments(post.id)}
           onContact={() => void handleSokinContact(post)}
@@ -1269,7 +1269,7 @@ function SoKinFeed({
       </section>
 
       {/* So-Kin overlays */}
-      {viewerItem && <MediaViewer item={viewerItem} onClose={() => setViewerItem(null)} />}
+      {viewerItem && <MediaViewer items={viewerItem.items} startIndex={viewerItem.index} onClose={() => setViewerItem(null)} />}
       <CommentsDrawer
         post={posts.find((p) => p.id === openCommentsPostId) ?? null}
         open={Boolean(openCommentsPostId)}

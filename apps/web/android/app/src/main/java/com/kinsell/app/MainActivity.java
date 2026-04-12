@@ -34,6 +34,29 @@ public class MainActivity extends BridgeActivity {
 
         // Handle call notification tap (from full-screen intent)
         handleCallIntent(getIntent());
+
+        // Flush pending FCM token (saved by KinSellMessagingService.onNewToken in background)
+        flushPendingFcmToken();
+    }
+
+    private void flushPendingFcmToken() {
+        try {
+            android.content.SharedPreferences prefs =
+                getSharedPreferences("kin_sell_prefs", MODE_PRIVATE);
+            String pendingToken = prefs.getString("pending_fcm_token", null);
+            if (pendingToken != null && !pendingToken.isEmpty()) {
+                WebView webView = getBridge().getWebView();
+                if (webView != null) {
+                    final String token = pendingToken.replace("'", "\\'");
+                    webView.post(() -> webView.evaluateJavascript(
+                        "window.dispatchEvent(new CustomEvent('ks:fcm-token',{detail:{token:'" + token + "'}}));",
+                        null));
+                }
+                prefs.edit().remove("pending_fcm_token").apply();
+            }
+        } catch (Exception e) {
+            // Ignore — WebView may not be ready yet
+        }
     }
 
     @Override

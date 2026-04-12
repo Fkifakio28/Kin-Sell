@@ -1,5 +1,6 @@
 import { Suspense, useState } from "react";
 import { Outlet, ScrollRestoration, useLocation } from "react-router-dom";
+import { Capacitor } from "@capacitor/core";
 import { CookieConsent } from "../../components/CookieConsent";
 import { Footer } from "../../components/Footer";
 import { shouldShowSplash, SplashScreen } from "../../components/SplashScreen";
@@ -17,7 +18,7 @@ export function RootLayout() {
     || location.pathname === "/register"
     || location.pathname === "/suspended";
 
-  const [splashVisible, setSplashVisible] = useState(() => shouldShowSplash());
+  const [splashVisible, setSplashVisible] = useState(() => !Capacitor.isNativePlatform() && shouldShowSplash());
 
   function handleSplashDismiss() {
     setSplashVisible(false);

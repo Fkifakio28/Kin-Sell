@@ -455,7 +455,7 @@ export function MediaCollage({
   autoPlayVideoIndex,
 }: {
   items: MediaItem[];
-  onItemClick: (item: MediaItem) => void;
+  onItemClick: (items: MediaItem[], index: number) => void;
   onVideoToggle?: (videoEl: HTMLVideoElement, item: MediaItem) => void;
   onVideoRef?: (videoEl: HTMLVideoElement | null, item: MediaItem, index: number) => void;
   autoPlayVideoIndex?: number;
@@ -501,7 +501,7 @@ export function MediaCollage({
             className={`sk-media-item${item.type === 'video' ? ' sk-media-item--video' : ''}${item.type === 'audio' ? ' sk-media-item--audio' : ''}`}
             onClick={() => {
               if (item.type === 'video') return;
-              onItemClick(item);
+              onItemClick(items, i);
             }}
             aria-label={item.type === 'video' ? 'Voir la vidéo' : item.type === 'audio' ? "Écouter l'audio" : "Voir l'image"}
           >
@@ -547,7 +547,7 @@ export type AnnounceCardProps = {
   post: SoKinApiFeedPost;
   t: (k: string) => string;
   isLoggedIn: boolean;
-  onMediaClick: (item: MediaItem) => void;
+  onMediaClick: (items: MediaItem[], index: number) => void;
   isCommentsOpen: boolean;
   onOpenComments: () => void;
   onContact: () => void;

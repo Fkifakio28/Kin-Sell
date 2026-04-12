@@ -270,6 +270,7 @@ export function DashboardMessaging() {
     const handleAccepted = async (data: { conversationId: string; accepterId: string }) => { setCallState((p) => p ? { ...p, status: "connected" } : null); if (peerConnectionRef.current) { const offer = await peerConnectionRef.current.createOffer(); await peerConnectionRef.current.setLocalDescription(offer); emit("webrtc:offer", { targetUserId: data.accepterId, sdp: offer }); } };
     const handleRejected = () => { cleanupCall(); setCallState(null); };
     const handleEnded = () => { cleanupCall(); setCallState(null); };
+    const handleNoAnswer = () => { cleanupCall(); setCallState(null); };
     const handleOffer = async (data: { callerId: string; sdp: RTCSessionDescriptionInit }) => { if (!peerConnectionRef.current) return; await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(data.sdp)); const ans = await peerConnectionRef.current.createAnswer(); await peerConnectionRef.current.setLocalDescription(ans); emit("webrtc:answer", { targetUserId: data.callerId, sdp: ans }); };
     const handleAnswer = async (data: { answererId: string; sdp: RTCSessionDescriptionInit }) => { if (peerConnectionRef.current) await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(data.sdp)); };
     const handleIce = async (data: { fromUserId: string; candidate: RTCIceCandidateInit }) => { if (peerConnectionRef.current) await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(data.candidate)); };
@@ -278,6 +279,7 @@ export function DashboardMessaging() {
     on("call:accepted", handleAccepted as (data: { conversationId: string; accepterId: string }) => void);
     on("call:rejected", handleRejected as (data: { conversationId: string; rejecterId: string }) => void);
     on("call:ended", handleEnded as (data: { conversationId: string; enderId: string }) => void);
+    on("call:no-answer", handleNoAnswer as any);
     on("webrtc:offer", handleOffer as (data: { callerId: string; sdp: RTCSessionDescriptionInit }) => void);
     on("webrtc:answer", handleAnswer as (data: { answererId: string; sdp: RTCSessionDescriptionInit }) => void);
     on("webrtc:ice-candidate", handleIce as (data: { fromUserId: string; candidate: RTCIceCandidateInit }) => void);
@@ -286,6 +288,7 @@ export function DashboardMessaging() {
       off("call:accepted", handleAccepted as (data: { conversationId: string; accepterId: string }) => void);
       off("call:rejected", handleRejected as (data: { conversationId: string; rejecterId: string }) => void);
       off("call:ended", handleEnded as (data: { conversationId: string; enderId: string }) => void);
+      off("call:no-answer", handleNoAnswer as any);
       off("webrtc:offer", handleOffer as (data: { callerId: string; sdp: RTCSessionDescriptionInit }) => void);
       off("webrtc:answer", handleAnswer as (data: { answererId: string; sdp: RTCSessionDescriptionInit }) => void);
       off("webrtc:ice-candidate", handleIce as (data: { fromUserId: string; candidate: RTCIceCandidateInit }) => void);
