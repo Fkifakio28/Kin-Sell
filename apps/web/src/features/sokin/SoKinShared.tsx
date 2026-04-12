@@ -66,6 +66,13 @@ export function MediaViewer({ item, onClose }: { item: MediaItem; onClose: () =>
             playsInline
             className="sk-viewer-media"
           />
+        ) : item.type === 'audio' ? (
+          <audio
+            src={resolveMediaUrl(item.url)}
+            controls
+            autoPlay
+            className="sk-viewer-audio"
+          />
         ) : (
           <img
             src={resolveMediaUrl(item.url)}

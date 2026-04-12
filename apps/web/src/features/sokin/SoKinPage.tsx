@@ -55,6 +55,7 @@ import {
   REPORT_REASONS,
   relTime,
   isVideoUrl,
+  isAudioUrl,
   categorizeMedia,
   IconMessage,
   IconHeart,
@@ -182,6 +183,47 @@ const FEED_TABS: { key: FeedTab; label: string; icon: string; soon?: boolean }[]
   { key: 'local',    label: 'Local',     icon: '📍' },
   { key: 'ventes',   label: 'Ventes',    icon: '🏷️' },
 ];
+
+const MEDIA_INPUT_ACCEPT = 'image/*,video/*,audio/mpeg,audio/mp3,.mp3';
+
+const isVideoFile = (file: File): boolean => file.type.startsWith('video/');
+
+const isAudioFile = (file: File): boolean => {
+  const mime = file.type.toLowerCase();
+  if (mime === 'audio/mpeg' || mime === 'audio/mp3') return true;
+  return file.name.toLowerCase().endsWith('.mp3');
+};
+
+const getAudioTitleFromValue = (value: string): string => {
+  const source = value.split('?')[0].split('#')[0];
+  const fileName = source.split('/').pop() ?? '';
+  if (!fileName) return '';
+  let decoded = fileName;
+  try {
+    decoded = decodeURIComponent(fileName);
+  } catch {
+    decoded = fileName;
+  }
+  return decoded
+    .replace(/\.mp3$/i, '')
+    .replace(/[-_]+/g, ' ')
+    .replace(/[@#]+/g, ' ')
+    .trim();
+};
+
+const getAudioTitleFallback = (files: File[], existingUrls: string[] = []): string => {
+  const localAudio = files.find((file) => isAudioFile(file));
+  if (localAudio) {
+    return getAudioTitleFromValue(localAudio.name);
+  }
+
+  const remoteAudio = existingUrls.find((url) => isAudioUrl(url));
+  if (remoteAudio) {
+    return getAudioTitleFromValue(remoteAudio);
+  }
+
+  return '';
+};
 
 /* ─────────────────────────────────────────────────────── */
 /* ICÔNES SVG INLINE (locales à SoKinPage)                  */
@@ -776,18 +818,23 @@ function DesktopStudioComposer({
   const addFiles = (fileList: FileList) => {
     setLocalError(null);
     const current = [...mediaFiles];
-    let videoCount = current.filter((f) => f.type.startsWith('video/')).length;
+    let videoCount = current.filter((f) => isVideoFile(f)).length;
+    let audioCount = current.filter((f) => isAudioFile(f)).length;
     const toAdd: File[] = [];
 
     for (const f of Array.from(fileList)) {
       if (current.length + toAdd.length >= 5) break;
-      if (f.type.startsWith('video/') && videoCount >= 2) continue;
-      if (f.type.startsWith('video/')) videoCount += 1;
+      if ((isVideoFile(f) && audioCount > 0) || (isAudioFile(f) && videoCount > 0)) {
+        continue;
+      }
+      if (isVideoFile(f) && videoCount >= 2) continue;
+      if (isVideoFile(f)) videoCount += 1;
+      if (isAudioFile(f)) audioCount += 1;
       toAdd.push(f);
     }
 
     if (toAdd.length === 0) {
-      setLocalError('Ajout refusé: maximum 5 médias dont 2 vidéos.');
+      setLocalError('Ajout refusé: max 5 médias, 2 vidéos max, et vidéo+audio interdit dans le même post.');
       return;
     }
 
@@ -864,6 +911,12 @@ function DesktopStudioComposer({
       setLocalError('Ajoutez du texte ou au moins 1 média.');
       return;
     }
+    const hasVideo = mediaFiles.some((file) => isVideoFile(file));
+    const hasAudio = mediaFiles.some((file) => isAudioFile(file));
+    if (hasVideo && hasAudio) {
+      setLocalError('Vous ne pouvez pas publier une vidéo et un audio dans le même post.');
+      return;
+    }
     const schedErr = validateDesktopSchedule(scheduledAt);
     if (schedErr) {
       setLocalError(schedErr);
@@ -871,8 +924,10 @@ function DesktopStudioComposer({
       return;
     }
 
+    const finalText = text.trim().length > 0 ? text : getAudioTitleFallback(mediaFiles);
+
     onPublish({
-      text,
+      text: finalText,
       mediaFiles,
       postType,
       subject: subject.trim() || undefined,
@@ -980,7 +1035,7 @@ function DesktopStudioComposer({
             ref={fileRef}
             type="file"
             multiple
-            accept="image/*,video/*"
+            accept={MEDIA_INPUT_ACCEPT}
             hidden
             onChange={(e) => {
               if (e.target.files) addFiles(e.target.files);
@@ -992,8 +1047,10 @@ function DesktopStudioComposer({
           <div className="sk-modal-previews">
             {mediaFiles.map((f, i) => (
               <div key={i} className="sk-modal-preview-item">
-                {f.type.startsWith('video/') ? (
+                {isVideoFile(f) ? (
                   <video src={previewUrls[i]} className="sk-modal-preview-thumb" muted playsInline />
+                ) : isAudioFile(f) ? (
+                  <div className="sk-modal-preview-audio" aria-label="Aperçu audio MP3">🎵</div>
                 ) : (
                   <img src={previewUrls[i]} alt="" className="sk-modal-preview-thumb" />
                 )}
@@ -1120,8 +1177,10 @@ function DesktopStudioComposer({
               <div className="sk-modal-previews">
                 {previewUrls.map((url, i) => (
                   <div key={i} className="sk-modal-preview-item">
-                    {mediaFiles[i]?.type.startsWith('video/') ? (
+                    {mediaFiles[i] && isVideoFile(mediaFiles[i]) ? (
                       <video src={url} className="sk-modal-preview-thumb" muted playsInline controls={false} />
+                    ) : mediaFiles[i] && isAudioFile(mediaFiles[i]) ? (
+                      <div className="sk-modal-preview-audio" aria-label="Aperçu audio MP3">🎵</div>
                     ) : (
                       <img src={url} alt="" className="sk-modal-preview-thumb" />
                     )}
@@ -1215,8 +1274,9 @@ function CreateAnnounceScreen({
   const hasMedia = totalMediaCount > 0;
   const showBgSelector = hasText && !hasMedia;
   const canPublish = hasText || hasMedia;
-  const imageCount = mediaFiles.filter((f) => !f.type.startsWith('video/')).length;
-  const videoCount = mediaFiles.filter((f) => f.type.startsWith('video/')).length;
+  const videoCount = mediaFiles.filter((f) => isVideoFile(f)).length;
+  const audioCount = mediaFiles.filter((f) => isAudioFile(f)).length;
+  const imageCount = Math.max(0, mediaFiles.length - videoCount - audioCount);
   const hasUnsavedInput =
     text.trim().length > 0 ||
     mediaFiles.length > 0 ||
@@ -1250,8 +1310,10 @@ function CreateAnnounceScreen({
   const validateMediaSelection = (files: File[]) => {
     const total = files.length + existingMediaUrls.length;
     if (total > 5) return 'Maximum 5 médias par publication.';
-    const vc = files.filter((f) => f.type.startsWith('video/')).length;
+    const vc = files.filter((f) => isVideoFile(f)).length + existingMediaUrls.filter((url) => isVideoUrl(url)).length;
+    const ac = files.filter((f) => isAudioFile(f)).length + existingMediaUrls.filter((url) => isAudioUrl(url)).length;
     if (vc > 2) return 'Maximum 2 vidéos par publication.';
+    if (vc > 0 && ac > 0) return 'Vous ne pouvez pas publier une vidéo et un audio dans le même post.';
     return null;
   };
 
@@ -1419,9 +1481,15 @@ function CreateAnnounceScreen({
     setLocalError(null);
     const current = [...mediaFiles];
     const existingCount = existingMediaUrls.length;
-    let videoCount = current.filter((f) => f.type.startsWith('video/')).length;
+    let videoCount = current.filter((f) => isVideoFile(f)).length;
+    let audioCount = current.filter((f) => isAudioFile(f)).length;
+    const existingVideoCount = existingMediaUrls.filter((url) => isVideoUrl(url)).length;
+    const existingAudioCount = existingMediaUrls.filter((url) => isAudioUrl(url)).length;
+    videoCount += existingVideoCount;
+    audioCount += existingAudioCount;
     const toAdd: File[] = [];
     let droppedVideos = 0;
+    let droppedMixed = 0;
     let droppedOverflow = 0;
 
     for (const f of Array.from(fileList)) {
@@ -1429,11 +1497,16 @@ function CreateAnnounceScreen({
         droppedOverflow++;
         continue;
       }
-      if (f.type.startsWith('video/') && videoCount >= 2) {
+      if ((isVideoFile(f) && audioCount > 0) || (isAudioFile(f) && videoCount > 0)) {
+        droppedMixed++;
+        continue;
+      }
+      if (isVideoFile(f) && videoCount >= 2) {
         droppedVideos++;
         continue;
       }
-      if (f.type.startsWith('video/')) videoCount++;
+      if (isVideoFile(f)) videoCount++;
+      if (isAudioFile(f)) audioCount++;
       toAdd.push(f);
     }
 
@@ -1443,6 +1516,11 @@ function CreateAnnounceScreen({
 
     if (droppedVideos > 0) {
       setLocalError('Maximum 2 vidéos par annonce.');
+      return;
+    }
+
+    if (droppedMixed > 0) {
+      setLocalError('Vidéo + audio dans le même post n\'est pas autorisé.');
       return;
     }
 
@@ -1619,8 +1697,12 @@ function CreateAnnounceScreen({
       }
     }
 
+    const finalText = text.trim().length > 0
+      ? text
+      : getAudioTitleFallback(mediaFiles, existingMediaUrls);
+
     onPublish({
-      text,
+      text: finalText,
       mediaFiles,
       existingMediaUrls,
       postType,
@@ -1804,8 +1886,10 @@ function CreateAnnounceScreen({
               <div className="sk-modal-previews">
                 {existingMediaUrls.map((url, i) => (
                   <div key={`existing-${i}`} className="sk-modal-preview-item">
-                    {/\.(mp4|webm|mov|ogg)(\?.*)?$/i.test(url) ? (
+                    {isVideoUrl(url) ? (
                       <video src={url} className="sk-modal-preview-thumb" muted playsInline />
+                    ) : isAudioUrl(url) ? (
+                      <div className="sk-modal-preview-audio" aria-label="Aperçu audio MP3">🎵</div>
                     ) : (
                       <img src={url} alt="" className="sk-modal-preview-thumb" />
                     )}
@@ -1821,8 +1905,10 @@ function CreateAnnounceScreen({
                 ))}
                 {mediaFiles.map((f, i) => (
                   <div key={`new-${i}`} className="sk-modal-preview-item">
-                    {f.type.startsWith('video/') ? (
+                    {isVideoFile(f) ? (
                       <video src={previewUrls[i]} className="sk-modal-preview-thumb" muted playsInline />
+                    ) : isAudioFile(f) ? (
+                      <div className="sk-modal-preview-audio" aria-label="Aperçu audio MP3">🎵</div>
                     ) : (
                       <img src={previewUrls[i]} alt="" className="sk-modal-preview-thumb" />
                     )}
@@ -1841,9 +1927,9 @@ function CreateAnnounceScreen({
 
             <div className="sk-modal-media-row">
               <span className="sk-modal-media-hint">Médias: {totalMediaCount}/5 (optionnel)</span>
-              <span className="sk-modal-media-hint">Jusqu'à 5 médias, dont 2 vidéos max</span>
+              <span className="sk-modal-media-hint">Jusqu'à 5 médias, dont 2 vidéos max (+ MP3)</span>
               <span className="sk-media-counter" aria-live="polite">
-                {imageCount} image{imageCount > 1 ? 's' : ''} / {videoCount} vidéo{videoCount > 1 ? 's' : ''}
+                {imageCount} image{imageCount > 1 ? 's' : ''} / {videoCount} vidéo{videoCount > 1 ? 's' : ''} / {audioCount} audio
               </span>
               <span className="sk-media-counter" aria-live="polite">
                 Détails: {selectedTags.length + selectedArticles.length + (location ? 1 : 0) + (scheduledAt ? 1 : 0)}
@@ -1852,7 +1938,7 @@ function CreateAnnounceScreen({
                 ref={fileRef}
                 type="file"
                 multiple
-                accept="image/*,video/*"
+                accept={MEDIA_INPUT_ACCEPT}
                 hidden
                 onChange={(e) => {
                   if (e.target.files) addFiles(e.target.files);
@@ -2047,8 +2133,10 @@ function CreateAnnounceScreen({
               <div className="sk-modal-previews">
                 {mediaFiles.map((f, i) => (
                   <div key={i} className="sk-modal-preview-item">
-                    {f.type.startsWith('video/') ? (
+                    {isVideoFile(f) ? (
                       <video src={previewUrls[i]} className="sk-modal-preview-thumb" muted playsInline controls={false} />
+                    ) : isAudioFile(f) ? (
+                      <div className="sk-modal-preview-audio" aria-label="Aperçu audio MP3">🎵</div>
                     ) : (
                       <img src={previewUrls[i]} alt="" className="sk-modal-preview-thumb" />
                     )}

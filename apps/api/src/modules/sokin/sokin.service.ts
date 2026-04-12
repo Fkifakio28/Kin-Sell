@@ -12,6 +12,7 @@ import { HttpError } from "../../shared/errors/http-error.js";
 import { sendPushToUser } from "../notifications/push.service.js";
 
 const isVideoMediaUrl = (value: string) => /\.(mp4|webm|mov|ogg)(\?.*)?$/i.test(value);
+const isAudioMediaUrl = (value: string) => /\.(mp3)(\?.*)?$/i.test(value);
 
 const normalizeMediaUrls = (mediaUrls: string[]): string[] =>
   mediaUrls
@@ -24,8 +25,12 @@ const validatePostMediaUrls = (mediaUrls: string[]) => {
     throw new HttpError(400, "Maximum 5 médias par publication");
   }
   const videoCount = mediaUrls.filter((url) => isVideoMediaUrl(url)).length;
+  const audioCount = mediaUrls.filter((url) => isAudioMediaUrl(url)).length;
   if (videoCount > 2) {
     throw new HttpError(400, "Maximum 2 vidéos par publication");
+  }
+  if (videoCount > 0 && audioCount > 0) {
+    throw new HttpError(400, "Une publication ne peut pas contenir une vidéo et un audio en même temps");
   }
 };
 

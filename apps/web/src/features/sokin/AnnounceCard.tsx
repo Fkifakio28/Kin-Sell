@@ -4,7 +4,7 @@
  * Utilisé dans SoKinPage ET HomePage pour un rendu identique.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   sokin as sokinApi,
@@ -61,7 +61,7 @@ function ensureVideoVisibilityListener(): void {
 /* TYPES                                                    */
 /* ─────────────────────────────────────────────────────── */
 
-export type MediaItem = { url: string; type: 'image' | 'video' };
+export type MediaItem = { url: string; type: 'image' | 'video' | 'audio' };
 
 /* ─────────────────────────────────────────────────────── */
 /* CONSTANTS                                                */
@@ -112,6 +112,10 @@ export function isVideoUrl(url: string): boolean {
   return /\.(mp4|webm|mov|ogg)(\?.*)?$/i.test(url);
 }
 
+export function isAudioUrl(url: string): boolean {
+  return /\.(mp3)(\?.*)?$/i.test(url);
+}
+
 export function categorizeMedia(urls: string[]): MediaItem[] {
   const limited = (urls ?? [])
     .map((value) => value.trim())
@@ -127,6 +131,11 @@ export function categorizeMedia(urls: string[]): MediaItem[] {
       }
       videoCount++;
       items.push({ url, type: 'video' });
+      continue;
+    }
+
+    if (isAudioUrl(url)) {
+      items.push({ url, type: 'audio' });
       continue;
     }
 
@@ -296,11 +305,31 @@ export function MediaCollage({
   autoPlayVideoIndex?: number;
 }) {
   const count = items.length;
+  const [singleMediaLayout, setSingleMediaLayout] = useState<'portrait' | 'landscape' | 'square' | null>(null);
+
+  useEffect(() => {
+    setSingleMediaLayout(null);
+  }, [items]);
+
+  const updateSingleLayout = useCallback((width: number, height: number) => {
+    if (count !== 1 || width <= 0 || height <= 0) return;
+    const ratio = width / height;
+    if (ratio > 1.08) {
+      setSingleMediaLayout('landscape');
+      return;
+    }
+    if (ratio < 0.92) {
+      setSingleMediaLayout('portrait');
+      return;
+    }
+    setSingleMediaLayout('square');
+  }, [count]);
+
   if (count === 0) return null;
 
   return (
     <div
-      className={`sk-media-grid sk-media-grid--${count}`}
+      className={`sk-media-grid sk-media-grid--${count}${count === 1 && singleMediaLayout ? ` sk-media-grid--single-${singleMediaLayout}` : ''}`}
       role="group"
       aria-label="Médias de l'annonce"
     >
@@ -310,12 +339,12 @@ export function MediaCollage({
           <button
             key={i}
             type="button"
-            className={`sk-media-item${item.type === 'video' ? ' sk-media-item--video' : ''}`}
+            className={`sk-media-item${item.type === 'video' ? ' sk-media-item--video' : ''}${item.type === 'audio' ? ' sk-media-item--audio' : ''}`}
             onClick={() => {
               if (item.type === 'video') return;
               onItemClick(item);
             }}
-            aria-label={item.type === 'video' ? 'Voir la vid�o' : "Voir l'image"}
+            aria-label={item.type === 'video' ? 'Voir la vidéo' : item.type === 'audio' ? "Écouter l'audio" : "Voir l'image"}
           >
             {item.type === 'video' ? (
               <>
@@ -333,8 +362,11 @@ export function MediaCollage({
                       bar.style.width = `${(v.currentTime / v.duration) * 100}%`;
                     }
                   }}
+                  onLoadedMetadata={(e) => {
+                    const v = e.currentTarget;
+                    updateSingleLayout(v.videoWidth, v.videoHeight);
+                  }}
                   data-autoplay={isAutoPlay ? 'true' : undefined}
-                  muted
                   playsInline
                   preload="none"
                   disablePictureInPicture
@@ -343,11 +375,22 @@ export function MediaCollage({
                 <span className="sk-media-play-icon" aria-hidden="true">&#9654;</span>
                 <div className="sk-video-progress" style={{ width: 0 }} />
               </>
+            ) : item.type === 'audio' ? (
+              <audio
+                src={resolveMediaUrl(item.url)}
+                controls
+                preload="metadata"
+                onClick={(e) => e.stopPropagation()}
+              />
             ) : (
               <img
                 src={resolveMediaUrl(item.url)}
                 alt=""
                 loading="lazy"
+                onLoad={(e) => {
+                  const img = e.currentTarget;
+                  updateSingleLayout(img.naturalWidth, img.naturalHeight);
+                }}
               />
             )}
           </button>
@@ -480,6 +523,23 @@ export function AnnounceCard({
 
   const mediaItems = categorizeMedia(post.mediaUrls ?? []);
   const firstVideoIndex = mediaItems.findIndex((item) => item.type === 'video');
+  const fallbackAudioTitle = useMemo(() => {
+    if (post.text?.trim()) return '';
+    const audioItem = mediaItems.find((item) => item.type === 'audio');
+    if (!audioItem) return '';
+    const cleanUrl = audioItem.url.split('?')[0].split('#')[0];
+    const fileName = cleanUrl.split('/').pop() ?? '';
+    if (!fileName) return '';
+    try {
+      return decodeURIComponent(fileName)
+        .replace(/\.mp3$/i, '')
+        .replace(/[-_]+/g, ' ')
+        .replace(/[@#]+/g, ' ')
+        .trim();
+    } catch {
+      return fileName.replace(/\.mp3$/i, '').replace(/[-_]+/g, ' ').replace(/[@#]+/g, ' ').trim();
+    }
+  }, [mediaItems, post.text]);
 
   useEffect(() => {
     if (firstVideoIndex < 0) {
@@ -793,6 +853,8 @@ export function AnnounceCard({
               <p className="sk-card-text sk-card-text--centered">{renderPostText(post.text, handleMentionClick, handleHashtagClick)}</p>
             </div>
           )
+      ) : fallbackAudioTitle ? (
+        <p className="sk-card-text">{fallbackAudioTitle}</p>
       ) : null}
 
       {((postHashtags && postHashtags.length > 0) || (postTags && postTags.length > 0)) && (
@@ -854,6 +916,8 @@ export function AnnounceCard({
               <div className="sk-repost-embed-media">
                 {origMediaItems[0].type === 'image' ? (
                   <img src={resolveMediaUrl(origMediaItems[0].url)} alt="" className="sk-repost-embed-img" loading="lazy" />
+                ) : origMediaItems[0].type === 'audio' ? (
+                  <audio src={resolveMediaUrl(origMediaItems[0].url)} controls className="sk-repost-embed-img" />
                 ) : (
                   <video src={resolveMediaUrl(origMediaItems[0].url)} className="sk-repost-embed-img" muted playsInline />
                 )}

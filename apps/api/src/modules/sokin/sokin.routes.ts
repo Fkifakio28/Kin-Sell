@@ -46,6 +46,7 @@ import { analyzePost, getAuthorTips, getAdminOpportunities, dismissTip, acceptTi
 import { requireSoKinAnalytics, requireSoKinAds, requireSoKinAdmin } from "./sokin-gating.service.js";
 
 const isVideoMediaUrl = (value: string) => /\.(mp4|webm|mov|ogg)(\?.*)?$/i.test(value);
+const isAudioMediaUrl = (value: string) => /\.(mp3)(\?.*)?$/i.test(value);
 
 /**
  * Types de publication qui exigent au moins 1 média
@@ -69,6 +70,13 @@ const createPostSchema = z.object({
     .default([])
     .refine((list) => list.filter((url) => isVideoMediaUrl(url)).length <= 2, {
       message: "Maximum 2 vidéos par publication",
+    })
+    .refine((list) => {
+      const hasVideo = list.some((url) => isVideoMediaUrl(url));
+      const hasAudio = list.some((url) => isAudioMediaUrl(url));
+      return !(hasVideo && hasAudio);
+    }, {
+      message: "Une publication ne peut pas contenir une vidéo et un audio en même temps",
     }),
   location: z.string().max(100).optional(),
   tags: z.array(z.string()).default([]).optional(),
@@ -341,6 +349,13 @@ const updatePostSchema = z.object({
     .max(5, "Maximum 5 médias par publication")
     .refine((list) => list.filter((url) => isVideoMediaUrl(url)).length <= 2, {
       message: "Maximum 2 vidéos par publication",
+    })
+    .refine((list) => {
+      const hasVideo = list.some((url) => isVideoMediaUrl(url));
+      const hasAudio = list.some((url) => isAudioMediaUrl(url));
+      return !(hasVideo && hasAudio);
+    }, {
+      message: "Une publication ne peut pas contenir une vidéo et un audio en même temps",
     })
     .optional(),
   location: z.string().max(100).nullable().optional(),
