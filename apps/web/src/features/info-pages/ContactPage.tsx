@@ -354,7 +354,7 @@ export function ContactPage() {
         </div>
       </section>
 
-      {/* ══════ 5. MESSAGE RASSURANT ══════ */
+      {/* ══════ 5. MESSAGE RASSURANT ══════ */}
       <section className="contact-reassurance glass-container">
         <div className="contact-reassurance-icon"><IconShield /></div>
         <div>
@@ -381,7 +381,7 @@ export function ContactPage() {
         </div>
       </section>
 
-      {/* ══════ 6. TIPS AVANT CONTACT ══════ */
+      {/* ══════ 6. TIPS AVANT CONTACT ══════ */}
       <section className="contact-tips">
         <h2 className="contact-section-title">Avant de nous contacter</h2>
         <div className="contact-tips-grid">
