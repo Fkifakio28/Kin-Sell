@@ -264,7 +264,7 @@ export const Header = React.memo(function Header() {
             <Link to="/sokin" className="ks-mobile-link" onClick={() => setMobileOpen(false)}>{t('nav.sokin')}</Link>
             <Link to="/contact" className="ks-mobile-link" onClick={() => setMobileOpen(false)}>{t('nav.contact')}</Link>
             {!Capacitor.isNativePlatform() && /android/i.test(navigator.userAgent) && import.meta.env.VITE_ANDROID_APK_URL && (
-              <a href={import.meta.env.VITE_ANDROID_APK_URL} className="ks-mobile-link ks-mobile-download" target="_blank" rel="noopener noreferrer" onClick={() => setMobileOpen(false)}>📲 {t('home.downloadAndroid', "Télécharger l'app Android")}</a>
+              <a href={import.meta.env.VITE_ANDROID_APK_URL} className="ks-mobile-link ks-mobile-download" target="_blank" rel="noopener noreferrer" onClick={() => setMobileOpen(false)}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{marginRight:6,verticalAlign:"middle"}}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Kin-Sell APK</a>
             )}
             <div className="ks-mobile-divider" />
             <RegionLanguageCurrencySelector className="ks-mobile-rlc" />
