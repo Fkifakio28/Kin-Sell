@@ -53,6 +53,10 @@ export const RateLimits = {
   PUBLIC_FEED: { windowMs: 60_000, max: 60, label: "PUBLIC_FEED" },
   /** Public ad banner: 120 per minute per IP */
   PUBLIC_AD_BANNER: { windowMs: 60_000, max: 120, label: "PUBLIC_AD_BANNER" },
+  /** OAuth debug telemetry: 30 per minute per IP (separate from LOGIN) */
+  OAUTH_DEBUG: { windowMs: 60_000, max: 30, label: "OAUTH_DEBUG" },
+  /** App code exchange: 10 per 15 minutes per IP (separate from LOGIN) */
+  APP_EXCHANGE: { windowMs: 900_000, max: 10, label: "APP_EXCHANGE" },
 } as const;
 
 type RateLimitConfig = { windowMs: number; max: number; label: string };

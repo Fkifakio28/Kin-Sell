@@ -53,7 +53,7 @@ const refreshSchema = z.object({
 
 const router = Router();
 
-router.post("/oauth/debug", rateLimit(RateLimits.LOGIN), asyncHandler(async (req, res) => {
+router.post("/oauth/debug", rateLimit(RateLimits.OAUTH_DEBUG), asyncHandler(async (req, res) => {
   const payload = z.object({
     stage: z.string().min(1).max(80),
     source: z.string().max(40).optional(),
@@ -347,7 +347,7 @@ router.post("/apple/native", rateLimit(RateLimits.LOGIN), asyncHandler(async (re
 // The WebView calls this to exchange the appCode for httpOnly cookies.
 // Idempotent: multiple calls with the same code return the same result
 // within the TTL window (handles duplicate deep-link race conditions).
-router.post("/app/exchange", rateLimit(RateLimits.LOGIN), asyncHandler(async (req, res) => {
+router.post("/app/exchange", rateLimit(RateLimits.APP_EXCHANGE), asyncHandler(async (req, res) => {
   const { appCode } = z.object({ appCode: z.string().length(64) }).parse(req.body);
 
   const entry = appCodeStore.get(appCode);
