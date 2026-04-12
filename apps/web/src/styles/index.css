@@ -484,3 +484,19 @@ a:hover {
     font-size: 13px;
   }
 }
+
+/* ═══════════════════════════════════════
+   PHONE LOCK — Verrouiller la vue mobile
+   sur les vrais téléphones (même en paysage)
+   ═══════════════════════════════════════ */
+html.is-phone {
+  --is-phone: 1;
+}
+/* Forcer la largeur max perçue pour que les media queries
+   min-width ne s'activent pas en mode paysage sur téléphone */
+@media (orientation: landscape) {
+  html.is-phone body {
+    max-width: 100vw;
+    overflow-x: hidden;
+  }
+}

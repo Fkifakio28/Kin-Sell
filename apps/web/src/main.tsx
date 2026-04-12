@@ -69,6 +69,18 @@ if (Capacitor.isNativePlatform()) {
   initializeIAP().catch(() => {});
 }
 
+// ── Détection téléphone : verrouiller la vue mobile ──
+(function lockPhoneView() {
+  if (typeof window === "undefined" || typeof navigator === "undefined") return;
+  const ua = navigator.userAgent || "";
+  const mobileUA = /Android|iPhone|iPod|Windows Phone|BlackBerry|Opera Mini|IEMobile/i.test(ua);
+  const touchScreen = "ontouchstart" in window || navigator.maxTouchPoints > 0;
+  const smallScreen = Math.min(window.screen.width, window.screen.height) <= 820;
+  if (mobileUA && touchScreen && smallScreen) {
+    document.documentElement.classList.add("is-phone");
+  }
+})();
+
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <ErrorBoundary>

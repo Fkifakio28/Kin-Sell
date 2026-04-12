@@ -860,10 +860,11 @@
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   display: flex;
-  align-items: flex-start;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
   padding: 8px 12px;
   animation: hm-fade-in 0.15s ease;
+  overflow-y: auto;
 }
 
 @keyframes hm-fade-in {

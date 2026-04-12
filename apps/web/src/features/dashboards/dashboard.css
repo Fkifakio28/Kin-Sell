@@ -7813,6 +7813,7 @@
   /* ── Mobile Search Bar (expanded) ── */
   .dash-mobile-searchbar {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 8px;
     padding: 8px 12px;
@@ -7825,6 +7826,11 @@
     left: 0;
     right: 0;
     z-index: 299;
+  }
+  .dash-mobile-searchbar .isr-container {
+    flex-basis: 100%;
+    max-height: calc(100vh - 130px);
+    overflow-y: auto;
   }
   .dash-mobile-searchbar form {
     display: flex;
