@@ -1068,17 +1068,21 @@ export function MessagingPage() {
     setIsSpeakerOn((prev) => {
       const next = !prev;
       if (next) {
-      // Route to loudspeaker
-      void setSpeaker();
-      setIsEarMode(false);
-      if (remoteAudioRef.current) remoteAudioRef.current.muted = false;
-      if (remoteVideoRef.current) remoteVideoRef.current.muted = false;
-    } else {
-      // Route to earpiece
-      void setEarpiece();
-      setIsEarMode(true);
-      if (remoteAudioRef.current) remoteAudioRef.current.muted = false;
-      if (remoteVideoRef.current) remoteVideoRef.current.muted = false;
+        // Route to loudspeaker
+        void setSpeaker();
+        setIsEarMode(false);
+        if (remoteAudioRef.current) remoteAudioRef.current.muted = false;
+        if (remoteVideoRef.current) remoteVideoRef.current.muted = false;
+      } else {
+        // Route to earpiece
+        void setEarpiece();
+        setIsEarMode(true);
+        if (remoteAudioRef.current) remoteAudioRef.current.muted = false;
+        if (remoteVideoRef.current) remoteVideoRef.current.muted = false;
+      }
+      return next;
+    });
+  }, []);
 
   const switchCamera = useCallback(async () => {
     if (!callState || callState.type !== "video" || !localStreamRef.current || !peerConnectionRef.current) return;
