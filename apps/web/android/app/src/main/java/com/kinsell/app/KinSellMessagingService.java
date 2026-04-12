@@ -24,7 +24,16 @@ public class KinSellMessagingService extends FirebaseMessagingService {
     @Override
     public void onNewToken(String token) {
         super.onNewToken(token);
-        // Le token sera envoyé au serveur par le bridge Capacitor au prochain démarrage
+        // Envoyer le nouveau token au serveur immédiatement
+        // (si le token est roté en background, le bridge Capacitor ne le verra pas
+        //  tant que l'utilisateur n'ouvre pas l'app)
+        new Thread(() -> {
+            try {
+                android.content.SharedPreferences prefs =
+                    getSharedPreferences("kin_sell_prefs", MODE_PRIVATE);
+                prefs.edit().putString("pending_fcm_token", token).apply();
+            } catch (Exception ignored) {}
+        }).start();
     }
 
     @Override

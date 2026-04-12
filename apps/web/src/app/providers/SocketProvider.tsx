@@ -1,5 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { io, type Socket } from "socket.io-client";
+import { App as CapacitorApp } from "@capacitor/app";
+import { Capacitor } from "@capacitor/core";
 import { useAuth } from "./AuthProvider";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:4000";
@@ -72,8 +74,10 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("online", handleOnline);
   }, [isLoggedIn]);
 
-  /* ── Disconnect propre sur fermeture d'onglet ── */
+  /* ── Disconnect propre sur fermeture d'onglet (web seulement) ── */
   useEffect(() => {
+    // Sur native, ne PAS déconnecter sur pagehide — le socket passe en grace period serveur
+    if (Capacitor.isNativePlatform()) return;
     const handler = () => { socketRef.current?.disconnect(); };
     window.addEventListener("beforeunload", handler);
     window.addEventListener("pagehide", handler);
@@ -82,6 +86,23 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       window.removeEventListener("pagehide", handler);
     };
   }, []);
+
+  /* ── Capacitor appStateChange : reconnexion au retour du background ── */
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    const listener = CapacitorApp.addListener("appStateChange", ({ isActive }) => {
+      const s = socketRef.current;
+      if (!s) return;
+      if (isActive) {
+        // App revenue au premier plan → forcer reconnexion + événement re-sync
+        if (s.disconnected) {
+          s.connect();
+        }
+        window.dispatchEvent(new CustomEvent("ks:app-resumed"));
+      }
+    });
+    return () => { listener.then(l => l.remove()); };
+  }, [isLoggedIn]);
 
   /* ── Stable helpers ── */
   const emit = useCallback(

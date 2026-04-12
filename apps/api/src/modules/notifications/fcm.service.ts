@@ -44,24 +44,18 @@ export async function sendFcmToToken(
   try {
     await admin.messaging().send({
       token,
-      // Data-only pour que notre KinSellMessagingService gère l'affichage
+      // DATA-ONLY: garantit que onMessageReceived() est appelé même en background
+      // (si on ajoute android.notification, Android intercepte et affiche via le système,
+      //  notre KinSellMessagingService Java n'est jamais appelé en background)
       data: {
         title: payload.title,
         body: payload.body,
+        channelId,
         ...(payload.data ?? {}),
       },
       android: {
         priority: "high",
         ttl: isCall ? 30000 : 86400000,
-        notification: {
-          title: payload.title,
-          body: payload.body,
-          sound: "default",
-          channelId,
-          icon: "ic_notification",
-          color: "#6F58FF",
-          notificationCount: 1,
-        },
       },
       apns: {
         payload: {

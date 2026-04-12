@@ -724,14 +724,21 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
     };
   }, [isLoggedIn, isConnected, user?.id, playMessageSound, presentIncomingCall, pushMissed, maybeShowSystemNotification]);
 
-  /* ── Reconnect catch-up: notify pages to refetch data on socket reconnection ── */
+  /* ── Reconnect catch-up: notify pages to refetch data on socket reconnection or app resume ── */
   useEffect(() => {
     if (!isLoggedIn) return;
     const handleReconnect = () => {
       window.dispatchEvent(new CustomEvent("ks:data-stale", { detail: { reason: "socket-reconnected" } }));
     };
+    const handleResume = () => {
+      window.dispatchEvent(new CustomEvent("ks:data-stale", { detail: { reason: "app-resumed" } }));
+    };
     window.addEventListener("ks:socket-reconnected", handleReconnect);
-    return () => window.removeEventListener("ks:socket-reconnected", handleReconnect);
+    window.addEventListener("ks:app-resumed", handleResume);
+    return () => {
+      window.removeEventListener("ks:socket-reconnected", handleReconnect);
+      window.removeEventListener("ks:app-resumed", handleResume);
+    };
   }, [isLoggedIn]);
 
   useEffect(() => {
