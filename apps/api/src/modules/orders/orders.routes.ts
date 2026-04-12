@@ -118,10 +118,10 @@ router.post(
       if (order.seller?.userId && order.seller.userId !== request.auth!.userId) {
         if (!isUserOnline(order.seller.userId)) {
           void sendPushToUser(order.seller.userId, {
-            title: "🛒 Nouvelle commande !",
-            body: `Vous avez re\u00e7u une nouvelle commande de ${order.itemsCount ?? 1} article(s)`,
+            title: "Kin-Sell • 🛒 Commande",
+            body: `${request.auth!.userId.slice(0, 8)} a effectué une commande de ${order.itemsCount ?? 1} article(s)`,
             tag: `order-${order.id}`,
-            data: { type: "order", orderId: order.id },
+            data: { type: "order", orderId: order.id, url: "/account?tab=commandes" },
           });
         }
         emitToUser(order.seller.userId, "order:created", {

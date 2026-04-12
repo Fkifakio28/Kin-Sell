@@ -65,10 +65,10 @@ router.post(
     // Push notify seller about new negotiation
     if (data.sellerUserId && data.sellerUserId !== request.auth!.userId && !isUserOnline(data.sellerUserId)) {
       void sendPushToUser(data.sellerUserId, {
-        title: "🤝 Nouvelle offre de marchandage",
-        body: `Un acheteur propose un prix pour ${data.listing?.title ?? "votre article"}`,
+        title: "Kin-Sell • 🤝 Marchandage",
+        body: `Un acheteur propose un prix pour « ${data.listing?.title ?? "votre article"} »`,
         tag: `nego-${data.id}`,
-        data: { type: "negotiation", negotiationId: data.id },
+        data: { type: "negotiation", negotiationId: data.id, url: "/account?tab=commandes" },
       });
     }
     emitNegotiationUpdated(data, "CREATED", request.auth!.userId);

@@ -42,6 +42,11 @@ self.addEventListener("push", (event) => {
     icon: payload.icon || DEFAULT_ICON,
     badge: payload.badge || DEFAULT_BADGE,
     tag: payload.tag,
+    renotify: true,
+    requireInteraction: data.type === "call",
+    vibrate: data.type === "call"
+      ? [500, 200, 500, 200, 500, 200, 500]
+      : [250, 100, 250],
     data: {
       ...(data || {}),
       url: targetUrl,

@@ -181,9 +181,14 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
         if (offlineRecipients.length > 0) {
           const senderProfile = await prisma.userProfile.findUnique({ where: { userId }, select: { displayName: true } });
           const senderName = senderProfile?.displayName ?? "Quelqu'un";
-          const bodyText = message.type === "TEXT" ? (message.content?.slice(0, 100) ?? "Nouveau message") : message.type === "IMAGE" ? "📷 Photo" : message.type === "AUDIO" ? "🎵 Audio" : message.type === "VIDEO" ? "🎬 Vidéo" : "📎 Fichier";
+          const bodyText = message.type === "TEXT"
+            ? `${senderName} : ${(message.content?.slice(0, 100) ?? "Nouveau message")} 💬`
+            : message.type === "IMAGE" ? `${senderName} a envoyé 📸`
+            : message.type === "AUDIO" ? `${senderName} a envoyé 🎵`
+            : message.type === "VIDEO" ? `${senderName} a envoyé 🎬`
+            : `${senderName} a envoyé 📎`;
           void sendPushToUsers(offlineRecipients, {
-            title: senderName,
+            title: "Kin-Sell • Chat",
             body: bodyText,
             tag: `msg-${data.conversationId}`,
             data: {
@@ -266,9 +271,10 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
       void (async () => {
         const senderProfile = await prisma.userProfile.findUnique({ where: { userId }, select: { displayName: true } });
         const senderName = senderProfile?.displayName ?? "Quelqu'un";
+        const callLabel = data.callType === "video" ? "📹 Appel vidéo" : "📞 Appel audio";
         void sendPushToUser(data.targetUserId, {
-            title: senderName,
-            body: `Appel ${data.callType === "video" ? "vidéo" : "audio"} entrant sur Kin-Sell`,
+            title: `Kin-Sell • ${callLabel}`,
+            body: `${senderName} vous appelle…`,
             tag: `call-${data.conversationId}`,
           data: {
             type: "call",

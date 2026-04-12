@@ -37,25 +37,40 @@ export async function sendFcmToToken(
 ): Promise<boolean> {
   if (!fcmConfigured) return false;
 
+  const notifType = payload.data?.type ?? "default";
+  const channelId = resolveChannelId(notifType);
+  const isCall = notifType === "call";
+
   try {
     await admin.messaging().send({
       token,
-      notification: { title: payload.title, body: payload.body },
-      data: payload.data ?? {},
+      // Data-only pour que notre KinSellMessagingService gère l'affichage
+      data: {
+        title: payload.title,
+        body: payload.body,
+        ...(payload.data ?? {}),
+      },
       android: {
         priority: "high",
+        ttl: isCall ? 30000 : 86400000,
         notification: {
+          title: payload.title,
+          body: payload.body,
           sound: "default",
-          channelId: "kin-sell-default",
+          channelId,
+          icon: "ic_notification",
+          color: "#6F58FF",
+          notificationCount: 1,
         },
       },
       apns: {
         payload: {
           aps: {
             alert: { title: payload.title, body: payload.body },
-            sound: "default",
+            sound: isCall ? "ringtone.caf" : "default",
             badge: 1,
             "mutable-content": 1,
+            "content-available": 1,
           },
         },
         headers: {
@@ -76,5 +91,18 @@ export async function sendFcmToToken(
     }
     logger.warn({ err, token: token.slice(0, 20) + "..." }, "[FCM] Envoi échoué");
     return false;
+  }
+}
+
+function resolveChannelId(type: string): string {
+  switch (type) {
+    case "message": return "kin-sell-messages";
+    case "call": return "kin-sell-calls";
+    case "order":
+    case "negotiation": return "kin-sell-orders";
+    case "like":
+    case "publication":
+    case "sokin": return "kin-sell-social";
+    default: return "kin-sell-default";
   }
 }
