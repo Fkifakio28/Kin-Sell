@@ -44,7 +44,7 @@ export function AuthCallbackPage() {
     if (appCode) {
       request<{ ok: boolean; role: string }>("/auth/app/exchange", {
         method: "POST",
-        body: JSON.stringify({ appCode }),
+        body: { appCode },
         headers: { "Content-Type": "application/json" },
       })
         .then((res) => redirectByRole(res.role))
@@ -62,3 +62,4 @@ export function AuthCallbackPage() {
     </div>
   );
 }
+

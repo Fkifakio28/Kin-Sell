@@ -1,45 +1,65 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="fr">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Kin-Sell — Redirection</title>
+  <title>Kin-Sell - Redirection</title>
   <style>
     body { background: #120b2b; color: #fff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; text-align: center; }
-    .container { padding: 2rem; }
+    .container { padding: 2rem; max-width: 560px; }
     .spinner { width: 32px; height: 32px; border: 3px solid rgba(111,88,255,0.3); border-top-color: #6f58ff; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 1rem; }
     @keyframes spin { to { transform: rotate(360deg); } }
-    p { color: #c7bedf; font-size: 1rem; margin: 0 0 1.5rem; }
-    a { display: inline-block; padding: 14px 28px; background: #6f58ff; color: #fff; border-radius: 12px; text-decoration: none; font-weight: 600; font-size: 1rem; }
+    p { color: #c7bedf; font-size: 1rem; margin: 0 0 1rem; }
+    .actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 0.8rem; }
+    a { display: inline-block; padding: 12px 20px; background: #6f58ff; color: #fff; border-radius: 12px; text-decoration: none; font-weight: 600; font-size: 0.95rem; }
+    a.secondary { background: rgba(255,255,255,0.12); }
     a:active { background: #5a45e0; }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="spinner"></div>
-    <p>Redirection vers Kin-Sell...</p>
-    <a id="fallback" style="display:none" href="#">Ouvrir Kin-Sell</a>
+    <p id="status">Redirection vers Kin-Sell...</p>
+    <div class="actions">
+      <a id="openApp" href="#">Ouvrir Kin-Sell</a>
+      <a id="openIntent" class="secondary" href="#">Forcer ouverture Android</a>
+    </div>
   </div>
   <script>
     (function() {
-      var search = window.location.search;
-      var customUrl = 'com.kinsell.app://auth/callback' + search;
-      var intentUrl = 'intent://auth/callback' + search + '#Intent;scheme=com.kinsell.app;package=com.kinsell.app;end';
+      var search = window.location.search || "";
+      var customUrl = "com.kinsell.app://auth/callback" + search;
+      var intentUrl = "intent://auth/callback" + search + "#Intent;scheme=com.kinsell.app;package=com.kinsell.app;end";
+      var httpsAppLink = "https://kin-sell.com/auth/callback" + search;
+      var statusEl = document.getElementById("status");
+      var openApp = document.getElementById("openApp");
+      var openIntent = document.getElementById("openIntent");
 
-      // 1) Try custom scheme redirect
-      window.location.replace(customUrl);
+      openApp.href = customUrl;
+      openIntent.href = intentUrl;
 
-      // 2) After 1.5s, try Android intent:// scheme (more reliable on modern Chrome)
+      function jump(url) {
+        try {
+          window.location.href = url;
+        } catch (e) {
+          // ignore
+        }
+      }
+
+      // Sequence robuste: custom scheme -> intent -> applink https
+      jump(customUrl);
+
       setTimeout(function() {
-        window.location.replace(intentUrl);
-      }, 1500);
+        jump(intentUrl);
+      }, 800);
 
-      // 3) After 3s, show manual fallback button
       setTimeout(function() {
-        var btn = document.getElementById('fallback');
-        btn.href = intentUrl;
-        btn.style.display = 'inline-block';
-      }, 3000);
+        jump(httpsAppLink);
+      }, 1700);
+
+      setTimeout(function() {
+        statusEl.textContent = "Si l'application ne s'ouvre pas automatiquement, appuyez sur un bouton.";
+      }, 2600);
     })();
   </script>
 </body>
