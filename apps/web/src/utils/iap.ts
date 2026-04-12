@@ -63,6 +63,7 @@ export async function initializeIAP(): Promise<void> {
   if (!isIAPAvailable()) return;
 
   try {
+    // @ts-ignore — native-only module, types may not exist on server
     const CdvPurchase = await import("cordova-plugin-purchase");
     const store = CdvPurchase.store ?? (CdvPurchase as unknown as { default: typeof CdvPurchase }).default?.store;
     if (!store) return;
@@ -93,13 +94,14 @@ export async function loadProducts(): Promise<IAPProduct[]> {
   if (!isIAPAvailable()) return [];
 
   try {
+    // @ts-ignore — native-only module
     const CdvPurchase = await import("cordova-plugin-purchase");
     const store = CdvPurchase.store ?? (CdvPurchase as unknown as { default: typeof CdvPurchase }).default?.store;
     if (!store) return [];
 
     return store.products
-      .filter((p) => p.platform === CdvPurchase.Platform.APPLE_APPSTORE)
-      .map((p) => ({
+      .filter((p: any) => p.platform === CdvPurchase.Platform.APPLE_APPSTORE)
+      .map((p: any) => ({
         id: p.id,
         title: p.title,
         description: p.description,
@@ -130,6 +132,7 @@ export async function purchasePlan(
   }
 
   try {
+    // @ts-ignore — native-only module
     const CdvPurchase = await import("cordova-plugin-purchase");
     const store = CdvPurchase.store ?? (CdvPurchase as unknown as { default: typeof CdvPurchase }).default?.store;
     if (!store) return { ok: false, error: "Store non initialisé" };
@@ -172,6 +175,7 @@ export async function restorePurchases(): Promise<void> {
   if (!isIAPAvailable()) return;
 
   try {
+    // @ts-ignore — native-only module
     const CdvPurchase = await import("cordova-plugin-purchase");
     const store = CdvPurchase.store ?? (CdvPurchase as unknown as { default: typeof CdvPurchase }).default?.store;
     if (!store) return;

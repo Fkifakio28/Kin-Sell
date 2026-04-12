@@ -253,7 +253,7 @@ function SideDrawer({
               rel="noopener noreferrer"
               onClick={onClose}
             >
-              📲 {t("home.downloadAndroid", "Télécharger l'app Android")}
+              📲 {t("home.downloadAndroid")}
             </a>
           )}
         </div>

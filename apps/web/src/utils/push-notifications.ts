@@ -1,5 +1,6 @@
 import { API_BASE } from "../lib/api-core";
 import { Capacitor } from "@capacitor/core";
+// @ts-ignore — native-only module, types may not exist on server
 import { PushNotifications } from "@capacitor/push-notifications";
 
 const SW_URL = "/sw.js";
@@ -176,17 +177,17 @@ export async function initNativePush(
 
     await PushNotifications.register();
 
-    const regListener = await PushNotifications.addListener("registration", (token) => {
+    const regListener = await PushNotifications.addListener("registration", (token: any) => {
       void sendFcmTokenToServer(token.value);
     });
 
-    const regErrorListener = await PushNotifications.addListener("registrationError", (err) => {
+    const regErrorListener = await PushNotifications.addListener("registrationError", (err: any) => {
       console.warn("[FCM] Registration error:", err);
     });
 
     const receivedListener = await PushNotifications.addListener(
       "pushNotificationReceived",
-      (notification) => {
+      (notification: any) => {
         // Notification received while app is in foreground
         if (onNotification && notification.data) {
           onNotification(notification.data as Record<string, string>);
@@ -196,7 +197,7 @@ export async function initNativePush(
 
     const actionListener = await PushNotifications.addListener(
       "pushNotificationActionPerformed",
-      (action) => {
+      (action: any) => {
         // User tapped the notification (app was in background)
         const data = action.notification.data as Record<string, string> | undefined;
         if (data?.url) {

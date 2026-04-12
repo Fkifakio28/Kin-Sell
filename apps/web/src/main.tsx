@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { App as CapacitorApp, type URLOpenListenerEvent } from "@capacitor/app";
 import { Browser } from "@capacitor/browser";
 import { Capacitor } from "@capacitor/core";
+// @ts-ignore — native-only module, types may not exist on server
 import { StatusBar, Style } from "@capacitor/status-bar";
 import App from "./App";
 import { ThemeProvider } from "./app/providers/ThemeProvider";
