@@ -27,7 +27,7 @@ const RINGING_STATES: Set<AudioCallStatus> = new Set([
   "incoming_ringing",
 ]);
 
-const TONE_MAP: Partial<Record<AudioCallStatus, () => Promise<void>>> = {
+const TONE_MAP: Partial<Record<AudioCallStatus, () => void>> = {
   connected: playConnectedTone,
   ended: playEndedTone,
   cancelled: playCancelledTone,
@@ -47,7 +47,7 @@ export function useCallSounds(
 
     // ── Sonnerie ──
     if (status && RINGING_STATES.has(status)) {
-      void playRingtone(direction ?? "outgoing");
+      playRingtone(direction ?? "outgoing");
       return () => { stopRingtone(); };
     }
 
@@ -58,7 +58,7 @@ export function useCallSounds(
 
     // ── Tonalité d'événement ──
     if (status && TONE_MAP[status] && prev !== status) {
-      void TONE_MAP[status]!();
+      TONE_MAP[status]!();
     }
 
     // ── Idle — silence complet ──

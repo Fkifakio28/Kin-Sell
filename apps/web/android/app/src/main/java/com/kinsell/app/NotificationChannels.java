@@ -29,6 +29,7 @@ public class NotificationChannels {
         // Supprimer les anciens canaux pour forcer la mise à jour du son/vibration
         // (Android met les canaux en cache après la première création)
         manager.deleteNotificationChannel(CHANNEL_CALLS);
+        manager.deleteNotificationChannel(CHANNEL_MESSAGES);
 
         Uri defaultSound = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
         AudioAttributes audioAttributes = new AudioAttributes.Builder()
@@ -36,11 +37,12 @@ public class NotificationChannels {
                 .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                 .build();
 
-        // ── Messages : haute priorité, son, vibration, flash LED violet ──
+        // ── Messages : haute priorité, son Kin-Sell, vibration, flash LED violet ──
+        Uri messageSound = Uri.parse("android.resource://" + context.getPackageName() + "/raw/kinsell_message");
         NotificationChannel messages = new NotificationChannel(
                 CHANNEL_MESSAGES, "Messages", NotificationManager.IMPORTANCE_HIGH);
         messages.setDescription("Nouveaux messages et conversations");
-        messages.setSound(defaultSound, audioAttributes);
+        messages.setSound(messageSound, audioAttributes);
         messages.enableVibration(true);
         messages.setVibrationPattern(new long[]{0, 250, 100, 250});
         messages.enableLights(true);
@@ -48,14 +50,14 @@ public class NotificationChannels {
         messages.setShowBadge(true);
 
         // ── Appels : priorité maximale, sonnerie Kin-Sell, vibration longue, flash ──
-        Uri callSound = Uri.parse("android.resource://" + context.getPackageName() + "/raw/kin_sell_ringtone");
+        Uri callSound = Uri.parse("android.resource://" + context.getPackageName() + "/raw/kinsell_incoming_call");
         AudioAttributes ringtoneAttr = new AudioAttributes.Builder()
                 .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
                 .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                 .build();
 
         NotificationChannel calls = new NotificationChannel(
-                CHANNEL_CALLS, "Appels", NotificationManager.IMPORTANCE_HIGH);
+                CHANNEL_CALLS, "Appels", NotificationManager.IMPORTANCE_MAX);
         calls.setDescription("Appels audio et vidéo entrants");
         calls.setSound(callSound, ringtoneAttr);
         calls.enableVibration(true);

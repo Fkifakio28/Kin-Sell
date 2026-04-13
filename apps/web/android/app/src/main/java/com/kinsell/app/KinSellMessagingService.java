@@ -125,7 +125,7 @@ public class KinSellMessagingService extends FirebaseMessagingService {
 
         NotificationCompat.Builder builder = new NotificationCompat.Builder(
                 this, NotificationChannels.CHANNEL_CALLS)
-                .setSmallIcon(R.drawable.ic_stat_kinsell)
+                .setSmallIcon(R.drawable.ic_notification)
                 .setContentTitle(title)
                 .setContentText(body.isEmpty() ? "Appel audio entrant" : body)
                 .setSubText("Kin-Sell")
@@ -208,7 +208,7 @@ public class KinSellMessagingService extends FirebaseMessagingService {
 
         NotificationCompat.Builder builder = new NotificationCompat.Builder(
                 this, NotificationChannels.CHANNEL_MESSAGES)
-                .setSmallIcon(R.drawable.ic_stat_kinsell)
+                .setSmallIcon(R.drawable.ic_notification)
                 .setColor(0xFF6F58FF)
                 .setStyle(style)
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
@@ -224,7 +224,7 @@ public class KinSellMessagingService extends FirebaseMessagingService {
         // Notification résumé pour le groupement (n messages)
         NotificationCompat.Builder summary = new NotificationCompat.Builder(
                 this, NotificationChannels.CHANNEL_MESSAGES)
-                .setSmallIcon(R.drawable.ic_stat_kinsell)
+                .setSmallIcon(R.drawable.ic_notification)
                 .setColor(0xFF6F58FF)
                 .setSubText("Kin-Sell")
                 .setGroup(MSG_GROUP)
@@ -244,7 +244,7 @@ public class KinSellMessagingService extends FirebaseMessagingService {
     private void showGenericNotification(String title, String body, String channelId,
                                           PendingIntent pendingIntent, NotificationManager manager, int notifId) {
         NotificationCompat.Builder builder = new NotificationCompat.Builder(this, channelId)
-                .setSmallIcon(R.drawable.ic_stat_kinsell)
+                .setSmallIcon(R.drawable.ic_notification)
                 .setContentTitle(title)
                 .setContentText(body)
                 .setSubText("Kin-Sell")
@@ -303,7 +303,8 @@ public class KinSellMessagingService extends FirebaseMessagingService {
     }
 
     /**
-     * Vibration manuelle pour les appels (pattern WhatsApp-like).
+     * Vibration en boucle pour les appels (pattern WhatsApp-like).
+     * Repeat index = 0 → boucle jusqu'à annulation (CallActionReceiver.stopVibration).
      */
     private void vibrateForCall() {
         try {
@@ -312,18 +313,18 @@ public class KinSellMessagingService extends FirebaseMessagingService {
                 if (vm != null) {
                     Vibrator vibrator = vm.getDefaultVibrator();
                     vibrator.vibrate(VibrationEffect.createWaveform(
-                            new long[]{0, 500, 200, 500, 200, 500, 200, 500},
-                            new int[]{0, 255, 0, 255, 0, 255, 0, 255},
-                            -1));
+                            new long[]{0, 500, 200, 500, 200, 500, 800},
+                            new int[]{0, 255, 0, 255, 0, 255, 0},
+                            0));
                 }
             } else {
                 Vibrator vibrator = (Vibrator) getSystemService(VIBRATOR_SERVICE);
                 if (vibrator != null && vibrator.hasVibrator()) {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                         vibrator.vibrate(VibrationEffect.createWaveform(
-                                new long[]{0, 500, 200, 500, 200, 500, 200, 500}, -1));
+                                new long[]{0, 500, 200, 500, 200, 500, 800}, 0));
                     } else {
-                        vibrator.vibrate(new long[]{0, 500, 200, 500, 200, 500, 200, 500}, -1);
+                        vibrator.vibrate(new long[]{0, 500, 200, 500, 200, 500, 800}, 0);
                     }
                 }
             }

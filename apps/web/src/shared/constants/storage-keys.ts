@@ -28,6 +28,9 @@ export const SK_REMEMBERED_ROLE = "kin-sell.remembered-role";
 
 /* ── AI Feature Toggles (User) ── */
 export const SK_AI_ADVICE = "ks-ai-advice";
+
+/* ── Permissions Onboarding ── */
+export const SK_PERMISSIONS_DONE = "ks-permissions-onboarding-done";
 export const SK_AI_AUTO_NEGO = "ks-ai-auto-nego";
 export const SK_AI_COMMANDE = "ks-ai-commande";
 

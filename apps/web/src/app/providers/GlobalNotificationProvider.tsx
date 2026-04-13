@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { useAuth } from "./AuthProvider";
 import { useSocketContext } from "./SocketProvider";
 import { playRingtone, stopRingtone } from "../../utils/call-sound-manager";
+import { playMessageSound as playMsgSound } from "../../utils/call-sound-manager";
 import { clearAllNotifications, clearCallNotification } from "../../utils/call-notification";
 import {
   getNotificationPermission,
@@ -361,20 +362,7 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
 
   /* ── Notification sound for messages ── */
   const playMessageSound = useCallback(() => {
-    try {
-      const ctx = new AudioContext();
-      const osc = ctx.createOscillator();
-      const g = ctx.createGain();
-      osc.connect(g);
-      g.connect(ctx.destination);
-      osc.frequency.value = 880;
-      osc.type = "sine";
-      g.gain.setValueAtTime(0.08, ctx.currentTime);
-      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
-      osc.start(ctx.currentTime);
-      osc.stop(ctx.currentTime + 0.3);
-      setTimeout(() => ctx.close(), 400);
-    } catch {}
+    playMsgSound();
   }, []);
 
   const dismissToast = useCallback((id: string) => {

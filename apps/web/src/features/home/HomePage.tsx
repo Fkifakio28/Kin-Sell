@@ -755,7 +755,7 @@ export function HomePage() {
             title={t('home.homeAria')}
             style={{ cursor: 'pointer' }}
           >
-            <img src="/assets/kin-sell/logo-kinsell.png" alt="Kin-Sell" />
+            <img src="/assets/kin-sell/logo.png" alt="Kin-Sell" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
           </div>
         </div>
       </header>

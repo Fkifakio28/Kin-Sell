@@ -13,6 +13,7 @@ import { LocaleCurrencyProvider } from "./app/providers/LocaleCurrencyProvider";
 import { MarketPreferenceProvider } from "./app/providers/MarketPreferenceProvider";
 import { SocketProvider } from "./app/providers/SocketProvider";
 import ErrorBoundary from "./components/ErrorBoundary";
+import { NativePermissionsGate } from "./features/onboarding/NativePermissionsGate";
 import { registerServiceWorker } from "./utils/push-notifications";
 import { initializeIAP } from "./utils/iap";
 import "./styles/index.css";
@@ -102,7 +103,9 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
             <AuthProvider>
               <SocketProvider>
                 <GlobalNotificationProvider>
-                  <App />
+                  <NativePermissionsGate>
+                    <App />
+                  </NativePermissionsGate>
                 </GlobalNotificationProvider>
               </SocketProvider>
             </AuthProvider>

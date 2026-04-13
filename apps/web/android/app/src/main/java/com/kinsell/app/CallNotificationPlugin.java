@@ -57,7 +57,7 @@ public class CallNotificationPlugin extends Plugin {
 
         NotificationCompat.Builder builder = new NotificationCompat.Builder(
                 getContext(), NotificationChannels.CHANNEL_ONGOING_CALL)
-                .setSmallIcon(R.drawable.ic_stat_kinsell)
+                .setSmallIcon(R.drawable.ic_notification)
                 .setContentTitle("Appel en cours")
                 .setContentText(callerName)
                 .setSubText("Kin-Sell")

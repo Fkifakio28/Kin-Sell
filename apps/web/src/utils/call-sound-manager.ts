@@ -1,221 +1,165 @@
 /**
  * CallSoundManager — Kin-Sell V2
  *
- * Gestionnaire centralisé de tous les sons d'appel :
+ * Gestionnaire audio CENTRALISÉ pour tous les sons de l'application.
  *
- * 1. Sonneries (fichiers .wav existants, sélection par connectivité réseau)
- *    - outgoing_ringing : sonnerie en boucle (côté appelant)
- *    - incoming_ringing  : sonnerie en boucle (côté receveur)
+ * RÈGLES STRICTES :
+ * - Un seul son joué à la fois — jamais de superposition
+ * - Tout son précédent est stoppé avant le nouveau
+ * - Les sons en boucle (incoming/outgoing) sont arrêtés dès changement d'état
+ * - Volume système respecté
+ * - Mute global possible
  *
- * 2. Tonalités générées (Web Audio API — aucun fichier supplémentaire)
- *    - connected   : double bip ascendant court (confirmation de connexion)
- *    - ended       : bip descendant (appel terminé normalement)
- *    - cancelled   : bip simple court (appelant a annulé)
- *    - declined    : 3 bips courts rapides (appel refusé / occupé)
- *    - unanswered  : 3 bips espacés (pas de réponse — timeout)
+ * Sons d'appel (7 fichiers) :
+ *   incoming   → kinsell_incoming_call.wav      (boucle)
+ *   outgoing   → kinsell_outgoing_call.wav      (boucle)
+ *   connected  → kinsell_call_connected.wav     (une fois)
+ *   declined   → kinsell_call_declined.wav      (une fois)
+ *   unanswered → kinsell_call_unanswered.wav    (une fois)
+ *   offline    → kinsell_user_offline.wav        (une fois)
+ *   ended      → kinsell_call_ended.wav          (une fois)
  *
- * Ce module remplace call-sound.ts comme point d'entrée unique pour tous
- * les sons liés aux appels. Il réutilise la logique de détection réseau.
+ * Sons UI (3 fichiers) :
+ *   message    → kinsell_message.wav             (une fois)
+ *   success    → kinsell_success.wav             (une fois)
+ *   error      → kinsell_error.wav               (une fois)
  */
-import { checkRealNetworkStatus, getCallRingtoneByNetworkStatus } from "./call-sound";
 
-const LOG = "[CallSoundMgr]";
+const LOG = "[SoundMgr]";
 
-// ── Singleton audio context (lazy) ───────────────────────────────────────────
+/* ══════════════════════════════════════════════════════════
+   Chemins des fichiers audio
+   ══════════════════════════════════════════════════════════ */
 
-let _ctx: AudioContext | null = null;
+const SOUNDS = {
+  // Appels
+  incoming:   "/assets/sounds/call/kinsell_incoming_call.wav",
+  outgoing:   "/assets/sounds/call/kinsell_outgoing_call.wav",
+  connected:  "/assets/sounds/call/kinsell_call_connected.wav",
+  declined:   "/assets/sounds/call/kinsell_call_declined.wav",
+  unanswered: "/assets/sounds/call/kinsell_call_unanswered.wav",
+  offline:    "/assets/sounds/call/kinsell_user_offline.wav",
+  ended:      "/assets/sounds/call/kinsell_call_ended.wav",
+  // UI
+  message:    "/assets/sounds/ui/kinsell_message.wav",
+  success:    "/assets/sounds/ui/kinsell_success.wav",
+  error:      "/assets/sounds/ui/kinsell_error.wav",
+} as const;
 
-function getAudioCtx(): AudioContext {
-  if (!_ctx || _ctx.state === "closed") {
-    _ctx = new AudioContext();
-  }
-  if (_ctx.state === "suspended") {
-    void _ctx.resume();
-  }
-  return _ctx;
-}
+export type SoundName = keyof typeof SOUNDS;
 
-// ── Ringtone (file-based, looped) ────────────────────────────────────────────
+/* ══════════════════════════════════════════════════════════
+   État interne
+   ══════════════════════════════════════════════════════════ */
 
-let _ringtoneAudio: HTMLAudioElement | null = null;
-let _ringtoneSrc: string | null = null;
-let _networkListenerCleanup: (() => void) | null = null;
+let _current: HTMLAudioElement | null = null;
+let _currentName: SoundName | null = null;
+let _muted = false;
+
+/* ══════════════════════════════════════════════════════════
+   API publique
+   ══════════════════════════════════════════════════════════ */
 
 /**
- * Play the ringtone in loop. Selects online/offline variant based on real
- * network connectivity. Auto-switches if network status changes while ringing.
+ * Jouer un son. Arrête automatiquement tout son en cours.
  */
-export async function playRingtone(direction: "incoming" | "outgoing"): Promise<void> {
-  const status = await checkRealNetworkStatus();
-  const src = getCallRingtoneByNetworkStatus(status);
-  console.debug(LOG, `▶ Ringtone ${direction} (réseau: ${status}) → ${src}`);
+export function playSound(name: SoundName, loop = false, volume = 0.85): void {
+  if (_muted) {
+    console.debug(LOG, `🔇 Muted — skip ${name}`);
+    return;
+  }
 
-  // Already playing the same source
-  if (_ringtoneAudio && _ringtoneSrc === src && !_ringtoneAudio.paused) return;
+  // Même son déjà en lecture → skip
+  if (_current && _currentName === name && !_current.paused) {
+    console.debug(LOG, `▶ ${name} déjà en lecture, skip`);
+    return;
+  }
 
-  stopRingtone();
+  // Stopper tout son précédent
+  stopAll();
 
   try {
-    const audio = new Audio(src);
-    audio.loop = true;
-    audio.volume = 0.85;
-    void audio.play().catch((e) => console.warn(LOG, "Autoplay bloqué:", e.message));
-    _ringtoneAudio = audio;
-    _ringtoneSrc = src;
+    const audio = new Audio(SOUNDS[name]);
+    audio.loop = loop;
+    audio.volume = volume;
+
+    const p = audio.play();
+    if (p) p.catch((e) => console.warn(LOG, `Autoplay bloqué (${name}):`, e.message));
+
+    _current = audio;
+    _currentName = name;
+    console.debug(LOG, `▶ ${name}${loop ? " (boucle)" : ""}`);
   } catch (e) {
-    console.error(LOG, "Erreur création Audio:", e);
+    console.error(LOG, `Erreur lecture ${name}:`, e);
   }
-
-  // Listen for network changes and switch ringtone variant if needed
-  const onNetChange = async () => {
-    if (!_ringtoneAudio) return;
-    const newStatus = await checkRealNetworkStatus();
-    const newSrc = getCallRingtoneByNetworkStatus(newStatus);
-    if (newSrc !== _ringtoneSrc) {
-      console.debug(LOG, `🔄 Réseau changé → switch ${_ringtoneSrc} → ${newSrc}`);
-      await playRingtone(direction);
-    }
-  };
-
-  window.addEventListener("online", onNetChange);
-  window.addEventListener("offline", onNetChange);
-  _networkListenerCleanup = () => {
-    window.removeEventListener("online", onNetChange);
-    window.removeEventListener("offline", onNetChange);
-  };
 }
 
 /**
- * Stop the ringtone and release resources.
+ * Arrête tout son en cours et libère les ressources.
  */
-export function stopRingtone(): void {
-  if (_ringtoneAudio) {
-    console.debug(LOG, "⏹ Stop ringtone");
+export function stopAll(): void {
+  if (_current) {
+    console.debug(LOG, `⏹ Stop ${_currentName}`);
     try {
-      _ringtoneAudio.pause();
-      _ringtoneAudio.currentTime = 0;
-      _ringtoneAudio.src = "";
+      _current.pause();
+      _current.currentTime = 0;
+      _current.src = "";
     } catch { /* ignore */ }
-    _ringtoneAudio = null;
-    _ringtoneSrc = null;
-  }
-  if (_networkListenerCleanup) {
-    _networkListenerCleanup();
-    _networkListenerCleanup = null;
+    _current = null;
+    _currentName = null;
   }
 }
 
-// ── Tone generator (Web Audio API) ───────────────────────────────────────────
-
-type ToneSpec = {
-  frequency: number;
-  duration: number;   // seconds
-  type?: OscillatorType;
-};
-
 /**
- * Play a sequence of tones with optional gap between them.
- * Returns a promise that resolves when all tones have finished.
+ * Retourne le nom du son actuellement en lecture, ou null.
  */
-function playToneSequence(
-  tones: ToneSpec[],
-  gap: number = 0.08, // seconds between tones
-  volume: number = 0.35,
-): Promise<void> {
-  return new Promise<void>((resolve) => {
-    try {
-      const ctx = getAudioCtx();
-      const gain = ctx.createGain();
-      gain.gain.value = volume;
-      gain.connect(ctx.destination);
-
-      let offset = ctx.currentTime;
-      for (const tone of tones) {
-        const osc = ctx.createOscillator();
-        osc.type = tone.type ?? "sine";
-        osc.frequency.value = tone.frequency;
-        osc.connect(gain);
-        osc.start(offset);
-        osc.stop(offset + tone.duration);
-        offset += tone.duration + gap;
-      }
-
-      // Resolve after the full sequence + small buffer
-      const totalDuration = (offset - ctx.currentTime + 0.05) * 1000;
-      setTimeout(resolve, totalDuration);
-    } catch (e) {
-      console.warn(LOG, "Erreur Web Audio:", e);
-      resolve();
-    }
-  });
-}
-
-// ── Call event tones ─────────────────────────────────────────────────────────
-
-/**
- * Connected — double bip ascendant (480Hz → 620Hz), 150ms each.
- * Indique que l'appel est désormais actif.
- */
-export function playConnectedTone(): Promise<void> {
-  console.debug(LOG, "🔔 Tone: connected");
-  return playToneSequence([
-    { frequency: 480, duration: 0.15 },
-    { frequency: 620, duration: 0.15 },
-  ]);
+export function currentlyPlaying(): SoundName | null {
+  if (_current && !_current.paused) return _currentName;
+  return null;
 }
 
 /**
- * Ended — bip descendant (520Hz → 380Hz), 200ms each.
- * Appel terminé normalement.
+ * Active/désactive le mute global.
  */
-export function playEndedTone(): Promise<void> {
-  console.debug(LOG, "🔔 Tone: ended");
-  return playToneSequence([
-    { frequency: 520, duration: 0.2 },
-    { frequency: 380, duration: 0.25 },
-  ]);
+export function setMuted(muted: boolean): void {
+  _muted = muted;
+  if (muted) stopAll();
+  console.debug(LOG, muted ? "🔇 Muted" : "🔊 Unmuted");
 }
 
-/**
- * Cancelled — bip simple court (440Hz, 200ms).
- * Appelant a annulé avant réponse.
- */
-export function playCancelledTone(): Promise<void> {
-  console.debug(LOG, "🔔 Tone: cancelled");
-  return playToneSequence([
-    { frequency: 440, duration: 0.2 },
-  ]);
+export function isMuted(): boolean {
+  return _muted;
 }
 
-/**
- * Declined — 3 bips rapides (480Hz, 120ms × 3, gap 60ms).
- * Appel refusé par le receveur.
- */
-export function playDeclinedTone(): Promise<void> {
-  console.debug(LOG, "🔔 Tone: declined");
-  return playToneSequence(
-    [
-      { frequency: 480, duration: 0.12 },
-      { frequency: 480, duration: 0.12 },
-      { frequency: 480, duration: 0.12 },
-    ],
-    0.06,
-  );
+/* ══════════════════════════════════════════════════════════
+   Raccourcis — Sonneries (boucle)
+   ══════════════════════════════════════════════════════════ */
+
+export function playRingtone(direction: "incoming" | "outgoing"): void {
+  playSound(direction, true);
 }
 
-/**
- * Unanswered — 3 bips espacés descendants (500→450→400Hz, 200ms × 3, gap 300ms).
- * Pas de réponse (timeout 30s côté serveur).
- */
-export function playUnansweredTone(): Promise<void> {
-  console.debug(LOG, "🔔 Tone: unanswered");
-  return playToneSequence(
-    [
-      { frequency: 500, duration: 0.2 },
-      { frequency: 450, duration: 0.2 },
-      { frequency: 400, duration: 0.25 },
-    ],
-    0.3,
-    0.3,
-  );
+export function stopRingtone(): void {
+  if (_currentName === "incoming" || _currentName === "outgoing") {
+    stopAll();
+  }
 }
+
+/* ══════════════════════════════════════════════════════════
+   Raccourcis — Tonalités d'événement (une seule lecture)
+   ══════════════════════════════════════════════════════════ */
+
+export function playConnectedTone(): void  { playSound("connected"); }
+export function playEndedTone(): void      { playSound("ended"); }
+export function playCancelledTone(): void  { stopAll(); }
+export function playDeclinedTone(): void   { playSound("declined"); }
+export function playUnansweredTone(): void { playSound("unanswered"); }
+export function playOfflineTone(): void    { playSound("offline"); }
+
+/* ══════════════════════════════════════════════════════════
+   Raccourcis — Sons UI
+   ══════════════════════════════════════════════════════════ */
+
+export function playMessageSound(): void   { playSound("message", false, 0.6); }
+export function playSuccessSound(): void   { playSound("success", false, 0.6); }
+export function playErrorSound(): void     { playSound("error", false, 0.6); }
