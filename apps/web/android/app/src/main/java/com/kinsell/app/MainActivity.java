@@ -4,11 +4,8 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
-import android.os.PowerManager;
-import android.provider.Settings;
 import android.view.WindowManager;
 import android.webkit.WebView;
 import androidx.appcompat.app.AppCompatDelegate;
@@ -54,6 +51,7 @@ public class MainActivity extends BridgeActivity {
         AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO);
         registerPlugin(AudioRoutePlugin.class);
         registerPlugin(CallNotificationPlugin.class);
+        registerPlugin(KinSellBackgroundPlugin.class);
 
         // Create all notification channels (son, vibration, LED)
         NotificationChannels.createChannels(this);
@@ -112,8 +110,14 @@ public class MainActivity extends BridgeActivity {
         }
 
         // Demander l'exclusion d'optimisation batterie (Samsung/Xiaomi/etc.)
-        // Nécessaire pour que les FCM data-only messages arrivent en background
-        requestBatteryOptimizationExemption();
+        // Utilise OemBatteryHelper pour chaque fabricant spécifique
+        if (OemBatteryHelper.isBatteryOptimized(this)) {
+            OemBatteryHelper.requestOemBatteryExemption(this);
+        }
+
+        // Démarrer le foreground service persistant (comme WhatsApp)
+        // Empêche Samsung "Suspendre activité si inutilisé" de tuer l'app
+        startConnectionService();
 
         // Écouter les rejets d'appel depuis la notification (app ouverte)
         IntentFilter filter = new IntentFilter("com.kinsell.app.CALL_REJECTED_INTERNAL");
@@ -244,22 +248,19 @@ public class MainActivity extends BridgeActivity {
     }
 
     /**
-     * Demande l'exclusion de l'optimisation batterie.
-     * Samsung/Xiaomi/Huawei etc. tuent les apps en background agressivement.
-     * Sans cette exemption, les FCM data-only messages n'arrivent pas fiablement.
+     * Démarre le service de connexion persistant.
+     * Comme WhatsApp, ce foreground service empêche Android de tuer l'app.
      */
-    private void requestBatteryOptimizationExemption() {
+    private void startConnectionService() {
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
-                if (pm != null && !pm.isIgnoringBatteryOptimizations(getPackageName())) {
-                    Intent intent = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
-                    intent.setData(Uri.parse("package:" + getPackageName()));
-                    startActivity(intent);
-                }
+            Intent intent = new Intent(this, KinSellConnectionService.class);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(intent);
+            } else {
+                startService(intent);
             }
         } catch (Exception ignored) {
-            // Certains fabricants bloquent cette intent — ignorer silencieusement
+            // Android 12+ peut bloquer le démarrage en "exact alarm" mode
         }
     }
 

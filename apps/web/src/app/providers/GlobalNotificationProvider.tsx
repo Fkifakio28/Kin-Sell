@@ -17,6 +17,7 @@ import {
   subscribeToPush,
 } from "../../utils/push-notifications";
 import { SK_PUSH_BANNER_DISMISSED } from "../../shared/constants/storage-keys";
+import { startBackgroundService, stopBackgroundService } from "../../utils/background-service";
 import "../../styles/global-notifications.css";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:4000";
@@ -135,6 +136,15 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
   const messagingActiveRef = useRef(false);
   const [pushEnabled, setPushEnabled] = useState(false);
   const [showPushBanner, setShowPushBanner] = useState(false);
+
+  /* ── Foreground service (Android) — comme WhatsApp ── */
+  useEffect(() => {
+    if (isLoggedIn) {
+      void startBackgroundService();
+    } else {
+      void stopBackgroundService();
+    }
+  }, [isLoggedIn]);
 
   /* ── Missed notifications (persisted) ── */
   const MISSED_KEY = "ks-missed-notifs";
