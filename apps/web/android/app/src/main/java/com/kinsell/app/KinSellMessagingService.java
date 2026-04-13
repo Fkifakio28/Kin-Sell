@@ -310,15 +310,17 @@ public class KinSellMessagingService extends FirebaseMessagingService {
 
     /**
      * Réveil de l'écran pour les appels entrants.
+     * Utilise SCREEN_BRIGHT_WAKE_LOCK (FULL_WAKE_LOCK est déprécié depuis API 17).
      */
+    @SuppressWarnings("deprecation")
     private void wakeScreen() {
         try {
             PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
             if (pm != null && !pm.isInteractive()) {
+                // SCREEN_BRIGHT_WAKE_LOCK + ACQUIRE_CAUSES_WAKEUP allume l'écran
                 PowerManager.WakeLock wakeLock = pm.newWakeLock(
-                        PowerManager.FULL_WAKE_LOCK
-                                | PowerManager.ACQUIRE_CAUSES_WAKEUP
-                                | PowerManager.ON_AFTER_RELEASE,
+                        PowerManager.SCREEN_BRIGHT_WAKE_LOCK
+                                | PowerManager.ACQUIRE_CAUSES_WAKEUP,
                         "kinsell:incoming_call");
                 wakeLock.acquire(30_000); // 30 secondes max
             }

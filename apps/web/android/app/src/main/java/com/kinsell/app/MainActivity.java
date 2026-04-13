@@ -1,13 +1,18 @@
 package com.kinsell.app;
 
+import android.Manifest;
 import android.app.NotificationManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.app.KeyguardManager;
+import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Vibrator;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 import android.os.VibratorManager;
 import android.view.WindowManager;
 import android.webkit.WebView;
@@ -17,6 +22,22 @@ import androidx.webkit.WebViewFeature;
 import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
+
+    /**
+     * Sanitise une chaîne pour injection sûre dans evaluateJavascript().
+     * Échappe les quotes, backslashes, retours à la ligne et caractères de contrôle.
+     */
+    private static String sanitizeForJs(String input) {
+        if (input == null) return "";
+        return input
+            .replace("\\", "\\\\")
+            .replace("'", "\\'")
+            .replace("\"", "\\\"")
+            .replace("\n", "\\n")
+            .replace("\r", "\\r")
+            .replace("<", "\\x3c")
+            .replace(">", "\\x3e");
+    }
 
     /**
      * Écoute les rejets d'appel déclenchés depuis la notification
@@ -86,6 +107,11 @@ public class MainActivity extends BridgeActivity {
             // Ignore — older WebView may not support this
         }
 
+        // Si c'est un lancement depuis un appel, s'assurer que le keyguard est retiré
+        if (getIntent() != null && "call".equals(getIntent().getStringExtra("type"))) {
+            ensureLockScreenFlags();
+        }
+
         // Handle call notification tap (from full-screen intent)
         handleCallIntent(getIntent());
 
@@ -94,6 +120,10 @@ public class MainActivity extends BridgeActivity {
 
         // Vérifier la permission USE_FULL_SCREEN_INTENT (Android 14+)
         requestFullScreenIntentPermission();
+
+        // Demander POST_NOTIFICATIONS pour Android 13+ (Tiramisu)
+        // Plus fiable que le bridge Capacitor seul (Samsung peut ignorer)
+        requestNotificationPermission();
 
         // Flush pending FCM token (saved by KinSellMessagingService.onNewToken in background)
         flushPendingFcmToken();
@@ -148,7 +178,7 @@ public class MainActivity extends BridgeActivity {
             if (pendingToken != null && !pendingToken.isEmpty()) {
                 WebView webView = getBridge().getWebView();
                 if (webView != null) {
-                    final String token = pendingToken.replace("'", "\\'");
+                    final String token = sanitizeForJs(pendingToken);
                     webView.post(() -> webView.evaluateJavascript(
                         "window.dispatchEvent(new CustomEvent('ks:fcm-token',{detail:{token:'" + token + "'}}));",
                         null));
@@ -163,8 +193,38 @@ public class MainActivity extends BridgeActivity {
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
+        // Si c'est un appel, re-appliquer les flags d'écran verrouillé
+        if (intent != null && "call".equals(intent.getStringExtra("type"))) {
+            ensureLockScreenFlags();
+        }
         handleCallIntent(intent);
         handleCallAcceptCleanup(intent);
+    }
+
+    /**
+     * Réapplique les flags pour afficher l'activité par-dessus l'écran verrouillé
+     * et demande au KeyguardManager de retirer le keyguard.
+     */
+    private void ensureLockScreenFlags() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(true);
+            setTurnScreenOn(true);
+        } else {
+            getWindow().addFlags(
+                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
+                | WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+                | WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD
+            );
+        }
+        // Demander au KeyguardManager de retirer l'écran de verrouillage
+        try {
+            KeyguardManager km = (KeyguardManager) getSystemService(KEYGUARD_SERVICE);
+            if (km != null && km.isKeyguardLocked()) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    km.requestDismissKeyguard(this, null);
+                }
+            }
+        } catch (Exception ignored) {}
     }
 
     private void handleCallIntent(Intent intent) {
@@ -174,7 +234,7 @@ public class MainActivity extends BridgeActivity {
             try {
                 WebView webView = getBridge().getWebView();
                 if (webView != null) {
-                    final String navUrl = url.replace("'", "\\'");
+                    final String navUrl = sanitizeForJs(url);
                     // Utiliser pushState + popstate pour navigation SPA sans reload
                     webView.post(() -> webView.evaluateJavascript(
                         "(function(){" +
@@ -240,10 +300,10 @@ public class MainActivity extends BridgeActivity {
             // Dispatcher l'appel avec un délai pour que la WebView + Socket soient prêts
             WebView webView = getBridge().getWebView();
             if (webView != null) {
-                final String cid = conversationId.replace("'", "\\'");
-                final String uid = callerId.replace("'", "\\'");
-                final String ct = callType.replace("'", "\\'");
-                final String cn = callerName.replace("'", "\\'");
+                final String cid = sanitizeForJs(conversationId);
+                final String uid = sanitizeForJs(callerId);
+                final String ct = sanitizeForJs(callType);
+                final String cn = sanitizeForJs(callerName);
                 // Délai de 2s pour laisser le temps au socket de se connecter
                 webView.postDelayed(() -> webView.evaluateJavascript(
                     "window.dispatchEvent(new CustomEvent('ks:native-incoming-call',{detail:{" +
@@ -281,8 +341,8 @@ public class MainActivity extends BridgeActivity {
         try {
             WebView webView = getBridge().getWebView();
             if (webView != null) {
-                final String cid = conversationId.replace("'", "\\'");
-                final String uid = callerId.replace("'", "\\'");
+                final String cid = sanitizeForJs(conversationId);
+                final String uid = sanitizeForJs(callerId);
                 webView.post(() -> webView.evaluateJavascript(
                     "window.dispatchEvent(new CustomEvent('ks:native-call-reject'," +
                     "{detail:{conversationId:'" + cid + "',callerId:'" + uid + "'}}));",
@@ -298,8 +358,8 @@ public class MainActivity extends BridgeActivity {
         try {
             WebView webView = getBridge().getWebView();
             if (webView != null) {
-                final String cid = conversationId.replace("'", "\\'");
-                final String uid = remoteUserId.replace("'", "\\'");
+                final String cid = sanitizeForJs(conversationId);
+                final String uid = sanitizeForJs(remoteUserId);
                 webView.post(() -> webView.evaluateJavascript(
                     "window.dispatchEvent(new CustomEvent('ks:native-call-hangup'," +
                     "{detail:{conversationId:'" + cid + "',remoteUserId:'" + uid + "'}}));",
@@ -337,6 +397,21 @@ public class MainActivity extends BridgeActivity {
                 if (vibrator != null) vibrator.cancel();
             }
         } catch (Exception ignored) {}
+    }
+
+    /**
+     * Android 13+ (Tiramisu, API 33) : POST_NOTIFICATIONS obligatoire.
+     * On le demande directement en Java car le bridge Capacitor peut échouer
+     * silencieusement sur certains OEM (Samsung notamment).
+     */
+    private void requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                    != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(this,
+                        new String[]{Manifest.permission.POST_NOTIFICATIONS}, 1001);
+            }
+        }
     }
 
     /**

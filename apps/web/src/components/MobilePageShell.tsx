@@ -178,7 +178,7 @@ export function MobilePageShell() {
   const hideBar = scrollDir === 'down' && !createOpen;
 
   return (
-    <>
+    <div className="msh-shell">
       {!isDashboard && <MobileTopBar hidden={hideBar} />}
       <div className={`msh-content${isMessaging ? ' msh-content--messaging' : ''}`}>
         <Suspense fallback={<div className="ks-page-loader">Chargement…</div>}>
@@ -200,6 +200,6 @@ export function MobilePageShell() {
           />
         </>
       )}
-    </>
+    </div>
   );
 }
