@@ -1,11 +1,14 @@
 package com.kinsell.app;
 
+import android.app.NotificationManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Vibrator;
+import android.os.VibratorManager;
 import android.view.WindowManager;
 import android.webkit.WebView;
 import androidx.appcompat.app.AppCompatDelegate;
@@ -86,6 +89,12 @@ public class MainActivity extends BridgeActivity {
         // Handle call notification tap (from full-screen intent)
         handleCallIntent(getIntent());
 
+        // Si c'est un accept depuis la notification → nettoyer notif + vibration
+        handleCallAcceptCleanup(getIntent());
+
+        // Vérifier la permission USE_FULL_SCREEN_INTENT (Android 14+)
+        requestFullScreenIntentPermission();
+
         // Flush pending FCM token (saved by KinSellMessagingService.onNewToken in background)
         flushPendingFcmToken();
 
@@ -155,6 +164,7 @@ public class MainActivity extends BridgeActivity {
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         handleCallIntent(intent);
+        handleCallAcceptCleanup(intent);
     }
 
     private void handleCallIntent(Intent intent) {
@@ -296,6 +306,59 @@ public class MainActivity extends BridgeActivity {
                     null));
             }
         } catch (Exception ignored) {}
+    }
+
+    /**
+     * Quand l'utilisateur appuie sur "Accepter" depuis la notification,
+     * la notification d'appel entrant et la vibration doivent être nettoyées.
+     * (Avant, ça passait par CallActionReceiver, mais Android 12+ bloque
+     *  le startActivity depuis un BroadcastReceiver.)
+     */
+    private void handleCallAcceptCleanup(Intent intent) {
+        if (intent == null) return;
+        String callAction = intent.getStringExtra("callAction");
+        if (!"accept".equals(callAction)) return;
+
+        // Annuler la notification d'appel entrant
+        try {
+            NotificationManager nm = getSystemService(NotificationManager.class);
+            if (nm != null) {
+                nm.cancel(CallActionReceiver.CALL_NOTIFICATION_ID);
+            }
+        } catch (Exception ignored) {}
+
+        // Arrêter la vibration
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                VibratorManager vm = (VibratorManager) getSystemService(VIBRATOR_MANAGER_SERVICE);
+                if (vm != null) vm.getDefaultVibrator().cancel();
+            } else {
+                Vibrator vibrator = (Vibrator) getSystemService(VIBRATOR_SERVICE);
+                if (vibrator != null) vibrator.cancel();
+            }
+        } catch (Exception ignored) {}
+    }
+
+    /**
+     * Android 14+ (API 34) : USE_FULL_SCREEN_INTENT est une permission spéciale.
+     * Sans elle, l'appel entrant ne s'affiche pas en plein écran sur l'écran verrouillé.
+     */
+    private void requestFullScreenIntentPermission() {
+        if (Build.VERSION.SDK_INT >= 34) {
+            try {
+                NotificationManager nm = getSystemService(NotificationManager.class);
+                if (nm != null && !nm.canUseFullScreenIntent()) {
+                    // Ouvrir les paramètres pour que l'utilisateur accorde la permission
+                    Intent intent = new Intent(
+                        android.provider.Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT,
+                        android.net.Uri.parse("package:" + getPackageName()));
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    startActivity(intent);
+                }
+            } catch (Exception ignored) {
+                // Fallback : certains OEM ne supportent pas cet intent
+            }
+        }
     }
 
     @Override

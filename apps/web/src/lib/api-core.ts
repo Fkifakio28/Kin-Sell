@@ -206,7 +206,17 @@ export function scheduleTokenRefresh(onSessionLost?: () => void): () => void {
       // On Android, the WebView is suspended in background — timers don't fire,
       // so the access token (15min TTL) may expire during any background session.
       if (hiddenDuration > 60_000) {
-        void refreshAccessToken().then((ok) => {
+        // Retry up to 3 times with 2s delay before giving up (network can be flaky on wake)
+        const retryRefresh = async (attempts: number): Promise<boolean> => {
+          const ok = await refreshAccessToken();
+          if (ok) return true;
+          if (attempts > 1) {
+            await new Promise((r) => setTimeout(r, 2000));
+            return retryRefresh(attempts - 1);
+          }
+          return false;
+        };
+        void retryRefresh(3).then((ok) => {
           if (ok) schedule();
           else onSessionLost?.();
         });

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Capacitor } from "@capacitor/core";
 import { useLocaleCurrency } from "../app/providers/LocaleCurrencyProvider";
 import "./cookie-consent.css";
 
@@ -6,9 +7,11 @@ const COOKIE_CONSENT_KEY = "ks-cookie-consent";
 
 export function CookieConsent() {
   const { t } = useLocaleCurrency();
-  const [visible, setVisible] = useState(() => !localStorage.getItem(COOKIE_CONSENT_KEY));
+  const isNative = Capacitor.isNativePlatform();
+  const [visible, setVisible] = useState(() => !isNative && !localStorage.getItem(COOKIE_CONSENT_KEY));
   const [detailsOpen, setDetailsOpen] = useState(false);
 
+  // Pas de popup cookies sur l'APK native
   if (!visible) return null;
 
   const handleAck = () => {

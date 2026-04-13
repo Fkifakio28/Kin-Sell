@@ -41,6 +41,11 @@ public class KinSellMessagingService extends FirebaseMessagingService {
     public void onMessageReceived(RemoteMessage remoteMessage) {
         super.onMessageReceived(remoteMessage);
 
+        // ── Créer les canaux de notification si pas encore fait ──
+        // Quand l'app est tuée, MainActivity.onCreate() n'a pas encore tourné,
+        // donc les canaux n'existent pas. Sans canal, Android 8+ ignore la notif.
+        NotificationChannels.createChannels(this);
+
         String type = remoteMessage.getData().get("type");
         String title = "";
         String body = "";
@@ -121,12 +126,18 @@ public class KinSellMessagingService extends FirebaseMessagingService {
         PendingIntent contentPI = PendingIntent.getActivity(this, 1, mainIntent, piFlags);
 
         // ── Action : Accepter ──
-        Intent acceptIntent = new Intent(this, CallActionReceiver.class);
-        acceptIntent.setAction(CallActionReceiver.ACTION_ACCEPT);
+        // IMPORTANT : PendingIntent.getActivity (pas getBroadcast) pour bypasser
+        // les restrictions Android 12+ sur le lancement d'activités depuis un BroadcastReceiver.
+        Intent acceptIntent = new Intent(this, MainActivity.class);
+        acceptIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        acceptIntent.putExtra("type", "call");
+        acceptIntent.putExtra("callAction", "accept");
         acceptIntent.putExtra("conversationId", conversationId);
         acceptIntent.putExtra("callerId", callerId);
         acceptIntent.putExtra("callType", callType);
-        PendingIntent acceptPI = PendingIntent.getBroadcast(this, 2, acceptIntent, piFlags);
+        acceptIntent.putExtra("url", "/messaging?callAction=accept&convId=" + conversationId +
+                "&callerId=" + callerId + "&callType=" + callType);
+        PendingIntent acceptPI = PendingIntent.getActivity(this, 2, acceptIntent, piFlags);
 
         // ── Action : Refuser ──
         Intent rejectIntent = new Intent(this, CallActionReceiver.class);

@@ -10,90 +10,65 @@ import android.os.PowerManager;
 import android.provider.Settings;
 
 /**
- * Gère les optimisations batterie spécifiques aux fabricants Android.
+ * GÃ¨re les optimisations batterie spÃ©cifiques aux fabricants Android.
  *
  * Samsung (ONE UI), Xiaomi (MIUI), Huawei (EMUI), Oppo (ColorOS),
- * Vivo (FuntouchOS), OnePlus (OxygenOS), Realme, Asus, Letv, Meizu…
+ * Vivo (FuntouchOS), OnePlus (OxygenOS), Realme, Asus, Letv, Meizuâ€¦
  *
- * L'objectif : empêcher le système de tuer Kin-Sell en arrière-plan.
- * Chaque fabricant a ses propres paramètres de "gestion batterie" qui
- * tuent les apps non-whitelistées. Ce helper tente d'ouvrir la bonne
- * page de paramètres pour chaque fabricant.
+ * L'objectif : empÃªcher le systÃ¨me de tuer Kin-Sell en arriÃ¨re-plan.
+ * Chaque fabricant a ses propres paramÃ¨tres de "gestion batterie" qui
+ * tuent les apps non-whitelistÃ©es. Ce helper tente d'ouvrir la bonne
+ * page de paramÃ¨tres pour chaque fabricant.
  *
- * Référence : https://dontkillmyapp.com/
+ * RÃ©fÃ©rence : https://dontkillmyapp.com/
  */
 public class OemBatteryHelper {
 
     /**
-     * Tente de désactiver les restrictions batterie OEM pour cette app.
-     * Lance l'intent du fabricant approprié si disponible.
+     * Tente de dÃ©sactiver les restrictions batterie OEM pour cette app.
+     * TOUJOURS afficher le dialogue standard Android d'abord (fiable sur tous les appareils),
+     * puis tenter l'interface OEM spÃ©cifique si disponible.
      *
-     * @return true si un intent a été lancé, false sinon
+     * @return true si un intent a Ã©tÃ© lancÃ©, false sinon
      */
     public static boolean requestOemBatteryExemption(Context context) {
+        // 1. Toujours montrer le dialogue standard Android EN PREMIER
+        //    C'est le seul qui montre un popup clair "Autoriser" / "Refuser"
+        boolean standardShown = requestStandardBatteryExemption(context);
+
+        // 2. Ensuite, tenter aussi l'interface OEM pour les restrictions supplÃ©mentaires
+        //    (Samsung "Suspendre activitÃ©", Xiaomi "Autostart", etc.)
         String manufacturer = Build.MANUFACTURER.toLowerCase();
 
-        // Samsung ONE UI / TouchWiz
         if (manufacturer.contains("samsung")) {
-            return trySamsungExemption(context);
+            trySamsungExemption(context);
+        } else if (manufacturer.contains("xiaomi") || manufacturer.contains("redmi") || manufacturer.contains("poco")) {
+            tryXiaomiExemption(context);
+        } else if (manufacturer.contains("huawei") || manufacturer.contains("honor")) {
+            tryHuaweiExemption(context);
+        } else if (manufacturer.contains("oppo") || manufacturer.contains("realme")) {
+            tryOppoExemption(context);
+        } else if (manufacturer.contains("vivo") || manufacturer.contains("iqoo")) {
+            tryVivoExemption(context);
+        } else if (manufacturer.contains("oneplus")) {
+            tryOnePlusExemption(context);
+        } else if (manufacturer.contains("asus")) {
+            tryAsusExemption(context);
+        } else if (manufacturer.contains("meizu")) {
+            tryMeizuExemption(context);
+        } else if (manufacturer.contains("letv") || manufacturer.contains("leeco")) {
+            tryLetvExemption(context);
+        } else if (manufacturer.contains("nokia") || manufacturer.contains("hmd")) {
+            tryNokiaExemption(context);
+        } else if (manufacturer.contains("infinix") || manufacturer.contains("tecno") || manufacturer.contains("itel")) {
+            tryTranssionExemption(context);
         }
 
-        // Xiaomi / Redmi / POCO
-        if (manufacturer.contains("xiaomi") || manufacturer.contains("redmi") || manufacturer.contains("poco")) {
-            return tryXiaomiExemption(context);
-        }
-
-        // Huawei / Honor
-        if (manufacturer.contains("huawei") || manufacturer.contains("honor")) {
-            return tryHuaweiExemption(context);
-        }
-
-        // Oppo / Realme
-        if (manufacturer.contains("oppo") || manufacturer.contains("realme")) {
-            return tryOppoExemption(context);
-        }
-
-        // Vivo / iQOO
-        if (manufacturer.contains("vivo") || manufacturer.contains("iqoo")) {
-            return tryVivoExemption(context);
-        }
-
-        // OnePlus
-        if (manufacturer.contains("oneplus")) {
-            return tryOnePlusExemption(context);
-        }
-
-        // Asus (ZenUI)
-        if (manufacturer.contains("asus")) {
-            return tryAsusExemption(context);
-        }
-
-        // Meizu
-        if (manufacturer.contains("meizu")) {
-            return tryMeizuExemption(context);
-        }
-
-        // Letv / LeEco
-        if (manufacturer.contains("letv") || manufacturer.contains("leeco")) {
-            return tryLetvExemption(context);
-        }
-
-        // Nokia (HMD)
-        if (manufacturer.contains("nokia") || manufacturer.contains("hmd")) {
-            return tryNokiaExemption(context);
-        }
-
-        // Infinix / Tecno / itel (Transsion)
-        if (manufacturer.contains("infinix") || manufacturer.contains("tecno") || manufacturer.contains("itel")) {
-            return tryTranssionExemption(context);
-        }
-
-        // Fallback: standard Android battery optimization
-        return requestStandardBatteryExemption(context);
+        return standardShown;
     }
 
     /**
-     * Vérifie si l'app est déjà exemptée des optimisations batterie.
+     * VÃ©rifie si l'app est dÃ©jÃ  exemptÃ©e des optimisations batterie.
      */
     public static boolean isBatteryOptimized(Context context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -103,9 +78,9 @@ public class OemBatteryHelper {
         return false;
     }
 
-    // ── Samsung ONE UI ──
-    private static boolean trySamsungExemption(Context context) {
-        // Samsung "Device Care" → Battery → App power management
+    // â”€â”€ Samsung ONE UI â”€â”€
+    private static void trySamsungExemption(Context context) {
+        // Samsung "Device Care" â†’ Battery â†’ App power management
         Intent[] intents = {
             // Samsung ONE UI 3+ "Sleeping apps" direct
             new Intent().setComponent(new ComponentName(
@@ -120,12 +95,11 @@ public class OemBatteryHelper {
                 "com.samsung.android.lool",
                 "com.samsung.android.lool.SettingsActivity")),
         };
-        if (tryIntents(context, intents)) return true;
-        return requestStandardBatteryExemption(context);
+        tryIntents(context, intents);
     }
 
-    // ── Xiaomi / MIUI ──
-    private static boolean tryXiaomiExemption(Context context) {
+    // â”€â”€ Xiaomi / MIUI â”€â”€
+    private static void tryXiaomiExemption(Context context) {
         Intent[] intents = {
             // MIUI Autostart
             new Intent().setComponent(new ComponentName(
@@ -136,14 +110,13 @@ public class OemBatteryHelper {
                 "com.miui.powerkeeper",
                 "com.miui.powerkeeper.ui.HiddenAppsConfigActivity")),
         };
-        if (tryIntents(context, intents)) return true;
-        return requestStandardBatteryExemption(context);
+        tryIntents(context, intents);
     }
 
-    // ── Huawei / EMUI ──
-    private static boolean tryHuaweiExemption(Context context) {
+    // â”€â”€ Huawei / EMUI â”€â”€
+    private static void tryHuaweiExemption(Context context) {
         Intent[] intents = {
-            // Huawei Phone Manager → Protected Apps
+            // Huawei Phone Manager â†’ Protected Apps
             new Intent().setComponent(new ComponentName(
                 "com.huawei.systemmanager",
                 "com.huawei.systemmanager.startupmgr.ui.StartupNormalAppListActivity")),
@@ -154,12 +127,11 @@ public class OemBatteryHelper {
                 "com.huawei.systemmanager",
                 "com.huawei.systemmanager.appcontrol.activity.StartupAppControlActivity")),
         };
-        if (tryIntents(context, intents)) return true;
-        return requestStandardBatteryExemption(context);
+        tryIntents(context, intents);
     }
 
-    // ── Oppo / ColorOS ──
-    private static boolean tryOppoExemption(Context context) {
+    // â”€â”€ Oppo / ColorOS â”€â”€
+    private static void tryOppoExemption(Context context) {
         Intent[] intents = {
             new Intent().setComponent(new ComponentName(
                 "com.coloros.safecenter",
@@ -171,12 +143,11 @@ public class OemBatteryHelper {
                 "com.coloros.safecenter",
                 "com.coloros.safecenter.startupapp.StartupAppListActivity")),
         };
-        if (tryIntents(context, intents)) return true;
-        return requestStandardBatteryExemption(context);
+        tryIntents(context, intents);
     }
 
-    // ── Vivo ──
-    private static boolean tryVivoExemption(Context context) {
+    // â”€â”€ Vivo â”€â”€
+    private static void tryVivoExemption(Context context) {
         Intent[] intents = {
             new Intent().setComponent(new ComponentName(
                 "com.vivo.permissionmanager",
@@ -185,23 +156,21 @@ public class OemBatteryHelper {
                 "com.iqoo.secure",
                 "com.iqoo.secure.ui.phoneoptimize.BgStartUpManager")),
         };
-        if (tryIntents(context, intents)) return true;
-        return requestStandardBatteryExemption(context);
+        tryIntents(context, intents);
     }
 
-    // ── OnePlus ──
-    private static boolean tryOnePlusExemption(Context context) {
+    // â”€â”€ OnePlus â”€â”€
+    private static void tryOnePlusExemption(Context context) {
         Intent[] intents = {
             new Intent().setComponent(new ComponentName(
                 "com.oneplus.security",
                 "com.oneplus.security.chainlaunch.view.ChainLaunchAppListActivity")),
         };
-        if (tryIntents(context, intents)) return true;
-        return requestStandardBatteryExemption(context);
+        tryIntents(context, intents);
     }
 
-    // ── Asus ──
-    private static boolean tryAsusExemption(Context context) {
+    // â”€â”€ Asus â”€â”€
+    private static void tryAsusExemption(Context context) {
         Intent[] intents = {
             new Intent().setComponent(new ComponentName(
                 "com.asus.mobilemanager",
@@ -210,55 +179,50 @@ public class OemBatteryHelper {
                 "com.asus.mobilemanager",
                 "com.asus.mobilemanager.entry.FunctionActivity")),
         };
-        if (tryIntents(context, intents)) return true;
-        return requestStandardBatteryExemption(context);
+        tryIntents(context, intents);
     }
 
-    // ── Meizu ──
-    private static boolean tryMeizuExemption(Context context) {
+    // â”€â”€ Meizu â”€â”€
+    private static void tryMeizuExemption(Context context) {
         Intent[] intents = {
             new Intent("com.meizu.safe.security.SHOW_APPSEC")
                 .addCategory(Intent.CATEGORY_DEFAULT)
                 .putExtra("packageName", context.getPackageName()),
         };
-        if (tryIntents(context, intents)) return true;
-        return requestStandardBatteryExemption(context);
+        tryIntents(context, intents);
     }
 
-    // ── Letv / LeEco ──
-    private static boolean tryLetvExemption(Context context) {
+    // â”€â”€ Letv / LeEco â”€â”€
+    private static void tryLetvExemption(Context context) {
         Intent[] intents = {
             new Intent().setComponent(new ComponentName(
                 "com.letv.android.letvsafe",
                 "com.letv.android.letvsafe.AutobootManageActivity")),
         };
-        if (tryIntents(context, intents)) return true;
-        return requestStandardBatteryExemption(context);
+        tryIntents(context, intents);
     }
 
-    // ── Nokia (HMD) ──
-    private static boolean tryNokiaExemption(Context context) {
+    // â”€â”€ Nokia (HMD) â”€â”€
+    private static void tryNokiaExemption(Context context) {
         Intent[] intents = {
             new Intent().setComponent(new ComponentName(
                 "com.evenwell.powersaving.g3",
                 "com.evenwell.powersaving.g3.exception.PowerSaverExceptionActivity")),
         };
-        if (tryIntents(context, intents)) return true;
-        return requestStandardBatteryExemption(context);
+        tryIntents(context, intents);
     }
 
-    // ── Infinix / Tecno / itel (Transsion) ──
-    private static boolean tryTranssionExemption(Context context) {
+    // â”€â”€ Infinix / Tecno / itel (Transsion) â”€â”€
+    private static void tryTranssionExemption(Context context) {
         Intent[] intents = {
             new Intent().setComponent(new ComponentName(
                 "com.transsion.phonemanager",
                 "com.itel.autobootcontroller.activity.AutoBootControllerActivity")),
         };
-        if (tryIntents(context, intents)) return true;
-        return requestStandardBatteryExemption(context);
+        tryIntents(context, intents);
     }
 
-    // ── Standard Android ──
+    // â”€â”€ Standard Android â”€â”€
     private static boolean requestStandardBatteryExemption(Context context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             try {
@@ -273,7 +237,7 @@ public class OemBatteryHelper {
     }
 
     /**
-     * Tente de lancer chaque intent dans l'ordre. Retourne true dès le premier succès.
+     * Tente de lancer chaque intent dans l'ordre. Retourne true dÃ¨s le premier succÃ¨s.
      */
     private static boolean tryIntents(Context context, Intent[] intents) {
         PackageManager pm = context.getPackageManager();
@@ -289,3 +253,4 @@ public class OemBatteryHelper {
         return false;
     }
 }
+
