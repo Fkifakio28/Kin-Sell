@@ -150,6 +150,20 @@ function parseCallEventFromSystemMessage(msg: ChatMessage): CallEventData | null
   }
 }
 
+/** Produce a short human-readable preview for a call-event SYSTEM message */
+function callEventPreview(msg: ChatMessage, t: (k: string) => string): string | null {
+  const ce = parseCallEventFromSystemMessage(msg);
+  if (!ce) return null;
+  const icon = ce.callType === "VIDEO" ? "📹" : "📞";
+  const label =
+    ce.status === "ANSWERED" ? t("msg.callAnswered")
+    : ce.status === "NO_ANSWER" ? t("msg.callNoAnswer")
+    : ce.status === "REJECTED" ? t("msg.callRejected")
+    : ce.status === "CANCELLED" ? t("msg.callCancelled")
+    : t("msg.callNoAnswer");
+  return `${icon} ${label}`;
+}
+
 /* ═══ Audio Player ═══ */
 function AudioPlayer({ src }: { src: string }) {
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -1227,11 +1241,13 @@ export function MessagingPage() {
                           {isMutedConv && "🔇 "}
                           {lastMsg
                             ? lastMsg.isDeleted ? t("msg.deletedMessage")
-                            : lastMsg.type === "IMAGE" ? `📷 ${t("msg.photo")}`
+                            : callEventPreview(lastMsg, t) ?? (
+                              lastMsg.type === "IMAGE" ? `📷 ${t("msg.photo")}`
                             : lastMsg.type === "AUDIO" ? `🎵 ${t("msg.audio")}`
                             : lastMsg.type === "VIDEO" ? `🎬 ${t("msg.video")}`
                             : lastMsg.type === "FILE" ? `📎 ${t("msg.file")}`
                             : (lastMsg.senderId === myId ? `${t("msg.you")}: ` : "") + (lastMsg.content?.slice(0, 45) ?? "")
+                            )
                             : t("msg.newConversationLabel")}
                         </span>
                         {conv.unreadCount > 0 && !isMutedConv && <span className="mg-unread">{conv.unreadCount}</span>}

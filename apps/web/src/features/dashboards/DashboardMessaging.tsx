@@ -75,6 +75,18 @@ function initials(name: string) {
   return name.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
 }
 
+/** Parse a SYSTEM message whose content is a call-event JSON */
+function dmCallPreview(msg: { type: string; content?: string | null }): string | null {
+  if (msg.type !== "SYSTEM" || !msg.content) return null;
+  try {
+    const d = JSON.parse(msg.content);
+    if (d?.source !== "call") return null;
+    const icon = d.callType === "VIDEO" ? "📹" : "📞";
+    const label = d.status === "ANSWERED" ? "Appel terminé" : d.status === "NO_ANSWER" ? "Appel manqué" : d.status === "REJECTED" ? "Appel refusé" : d.status === "CANCELLED" ? "Appel annulé" : "Appel manqué";
+    return `${icon} ${label}`;
+  } catch { return null; }
+}
+
 function formatAudioTime(seconds: number) {
   const m = Math.floor(seconds / 60);
   const s = Math.floor(seconds % 60);
@@ -502,7 +514,7 @@ export function DashboardMessaging() {
                         {lastMsg && <span className="dm-conv-time">{timeLabel(lastMsg.createdAt)}</span>}
                       </div>
                       <div className="dm-conv-bottom">
-                        <span className="dm-conv-preview">{isMuted && "🔇 "}{lastMsg ? lastMsg.isDeleted ? "Supprimé" : lastMsg.type === "IMAGE" ? "📷" : lastMsg.type === "AUDIO" ? "🎵" : lastMsg.type === "VIDEO" ? "🎬" : lastMsg.type === "FILE" ? "📎" : (lastMsg.senderId === myId ? "Vous: " : "") + (lastMsg.content?.slice(0, 35) ?? "") : "Nouveau"}</span>
+                        <span className="dm-conv-preview">{isMuted && "🔇 "}{lastMsg ? lastMsg.isDeleted ? "Supprimé" : dmCallPreview(lastMsg) ?? (lastMsg.type === "IMAGE" ? "📷" : lastMsg.type === "AUDIO" ? "🎵" : lastMsg.type === "VIDEO" ? "🎬" : lastMsg.type === "FILE" ? "📎" : (lastMsg.senderId === myId ? "Vous: " : "") + (lastMsg.content?.slice(0, 35) ?? "")) : "Nouveau"}</span>
                         {conv.unreadCount > 0 && !isMuted && <span className="dm-unread-badge">{conv.unreadCount}</span>}
                       </div>
                     </div>
