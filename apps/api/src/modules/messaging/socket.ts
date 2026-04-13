@@ -315,6 +315,7 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
             type: "call",
             conversationId: data.conversationId,
             callerId: userId,
+            callerName: senderName,
             callType: data.callType,
             url: `/messaging?incomingConvId=${data.conversationId}&incomingCallerId=${userId}&incomingCallType=${data.callType}`,
           },

@@ -94,8 +94,22 @@ public class MainActivity extends BridgeActivity {
         // Flush pending call reject (saved by CallActionReceiver when app was in background)
         flushPendingCallReject();
 
-        // Flush incoming call (saved by KinSellMessagingService when app was killed)
-        flushPendingIncomingCall();
+        // Flush incoming call ONLY if the user didn't already accept via notification button.
+        // If callAction=accept is in the intent, the call is being accepted → don't re-show overlay.
+        String callAction = getIntent() != null ? getIntent().getStringExtra("callAction") : null;
+        if (!"accept".equals(callAction)) {
+            flushPendingIncomingCall();
+        } else {
+            // Clear the pending call to avoid re-dispatch on next resume
+            try {
+                android.content.SharedPreferences prefs =
+                    getSharedPreferences("kin_sell_prefs", MODE_PRIVATE);
+                prefs.edit()
+                    .remove("pending_incoming_call")
+                    .remove("pending_incoming_call_ts")
+                    .apply();
+            } catch (Exception ignored) {}
+        }
 
         // Demander l'exclusion d'optimisation batterie (Samsung/Xiaomi/etc.)
         // Nécessaire pour que les FCM data-only messages arrivent en background

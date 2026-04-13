@@ -232,8 +232,7 @@ public class KinSellMessagingService extends FirebaseMessagingService {
                 .setAutoCancel(true)
                 .setContentIntent(pendingIntent)
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-                .setGroup(MSG_GROUP)
-                .setDefaults(NotificationCompat.DEFAULT_ALL);
+                .setGroup(MSG_GROUP);
 
         manager.notify(notifId, builder.build());
 
@@ -268,8 +267,7 @@ public class KinSellMessagingService extends FirebaseMessagingService {
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setAutoCancel(true)
                 .setContentIntent(pendingIntent)
-                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-                .setDefaults(NotificationCompat.DEFAULT_ALL);
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC);
 
         // Style Big Text pour les longs messages
         if (body.length() > 40) {
