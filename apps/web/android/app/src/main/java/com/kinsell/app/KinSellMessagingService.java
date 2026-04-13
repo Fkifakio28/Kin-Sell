@@ -10,6 +10,7 @@ import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.os.VibratorManager;
 import androidx.core.app.NotificationCompat;
+import androidx.core.app.Person;
 import com.google.firebase.messaging.FirebaseMessagingService;
 import com.google.firebase.messaging.RemoteMessage;
 
@@ -70,7 +71,8 @@ public class KinSellMessagingService extends FirebaseMessagingService {
     }
 
     /**
-     * Notification d'appel entrant avec full-screen intent (écran verrouillé).
+     * Notification d'appel entrant avec full-screen intent + actions Accepter/Refuser.
+     * Visible sur : écran verrouillé, barre d'état, panneau de notifications.
      */
     private void showIncomingCallNotification(RemoteMessage msg, String title, String body) {
         // Réveiller l'écran
@@ -79,57 +81,80 @@ public class KinSellMessagingService extends FirebaseMessagingService {
         String conversationId = msg.getData().get("conversationId");
         String callerId = msg.getData().get("callerId");
         String callType = msg.getData().get("callType");
+        if (conversationId == null) conversationId = "";
+        if (callerId == null) callerId = "";
+        if (callType == null) callType = "audio";
 
-        // Intent principal : ouvrir l'app sur la page de messaging avec l'appel
+        int piFlags = PendingIntent.FLAG_UPDATE_CURRENT;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            piFlags |= PendingIntent.FLAG_IMMUTABLE;
+        }
+
+        // ── Intent principal : tap → ouvrir l'app sur l'écran d'appel ──
         Intent mainIntent = new Intent(this, MainActivity.class);
         mainIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
         mainIntent.putExtra("type", "call");
-        mainIntent.putExtra("conversationId", conversationId != null ? conversationId : "");
-        mainIntent.putExtra("callerId", callerId != null ? callerId : "");
-        mainIntent.putExtra("callType", callType != null ? callType : "audio");
-        mainIntent.putExtra("url", "/messaging?incomingConvId=" +
-                (conversationId != null ? conversationId : "") +
-                "&incomingCallerId=" + (callerId != null ? callerId : "") +
-                "&incomingCallType=" + (callType != null ? callType : "audio"));
+        mainIntent.putExtra("conversationId", conversationId);
+        mainIntent.putExtra("callerId", callerId);
+        mainIntent.putExtra("callType", callType);
+        mainIntent.putExtra("url", "/messaging?incomingConvId=" + conversationId +
+                "&incomingCallerId=" + callerId +
+                "&incomingCallType=" + callType);
 
-        int flags = PendingIntent.FLAG_UPDATE_CURRENT;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            flags |= PendingIntent.FLAG_IMMUTABLE;
-        }
+        PendingIntent fullScreenPI = PendingIntent.getActivity(this, 0, mainIntent, piFlags);
+        PendingIntent contentPI = PendingIntent.getActivity(this, 1, mainIntent, piFlags);
 
-        PendingIntent fullScreenPendingIntent = PendingIntent.getActivity(
-                this, 0, mainIntent, flags);
+        // ── Action : Accepter ──
+        Intent acceptIntent = new Intent(this, CallActionReceiver.class);
+        acceptIntent.setAction(CallActionReceiver.ACTION_ACCEPT);
+        acceptIntent.putExtra("conversationId", conversationId);
+        acceptIntent.putExtra("callerId", callerId);
+        acceptIntent.putExtra("callType", callType);
+        PendingIntent acceptPI = PendingIntent.getBroadcast(this, 2, acceptIntent, piFlags);
 
-        PendingIntent contentPendingIntent = PendingIntent.getActivity(
-                this, 1, mainIntent, flags);
+        // ── Action : Refuser ──
+        Intent rejectIntent = new Intent(this, CallActionReceiver.class);
+        rejectIntent.setAction(CallActionReceiver.ACTION_REJECT);
+        rejectIntent.putExtra("conversationId", conversationId);
+        rejectIntent.putExtra("callerId", callerId);
+        rejectIntent.putExtra("callType", callType);
+        PendingIntent rejectPI = PendingIntent.getBroadcast(this, 3, rejectIntent, piFlags);
 
         // Vibrer manuellement (certains appareils ignorent le canal)
         vibrateForCall();
 
         NotificationCompat.Builder builder = new NotificationCompat.Builder(
                 this, NotificationChannels.CHANNEL_CALLS)
-                .setSmallIcon(R.drawable.ic_notification)
+                .setSmallIcon(R.drawable.ic_stat_kinsell)
                 .setContentTitle(title)
-                .setContentText(body)
+                .setContentText(body.isEmpty() ? "Appel audio entrant" : body)
+                .setSubText("Kin-Sell")
                 .setColor(0xFF6F58FF)
                 .setPriority(NotificationCompat.PRIORITY_MAX)
                 .setCategory(NotificationCompat.CATEGORY_CALL)
-                .setAutoCancel(true)
+                .setAutoCancel(false)
                 .setOngoing(true)
-                .setContentIntent(contentPendingIntent)
-                .setFullScreenIntent(fullScreenPendingIntent, true)
+                .setContentIntent(contentPI)
+                .setFullScreenIntent(fullScreenPI, true)
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-                .setDefaults(NotificationCompat.DEFAULT_ALL);
+                .setTimeoutAfter(30_000) // Auto-dismiss après 30s
+                // ── Actions visibles dans le panneau de notifications ──
+                .addAction(0, "✅ Accepter", acceptPI)
+                .addAction(0, "❌ Refuser", rejectPI);
 
         NotificationManager manager = getSystemService(NotificationManager.class);
         if (manager != null) {
-            manager.notify(9999, builder.build());
+            manager.notify(CallActionReceiver.CALL_NOTIFICATION_ID, builder.build());
         }
     }
 
     /**
      * Notification standard (messages, commandes, publications).
+     * Messages : MessagingStyle + groupement par conversation.
+     * Autres : BigText avec regroupement global.
      */
+    private static final String MSG_GROUP = "kin-sell-messages-group";
+
     private void showStandardNotification(RemoteMessage msg, String title, String body, String type) {
         String channelId = resolveChannelId(type);
         String tag = msg.getData().get("tag");
@@ -151,10 +176,78 @@ public class KinSellMessagingService extends FirebaseMessagingService {
         PendingIntent pendingIntent = PendingIntent.getActivity(
                 this, (int) System.currentTimeMillis(), intent, flags);
 
+        NotificationManager manager = getSystemService(NotificationManager.class);
+        if (manager == null) return;
+
+        int notifId = tag != null ? tag.hashCode() : (int) System.currentTimeMillis();
+
+        if ("message".equals(type)) {
+            showMessageNotification(msg, title, body, pendingIntent, manager, notifId);
+        } else {
+            showGenericNotification(title, body, channelId, pendingIntent, manager, notifId);
+        }
+    }
+
+    /**
+     * Notification de message avec MessagingStyle et groupement.
+     */
+    private void showMessageNotification(RemoteMessage msg, String title, String body,
+                                          PendingIntent pendingIntent, NotificationManager manager, int notifId) {
+        String senderName = msg.getData().get("senderName");
+        if (senderName == null || senderName.isEmpty()) senderName = title;
+
+        Person sender = new Person.Builder()
+                .setName(senderName)
+                .setKey(msg.getData().get("senderId"))
+                .build();
+
+        NotificationCompat.MessagingStyle style = new NotificationCompat.MessagingStyle(
+                new Person.Builder().setName("Moi").build());
+        style.setConversationTitle(null);     // 1-on-1 : pas de titre de conv
+        style.addMessage(body, System.currentTimeMillis(), sender);
+
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(
+                this, NotificationChannels.CHANNEL_MESSAGES)
+                .setSmallIcon(R.drawable.ic_stat_kinsell)
+                .setColor(0xFF6F58FF)
+                .setStyle(style)
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+                .setAutoCancel(true)
+                .setContentIntent(pendingIntent)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                .setGroup(MSG_GROUP)
+                .setDefaults(NotificationCompat.DEFAULT_ALL);
+
+        manager.notify(notifId, builder.build());
+
+        // Notification résumé pour le groupement (n messages)
+        NotificationCompat.Builder summary = new NotificationCompat.Builder(
+                this, NotificationChannels.CHANNEL_MESSAGES)
+                .setSmallIcon(R.drawable.ic_stat_kinsell)
+                .setColor(0xFF6F58FF)
+                .setSubText("Kin-Sell")
+                .setGroup(MSG_GROUP)
+                .setGroupSummary(true)
+                .setAutoCancel(true)
+                .setStyle(new NotificationCompat.InboxStyle()
+                        .setSummaryText("Kin-Sell • Messages"))
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC);
+
+        manager.notify(0, summary.build());
+    }
+
+    /**
+     * Notification générique (commandes, publications, etc.).
+     */
+    private void showGenericNotification(String title, String body, String channelId,
+                                          PendingIntent pendingIntent, NotificationManager manager, int notifId) {
         NotificationCompat.Builder builder = new NotificationCompat.Builder(this, channelId)
-                .setSmallIcon(R.drawable.ic_notification)
+                .setSmallIcon(R.drawable.ic_stat_kinsell)
                 .setContentTitle(title)
                 .setContentText(body)
+                .setSubText("Kin-Sell")
                 .setColor(0xFF6F58FF)
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setAutoCancel(true)
@@ -167,11 +260,7 @@ public class KinSellMessagingService extends FirebaseMessagingService {
             builder.setStyle(new NotificationCompat.BigTextStyle().bigText(body));
         }
 
-        NotificationManager manager = getSystemService(NotificationManager.class);
-        if (manager != null) {
-            int notifId = tag != null ? tag.hashCode() : (int) System.currentTimeMillis();
-            manager.notify(notifId, builder.build());
-        }
+        manager.notify(notifId, builder.build());
     }
 
     private String resolveChannelId(String type) {

@@ -28,6 +28,7 @@ export {
   ApiError,
   health,
   request,
+  refreshSession,
 } from "./api-core";
 export type { AccountUser } from "./api-core";
 

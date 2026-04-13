@@ -28,6 +28,13 @@ const config: CapacitorConfig = {
   },
 
   plugins: {
+    // ── Route fetch/XHR through native HTTP layer (bypass WebView CORS & cookie restrictions) ──
+    CapacitorHttp: {
+      enabled: true,
+    },
+    CapacitorCookies: {
+      enabled: true,
+    },
     SplashScreen: {
       launchAutoHide: true,
       launchShowDuration: 2000,

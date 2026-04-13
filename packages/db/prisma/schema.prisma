@@ -911,6 +911,7 @@ enum CallStatus {
   ANSWERED
   REJECTED
   NO_ANSWER
+  CANCELLED
 }
 
 model CallLog {

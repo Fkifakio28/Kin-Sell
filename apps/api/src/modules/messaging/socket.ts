@@ -221,14 +221,16 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
             : message.type === "VIDEO" ? `${senderName} a envoyé 🎬`
             : `${senderName} a envoyé 📎`;
           void sendPushToUsers(offlineRecipients, {
-            title: "Kin-Sell • Chat",
+            title: senderName,
             body: bodyText,
             tag: `msg-${data.conversationId}`,
             data: {
               type: "message",
               conversationId: data.conversationId,
               senderId: userId,
-              url: "/messaging",
+              senderName,
+              messageType: message.type,
+              url: `/messaging?convId=${data.conversationId}`,
             },
           });
         }
@@ -416,7 +418,9 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
             const existing = await prisma.callLog.findUnique({ where: { id: logId }, select: { answeredAt: true, callType: true, callerUserId: true } });
             const endedAt = new Date();
             const durationSeconds = existing?.answeredAt ? Math.round((endedAt.getTime() - existing.answeredAt.getTime()) / 1000) : undefined;
-            const status = existing?.answeredAt ? "ANSWERED" : "MISSED";
+            // ANSWERED = appel connecté puis terminé
+            // CANCELLED = appelant a raccroché AVANT que le receveur ne décroche
+            const status = existing?.answeredAt ? "ANSWERED" : "CANCELLED";
             await callLogService.updateCallLogStatus(logId, status, { endedAt, durationSeconds });
             await createCallEventMessage(io, data.conversationId, existing?.callerUserId ?? userId, existing?.callType ?? "AUDIO", status, durationSeconds);
           } catch (e) { logger.error({ err: e, logId }, "[CallLog] end error"); }

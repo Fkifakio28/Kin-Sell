@@ -16,6 +16,7 @@ type SocketEvents = {
   "call:accepted": (data: { conversationId: string; accepterId: string }) => void;
   "call:rejected": (data: { conversationId: string; rejecterId: string }) => void;
   "call:ended": (data: { conversationId: string; enderId: string }) => void;
+  "call:no-answer": (data: { conversationId: string }) => void;
   "order:created": (data: {
     type: "ORDER_CREATED";
     orderId: string;

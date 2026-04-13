@@ -9,13 +9,8 @@ import {
 import { useSocket } from "../../hooks/useSocket";
 import { createOptimizedAudioRecorder, createUploadFile, prepareMediaUrl } from "../../utils/media-upload";
 import { useGlobalNotification } from "../../app/providers/GlobalNotificationProvider";
-import { playCallSound, stopCallSound, refreshCallSoundIfNeeded } from "../../utils/call-sound";
-import {
-  getRtcConfig, applyCodecPreferences, optimizeSenders, applyVideoProfileToPC,
-  getInitialProfile, getMediaConstraints, type VideoProfile,
-  QUALITY_POOR, QUALITY_FAIR, UPGRADE_STREAK, DOWNGRADE_STREAK,
-  ICE_RESTART_DELAYS, ICE_MAX_ATTEMPTS, VIDEO_BITRATE, VIDEO_CONSTRAINTS, VIDEO_SCALE_DOWN,
-} from "../../utils/webrtc-config";
+import { useAudioCallState } from "../../hooks/useAudioCallState";
+import AudioCallScreen from "../messaging/AudioCallScreen";
 import "./dashboard-messaging.css";
 
 /* ── Emoji data ── */
@@ -176,15 +171,20 @@ export function DashboardMessaging() {
   const animFrameRef = useRef<number>(0);
   const audioContextRef = useRef<AudioContext | null>(null);
 
-  const [callState, setCallState] = useState<null | { type: "audio" | "video"; conversationId: string; remoteUserId: string; direction: "incoming" | "outgoing"; status: "ringing" | "connected" | "ended" }>(null);
-  const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
-  const iceRestartAttemptRef = useRef(0);
-  const callQualityTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const localStreamRef = useRef<MediaStream | null>(null);
-  const remoteStreamRef = useRef<MediaStream | null>(null);
-  const localVideoRef = useRef<HTMLVideoElement>(null);
-  const remoteVideoRef = useRef<HTMLVideoElement>(null);
-  const remoteAudioRef = useRef<HTMLAudioElement>(null);
+  /* ── Audio call (nouveau système) ── */
+  const {
+    call: audioCall,
+    callResult: audioCallResult,
+    durationSeconds: audioCallDuration,
+    isMuted,
+    isSpeakerOn,
+    startCall: audioStartCall,
+    acceptCall: audioAcceptCall,
+    hangup: audioHangup,
+    toggleMute,
+    toggleSpeaker,
+  } = useAudioCallState();
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -202,27 +202,6 @@ export function DashboardMessaging() {
     setLoadingCallLogs(true);
     messaging.callLogs().then((r) => setCallLogs(r.callLogs)).catch(() => {}).finally(() => setLoadingCallLogs(false));
   }, [sidebarTab, isLoggedIn]);
-
-  /* ── Ringtone (WAV files selon connectivité réseau) ── */
-  useEffect(() => {
-    const isRinging = callState?.status === "ringing";
-    if (!isRinging) {
-      stopCallSound();
-      return;
-    }
-    const direction = callState?.direction ?? "outgoing";
-    void playCallSound(direction);
-
-    const onNetworkChange = () => void refreshCallSoundIfNeeded(direction);
-    window.addEventListener("online", onNetworkChange);
-    window.addEventListener("offline", onNetworkChange);
-
-    return () => {
-      stopCallSound();
-      window.removeEventListener("online", onNetworkChange);
-      window.removeEventListener("offline", onNetworkChange);
-    };
-  }, [callState?.status, callState?.direction]);
 
   /* ── Load conversations ── */
   useEffect(() => {
@@ -263,223 +242,6 @@ export function DashboardMessaging() {
     on("presence:snapshot", handlePresenceSnapshot); on("user:online", handleOnline); on("user:offline", handleOffline); on("conversation:read", handleRead);
     return () => { off("message:new", handleNew); off("message:edited", handleEdited); off("message:deleted", handleDeleted); off("typing:start", handleTypingStart); off("typing:stop", handleTypingStop); off("presence:snapshot", handlePresenceSnapshot); off("user:online", handleOnline); off("user:offline", handleOffline); off("conversation:read", handleRead); };
   }, [on, off, activeConv?.id, myId, emit]);
-
-  /* ── WebRTC call events ── */
-  useEffect(() => {
-    const handleIncoming = (data: { conversationId: string; callerId: string; callType: "audio" | "video" }) => { setCallState({ type: data.callType, conversationId: data.conversationId, remoteUserId: data.callerId, direction: "incoming", status: "ringing" }); };
-    const handleAccepted = async (data: { conversationId: string; accepterId: string }) => { setCallState((p) => p ? { ...p, status: "connected" } : null); if (peerConnectionRef.current) { const offer = await peerConnectionRef.current.createOffer(); await peerConnectionRef.current.setLocalDescription(offer); emit("webrtc:offer", { targetUserId: data.accepterId, sdp: offer }); } };
-    const handleRejected = () => { cleanupCall(); setCallState(null); };
-    const handleEnded = () => { cleanupCall(); setCallState(null); };
-    const handleNoAnswer = () => { cleanupCall(); setCallState(null); };
-    const handleOffer = async (data: { callerId: string; sdp: RTCSessionDescriptionInit }) => { if (!peerConnectionRef.current) return; await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(data.sdp)); const ans = await peerConnectionRef.current.createAnswer(); await peerConnectionRef.current.setLocalDescription(ans); emit("webrtc:answer", { targetUserId: data.callerId, sdp: ans }); };
-    const handleAnswer = async (data: { answererId: string; sdp: RTCSessionDescriptionInit }) => { if (peerConnectionRef.current) await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(data.sdp)); };
-    const handleIce = async (data: { fromUserId: string; candidate: RTCIceCandidateInit }) => { if (peerConnectionRef.current) await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(data.candidate)); };
-
-    on("call:incoming", handleIncoming);
-    on("call:accepted", handleAccepted as (data: { conversationId: string; accepterId: string }) => void);
-    on("call:rejected", handleRejected as (data: { conversationId: string; rejecterId: string }) => void);
-    on("call:ended", handleEnded as (data: { conversationId: string; enderId: string }) => void);
-    on("call:no-answer", handleNoAnswer as any);
-    on("webrtc:offer", handleOffer as (data: { callerId: string; sdp: RTCSessionDescriptionInit }) => void);
-    on("webrtc:answer", handleAnswer as (data: { answererId: string; sdp: RTCSessionDescriptionInit }) => void);
-    on("webrtc:ice-candidate", handleIce as (data: { fromUserId: string; candidate: RTCIceCandidateInit }) => void);
-    return () => {
-      off("call:incoming", handleIncoming);
-      off("call:accepted", handleAccepted as (data: { conversationId: string; accepterId: string }) => void);
-      off("call:rejected", handleRejected as (data: { conversationId: string; rejecterId: string }) => void);
-      off("call:ended", handleEnded as (data: { conversationId: string; enderId: string }) => void);
-      off("call:no-answer", handleNoAnswer as any);
-      off("webrtc:offer", handleOffer as (data: { callerId: string; sdp: RTCSessionDescriptionInit }) => void);
-      off("webrtc:answer", handleAnswer as (data: { answererId: string; sdp: RTCSessionDescriptionInit }) => void);
-      off("webrtc:ice-candidate", handleIce as (data: { fromUserId: string; candidate: RTCIceCandidateInit }) => void);
-    };
-  }, [on, off, emit]);
-
-  /* ── WebRTC helpers ── */
-  const createPeerConnection = useCallback((remoteUserId: string) => {
-    const pc = new RTCPeerConnection(getRtcConfig());
-    pc.onicecandidate = (e) => { if (e.candidate) emit("webrtc:ice-candidate", { targetUserId: remoteUserId, candidate: e.candidate.toJSON() }); };
-    pc.ontrack = (e) => {
-      remoteStreamRef.current = e.streams[0];
-      if (remoteVideoRef.current) {
-        remoteVideoRef.current.srcObject = e.streams[0];
-        void remoteVideoRef.current.play().catch(() => {});
-      }
-      if (remoteAudioRef.current) {
-        remoteAudioRef.current.srcObject = e.streams[0];
-        void remoteAudioRef.current.play().catch(() => {});
-      }
-    };
-    // ── ICE reconnection automatique avec backoff exponentiel ──
-    pc.oniceconnectionstatechange = () => {
-      const state = pc.iceConnectionState;
-      if (state === "connected" || state === "completed") {
-        iceRestartAttemptRef.current = 0;
-      }
-      const attemptRestart = () => {
-        if (iceRestartAttemptRef.current >= ICE_MAX_ATTEMPTS) return;
-        const delay = ICE_RESTART_DELAYS[Math.min(iceRestartAttemptRef.current, ICE_RESTART_DELAYS.length - 1)];
-        setTimeout(() => {
-          if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") return;
-          iceRestartAttemptRef.current++;
-          // Dégrader la qualité après 2 échecs
-          if (iceRestartAttemptRef.current >= 2 && localStreamRef.current) {
-            void applyVideoProfileToPC(pc, localStreamRef.current, "data-saver");
-          }
-          pc.restartIce();
-          pc.createOffer({ iceRestart: true }).then(async (offer) => {
-            await pc.setLocalDescription(offer);
-            emit("webrtc:offer", { targetUserId: remoteUserId, sdp: offer });
-          }).catch(() => {});
-        }, delay);
-      };
-      if (state === "disconnected") attemptRestart();
-      if (state === "failed") attemptRestart();
-    };
-    peerConnectionRef.current = pc;
-    // Codec preferences applied after tracks added (in optimizePeerSenders)
-    return pc;
-  }, [emit]);
-
-  const cleanupCall = useCallback(() => {
-    peerConnectionRef.current?.close();
-    peerConnectionRef.current = null;
-    if (callQualityTimerRef.current) { clearInterval(callQualityTimerRef.current); callQualityTimerRef.current = null; }
-    localStreamRef.current?.getTracks().forEach((t) => t.stop());
-    localStreamRef.current = null;
-    remoteStreamRef.current = null;
-    iceRestartAttemptRef.current = 0;
-  }, []);
-
-  const startQualityMonitor = useCallback((pc: RTCPeerConnection) => {
-    if (callQualityTimerRef.current) { clearInterval(callQualityTimerRef.current); callQualityTimerRef.current = null; }
-    let poorStreak = 0;
-    let goodStreak = 0;
-    let currentProfile: VideoProfile = getInitialProfile();
-    const sample = async () => {
-      try {
-        const stats = await pc.getStats();
-        let fps = 0, packetsLost = 0, packetsRecv = 0, rtt = 0;
-        stats.forEach((report) => {
-          if (report.type === "inbound-rtp" && (report as any).kind === "video") { fps = Number((report as any).framesPerSecond ?? fps); packetsLost = Number((report as any).packetsLost ?? packetsLost); packetsRecv = Number((report as any).packetsReceived ?? packetsRecv); }
-          if (report.type === "candidate-pair" && (report as any).state === "succeeded") { rtt = Number((report as any).currentRoundTripTime ?? rtt); }
-        });
-        const total = packetsLost + packetsRecv;
-        const loss = total > 0 ? packetsLost / total : 0;
-        if (loss > QUALITY_POOR.lossRate || fps < QUALITY_POOR.minFps || rtt > QUALITY_POOR.maxRtt) {
-          poorStreak++; goodStreak = 0;
-          // Auto-downgrade
-          if (poorStreak >= DOWNGRADE_STREAK) {
-            const next: VideoProfile = currentProfile === "hd" ? "balanced" : "data-saver";
-            if (next !== currentProfile) {
-              currentProfile = next;
-              if (localStreamRef.current) void applyVideoProfileToPC(pc, localStreamRef.current, next);
-            }
-          }
-        } else if (loss > QUALITY_FAIR.lossRate || fps < QUALITY_FAIR.minFps || rtt > QUALITY_FAIR.maxRtt) {
-          poorStreak = Math.max(0, poorStreak - 1); goodStreak = 0;
-        } else {
-          goodStreak++; poorStreak = Math.max(0, poorStreak - 1);
-          // Auto-upgrade
-          if (goodStreak >= UPGRADE_STREAK) {
-            const next: VideoProfile = currentProfile === "data-saver" ? "balanced" : currentProfile === "balanced" ? "hd" : "hd";
-            if (next !== currentProfile) {
-              currentProfile = next;
-              if (localStreamRef.current) void applyVideoProfileToPC(pc, localStreamRef.current, next);
-            }
-          }
-        }
-      } catch { /* */ }
-    };
-    void sample();
-    callQualityTimerRef.current = setInterval(() => void sample(), 2000);
-  }, []);
-
-  const getCallMedia = useCallback(async (callType: "audio" | "video") => {
-    return navigator.mediaDevices.getUserMedia(getMediaConstraints(callType));
-  }, []);
-
-  const optimizePeerSenders = useCallback(async (pc: RTCPeerConnection) => {
-    applyCodecPreferences(pc);
-    await optimizeSenders(pc, getInitialProfile());
-  }, []);
-
-  const startCall = useCallback(async (callType: "audio" | "video") => {
-    if (!activeConv || activeConv.isGroup) return;
-    const rid = getOtherUserId(activeConv, myId);
-    if (!rid) return;
-    try {
-      const stream = await getCallMedia(callType);
-      localStreamRef.current = stream;
-      if (localVideoRef.current) localVideoRef.current.srcObject = stream;
-      const pc = createPeerConnection(rid);
-      stream.getTracks().forEach((t) => pc.addTrack(t, stream));
-      await optimizePeerSenders(pc);
-      // Sélection initiale basée sur le réseau
-      const initProf = getInitialProfile();
-      if (callType === "video") await applyVideoProfileToPC(pc, stream, initProf);
-      startQualityMonitor(pc);
-      setCallState({ type: callType, conversationId: activeConv.id, remoteUserId: rid, direction: "outgoing", status: "ringing" });
-      emit("call:initiate", { conversationId: activeConv.id, targetUserId: rid, callType });
-    } catch { alert("Impossible d'accéder au micro/caméra."); }
-  }, [activeConv, myId, createPeerConnection, emit, getCallMedia, optimizePeerSenders, startQualityMonitor]);
-
-  const acceptCall = useCallback(async (preferredType?: "audio" | "video") => {
-    if (!callState) return;
-    const acceptedType = preferredType ?? callState.type;
-    try {
-      const stream = await getCallMedia(acceptedType);
-      localStreamRef.current = stream;
-      if (localVideoRef.current) localVideoRef.current.srcObject = stream;
-      const pc = createPeerConnection(callState.remoteUserId);
-      stream.getTracks().forEach((t) => pc.addTrack(t, stream));
-      await optimizePeerSenders(pc);
-      // Sélection initiale basée sur le réseau
-      const initProf = getInitialProfile();
-      if (acceptedType === "video") await applyVideoProfileToPC(pc, stream, initProf);
-      startQualityMonitor(pc);
-      emit("call:accept", { conversationId: callState.conversationId, callerId: callState.remoteUserId });
-      setCallState((p) => p ? { ...p, type: acceptedType, status: "connected" } : null);
-    } catch { alert("Impossible d'accéder au micro/caméra."); }
-  }, [callState, createPeerConnection, emit, getCallMedia, optimizePeerSenders, startQualityMonitor]);
-
-  const rejectCall = useCallback(() => { if (!callState) return; emit("call:reject", { conversationId: callState.conversationId, callerId: callState.remoteUserId }); cleanupCall(); setCallState(null); }, [callState, emit, cleanupCall]);
-  const endCall = useCallback(() => { if (!callState) return; emit("call:end", { conversationId: callState.conversationId, targetUserId: callState.remoteUserId }); cleanupCall(); setCallState(null); }, [callState, emit, cleanupCall]);
-
-  /* ── beforeunload: nettoyer appel actif si tab fermé ── */
-  const callStateRef = useRef(callState);
-  callStateRef.current = callState;
-  useEffect(() => {
-    const handler = () => {
-      const cs = callStateRef.current;
-      if (cs) {
-        if (cs.status === "connected" || cs.status === "ringing") {
-          emit("call:end", { conversationId: cs.conversationId, targetUserId: cs.remoteUserId });
-        }
-        cleanupCall();
-      }
-    };
-    window.addEventListener("beforeunload", handler);
-    window.addEventListener("pagehide", handler);
-    return () => { window.removeEventListener("beforeunload", handler); window.removeEventListener("pagehide", handler); };
-  }, [emit, cleanupCall]);
-
-  /* ── Réaction au changement réseau en cours d'appel ── */
-  useEffect(() => {
-    if (!callState || callState.status !== "connected" || callState.type !== "video") return;
-    const conn = (navigator as any).connection;
-    if (!conn) return;
-    const handleNetChange = () => {
-      const pc = peerConnectionRef.current;
-      const stream = localStreamRef.current;
-      if (pc && stream) {
-        const profile = getInitialProfile();
-        void applyVideoProfileToPC(pc, stream, profile);
-      }
-    };
-    conn.addEventListener("change", handleNetChange);
-    return () => conn.removeEventListener("change", handleNetChange);
-  }, [callState?.status, callState?.type]);
 
   /* ── Typing ── */
   const handleTyping = useCallback(() => {
@@ -630,40 +392,38 @@ export function DashboardMessaging() {
       className="dm-shell"
       style={{ "--ks-kb-offset": `${keyboardOffset}px` } as CSSProperties}
     >
-      {/* Call overlays */}
-      {callState && callState.status === "ringing" && callState.direction === "incoming" && (
-        <div className="dm-call-overlay">
-          <div className="dm-call-screen dm-call-screen--incoming">
-            <div className="dm-ringtone-pulse"><span className="dm-ringtone-dot" /><span className="dm-ringtone-dot" /><span className="dm-ringtone-dot" /></div>
-            <div className="dm-call-caller-avatar dm-call-caller-avatar--lg">
-              {(() => {
-                const conv = conversations.find((c) => c.id === callState.conversationId);
-                const avatar = conv ? getConversationAvatar(conv, myId) : null;
-                const name = conv ? getConversationName(conv, myId) : "Appel";
-                return avatar ? <img src={avatar} alt="" /> : <span>{initials(name)}</span>;
-              })()}
-            </div>
-            <p className="dm-call-label dm-call-label--title">
-              {(() => {
-                const conv = conversations.find((c) => c.id === callState.conversationId);
-                return conv ? getConversationName(conv, myId) : "Utilisateur";
-              })()}
-            </p>
-            <p className="dm-call-label">📞 Appel audio entrant</p>
-            <div className="dm-call-actions">
-              <button className="dm-call-btn dm-call-btn--reject" onClick={rejectCall}>Refuser</button>
-              <button className="dm-call-btn dm-call-btn--accept" onClick={() => void acceptCall("audio")}>Accepter</button>
-            </div>
-          </div>
-        </div>
-      )}
-      {callState && (callState.status === "connected" || (callState.status === "ringing" && callState.direction === "outgoing")) && (
-        <div className="dm-call-overlay">
-          <div className="dm-call-screen dm-call-screen--active">
-            <audio ref={remoteAudioRef} autoPlay playsInline />
-            {callState.status === "ringing" && <div className="dm-ringtone-pulse"><span className="dm-ringtone-dot" /><span className="dm-ringtone-dot" /><span className="dm-ringtone-dot" /></div>}
-            <p className="dm-call-label">{callState.status === "ringing" ? "Appel en cours..." : "Appel audio connecté"}</p>
-            <button className="dm-call-btn dm-call-btn--reject" onClick={endCall}>Raccrocher</button>
+      {/* ══ Audio call screen (nouveau système) ══ */}
+      {audioCall && (() => {
+        const conv = conversations.find((c) => c.id === audioCall.conversationId);
+        const contactName = conv ? getConversationName(conv, myId) : "Utilisateur";
+        const contactAvatar = conv ? getConversationAvatar(conv, myId) : null;
+        return (
+          <AudioCallScreen
+            status={audioCall.status}
+            contactName={contactName}
+            contactAvatarUrl={contactAvatar}
+            direction={audioCall.direction}
+            isMuted={isMuted}
+            isSpeakerOn={isSpeakerOn}
+            durationSeconds={audioCallDuration}
+            onToggleMute={toggleMute}
+            onToggleSpeaker={toggleSpeaker}
+            onHangup={audioHangup}
+            onAccept={audioCall.status === "incoming_ringing" ? audioAcceptCall : undefined}
+            onBack={() => {/* AudioCallScreen auto-dismisses on terminal states */}}
+          />
+        );
+      })()}
+
+      {/* ══ Audio call result banner ══ */}
+      {audioCallResult && (
+        <div className={`dm-call-summary${audioCallResult.status !== "ended" ? " dm-call-summary--missed" : ""}`}>
+          <span className="dm-call-summary-icon">📞</span>
+          <div className="dm-call-summary-info">
+            <strong>{audioCallResult.status === "ended" ? "Appel terminé" : audioCallResult.status === "unanswered" ? "Pas de réponse" : audioCallResult.status === "declined" ? "Appel refusé" : audioCallResult.status === "cancelled" ? "Appel annulé" : "Appel manqué"}</strong>
+            {audioCallResult.durationSeconds > 0 && (
+              <span>{Math.floor(audioCallResult.durationSeconds / 60).toString().padStart(2, "0")}:{(audioCallResult.durationSeconds % 60).toString().padStart(2, "0")}</span>
+            )}
           </div>
         </div>
       )}
@@ -761,7 +521,8 @@ export function DashboardMessaging() {
                 const other = isCaller ? log.receiver : log.caller;
                 const isMissed = log.status === "MISSED" || log.status === "NO_ANSWER";
                 const isRejected = log.status === "REJECTED";
-                const statusIcon = isMissed ? "❌" : isRejected ? "↩️" : "✅";
+                const isCancelled = log.status === "CANCELLED";
+                const statusIcon = isMissed ? "❌" : isRejected ? "↩️" : isCancelled ? "🚫" : "✅";
                 const directionIcon = isCaller ? "↗️" : "↙️";
                 const typeIcon = log.callType === "VIDEO" ? "📹" : "📞";
                 const durationLabel = log.durationSeconds != null && log.durationSeconds > 0
@@ -772,7 +533,7 @@ export function DashboardMessaging() {
                       : `${log.durationSeconds}s`
                   : null;
                 return (
-                  <div key={log.id} className={`dm-call-log-item${isMissed ? " dm-call-log-item--missed" : isRejected ? " dm-call-log-item--rejected" : ""}`}>
+                  <div key={log.id} className={`dm-call-log-item${isMissed ? " dm-call-log-item--missed" : isRejected ? " dm-call-log-item--rejected" : isCancelled ? " dm-call-log-item--cancelled" : ""}`}>
                     <div className="dm-avatar dm-avatar--sm">
                       {other.profile.avatarUrl ? <img src={other.profile.avatarUrl} alt="" /> : initials(other.profile.displayName)}
                     </div>
@@ -826,7 +587,7 @@ export function DashboardMessaging() {
               </div>
               <div className="dm-chat-header-actions">
                 {!activeConv.isGroup && (
-                  <button className="dm-icon-btn" title="Appel audio" onClick={() => void startCall("audio")}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg></button>
+                  <button className="dm-icon-btn" title="Appel audio" onClick={() => { const rid = getOtherUserId(activeConv, myId); if (rid) audioStartCall(activeConv.id, rid); }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg></button>
                 )}
               </div>
             </div>

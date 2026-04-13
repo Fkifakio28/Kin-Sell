@@ -7,6 +7,7 @@ const schema = z.object({
   API_PORT: z.coerce.number().default(4000),
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   CORS_ORIGIN: z.string().default("http://localhost:5173"),
+  COOKIE_DOMAIN: z.string().optional(), // e.g. ".kin-sell.com" — enables cookie sharing across subdomains
   JWT_SECRET: z.string().min(24),
   JWT_EXPIRES_IN: z.string().default("15m"),
   REFRESH_TOKEN_SECRET: z.string().min(24),

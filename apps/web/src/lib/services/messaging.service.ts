@@ -59,7 +59,7 @@ export type CallLogEntry = {
   callerUserId: string;
   receiverUserId: string;
   callType: "AUDIO" | "VIDEO";
-  status: "MISSED" | "ANSWERED" | "REJECTED" | "NO_ANSWER";
+  status: "MISSED" | "ANSWERED" | "REJECTED" | "NO_ANSWER" | "CANCELLED";
   startedAt: string;
   answeredAt: string | null;
   endedAt: string | null;

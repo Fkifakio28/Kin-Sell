@@ -134,6 +134,14 @@ export class ApiError extends Error {
 // ── Refresh Logic ────────────────────────────────────────────────────────────
 let _refreshPromise: Promise<boolean> | null = null;
 
+/**
+ * Refresh the access token using the httpOnly refresh cookie.
+ * Exported so SocketProvider can force a refresh before reconnecting.
+ */
+export async function refreshSession(): Promise<boolean> {
+  return refreshAccessToken();
+}
+
 async function refreshAccessToken(): Promise<boolean> {
   if (_refreshPromise) return _refreshPromise;
 
@@ -194,8 +202,10 @@ export function scheduleTokenRefresh(onSessionLost?: () => void): () => void {
   const handleVisibility = () => {
     if (document.visibilityState === "visible") {
       const hiddenDuration = Date.now() - lastVisible;
-      // If hidden for more than 10 minutes, refresh immediately
-      if (hiddenDuration > 10 * 60 * 1000) {
+      // If hidden for more than 1 minute, refresh immediately.
+      // On Android, the WebView is suspended in background — timers don't fire,
+      // so the access token (15min TTL) may expire during any background session.
+      if (hiddenDuration > 60_000) {
         void refreshAccessToken().then((ok) => {
           if (ok) schedule();
           else onSessionLost?.();

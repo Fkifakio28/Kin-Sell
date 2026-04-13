@@ -12,6 +12,7 @@ const { mockPrisma } = vi.hoisted(() => ({
   mockPrisma: {
     order: { findUnique: vi.fn() },
     user: { findUnique: vi.fn() },
+    userProfile: { findUnique: vi.fn() },
     userReview: {
       findUnique: vi.fn(), findFirst: vi.fn(), findMany: vi.fn(),
       create: vi.fn(), update: vi.fn(), count: vi.fn(),
@@ -20,6 +21,7 @@ const { mockPrisma } = vi.hoisted(() => ({
 }));
 
 vi.mock("../shared/db/prisma.js", () => ({ prisma: mockPrisma }));
+vi.mock("../modules/notifications/push.service.js", () => ({ sendPushToUser: vi.fn().mockResolvedValue(undefined) }));
 
 // ── Import after mocks ─────────────────────────────────────
 

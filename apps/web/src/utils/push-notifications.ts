@@ -213,14 +213,20 @@ export async function initNativePush(
     const actionListener = await PushNotifications.addListener(
       "pushNotificationActionPerformed",
       (action: any) => {
-        // User tapped the notification (app was in background)
+        // User tapped the notification — navigate via SPA (no page reload)
         const data = action.notification.data as Record<string, string> | undefined;
-        if (data?.url) {
-          window.location.href = data.url;
-        } else if (data?.type === "message") {
-          window.location.href = "/messaging";
-        } else if (data?.type === "order") {
-          window.location.href = "/account?tab=commandes";
+        let targetUrl = data?.url || "";
+        if (!targetUrl) {
+          if (data?.type === "message") targetUrl = "/messaging";
+          else if (data?.type === "order" || data?.type === "negotiation") targetUrl = "/account?tab=commandes";
+          else if (data?.type === "sokin" || data?.type === "publication") targetUrl = "/sokin";
+        }
+        if (targetUrl) {
+          const current = `${window.location.pathname}${window.location.search}`;
+          if (current !== targetUrl) {
+            window.history.pushState({}, "", targetUrl);
+            window.dispatchEvent(new PopStateEvent("popstate"));
+          }
         }
       },
     );

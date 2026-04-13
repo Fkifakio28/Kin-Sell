@@ -180,43 +180,35 @@ const COOKIE_ACCESS  = "kin_access";
 const COOKIE_REFRESH = "kin_refresh";
 const COOKIE_SID     = "kin_sid";
 
+/**
+ * Builds cookie options for cross-origin Android WebView compatibility.
+ * Production: sameSite "none" + secure + domain ".kin-sell.com"
+ *   → cookies are sent in cross-origin requests (kin-sell.com → api.kin-sell.com)
+ * Dev: sameSite "lax" (no domain needed for localhost)
+ */
+function cookieOpts(maxAge: number): import("express").CookieOptions {
+  const isProd = env.NODE_ENV === "production";
+  return {
+    httpOnly: true,
+    secure: isProd,
+    sameSite: isProd ? "none" as const : "lax" as const,
+    path: "/",
+    maxAge,
+    ...(env.COOKIE_DOMAIN ? { domain: env.COOKIE_DOMAIN } : {}),
+  };
+}
+
 export function setAuthCookies(
   res: Response,
   tokens: { accessToken: string; refreshToken: string; sessionId: string },
 ) {
-  const secure = env.NODE_ENV === "production";
-  const sameSite: "lax" = "lax";
-
-  res.cookie(COOKIE_ACCESS, tokens.accessToken, {
-    httpOnly: true,
-    secure,
-    sameSite,
-    path: "/",
-    maxAge: parseDurationMs(env.JWT_EXPIRES_IN),
-  });
-
-  res.cookie(COOKIE_REFRESH, tokens.refreshToken, {
-    httpOnly: true,
-    secure,
-    sameSite,
-    path: "/",
-    maxAge: parseDurationMs(env.REFRESH_TOKEN_EXPIRES_IN),
-  });
-
-  res.cookie(COOKIE_SID, tokens.sessionId, {
-    httpOnly: true,
-    secure,
-    sameSite,
-    path: "/",
-    maxAge: parseDurationMs(env.REFRESH_TOKEN_EXPIRES_IN),
-  });
+  res.cookie(COOKIE_ACCESS, tokens.accessToken, cookieOpts(parseDurationMs(env.JWT_EXPIRES_IN)));
+  res.cookie(COOKIE_REFRESH, tokens.refreshToken, cookieOpts(parseDurationMs(env.REFRESH_TOKEN_EXPIRES_IN)));
+  res.cookie(COOKIE_SID, tokens.sessionId, cookieOpts(parseDurationMs(env.REFRESH_TOKEN_EXPIRES_IN)));
 }
 
 export function clearAuthCookies(res: Response) {
-  const secure = env.NODE_ENV === "production";
-  const sameSite: "lax" = "lax";
-  const opts = { httpOnly: true, secure, sameSite, path: "/" } as const;
-
+  const opts = cookieOpts(0);
   res.clearCookie(COOKIE_ACCESS, opts);
   res.clearCookie(COOKIE_REFRESH, opts);
   res.clearCookie(COOKIE_SID, opts);

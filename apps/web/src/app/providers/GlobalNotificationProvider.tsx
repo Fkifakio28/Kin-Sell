@@ -2,7 +2,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { createPortal } from "react-dom";
 import { useAuth } from "./AuthProvider";
 import { useSocketContext } from "./SocketProvider";
-import { playCallSound, stopCallSound } from "../../utils/call-sound";
+import { playRingtone, stopRingtone } from "../../utils/call-sound-manager";
+import { clearAllNotifications, clearCallNotification } from "../../utils/call-notification";
 import {
   getNotificationPermission,
   isPushSupported,
@@ -84,9 +85,10 @@ type MessageToast = {
 function resolveNotificationTarget(data: PushPayloadData): string {
   switch (data.type) {
     case "message":
-      return "/messaging";
+      return data.conversationId ? `/messaging?convId=${data.conversationId}` : "/messaging";
     case "call":
-      return `/messaging?incomingConvId=${data.conversationId ?? ""}&incomingCallerId=${data.callerId ?? ""}&incomingCallType=${data.callType ?? "audio"}`;
+      const p = new URLSearchParams({ incomingConvId: data.conversationId ?? "", incomingCallerId: data.callerId ?? "", incomingCallType: data.callType ?? "audio" });
+      return `/messaging?${p.toString()}`;
     case "order":
       return "/account?tab=commandes";
     case "negotiation":
@@ -136,11 +138,14 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
   /* ── Missed notifications (persisted) ── */
   const MISSED_KEY = "ks-missed-notifs";
   const MAX_MISSED = 50;
+  const MISSED_TTL = 24 * 60 * 60 * 1000; // 24 h
 
   const [missedNotifications, setMissedNotifications] = useState<MissedNotification[]>(() => {
     try {
       const raw = localStorage.getItem(MISSED_KEY);
-      return raw ? (JSON.parse(raw) as MissedNotification[]).slice(0, MAX_MISSED) : [];
+      if (!raw) return [];
+      const now = Date.now();
+      return (JSON.parse(raw) as MissedNotification[]).filter((n) => now - n.timestamp < MISSED_TTL).slice(0, MAX_MISSED);
     } catch { return []; }
   });
 
@@ -260,6 +265,8 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
     callerName: string;
     callType: "audio" | "video";
   } | null>(null);
+  const incomingCallRef = useRef(incomingCall);
+  useEffect(() => { incomingCallRef.current = incomingCall; }, [incomingCall]);
   const incomingCallTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const vibrationIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   /** Track which calls were accepted so we can detect missed calls */
@@ -323,12 +330,14 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
       }, 2500);
     }
 
-    // Jouer la sonnerie d'appel entrant (WAV selon connectivité réelle)
-    void playCallSound("incoming");
+    // Jouer la sonnerie d'appel entrant (sauf si MessagingPage gère les sons via useCallSounds)
+    if (!messagingActiveRef.current) {
+      void playRingtone("incoming");
+    }
 
     incomingCallTimerRef.current = setTimeout(() => {
       setIncomingCall(null);
-      stopCallSound();
+      stopRingtone();
       if (vibrationIntervalRef.current) { clearInterval(vibrationIntervalRef.current); vibrationIntervalRef.current = null; }
       if ("vibrate" in navigator) navigator.vibrate(0);
     }, 30_000);
@@ -375,7 +384,7 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
   const acceptGlobalCall = useCallback((preferredCallType?: "audio" | "video") => {
     if (!incomingCall) return;
     if (incomingCallTimerRef.current) clearTimeout(incomingCallTimerRef.current);
-    stopCallSound();
+    stopRingtone();
     if (vibrationIntervalRef.current) { clearInterval(vibrationIntervalRef.current); vibrationIntervalRef.current = null; }
     if ("vibrate" in navigator) navigator.vibrate(0);
     const { conversationId, callerId, callType } = incomingCall;
@@ -391,7 +400,7 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
   const rejectGlobalCall = useCallback(() => {
     if (!incomingCall) return;
     if (incomingCallTimerRef.current) clearTimeout(incomingCallTimerRef.current);
-    stopCallSound();
+    stopRingtone();
     if (vibrationIntervalRef.current) { clearInterval(vibrationIntervalRef.current); vibrationIntervalRef.current = null; }
     if ("vibrate" in navigator) navigator.vibrate(0);
     socketRef.current?.emit("call:reject", {
@@ -401,6 +410,25 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
     window.dispatchEvent(new CustomEvent("ks:incoming-call-reject", { detail: incomingCall }));
     setIncomingCall(null);
   }, [incomingCall]);
+
+  /* ── Native reject from Android notification button ── */
+  useEffect(() => {
+    const handler = () => {
+      if (incomingCallTimerRef.current) clearTimeout(incomingCallTimerRef.current);
+      stopRingtone();
+      if (vibrationIntervalRef.current) { clearInterval(vibrationIntervalRef.current); vibrationIntervalRef.current = null; }
+      if ("vibrate" in navigator) navigator.vibrate(0);
+      if (incomingCallRef.current) {
+        socketRef.current?.emit("call:reject", {
+          conversationId: incomingCallRef.current.conversationId,
+          callerId: incomingCallRef.current.callerId,
+        });
+      }
+      setIncomingCall(null);
+    };
+    window.addEventListener("ks:native-call-reject", handler);
+    return () => window.removeEventListener("ks:native-call-reject", handler);
+  }, []);
 
   /* ── Service Worker push messages (background/outside browser) ── */
   useEffect(() => {
@@ -472,7 +500,7 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
                   ? "🎬 Vidéo"
                   : "📎 Fichier",
         icon: "💬",
-        targetUrl: "/messaging",
+        targetUrl: (msg as any).conversationId ? `/messaging?convId=${(msg as any).conversationId}` : "/messaging",
         timestamp: Date.now(),
       };
       setToasts((p) => [toast, ...p].slice(0, 4));
@@ -486,7 +514,7 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
       // Push a "pending" incoming call notification (will become missed if not accepted)
       pushMissed(
         { kind: "message", title: "📞 Appel entrant", content: data.callType === "video" ? "Appel vidéo" : "Appel audio", icon: "📞", targetUrl: `/messaging?incomingConvId=${data.conversationId}&incomingCallerId=${data.callerId}&incomingCallType=${data.callType}` },
-        `call-incoming-${data.conversationId}-${data.callerId}`,
+        `call-incoming-${data.conversationId}`,
       );
       void maybeShowSystemNotification(
         {
@@ -507,17 +535,19 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
       setIncomingCall((prev) => {
         if (!prev || prev.conversationId !== data.conversationId) return prev;
         if (incomingCallTimerRef.current) { clearTimeout(incomingCallTimerRef.current); incomingCallTimerRef.current = null; }
-        stopCallSound();
+        stopRingtone();
         if (vibrationIntervalRef.current) { clearInterval(vibrationIntervalRef.current); vibrationIntervalRef.current = null; }
         if ("vibrate" in navigator) navigator.vibrate(0);
         return null;
       });
+      // Retirer la notification Android d'appel entrant (ID 9999)
+      void clearCallNotification();
     };
 
-    const handleCallEnded = (data: { conversationId: string; callerId?: string }) => {
+    const handleCallEnded = (data: { conversationId: string; enderId?: string }) => {
       clearIncomingCallFor(data);
       // If we never accepted this call, convert the incoming notif to "missed"
-      const callKey = `call-incoming-${data.conversationId}-${data.callerId ?? ""}`;
+      const callKey = `call-incoming-${data.conversationId}`;
       if (!acceptedCallsRef.current.has(data.conversationId)) {
         // Remove the "incoming" entry and replace with "missed"
         setMissedNotifications((prev) => prev.filter((n) => n.id !== callKey));
@@ -538,10 +568,10 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
       const callKey = `call-incoming-${data.conversationId}`;
       setMissedNotifications((prev) => prev.filter((n) => !n.id.startsWith(callKey)));
     };
-    const handleCallRejected = (data: { conversationId: string; callerId?: string }) => {
+    const handleCallRejected = (data: { conversationId: string; rejecterId?: string }) => {
       clearIncomingCallFor(data);
       // Rejected by the other party — remove the incoming call notification
-      const callKey = `call-incoming-${data.conversationId}-${data.callerId ?? ""}`;
+      const callKey = `call-incoming-${data.conversationId}`;
       setMissedNotifications((prev) => prev.filter((n) => n.id !== callKey));
     };
 
@@ -756,6 +786,18 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
       window.removeEventListener("ks:app-resumed", handleResume);
     };
   }, [isLoggedIn]);
+
+  /* ── Nettoyer les notifications Android quand l'app revient au premier plan ── */
+  useEffect(() => {
+    if (!isNativeApp()) return;
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        void clearAllNotifications();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, []);
 
   useEffect(() => {
     return () => {

@@ -15,6 +15,7 @@ public class NotificationChannels {
 
     public static final String CHANNEL_MESSAGES = "kin-sell-messages";
     public static final String CHANNEL_CALLS = "kin-sell-calls";
+    public static final String CHANNEL_ONGOING_CALL = "kin-sell-ongoing-call";
     public static final String CHANNEL_ORDERS = "kin-sell-orders";
     public static final String CHANNEL_SOCIAL = "kin-sell-social";
     public static final String CHANNEL_DEFAULT = "kin-sell-default";
@@ -24,6 +25,10 @@ public class NotificationChannels {
 
         NotificationManager manager = context.getSystemService(NotificationManager.class);
         if (manager == null) return;
+
+        // Supprimer les anciens canaux pour forcer la mise à jour du son/vibration
+        // (Android met les canaux en cache après la première création)
+        manager.deleteNotificationChannel(CHANNEL_CALLS);
 
         Uri defaultSound = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
         AudioAttributes audioAttributes = new AudioAttributes.Builder()
@@ -42,8 +47,8 @@ public class NotificationChannels {
         messages.setLightColor(0xFF6F58FF); // Violet Kin-Sell
         messages.setShowBadge(true);
 
-        // ── Appels : priorité maximale, son de sonnerie, vibration longue, flash ──
-        Uri ringtoneSound = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE);
+        // ── Appels : priorité maximale, sonnerie Kin-Sell, vibration longue, flash ──
+        Uri callSound = Uri.parse("android.resource://" + context.getPackageName() + "/raw/kin_sell_ringtone");
         AudioAttributes ringtoneAttr = new AudioAttributes.Builder()
                 .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
                 .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
@@ -52,12 +57,21 @@ public class NotificationChannels {
         NotificationChannel calls = new NotificationChannel(
                 CHANNEL_CALLS, "Appels", NotificationManager.IMPORTANCE_HIGH);
         calls.setDescription("Appels audio et vidéo entrants");
-        calls.setSound(ringtoneSound, ringtoneAttr);
+        calls.setSound(callSound, ringtoneAttr);
         calls.enableVibration(true);
         calls.setVibrationPattern(new long[]{0, 500, 200, 500, 200, 500});
         calls.enableLights(true);
         calls.setLightColor(0xFF4CAF50); // Vert pour appels
         calls.setShowBadge(true);
+
+        // ── Appel en cours : priorité basse, silencieux, persistant ──
+        NotificationChannel ongoingCall = new NotificationChannel(
+                CHANNEL_ONGOING_CALL, "Appel en cours", NotificationManager.IMPORTANCE_LOW);
+        ongoingCall.setDescription("Notification persistante pendant un appel actif");
+        ongoingCall.setSound(null, null);
+        ongoingCall.enableVibration(false);
+        ongoingCall.enableLights(false);
+        ongoingCall.setShowBadge(false);
 
         // ── Commandes & Marchandages : son, vibration, flash LED orange ──
         NotificationChannel orders = new NotificationChannel(
@@ -94,6 +108,7 @@ public class NotificationChannels {
 
         manager.createNotificationChannel(messages);
         manager.createNotificationChannel(calls);
+        manager.createNotificationChannel(ongoingCall);
         manager.createNotificationChannel(orders);
         manager.createNotificationChannel(social);
         manager.createNotificationChannel(defaultChannel);
