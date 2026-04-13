@@ -29,6 +29,11 @@ if (Capacitor.isNativePlatform()) {
   StatusBar.setBackgroundColor({ color: "#120B2B" }).catch(() => {});
   StatusBar.setStyle({ style: Style.Dark }).catch(() => {});
 
+  // Marquer le body pour neutraliser env(safe-area-inset-top) redondant avec overlay:false
+  if (Capacitor.getPlatform() === "android") {
+    document.body.classList.add("capacitor-android");
+  }
+
   // Deep-link handler: intercept OAuth callback
   // Guard against duplicate deep-links from the redirect page
   let _authCallbackHandled = false;

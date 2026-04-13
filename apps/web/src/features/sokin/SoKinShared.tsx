@@ -59,26 +59,49 @@ export function MediaViewer({ items, startIndex, onClose }: { items: MediaItem[]
     };
   }, [onClose, goPrev, goNext]);
 
-  /* ── Touch / swipe ── */
+  /* ── Android back button: ferme le viewer au lieu de naviguer ── */
+  useEffect(() => {
+    window.history.pushState({ skViewer: true }, '');
+    const onPopState = () => { onClose(); };
+    window.addEventListener('popstate', onPopState);
+    return () => {
+      window.removeEventListener('popstate', onPopState);
+      // Si on démonte sans popstate (fermeture par ✕ ou overlay), retirer l'entrée
+      if (window.history.state?.skViewer) window.history.back();
+    };
+  }, [onClose]);
+
+  /* ── Touch / swipe (horizontal pour navigation, vertical pour fermer) ── */
+  const touchStartY = useRef(0);
+  const touchDeltaY = useRef(0);
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
     touchDeltaX.current = 0;
+    touchDeltaY.current = 0;
     isDragging.current = true;
   }, []);
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
     if (!isDragging.current) return;
     touchDeltaX.current = e.touches[0].clientX - touchStartX.current;
+    touchDeltaY.current = e.touches[0].clientY - touchStartY.current;
   }, []);
 
   const handleTouchEnd = useCallback(() => {
     if (!isDragging.current) return;
     isDragging.current = false;
     const threshold = 50;
+    // Swipe vertical vers le bas → fermer le viewer
+    if (touchDeltaY.current > 100 && Math.abs(touchDeltaY.current) > Math.abs(touchDeltaX.current)) {
+      onClose();
+      return;
+    }
     if (touchDeltaX.current < -threshold) goNext();
     else if (touchDeltaX.current > threshold) goPrev();
     touchDeltaX.current = 0;
-  }, [goNext, goPrev]);
+    touchDeltaY.current = 0;
+  }, [goNext, goPrev, onClose]);
 
   const renderMedia = (mi: MediaItem) => {
     if (mi.type === 'video') {
