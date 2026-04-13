@@ -4,8 +4,11 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.PowerManager;
+import android.provider.Settings;
 import android.view.WindowManager;
 import android.webkit.WebView;
 import androidx.appcompat.app.AppCompatDelegate;
@@ -91,6 +94,13 @@ public class MainActivity extends BridgeActivity {
         // Flush pending call reject (saved by CallActionReceiver when app was in background)
         flushPendingCallReject();
 
+        // Flush incoming call (saved by KinSellMessagingService when app was killed)
+        flushPendingIncomingCall();
+
+        // Demander l'exclusion d'optimisation batterie (Samsung/Xiaomi/etc.)
+        // Nécessaire pour que les FCM data-only messages arrivent en background
+        requestBatteryOptimizationExemption();
+
         // Écouter les rejets d'appel depuis la notification (app ouverte)
         IntentFilter filter = new IntentFilter("com.kinsell.app.CALL_REJECTED_INTERNAL");
         IntentFilter hangupFilter = new IntentFilter("com.kinsell.app.CALL_HANGUP_INTERNAL");
@@ -170,6 +180,73 @@ public class MainActivity extends BridgeActivity {
                 }
             }
         } catch (Exception ignored) {}
+    }
+
+    /**
+     * Flush un appel entrant sauvé par KinSellMessagingService quand l'app était tuée.
+     * Dispatche l'appel à la WebView pour que le UI d'appel entrant s'affiche.
+     * Expire après 35s (le serveur timeout à 30s).
+     */
+    private void flushPendingIncomingCall() {
+        try {
+            android.content.SharedPreferences prefs =
+                getSharedPreferences("kin_sell_prefs", MODE_PRIVATE);
+            String pendingCall = prefs.getString("pending_incoming_call", null);
+            long ts = prefs.getLong("pending_incoming_call_ts", 0);
+            // Effacer immédiatement pour éviter les doublons
+            prefs.edit()
+                .remove("pending_incoming_call")
+                .remove("pending_incoming_call_ts")
+                .apply();
+            if (pendingCall == null || pendingCall.isEmpty()) return;
+            // Expiration : si l'appel date de plus de 35s, il a expiré côté serveur
+            if (System.currentTimeMillis() - ts > 35_000) return;
+
+            String[] parts = pendingCall.split("\\|");
+            if (parts.length < 3) return;
+            String conversationId = parts[0];
+            String callerId = parts[1];
+            String callType = parts[2];
+            String callerName = parts.length > 3 ? parts[3] : "";
+
+            // Dispatcher l'appel avec un délai pour que la WebView + Socket soient prêts
+            WebView webView = getBridge().getWebView();
+            if (webView != null) {
+                final String cid = conversationId.replace("'", "\\'");
+                final String uid = callerId.replace("'", "\\'");
+                final String ct = callType.replace("'", "\\'");
+                final String cn = callerName.replace("'", "\\'");
+                // Délai de 2s pour laisser le temps au socket de se connecter
+                webView.postDelayed(() -> webView.evaluateJavascript(
+                    "window.dispatchEvent(new CustomEvent('ks:native-incoming-call',{detail:{" +
+                    "conversationId:'" + cid + "'," +
+                    "callerId:'" + uid + "'," +
+                    "callType:'" + ct + "'," +
+                    "callerName:'" + cn + "'" +
+                    "}}));",
+                    null), 2000);
+            }
+        } catch (Exception ignored) {}
+    }
+
+    /**
+     * Demande l'exclusion de l'optimisation batterie.
+     * Samsung/Xiaomi/Huawei etc. tuent les apps en background agressivement.
+     * Sans cette exemption, les FCM data-only messages n'arrivent pas fiablement.
+     */
+    private void requestBatteryOptimizationExemption() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
+                if (pm != null && !pm.isIgnoringBatteryOptimizations(getPackageName())) {
+                    Intent intent = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+                    intent.setData(Uri.parse("package:" + getPackageName()));
+                    startActivity(intent);
+                }
+            }
+        } catch (Exception ignored) {
+            // Certains fabricants bloquent cette intent — ignorer silencieusement
+        }
     }
 
     /**

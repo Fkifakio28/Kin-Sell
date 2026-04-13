@@ -758,6 +758,27 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
     };
   }, [isLoggedIn, isConnected, user?.id, playMessageSound, presentIncomingCall, pushMissed, maybeShowSystemNotification]);
 
+  /* ── Native bridge: incoming call from Java SharedPreferences (app was killed) ── */
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    const handleNativeCall = (e: Event) => {
+      const detail = (e as CustomEvent).detail as {
+        conversationId: string;
+        callerId: string;
+        callType: string;
+        callerName?: string;
+      };
+      if (!detail?.conversationId || !detail?.callerId) return;
+      presentIncomingCall({
+        conversationId: detail.conversationId,
+        callerId: detail.callerId,
+        callType: (detail.callType === "video" ? "video" : "audio") as "audio" | "video",
+      });
+    };
+    window.addEventListener("ks:native-incoming-call", handleNativeCall);
+    return () => window.removeEventListener("ks:native-incoming-call", handleNativeCall);
+  }, [isLoggedIn, presentIncomingCall]);
+
   /* ── Reconnect catch-up: notify pages to refetch data on socket reconnection or app resume ── */
   useEffect(() => {
     if (!isLoggedIn) return;

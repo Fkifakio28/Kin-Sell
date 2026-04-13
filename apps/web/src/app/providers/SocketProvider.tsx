@@ -101,7 +101,18 @@ export function SocketProvider({ children }: { children: ReactNode }) {
           if (s.disconnected) {
             s.connect();
           }
-          window.dispatchEvent(new CustomEvent("ks:app-resumed"));
+          // Dispatcher ks:app-resumed APRÈS un court délai pour que le socket ait le temps
+          // de se connecter et que les listeners de call:incoming soient actifs
+          setTimeout(() => {
+            window.dispatchEvent(new CustomEvent("ks:app-resumed"));
+          }, 500);
+        }).catch(() => {
+          // Token refresh a échoué — tenter quand même la reconnexion socket
+          // (le serveur refusera peut-être, mais au moins on essaie)
+          if (s.disconnected) s.connect();
+          setTimeout(() => {
+            window.dispatchEvent(new CustomEvent("ks:app-resumed"));
+          }, 500);
         });
       }
     });

@@ -42,9 +42,48 @@ export async function sendFcmToToken(
   const isCall = notifType === "call";
 
   try {
+    // ── APPELS : data-only message ──
+    // Un message FCM avec un champ `notification` est intercepté par Firebase
+    // quand l'app est en background/tuée : Android affiche sa propre notification
+    // basique et onMessageReceived() n'est JAMAIS appelé.
+    // → Résultat : pas de fullScreenIntent, pas de wakeScreen, pas de vibration.
+    // En envoyant data-only, onMessageReceived() est TOUJOURS appelé,
+    // même quand l'app est tuée, permettant le full-screen intent.
+    if (isCall) {
+      await admin.messaging().send({
+        token,
+        data: {
+          title: payload.title,
+          body: payload.body,
+          channelId,
+          ...(payload.data ?? {}),
+        },
+        android: {
+          priority: "high",
+          ttl: 30000,
+        },
+        apns: {
+          payload: {
+            aps: {
+              alert: { title: payload.title, body: payload.body },
+              sound: "ringtone.caf",
+              badge: 1,
+              "mutable-content": 1,
+              "content-available": 1,
+            },
+          },
+          headers: {
+            "apns-priority": "10",
+            "apns-push-type": "alert",
+          },
+        },
+      });
+      return true;
+    }
+
+    // ── Autres notifications : notification + data (affichage système) ──
     await admin.messaging().send({
       token,
-      // Payload notification pour affichage système garanti (icône + popup)
       notification: {
         title: payload.title,
         body: payload.body,
@@ -57,22 +96,22 @@ export async function sendFcmToToken(
       },
       android: {
         priority: "high",
-        ttl: isCall ? 30000 : 86400000,
+        ttl: 86400000,
         notification: {
           channelId,
           icon: "ic_notification",
           color: "#6F58FF",
           tag: payload.data?.tag ?? undefined,
           visibility: "public" as const,
-          sound: isCall ? "ringtone" : "default",
-          priority: isCall ? "max" as const : "high" as const,
+          sound: "default",
+          priority: "high" as const,
         },
       },
       apns: {
         payload: {
           aps: {
             alert: { title: payload.title, body: payload.body },
-            sound: isCall ? "ringtone.caf" : "default",
+            sound: "default",
             badge: 1,
             "mutable-content": 1,
             "content-available": 1,

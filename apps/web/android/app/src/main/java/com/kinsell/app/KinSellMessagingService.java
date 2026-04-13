@@ -81,9 +81,25 @@ public class KinSellMessagingService extends FirebaseMessagingService {
         String conversationId = msg.getData().get("conversationId");
         String callerId = msg.getData().get("callerId");
         String callType = msg.getData().get("callType");
+        String callerName = msg.getData().get("callerName");
         if (conversationId == null) conversationId = "";
         if (callerId == null) callerId = "";
         if (callType == null) callType = "audio";
+        if (callerName == null) callerName = title;
+
+        // ── Persister l'appel dans SharedPreferences ──
+        // Quand l'app est tuée, le WebView n'existe pas encore.
+        // Au prochain onCreate(), MainActivity lira cette donnée et
+        // dispatera l'appel entrant à la WebView dès qu'elle est prête.
+        try {
+            android.content.SharedPreferences prefs =
+                getSharedPreferences("kin_sell_prefs", MODE_PRIVATE);
+            prefs.edit()
+                .putString("pending_incoming_call",
+                    conversationId + "|" + callerId + "|" + callType + "|" + callerName)
+                .putLong("pending_incoming_call_ts", System.currentTimeMillis())
+                .apply();
+        } catch (Exception ignored) {}
 
         int piFlags = PendingIntent.FLAG_UPDATE_CURRENT;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
