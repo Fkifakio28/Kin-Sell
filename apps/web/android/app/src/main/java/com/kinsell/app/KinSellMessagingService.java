@@ -181,6 +181,7 @@ public class KinSellMessagingService extends FirebaseMessagingService {
      * Autres : BigText avec regroupement global.
      */
     private static final String MSG_GROUP = "kin-sell-messages-group";
+    private static final int MSG_SUMMARY_ID = 9991; // ID unique pour le résumé groupé
 
     private void showStandardNotification(RemoteMessage msg, String title, String body, String type) {
         String channelId = resolveChannelId(type);
@@ -261,7 +262,7 @@ public class KinSellMessagingService extends FirebaseMessagingService {
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC);
 
-        manager.notify(0, summary.build());
+        manager.notify(MSG_SUMMARY_ID, summary.build());
     }
 
     /**

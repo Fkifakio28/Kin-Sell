@@ -42,7 +42,7 @@ import {
 } from "../../hooks/useLockedCategories";
 import { useSocket } from "../../hooks/useSocket";
 import { SoKinToastProvider } from "../../components/feedback/SoKinToast";
-import { AnnounceCard, type MediaItem } from "../sokin/AnnounceCard";
+import { AnnounceCard, type MediaItem, resetFeedAutoPlay } from "../sokin/AnnounceCard";
 import { MediaViewer, CommentsDrawer, type CommentProfileState, type MissingPublicProfile, type ViewerState } from "../sokin/SoKinShared";
 import "../sokin/sokin.css";
 import { InlineSearchResults } from "../../components/InlineSearchResults";
@@ -1444,6 +1444,9 @@ export function HomePageMobile() {
   const lockedCats = useLockedCategories();
   const barsVisibleRaw = useScrollDirection();
   const tutorial = useTutorial("home-mobile");
+
+  // Réinitialiser le flag d'autoplay vidéo à chaque montage de la page home
+  useEffect(() => { resetFeedAutoPlay(); }, []);
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);

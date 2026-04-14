@@ -22,6 +22,30 @@ import type { PostInsight, PostInsightCard, BoostPostStats } from '../../lib/ser
 
 let activeVideoEl: HTMLVideoElement | null = null;
 let visibilityListenerAttached = false;
+/**
+ * Flag global : l'utilisateur a-t-il déjà scrollé dans le feed ?
+ * Empêche l'autoplay de la première vidéo visible au chargement initial.
+ * Réinitialisé à chaque navigation vers le feed.
+ */
+let userHasScrolled = false;
+let scrollListenerAttached = false;
+
+function attachScrollListener(): void {
+  if (scrollListenerAttached || typeof window === 'undefined') return;
+  scrollListenerAttached = true;
+  const handler = () => {
+    userHasScrolled = true;
+    window.removeEventListener('scroll', handler, true);
+    scrollListenerAttached = false;
+  };
+  window.addEventListener('scroll', handler, { capture: true, once: true, passive: true });
+}
+
+/** Permet de réinitialiser le flag quand on navigue vers le feed */
+export function resetFeedAutoPlay(): void {
+  userHasScrolled = false;
+  attachScrollListener();
+}
 
 function safePlayVideo(video: HTMLVideoElement): void {
   try {
@@ -702,8 +726,9 @@ export function AnnounceCard({
           if (videoEl.preload === 'none') videoEl.preload = 'metadata';
 
           if (entry.intersectionRatio >= 0.5) {
-            // Autoplay quand ≥50% visible
-            if (!userPausedRef.current) {
+            // Autoplay quand ≥50% visible ET que l'utilisateur a scrollé
+            // (évite de lancer la vidéo dès l'ouverture du feed)
+            if (!userPausedRef.current && userHasScrolled) {
               if (activeVideoEl && activeVideoEl !== videoEl) {
                 pauseVideo(activeVideoEl);
               }

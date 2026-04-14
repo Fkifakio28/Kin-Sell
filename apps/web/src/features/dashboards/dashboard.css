@@ -5297,6 +5297,45 @@
   margin-bottom: 12px;
 }
 
+/* ── Transaction tabs ── */
+.ud-tx-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.ud-tx-tab {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid var(--glass-border-color, rgba(255, 255, 255, 0.12));
+  border-radius: 10px;
+  background: transparent;
+  color: var(--color-text-secondary, #aaa);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+.ud-tx-tab:hover {
+  background: rgba(111, 88, 255, 0.08);
+  border-color: var(--color-primary, #6f58ff);
+}
+.ud-tx-tab--active {
+  background: var(--color-primary, #6f58ff);
+  color: #fff;
+  border-color: var(--color-primary, #6f58ff);
+}
+.ud-tx-type-label {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgba(111, 88, 255, 0.12);
+  color: var(--color-primary, #6f58ff);
+  margin-bottom: 6px;
+}
+
 @media (max-width: 640px) {
   .ud-commerce-panel {
     padding: 14px;

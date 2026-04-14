@@ -26,10 +26,10 @@ public class NotificationChannels {
         NotificationManager manager = context.getSystemService(NotificationManager.class);
         if (manager == null) return;
 
-        // Supprimer les anciens canaux pour forcer la mise à jour du son/vibration
-        // (Android met les canaux en cache après la première création)
-        manager.deleteNotificationChannel(CHANNEL_CALLS);
-        manager.deleteNotificationChannel(CHANNEL_MESSAGES);
+        // NE PAS supprimer les canaux existants — sur Samsung, ça crée une course
+        // entre la suppression et la publication de la notification, ce qui la perd.
+        // Android met les canaux en cache : après la première création, les paramètres
+        // (son, vibration) ne peuvent être modifiés que par l'utilisateur.
 
         Uri defaultSound = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
         AudioAttributes audioAttributes = new AudioAttributes.Builder()

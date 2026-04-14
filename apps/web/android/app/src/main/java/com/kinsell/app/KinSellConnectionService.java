@@ -55,6 +55,8 @@ public class KinSellConnectionService extends Service {
                 .setPriority(NotificationCompat.PRIORITY_MIN)
                 .setCategory(NotificationCompat.CATEGORY_SERVICE)
                 .setVisibility(NotificationCompat.VISIBILITY_SECRET)
+                .setGroup("kin-sell-service-group")   // Isoler dans son propre groupe
+                .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_CHILDREN) // Silencieux
                 .setContentIntent(pendingIntent);
 
         Notification notification = builder.build();

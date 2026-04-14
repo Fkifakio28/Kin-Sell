@@ -134,6 +134,8 @@ router.get(
 /**
  * GET /analytics/ai/recommendations
  * Récupère les recommandations actives pour l'utilisateur connecté
+ * Filtre par plan d'abonnement — les recommandations UPGRADE_PLAN sont
+ * adaptées au plan actuel de l'utilisateur.
  * 🔐 Requiert IA_MERCHANT
  */
 router.get(
@@ -142,7 +144,24 @@ router.get(
   asyncHandler(async (req: AuthenticatedRequest, res, next) => { await requireIa("IA_MERCHANT")(req, res, next); }),
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     const recs = await aiTrigger.getActiveRecommendations(req.auth!.userId);
-    res.json(recs);
+    // Filtrer les recommandations selon le plan de l'utilisateur
+    const sub = await prisma.subscription.findFirst({
+      where: { userId: req.auth!.userId, status: "ACTIVE" },
+      select: { planCode: true },
+    });
+    const userPlan = sub?.planCode ?? "FREE";
+    const filtered = recs.filter((r) => {
+      // Si la reco demande un plan spécifique (ex: UPGRADE_PLAN vers AUTO),
+      // ne la montrer que si l'utilisateur n'a pas déjà ce plan ou un supérieur
+      if (r.actionType === "UPGRADE_PLAN" && r.actionData) {
+        try {
+          const meta = typeof r.actionData === "string" ? JSON.parse(r.actionData) : r.actionData;
+          if (meta.targetPlan && meta.targetPlan === userPlan) return false;
+        } catch {}
+      }
+      return true;
+    });
+    res.json(filtered);
   })
 );
 
@@ -302,12 +321,11 @@ router.get(
 /**
  * GET /analytics/ai/post-sale-advice?orderId=X
  * Recommandations contextuelles après vente confirmée
- * 🔐 Requiert IA_ORDER
+ * � Gratuit pour tous les vendeurs (outil d'upsell)
  */
 router.get(
   "/ai/post-sale-advice",
   requireAuth,
-  asyncHandler(async (req: AuthenticatedRequest, res, next) => { await requireIa("IA_ORDER")(req, res, next); }),
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     const orderId = req.query.orderId as string;
     if (!orderId) throw new HttpError(400, "orderId est requis");

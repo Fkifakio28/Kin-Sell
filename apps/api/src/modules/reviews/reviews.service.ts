@@ -47,9 +47,9 @@ export const getReviewsForUser = async (targetId: string, limit = 20, offset = 0
  * Créer un avis lié à une commande réelle (avis vérifié).
  * Conditions :
  *  - la commande doit être DELIVERED
- *  - l'auteur doit être buyer ou seller de la commande
- *  - la cible doit être l'autre partie
- *  - un seul avis par personne par commande
+ *  - l'auteur doit être l'acheteur de la commande
+ *  - la cible est automatiquement le vendeur
+ *  - un seul avis par acheteur par commande
  */
 export const createOrderReview = async (
   authorId: string,
@@ -65,15 +65,11 @@ export const createOrderReview = async (
   if (!order) throw new HttpError(404, "Commande introuvable.");
   if (order.status !== "DELIVERED") throw new HttpError(400, "Vous ne pouvez laisser un avis que sur une commande livrée.");
 
-  // Déterminer rôle de l'auteur et la cible
-  let targetId: string;
-  if (authorId === order.buyerUserId) {
-    targetId = order.sellerUserId;
-  } else if (authorId === order.sellerUserId) {
-    targetId = order.buyerUserId;
-  } else {
-    throw new HttpError(403, "Vous ne faites pas partie de cette transaction.");
+  // Seul l'acheteur peut laisser un avis
+  if (authorId !== order.buyerUserId) {
+    throw new HttpError(403, "Seul l'acheteur peut laisser un avis.");
   }
+  const targetId = order.sellerUserId;
 
   // Vérifier doublon
   const existing = await prisma.userReview.findUnique({

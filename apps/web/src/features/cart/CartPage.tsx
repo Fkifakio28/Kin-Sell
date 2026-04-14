@@ -14,6 +14,8 @@ import type { StructuredLocation } from "../../lib/api-client";
 import { extractValidationCodeFromQrPayload } from "../../utils/order-validation";
 import { SK_AI_ADVICE, SK_AI_COMMANDE } from "../../shared/constants/storage-keys";
 import { useFeatureGate } from "../../shared/hooks/useFeatureGate";
+import TutorialOverlay, { useTutorial, TutorialRelaunchBtn } from '../../components/TutorialOverlay';
+import { cartSteps, cartEmptySteps } from '../../components/tutorial-steps';
 import "./cart.css";
 
 export function CartPage() {
@@ -603,6 +605,7 @@ export function CartPage() {
 
   // Check items breakdown: COMMANDE vs MARCHANDAGE
   const hasNegotiatingItems = cart?.items.some((item) => item.itemState === "MARCHANDAGE") ?? false;
+  const tutorial = useTutorial('cart');
   const readyItemsCount = cart?.items.filter((item) => item.itemState !== "MARCHANDAGE").length ?? 0;
   const negotiatingItemsCount = cart?.items.filter((item) => item.itemState === "MARCHANDAGE").length ?? 0;
   const allNegotiating = readyItemsCount === 0 && negotiatingItemsCount > 0;
@@ -1568,6 +1571,15 @@ export function CartPage() {
           </div>
         </div>
       )}
+
+      {/* ── Tutoriel interactif ── */}
+      <TutorialOverlay
+        pageKey="cart"
+        steps={isEmpty ? cartEmptySteps : cartSteps}
+        open={tutorial.isOpen}
+        onClose={tutorial.close}
+      />
+      {!tutorial.isOpen && <TutorialRelaunchBtn reset={tutorial.reset} start={tutorial.start} />}
     </section>
   );
 }

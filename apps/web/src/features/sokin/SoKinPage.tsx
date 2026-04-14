@@ -63,6 +63,7 @@ import {
   IconRepost,
   IconBookmark,
   IconMoreHoriz,
+  resetFeedAutoPlay,
 } from './AnnounceCard';
 import { MediaViewer, CommentsDrawer, type CommentProfileState, type MissingPublicProfile, type ViewerState } from './SoKinShared';
 import { SOKIN_POST_BACKGROUNDS, DEFAULT_BG_ID, resolveBackgroundCss } from './sokin-backgrounds';
@@ -2189,6 +2190,9 @@ function SoKinPageInner() {
 
   // ── State — TOUS les hooks avant tout return conditionnel ──
   const scrollDir = useScrollDirection();
+
+  // Réinitialiser le flag d'autoplay vidéo à chaque montage du feed
+  useEffect(() => { resetFeedAutoPlay(); }, []);
 
   const [posts, setPosts] = useState<SoKinApiFeedPost[]>([]);
   const [loadingFeed, setLoadingFeed] = useState(true);
