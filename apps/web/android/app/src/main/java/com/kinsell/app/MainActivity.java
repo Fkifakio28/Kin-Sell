@@ -124,6 +124,7 @@ public class MainActivity extends BridgeActivity {
         // Demander POST_NOTIFICATIONS pour Android 13+ (Tiramisu)
         // Plus fiable que le bridge Capacitor seul (Samsung peut ignorer)
         requestNotificationPermission();
+        ensureNotificationsEnabled();
 
         // Flush pending FCM token (saved by KinSellMessagingService.onNewToken in background)
         flushPendingFcmToken();
@@ -411,6 +412,49 @@ public class MainActivity extends BridgeActivity {
                     != PackageManager.PERMISSION_GRANTED) {
                 ActivityCompat.requestPermissions(this,
                         new String[]{Manifest.permission.POST_NOTIFICATIONS}, 1001);
+            }
+        }
+    }
+
+    /**
+     * Si l'utilisateur a bloqué les notifications au niveau Android,
+     * ouvrir une fois les réglages système de l'app.
+     */
+    private void ensureNotificationsEnabled() {
+        try {
+            NotificationManager nm = getSystemService(NotificationManager.class);
+            if (nm == null) return;
+
+            boolean enabled = nm.areNotificationsEnabled();
+            if (enabled) return;
+
+            android.content.SharedPreferences prefs =
+                getSharedPreferences("kin_sell_prefs", MODE_PRIVATE);
+            boolean alreadyPrompted = prefs.getBoolean("notif_settings_prompted", false);
+            if (alreadyPrompted) return;
+
+            prefs.edit().putBoolean("notif_settings_prompted", true).apply();
+            openNotificationSettings();
+        } catch (Exception ignored) {
+            // Ignore — OEM specific behavior
+        }
+    }
+
+    private void openNotificationSettings() {
+        try {
+            Intent intent = new Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS);
+            intent.putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, getPackageName());
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(intent);
+        } catch (Exception ignored) {
+            // Fallback for OEMs that ignore ACTION_APP_NOTIFICATION_SETTINGS
+            try {
+                Intent fallback = new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+                fallback.setData(android.net.Uri.parse("package:" + getPackageName()));
+                fallback.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(fallback);
+            } catch (Exception ignoredAgain) {
+                // Ignore
             }
         }
     }

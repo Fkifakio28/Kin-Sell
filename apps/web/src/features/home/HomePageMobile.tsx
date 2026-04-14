@@ -586,8 +586,6 @@ function SuggestionsSection({
     };
   }, [cityHint, countryHint]);
 
-  if (!loading && items.length === 0) return null;
-
   return (
     <section
       className="hm-section hm-suggestions"
@@ -601,6 +599,12 @@ function SuggestionsSection({
           ? [1, 2, 3, 4].map((i) => (
               <div key={i} className="hm-card-skeleton hm-card-skeleton--small" />
             ))
+          : items.length === 0
+          ? (
+              <div className="hm-empty">
+                {t("common.noResults")}
+              </div>
+            )
           : items.map((item) => (
               <button
                 key={item.id}

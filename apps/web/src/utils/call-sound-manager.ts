@@ -1,3 +1,5 @@
+import { Capacitor } from "@capacitor/core";
+
 /**
  * CallSoundManager — Kin-Sell V2
  *
@@ -56,6 +58,10 @@ let _current: HTMLAudioElement | null = null;
 let _currentName: SoundName | null = null;
 let _muted = false;
 
+function useSystemSoundsOnly(): boolean {
+  return Capacitor.isNativePlatform();
+}
+
 /* ══════════════════════════════════════════════════════════
    API publique
    ══════════════════════════════════════════════════════════ */
@@ -64,6 +70,11 @@ let _muted = false;
  * Jouer un son. Arrête automatiquement tout son en cours.
  */
 export function playSound(name: SoundName, loop = false, volume = 0.85): void {
+  if (useSystemSoundsOnly()) {
+    // On APK native, rely exclusively on Android notification channels.
+    return;
+  }
+
   if (_muted) {
     console.debug(LOG, `🔇 Muted — skip ${name}`);
     return;

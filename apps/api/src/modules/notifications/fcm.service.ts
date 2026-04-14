@@ -97,14 +97,14 @@ export async function sendFcmToToken(
 
 function resolveChannelId(type: string): string {
   switch (type) {
-    case "message": return "kin-sell-messages-v3";
-    case "call": return "kin-sell-calls-v3";
+    case "message": return "kin-sell-messages-v4";
+    case "call": return "kin-sell-calls-v4";
     case "order":
     case "negotiation":
-    case "stock": return "kin-sell-orders-v3";
+    case "stock": return "kin-sell-orders-v4";
     case "like":
     case "publication":
-    case "sokin": return "kin-sell-social-v3";
-    default: return "kin-sell-default-v3";
+    case "sokin": return "kin-sell-social-v4";
+    default: return "kin-sell-default-v4";
   }
 }
