@@ -1,0 +1,1 @@
+import{f as r}from"./index-Cq_upR72.js";const e={stats:()=>r("/explorer/stats"),ads:t=>r("/explorer/ads",{params:t}),shops:t=>r("/explorer/shops",{params:{limit:t?.limit??4,city:t?.city,country:t?.country}}),profiles:t=>r("/explorer/profiles",{params:{limit:t?.limit??4,city:t?.city,country:t?.country}})};export{e};

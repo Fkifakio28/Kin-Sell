@@ -25,7 +25,7 @@ import androidx.core.app.NotificationCompat;
 public class KinSellConnectionService extends Service {
 
     public static final int NOTIFICATION_ID = 9990;
-    private static final String CHANNEL_ID = "kin-sell-connection";
+    private static final String CHANNEL_ID = "kin-sell-connection-v2";
     private PowerManager.WakeLock wakeLock;
 
     @Override

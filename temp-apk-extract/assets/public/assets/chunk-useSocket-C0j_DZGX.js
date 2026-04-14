@@ -1,0 +1,1 @@
+import{r as e}from"./chunk-vendor-react-DRUrxFdQ.js";import{v as m}from"./index-Cq_upR72.js";function p(){const{socketRef:n,isConnected:r,emit:s,on:c,off:a}=m(),f=e.useCallback((o,t,k)=>{s(o,t,k)},[s]),u=e.useCallback((o,t)=>{c(o,t)},[c]),i=e.useCallback((o,t)=>{a(o,t)},[a]);return{socket:n,emit:f,on:u,off:i,isConnected:r}}export{p as u};

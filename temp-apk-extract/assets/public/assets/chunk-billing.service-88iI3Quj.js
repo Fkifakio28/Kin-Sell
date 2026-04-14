@@ -1,0 +1,1 @@
+import{f as a}from"./index-Cq_upR72.js";const t={catalog:()=>a("/billing/catalog"),myPlan:()=>a("/billing/my-plan"),createPaypalCheckout:l=>a("/billing/checkout/paypal",{method:"POST",body:l}),paymentOrders:()=>a("/billing/payment-orders"),capturePaypalCheckout:l=>a("/billing/paypal/capture",{method:"POST",body:l})};export{t as b};

@@ -9,16 +9,27 @@ import android.net.Uri;
 import android.os.Build;
 
 /**
- * Crée les canaux de notification Kin-Sell avec sons, vibrations et flash LED.
+ * Canaux de notification Kin-Sell v2 — sons système uniquement.
+ *
+ * Les IDs portent le suffixe "-v2" pour forcer Android à créer de nouveaux
+ * canaux propres (les anciens canaux corrompus sont supprimés au démarrage).
  */
 public class NotificationChannels {
 
-    public static final String CHANNEL_MESSAGES = "kin-sell-messages";
-    public static final String CHANNEL_CALLS = "kin-sell-calls";
-    public static final String CHANNEL_ONGOING_CALL = "kin-sell-ongoing-call";
-    public static final String CHANNEL_ORDERS = "kin-sell-orders";
-    public static final String CHANNEL_SOCIAL = "kin-sell-social";
-    public static final String CHANNEL_DEFAULT = "kin-sell-default";
+    // ── Nouveaux IDs v2 (reset complet des canaux corrompus) ──
+    public static final String CHANNEL_MESSAGES = "kin-sell-messages-v2";
+    public static final String CHANNEL_CALLS = "kin-sell-calls-v2";
+    public static final String CHANNEL_ONGOING_CALL = "kin-sell-ongoing-call-v2";
+    public static final String CHANNEL_ORDERS = "kin-sell-orders-v2";
+    public static final String CHANNEL_SOCIAL = "kin-sell-social-v2";
+    public static final String CHANNEL_DEFAULT = "kin-sell-default-v2";
+
+    // Anciens IDs à supprimer (une seule fois)
+    private static final String[] OLD_CHANNELS = {
+        "kin-sell-messages", "kin-sell-calls", "kin-sell-ongoing-call",
+        "kin-sell-orders", "kin-sell-social", "kin-sell-default",
+        "kin-sell-connection"
+    };
 
     public static void createChannels(Context context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
@@ -26,45 +37,49 @@ public class NotificationChannels {
         NotificationManager manager = context.getSystemService(NotificationManager.class);
         if (manager == null) return;
 
-        // NE PAS supprimer les canaux existants — sur Samsung, ça crée une course
-        // entre la suppression et la publication de la notification, ce qui la perd.
-        // Android met les canaux en cache : après la première création, les paramètres
-        // (son, vibration) ne peuvent être modifiés que par l'utilisateur.
+        // ── Supprimer les anciens canaux corrompus (migration unique) ──
+        for (String oldId : OLD_CHANNELS) {
+            if (manager.getNotificationChannel(oldId) != null) {
+                manager.deleteNotificationChannel(oldId);
+            }
+        }
 
-        Uri defaultSound = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
-        AudioAttributes audioAttributes = new AudioAttributes.Builder()
+        // ── Sons système par défaut (pas de sons custom dans l'APK) ──
+        Uri notifSound = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
+        Uri ringtoneSound = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE);
+
+        AudioAttributes notifAttr = new AudioAttributes.Builder()
                 .setUsage(AudioAttributes.USAGE_NOTIFICATION)
                 .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                 .build();
-
-        // ── Messages : haute priorité, son Kin-Sell, vibration, flash LED violet ──
-        Uri messageSound = Uri.parse("android.resource://" + context.getPackageName() + "/raw/kinsell_message");
-        NotificationChannel messages = new NotificationChannel(
-                CHANNEL_MESSAGES, "Messages", NotificationManager.IMPORTANCE_HIGH);
-        messages.setDescription("Nouveaux messages et conversations");
-        messages.setSound(messageSound, audioAttributes);
-        messages.enableVibration(true);
-        messages.setVibrationPattern(new long[]{0, 250, 100, 250});
-        messages.enableLights(true);
-        messages.setLightColor(0xFF6F58FF); // Violet Kin-Sell
-        messages.setShowBadge(true);
-
-        // ── Appels : priorité maximale, sonnerie Kin-Sell, vibration longue, flash ──
-        Uri callSound = Uri.parse("android.resource://" + context.getPackageName() + "/raw/kinsell_incoming_call");
         AudioAttributes ringtoneAttr = new AudioAttributes.Builder()
                 .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
                 .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                 .build();
 
+        // ── Messages : haute priorité, son notification système ──
+        NotificationChannel messages = new NotificationChannel(
+                CHANNEL_MESSAGES, "Messages Kin-Sell", NotificationManager.IMPORTANCE_HIGH);
+        messages.setDescription("Nouveaux messages et conversations");
+        messages.setSound(notifSound, notifAttr);
+        messages.enableVibration(true);
+        messages.setVibrationPattern(new long[]{0, 250, 100, 250});
+        messages.enableLights(true);
+        messages.setLightColor(0xFF6F58FF);
+        messages.setShowBadge(true);
+        messages.setLockscreenVisibility(android.app.Notification.VISIBILITY_PUBLIC);
+
+        // ── Appels : priorité maximale, sonnerie système du téléphone ──
         NotificationChannel calls = new NotificationChannel(
-                CHANNEL_CALLS, "Appels", NotificationManager.IMPORTANCE_MAX);
+                CHANNEL_CALLS, "Appels Kin-Sell", NotificationManager.IMPORTANCE_MAX);
         calls.setDescription("Appels audio et vidéo entrants");
-        calls.setSound(callSound, ringtoneAttr);
+        calls.setSound(ringtoneSound, ringtoneAttr);
         calls.enableVibration(true);
         calls.setVibrationPattern(new long[]{0, 500, 200, 500, 200, 500});
         calls.enableLights(true);
-        calls.setLightColor(0xFF4CAF50); // Vert pour appels
+        calls.setLightColor(0xFF4CAF50);
         calls.setShowBadge(true);
+        calls.setLockscreenVisibility(android.app.Notification.VISIBILITY_PUBLIC);
 
         // ── Appel en cours : priorité basse, silencieux, persistant ──
         NotificationChannel ongoingCall = new NotificationChannel(
@@ -75,38 +90,41 @@ public class NotificationChannels {
         ongoingCall.enableLights(false);
         ongoingCall.setShowBadge(false);
 
-        // ── Commandes & Marchandages : son, vibration, flash LED orange ──
+        // ── Commandes & Transactions : son notification système ──
         NotificationChannel orders = new NotificationChannel(
-                CHANNEL_ORDERS, "Commandes & Marchandages", NotificationManager.IMPORTANCE_HIGH);
+                CHANNEL_ORDERS, "Transactions Kin-Sell", NotificationManager.IMPORTANCE_HIGH);
         orders.setDescription("Commandes, marchandages et transactions");
-        orders.setSound(defaultSound, audioAttributes);
+        orders.setSound(notifSound, notifAttr);
         orders.enableVibration(true);
         orders.setVibrationPattern(new long[]{0, 300, 150, 300});
         orders.enableLights(true);
-        orders.setLightColor(0xFFFF9800); // Orange pour transactions
+        orders.setLightColor(0xFFFF9800);
         orders.setShowBadge(true);
+        orders.setLockscreenVisibility(android.app.Notification.VISIBILITY_PUBLIC);
 
-        // ── Publications So-Kin : son, vibration légère, flash violet ──
+        // ── Publications So-Kin : son notification système ──
         NotificationChannel social = new NotificationChannel(
                 CHANNEL_SOCIAL, "Publications So-Kin", NotificationManager.IMPORTANCE_DEFAULT);
         social.setDescription("Nouvelles publications et interactions So-Kin");
-        social.setSound(defaultSound, audioAttributes);
+        social.setSound(notifSound, notifAttr);
         social.enableVibration(true);
         social.setVibrationPattern(new long[]{0, 150, 100, 150});
         social.enableLights(true);
-        social.setLightColor(0xFF6F58FF); // Violet
+        social.setLightColor(0xFF6F58FF);
         social.setShowBadge(true);
+        social.setLockscreenVisibility(android.app.Notification.VISIBILITY_PUBLIC);
 
-        // ── Canal par défaut (falback) ──
+        // ── Canal par défaut : son notification système ──
         NotificationChannel defaultChannel = new NotificationChannel(
                 CHANNEL_DEFAULT, "Kin-Sell", NotificationManager.IMPORTANCE_HIGH);
         defaultChannel.setDescription("Notifications générales Kin-Sell");
-        defaultChannel.setSound(defaultSound, audioAttributes);
+        defaultChannel.setSound(notifSound, notifAttr);
         defaultChannel.enableVibration(true);
         defaultChannel.setVibrationPattern(new long[]{0, 250, 100, 250});
         defaultChannel.enableLights(true);
         defaultChannel.setLightColor(0xFF6F58FF);
         defaultChannel.setShowBadge(true);
+        defaultChannel.setLockscreenVisibility(android.app.Notification.VISIBILITY_PUBLIC);
 
         manager.createNotificationChannel(messages);
         manager.createNotificationChannel(calls);

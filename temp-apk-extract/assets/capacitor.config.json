@@ -1,0 +1,46 @@
+{
+	"appId": "com.kinsell.app",
+	"appName": "Kin-Sell",
+	"webDir": "dist",
+	"server": {
+		"url": "https://kin-sell.com",
+		"cleartext": false,
+		"androidScheme": "https",
+		"iosScheme": "https"
+	},
+	"android": {
+		"allowMixedContent": false,
+		"appendUserAgent": "KinSellApp"
+	},
+	"ios": {
+		"contentInset": "automatic",
+		"allowsLinkPreview": true,
+		"scrollEnabled": true,
+		"appendUserAgent": "KinSellApp",
+		"scheme": "kinsell"
+	},
+	"plugins": {
+		"CapacitorHttp": {
+			"enabled": true
+		},
+		"CapacitorCookies": {
+			"enabled": true
+		},
+		"SplashScreen": {
+			"launchAutoHide": true,
+			"launchShowDuration": 2000,
+			"backgroundColor": "#120B2B",
+			"showSpinner": false,
+			"androidScaleType": "CENTER_INSIDE",
+			"iosSpinnerStyle": "large"
+		},
+		"Browser": {},
+		"PushNotifications": {
+			"presentationOptions": [
+				"badge",
+				"sound",
+				"alert"
+			]
+		}
+	}
+}
