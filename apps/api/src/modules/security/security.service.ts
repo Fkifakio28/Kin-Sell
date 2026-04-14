@@ -5,7 +5,8 @@
  * spam detection indicators, and progressive sanctions.
  */
 
-import { Prisma, RestrictionType, SanctionLevel } from "@prisma/client";
+import { RestrictionType, SanctionLevel } from "../../shared/db/prisma-enums.js";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "../../shared/db/prisma.js";
 import { applyDelta, TrustEvents, recalculate } from "./trust-score.service.js";
 

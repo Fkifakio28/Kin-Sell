@@ -13,7 +13,7 @@ import { HttpError } from "../../shared/errors/http-error.js";
 import { logger } from "../../shared/logger.js";
 import { promoteListingBoost, promoteHighlight as promoHighlight } from "./ia-messenger-promo.service.js";
 import { assertAddonAccess } from "../../shared/billing/subscription-guard.js";
-import { AddonCode } from "@prisma/client";
+import { AddonCode } from "../../shared/db/prisma-enums.js";
 
 // ─────────────────────────────────────────────
 // Promotion Scope & Pricing

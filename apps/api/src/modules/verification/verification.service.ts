@@ -1,5 +1,6 @@
 import { prisma } from "../../shared/db/prisma.js";
-import { VerificationStatus, type Prisma } from "@prisma/client";
+import { VerificationStatus } from "../../shared/db/prisma-enums.js";
+import type { Prisma } from "@prisma/client";
 import { logger } from "../../shared/logger.js";
 import { sendPushToUser } from "../notifications/push.service.js";
 

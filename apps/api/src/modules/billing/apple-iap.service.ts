@@ -10,7 +10,7 @@
  *  3. We verify with Apple → activate subscription
  */
 
-import { PaymentMethod, PaymentOrderStatus, SubscriptionScope } from "@prisma/client";
+import { PaymentMethod, PaymentOrderStatus, SubscriptionScope } from "../../shared/db/prisma-enums.js";
 import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
 import { getPlanOrThrow } from "./billing.catalog.js";

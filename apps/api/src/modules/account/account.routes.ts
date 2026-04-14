@@ -1,4 +1,4 @@
-import { AccountType, AuthProvider, VerificationPurpose } from "@prisma/client";
+import { AccountType, AuthProvider, VerificationPurpose } from "../../shared/db/prisma-enums.js";
 import { Router } from "express";
 import { z } from "zod";
 import { requireAuth, type AuthenticatedRequest } from "../../shared/auth/auth-middleware.js";

@@ -1,3 +1,4 @@
+import { Capacitor } from "@capacitor/core";
 import { useEffect, useState } from "react";
 
 interface SplashScreenProps {
@@ -55,7 +56,9 @@ export function SplashScreen({ onDismiss }: SplashScreenProps) {
   );
 }
 
-/** Retourne true si le splash doit s'afficher (une seule fois par session) */
+/** Retourne true si le splash doit s'afficher (une seule fois par session, web uniquement) */
 export function shouldShowSplash(): boolean {
+  // Sur APK/natif, le splash Android 12+ + Capacitor suffit — pas de web splash
+  if (Capacitor.isNativePlatform()) return false;
   return !sessionStorage.getItem(SPLASH_KEY);
 }

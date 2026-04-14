@@ -1,4 +1,5 @@
-import { AddonCode, AddonStatus, BillingCycle, PaymentMethod, PaymentOrderStatus, Prisma, SubscriptionScope, SubscriptionStatus } from "@prisma/client";
+import { AddonCode, AddonStatus, BillingCycle, PaymentMethod, PaymentOrderStatus, SubscriptionScope, SubscriptionStatus } from "../../shared/db/prisma-enums.js";
+import type { Prisma } from "@prisma/client";
 import { env } from "../../config/env.js";
 import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";

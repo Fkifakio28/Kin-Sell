@@ -1,4 +1,4 @@
-import { ListingStatus, PromotionStatus, PromotionDiffusion, PromotionType } from "@prisma/client";
+import { ListingStatus, PromotionStatus, PromotionDiffusion, PromotionType } from "../../shared/db/prisma-enums.js";
 import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
 import { Role } from "../../types/roles.js";

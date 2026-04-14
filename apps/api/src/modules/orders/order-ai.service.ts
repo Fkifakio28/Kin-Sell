@@ -10,7 +10,7 @@
  * - Order Anomaly       : détection d'anomalies dans les commandes
  */
 
-import { CartStatus } from "@prisma/client";
+import { CartStatus } from "../../shared/db/prisma-enums.js";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";

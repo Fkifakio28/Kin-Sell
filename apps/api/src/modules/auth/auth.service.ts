@@ -1,4 +1,4 @@
-import { AccountType, AuthProvider } from "@prisma/client";
+import { AccountType, AuthProvider } from "../../shared/db/prisma-enums.js";
 import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
 import { hashPassword, verifyPassword } from "../../shared/auth/password.js";

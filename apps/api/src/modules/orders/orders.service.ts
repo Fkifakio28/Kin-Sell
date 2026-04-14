@@ -1,4 +1,5 @@
-import { CartStatus, NegotiationStatus, OrderStatus, Prisma } from "@prisma/client";
+import { CartStatus, NegotiationStatus, OrderStatus } from "../../shared/db/prisma-enums.js";
+import type { Prisma } from "@prisma/client";
 import { randomBytes } from "crypto";
 import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";

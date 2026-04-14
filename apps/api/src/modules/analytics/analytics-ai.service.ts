@@ -14,7 +14,7 @@
  * Tout rule-based. Données Prisma temps réel.
  */
 
-import { CartStatus, SubscriptionStatus } from "@prisma/client";
+import { CartStatus, SubscriptionStatus } from "../../shared/db/prisma-enums.js";
 import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
 import { getMarketMedian, computePricePosition, getTrendingCategories, PRICE_THRESHOLD_PERCENT } from "../../shared/market/market-shared.js";

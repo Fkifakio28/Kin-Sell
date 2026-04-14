@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
-import { SessionStatus } from "@prisma/client";
+import { SessionStatus } from "../db/prisma-enums.js";
 import type { Response } from "express";
 import { env } from "../../config/env.js";
 import { prisma } from "../db/prisma.js";

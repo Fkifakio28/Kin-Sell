@@ -53,7 +53,7 @@
  *     5. Effort estimé : ~30 lignes de code, 3 fichiers.
  */
 
-import { AddonCode, AddonStatus, SubscriptionStatus } from "@prisma/client";
+import { AddonCode, AddonStatus, SubscriptionStatus } from "../db/prisma-enums.js";
 import { prisma } from "../db/prisma.js";
 import { PLAN_CATALOG } from "../../modules/billing/billing.catalog.js";
 import { HttpError } from "../errors/http-error.js";

@@ -15,7 +15,7 @@
  */
 
 import { prisma } from "../../shared/db/prisma.js";
-import { SubscriptionStatus } from "@prisma/client";
+import { SubscriptionStatus } from "../../shared/db/prisma-enums.js";
 
 // ═══════════════════════════════════════════════════════
 // TYPES — Contrat API

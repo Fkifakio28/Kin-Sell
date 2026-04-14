@@ -5,7 +5,7 @@
  * restrictions, historique de confiance, sanctions manuelles.
  */
 
-import { RestrictionType, SanctionLevel } from "@prisma/client";
+import { RestrictionType, SanctionLevel } from "../../shared/db/prisma-enums.js";
 import { Router } from "express";
 import { z } from "zod";
 import { requireAuth, requireRoles, type AuthenticatedRequest } from "../../shared/auth/auth-middleware.js";

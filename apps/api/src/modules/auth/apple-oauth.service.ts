@@ -1,4 +1,4 @@
-import { AuthProvider } from "@prisma/client";
+import { AuthProvider } from "../../shared/db/prisma-enums.js";
 import { env } from "../../config/env.js";
 import { prisma } from "../../shared/db/prisma.js";
 import { createSessionTokens } from "../../shared/auth/session.js";

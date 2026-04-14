@@ -3,7 +3,7 @@
  * Orchestre les providers, crée les enregistrements MobileMoneyPayment, gère les callbacks.
  */
 
-import { MomoStatus, PaymentMethod } from "@prisma/client";
+import { MomoStatus, PaymentMethod } from "../../shared/db/prisma-enums.js";
 import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
 import * as orangeMoney from "../../shared/payment/orange-money.provider.js";

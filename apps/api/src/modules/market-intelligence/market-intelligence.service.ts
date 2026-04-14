@@ -8,7 +8,7 @@
 
 import { prisma } from "../../shared/db/prisma.js";
 import { computePricePosition, getMarketDemand, PRICE_THRESHOLD_PERCENT } from "../../shared/market/market-shared.js";
-import { CountryCode } from "@prisma/client";
+import { CountryCode } from "../../shared/db/prisma-enums.js";
 import { getDefaultCurrency } from "../../config/platform.js";
 
 // ── Types ──

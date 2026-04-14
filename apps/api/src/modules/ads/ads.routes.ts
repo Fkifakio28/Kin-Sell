@@ -3,7 +3,7 @@ import { asyncHandler } from '../../shared/utils/async-handler.js';
 import { requireAuth, requireRoles, type AuthenticatedRequest } from '../../shared/auth/auth-middleware.js';
 import { Role } from '../../types/roles.js';
 import { prisma } from '../../shared/db/prisma.js';
-import { AddonCode, AddonStatus } from '@prisma/client';
+import { AddonCode, AddonStatus } from '../../shared/db/prisma-enums.js';
 import { HttpError } from '../../shared/errors/http-error.js';
 import * as adsService from './ads.service.js';
 import {

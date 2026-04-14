@@ -7,7 +7,8 @@
  * Calcul incrémental via deltas + recalcul complet périodique.
  */
 
-import { Prisma, TrustLevel } from "@prisma/client";
+import { TrustLevel } from "../../shared/db/prisma-enums.js";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "../../shared/db/prisma.js";
 
 /* ── Constants ── */

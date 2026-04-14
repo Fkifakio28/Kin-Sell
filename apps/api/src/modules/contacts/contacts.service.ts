@@ -7,7 +7,7 @@
  */
 
 import { prisma } from "../../shared/db/prisma.js";
-import { ContactSource } from "@prisma/client";
+import { ContactSource } from "../../shared/db/prisma-enums.js";
 
 // ── Types ──
 

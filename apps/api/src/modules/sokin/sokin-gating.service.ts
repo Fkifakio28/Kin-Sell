@@ -34,7 +34,7 @@
  * - Les routes analytics brutes sont bloquées au middleware
  */
 
-import { SubscriptionStatus } from "@prisma/client";
+import { SubscriptionStatus } from "../../shared/db/prisma-enums.js";
 import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
 import type { AuthenticatedRequest } from "../../shared/auth/auth-middleware.js";
