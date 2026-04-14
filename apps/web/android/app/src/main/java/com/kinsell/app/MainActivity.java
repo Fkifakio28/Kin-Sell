@@ -179,9 +179,10 @@ public class MainActivity extends BridgeActivity {
                 WebView webView = getBridge().getWebView();
                 if (webView != null) {
                     final String token = sanitizeForJs(pendingToken);
-                    webView.post(() -> webView.evaluateJavascript(
+                    // Delay dispatch to give JS enough time to set up listeners
+                    webView.postDelayed(() -> webView.evaluateJavascript(
                         "window.dispatchEvent(new CustomEvent('ks:fcm-token',{detail:{token:'" + token + "'}}));",
-                        null));
+                        null), 3000);
                 }
                 prefs.edit().remove("pending_fcm_token").apply();
             }

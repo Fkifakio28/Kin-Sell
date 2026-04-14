@@ -151,12 +151,27 @@ export function onServiceWorkerMessage(
 
 async function sendFcmTokenToServer(token: string): Promise<void> {
   const platform = Capacitor.getPlatform(); // "android" | "ios"
-  await fetch(`${API_BASE}/notifications/fcm/register`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify({ token, platform }),
-  }).catch(() => {});
+  try {
+    const res = await fetch(`${API_BASE}/notifications/fcm/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ token, platform }),
+    });
+    if (res.ok) {
+      console.log("[FCM] Token registered on server");
+      // Clear pending token on success
+      try { localStorage.removeItem("ks_pending_fcm_token"); } catch {}
+    } else {
+      console.warn("[FCM] Server rejected token registration:", res.status);
+      // Save for retry on next launch
+      try { localStorage.setItem("ks_pending_fcm_token", token); } catch {}
+    }
+  } catch (err) {
+    console.warn("[FCM] Failed to send token to server:", err);
+    // Save for retry on next launch
+    try { localStorage.setItem("ks_pending_fcm_token", token); } catch {}
+  }
 }
 
 /**
@@ -168,9 +183,22 @@ export function listenForPendingFcmToken(): () => void {
   if (!isNativeApp()) return () => {};
   const handler = (e: Event) => {
     const token = (e as CustomEvent<{ token: string }>).detail?.token;
-    if (token) void sendFcmTokenToServer(token);
+    if (token) {
+      console.log("[FCM] Received pending token from native side");
+      void sendFcmTokenToServer(token);
+    }
   };
   window.addEventListener("ks:fcm-token", handler);
+
+  // Also retry any previously failed token registration
+  try {
+    const pendingToken = localStorage.getItem("ks_pending_fcm_token");
+    if (pendingToken) {
+      console.log("[FCM] Retrying previously failed token registration");
+      void sendFcmTokenToServer(pendingToken);
+    }
+  } catch {}
+
   return () => window.removeEventListener("ks:fcm-token", handler);
 }
 
@@ -190,15 +218,17 @@ export async function initNativePush(
     }
     if (permStatus.receive !== "granted") return null;
 
-    await PushNotifications.register();
-
+    // IMPORTANT: attach listeners BEFORE register() to avoid race condition
     const regListener = await PushNotifications.addListener("registration", (token: any) => {
+      console.log("[FCM] Token received, sending to server...");
       void sendFcmTokenToServer(token.value);
     });
 
     const regErrorListener = await PushNotifications.addListener("registrationError", (err: any) => {
       console.warn("[FCM] Registration error:", err);
     });
+
+    await PushNotifications.register();
 
     const receivedListener = await PushNotifications.addListener(
       "pushNotificationReceived",
