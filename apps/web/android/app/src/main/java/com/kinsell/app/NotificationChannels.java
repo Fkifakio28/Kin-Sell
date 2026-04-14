@@ -9,26 +9,29 @@ import android.net.Uri;
 import android.os.Build;
 
 /**
- * Canaux de notification Kin-Sell v2 — sons système uniquement.
+ * Canaux de notification Kin-Sell v3 — sons système uniquement.
  *
- * Les IDs portent le suffixe "-v2" pour forcer Android à créer de nouveaux
- * canaux propres (les anciens canaux corrompus sont supprimés au démarrage).
+ * Les IDs portent le suffixe "-v3" pour forcer Android à créer de nouveaux
+ * canaux propres. Android ne permet PAS de modifier un canal après création,
+ * donc tout changement de son/vibration nécessite un nouveau suffixe.
  */
 public class NotificationChannels {
 
-    // ── Nouveaux IDs v2 (reset complet des canaux corrompus) ──
-    public static final String CHANNEL_MESSAGES = "kin-sell-messages-v2";
-    public static final String CHANNEL_CALLS = "kin-sell-calls-v2";
-    public static final String CHANNEL_ONGOING_CALL = "kin-sell-ongoing-call-v2";
-    public static final String CHANNEL_ORDERS = "kin-sell-orders-v2";
-    public static final String CHANNEL_SOCIAL = "kin-sell-social-v2";
-    public static final String CHANNEL_DEFAULT = "kin-sell-default-v2";
+    // ── Nouveaux IDs v3 (reset complet — sons système garantis) ──
+    public static final String CHANNEL_MESSAGES = "kin-sell-messages-v3";
+    public static final String CHANNEL_CALLS = "kin-sell-calls-v3";
+    public static final String CHANNEL_ONGOING_CALL = "kin-sell-ongoing-call-v3";
+    public static final String CHANNEL_ORDERS = "kin-sell-orders-v3";
+    public static final String CHANNEL_SOCIAL = "kin-sell-social-v3";
+    public static final String CHANNEL_DEFAULT = "kin-sell-default-v3";
 
-    // Anciens IDs à supprimer (une seule fois)
+    // Anciens IDs à supprimer (v1 + v2)
     private static final String[] OLD_CHANNELS = {
         "kin-sell-messages", "kin-sell-calls", "kin-sell-ongoing-call",
         "kin-sell-orders", "kin-sell-social", "kin-sell-default",
-        "kin-sell-connection"
+        "kin-sell-connection",
+        "kin-sell-messages-v2", "kin-sell-calls-v2", "kin-sell-ongoing-call-v2",
+        "kin-sell-orders-v2", "kin-sell-social-v2", "kin-sell-default-v2"
     };
 
     public static void createChannels(Context context) {

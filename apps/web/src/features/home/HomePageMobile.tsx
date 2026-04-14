@@ -562,13 +562,17 @@ function SuggestionsSection({
     (async () => {
       try {
         let results = await listingsApi.latest({ limit: 12, city: cityHint, country: countryHint });
-        // Fallback: country only
-        if (results.length === 0 && countryHint) {
-          results = await listingsApi.latest({ limit: 12, country: countryHint });
+        // Fallback: country only if few results
+        if (results.length < 4 && countryHint) {
+          const more = await listingsApi.latest({ limit: 12, country: countryHint });
+          const ids = new Set(results.map((r) => r.id));
+          results = [...results, ...more.filter((r) => !ids.has(r.id))].slice(0, 12);
         }
-        // Fallback: no geo filter
-        if (results.length === 0) {
-          results = await listingsApi.latest({ limit: 12 });
+        // Fallback: global if still few results
+        if (results.length < 4) {
+          const more = await listingsApi.latest({ limit: 12 });
+          const ids = new Set(results.map((r) => r.id));
+          results = [...results, ...more.filter((r) => !ids.has(r.id))].slice(0, 12);
         }
         if (!cancelled) setItems(results);
       } catch {
@@ -743,13 +747,17 @@ function ListingsSection({
           city: cityHint,
           country: countryHint,
         });
-        // Fallback: country only (no city)
-        if (results.length === 0 && countryHint) {
-          results = await listingsApi.latest({ type: activeTab, limit: 10, country: countryHint });
+        // Fallback: country only if few results
+        if (results.length < 3 && countryHint) {
+          const more = await listingsApi.latest({ type: activeTab, limit: 10, country: countryHint });
+          const ids = new Set(results.map((r) => r.id));
+          results = [...results, ...more.filter((r) => !ids.has(r.id))].slice(0, 10);
         }
-        // Fallback: no geo filter
-        if (results.length === 0) {
-          results = await listingsApi.latest({ type: activeTab, limit: 10 });
+        // Fallback: global if still few results
+        if (results.length < 3) {
+          const more = await listingsApi.latest({ type: activeTab, limit: 10 });
+          const ids = new Set(results.map((r) => r.id));
+          results = [...results, ...more.filter((r) => !ids.has(r.id))].slice(0, 10);
         }
         if (!cancelled) setListings(results);
       } catch {
