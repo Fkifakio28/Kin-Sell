@@ -24,6 +24,8 @@ import NotificationCenter from "../../components/NotificationCenter";
 import { useGlobalNotification } from "../../app/providers/GlobalNotificationProvider";
 import TutorialOverlay, { useTutorial, TutorialRelaunchBtn } from "../../components/TutorialOverlay";
 import { homeDesktopSteps } from "../../components/tutorial-steps";
+import { WelcomeOnboarding } from "../onboarding/WelcomeOnboarding";
+import { SK_WELCOME_ONBOARDING_DONE } from "../../shared/constants/storage-keys";
 import "../sokin/sokin.css";
 import "./home.css";
 
@@ -66,6 +68,7 @@ export function HomePage() {
   const lockedCats = useLockedCategories();
   const { missedCount } = useGlobalNotification();
   const tutorial = useTutorial("home-desktop");
+  const [showWelcome, setShowWelcome] = useState(() => !localStorage.getItem(SK_WELCOME_ONBOARDING_DONE));
   const [ncOpen, setNcOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [isInfoOpen, setIsInfoOpen] = useState(false);
@@ -1313,6 +1316,8 @@ export function HomePage() {
 
       <TutorialOverlay pageKey="home-desktop" steps={homeDesktopSteps} open={tutorial.isOpen} onClose={tutorial.close} />
       {!tutorial.isOpen && <TutorialRelaunchBtn reset={tutorial.reset} start={tutorial.start} />}
+
+      {showWelcome && <WelcomeOnboarding onClose={() => setShowWelcome(false)} />}
     </div>
   );
 }

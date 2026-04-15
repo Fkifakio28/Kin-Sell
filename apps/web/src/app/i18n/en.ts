@@ -1741,4 +1741,14 @@ export const en: Record<string, string> = {
     "perm.battTitle": "Battery optimization",
     "perm.battDesc": "Disabling battery optimization allows Kin-Sell to receive calls and notifications in the background.",
     "perm.battWarn": "Battery optimization may prevent receiving calls and notifications in the background.",
+
+    /* ── Welcome onboarding ── */
+    "onboarding.welcomeTitle": "Welcome to Kin-Sell!",
+    "onboarding.welcomeSubtitle": "What would you like to do today?",
+    "onboarding.wantBuy": "I want to buy",
+    "onboarding.wantSell": "I want to sell a product",
+    "onboarding.wantService": "I want to offer my services",
+    "onboarding.buyInfoTitle": "How to buy on Kin-Sell",
+    "onboarding.buyInfoDesc": "You can browse published items and So-Kin announcements right on the home page. To see all available products and announcements, tap \"See more\" in each section.",
+    "onboarding.understood": "Got it",
 };

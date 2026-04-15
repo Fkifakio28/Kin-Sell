@@ -31,6 +31,7 @@ export const SK_AI_ADVICE = "ks-ai-advice";
 
 /* ── Permissions Onboarding ── */
 export const SK_PERMISSIONS_DONE = "ks-permissions-onboarding-done";
+export const SK_WELCOME_ONBOARDING_DONE = "ks-welcome-onboarding-done";
 export const SK_AI_AUTO_NEGO = "ks-ai-auto-nego";
 export const SK_AI_COMMANDE = "ks-ai-commande";
 

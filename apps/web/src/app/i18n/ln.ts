@@ -1742,4 +1742,14 @@ export const ln: Record<string, string> = {
     "perm.battTitle": "Optimisation ya batterie",
     "perm.battDesc": "Kolongola optimisation ya batterie epesi Kin-Sell nzela ya kozwa baappel mpe notifications na nsima.",
     "perm.battWarn": "Optimisation ya batterie ekoki kopekisa kozwa baappel mpe notifications na nsima.",
+
+    /* ── Onboarding ya boyambi ── */
+    "onboarding.welcomeTitle": "Boyei malamu na Kin-Sell!",
+    "onboarding.welcomeSubtitle": "Olingi kosala nini lelo?",
+    "onboarding.wantBuy": "Nalingi kosomba",
+    "onboarding.wantSell": "Nalingi koteka eloko",
+    "onboarding.wantService": "Nalingi kopesa ba services na ngai",
+    "onboarding.buyInfoTitle": "Ndenge nini ya kosomba na Kin-Sell",
+    "onboarding.buyInfoDesc": "Okoki kotala ba articles mpe ba annonces So-Kin dirèktement na page ya accueil. Mpo na komona biloko nyonso oyo ezali, finá \"Voir plus\" na section mokomoko.",
+    "onboarding.understood": "Nasosolí",
 };

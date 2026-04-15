@@ -229,14 +229,17 @@ export function UserDashboard() {
   const missing = user ? MISSING_FIELD_KEYS.filter(f => f.check(user)).map(f => t(f.key)) : [];
 
   const initialActionRef = useRef<string | null>(null);
+  const initialTypeRef = useRef<string | null>(null);
   const [activeSection, setActiveSection] = useState<HubSection>(() => {
     const params = new URLSearchParams(window.location.search);
     const urlSection = params.get('section');
     const urlAction = params.get('action');
+    const urlType = params.get('type');
     if (urlSection) {
       // Clean URL without reload
       window.history.replaceState({}, '', window.location.pathname);
       if (urlAction) initialActionRef.current = urlAction;
+      if (urlType) initialTypeRef.current = urlType;
       return urlSection as HubSection;
     }
     const stored = sessionStorage.getItem('ud-section');
@@ -428,10 +431,14 @@ export function UserDashboard() {
   const [editingArticle, setEditingArticle] = useState<MyListing | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
 
-  // Auto-open publish form if navigated with ?action=publish
+  // Auto-open publish form if navigated with ?action=publish&type=PRODUIT|SERVICE
   useEffect(() => {
     if (initialActionRef.current === 'publish') {
       initialActionRef.current = null;
+      if (initialTypeRef.current === 'PRODUIT' || initialTypeRef.current === 'SERVICE') {
+        setArticleForm(prev => ({ ...prev, type: initialTypeRef.current as 'PRODUIT' | 'SERVICE' }));
+        initialTypeRef.current = null;
+      }
       setShowCreateForm(true);
     }
   }, []);

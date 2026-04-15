@@ -28,7 +28,8 @@ function getErrorMessage(error: unknown, t: (k: string) => string): string {
 
 function getRedirectPath(role: string): string {
   if (role === "ADMIN" || role === "SUPER_ADMIN") return "/admin/dashboard";
-  return role === "BUSINESS" ? "/business/dashboard" : "/account";
+  if (role === "BUSINESS") return "/business/dashboard";
+  return "/";
 }
 
 export function LoginPage() {

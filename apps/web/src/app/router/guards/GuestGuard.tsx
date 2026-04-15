@@ -1,6 +1,5 @@
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../../providers/AuthProvider";
-import { getDashboardPath } from "../../../shared/constants/roles";
 import type { ReactNode } from "react";
 
 /**
@@ -13,7 +12,10 @@ export function GuestGuard({ children }: { children: ReactNode }) {
   if (isLoading) return null;
 
   if (isLoggedIn && user) {
-    return <Navigate to={getDashboardPath(user.role)} replace />;
+    const role = user.role;
+    if (role === "ADMIN" || role === "SUPER_ADMIN") return <Navigate to="/admin/dashboard" replace />;
+    if (role === "BUSINESS") return <Navigate to="/business/dashboard" replace />;
+    return <Navigate to="/" replace />;
   }
 
   return <>{children}</>;

@@ -53,6 +53,8 @@ import { useGlobalNotification } from "../../app/providers/GlobalNotificationPro
 import TutorialOverlay, { useTutorial, TutorialRelaunchBtn } from "../../components/TutorialOverlay";
 import { homeMobileSteps } from "../../components/tutorial-steps";
 import { Capacitor } from "@capacitor/core";
+import { WelcomeOnboarding } from "../onboarding/WelcomeOnboarding";
+import { SK_WELCOME_ONBOARDING_DONE } from "../../shared/constants/storage-keys";
 import "./home-mobile.css";
 
 /* ────────────── Static data ────────────── */
@@ -1457,6 +1459,8 @@ export function HomePageMobile() {
   const barsVisibleRaw = useScrollDirection();
   const tutorial = useTutorial("home-mobile");
 
+  const [showWelcome, setShowWelcome] = useState(() => !localStorage.getItem(SK_WELCOME_ONBOARDING_DONE));
+
   // Réinitialiser le flag d'autoplay vidéo à chaque montage de la page home
   useEffect(() => { resetFeedAutoPlay(); }, []);
 
@@ -1610,6 +1614,8 @@ export function HomePageMobile() {
 
       <TutorialOverlay pageKey="home-mobile" steps={homeMobileSteps} open={tutorial.isOpen} onClose={tutorial.close} />
       {!tutorial.isOpen && <TutorialRelaunchBtn reset={tutorial.reset} start={tutorial.start} />}
+
+      {showWelcome && <WelcomeOnboarding onClose={() => setShowWelcome(false)} />}
     </div>
   );
 }

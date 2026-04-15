@@ -1731,4 +1731,14 @@ export const ar: Record<string, string> = {
     "perm.battTitle": "تحسين البطارية",
     "perm.battDesc": "تعطيل تحسين البطارية يسمح لـ Kin-Sell بتلقي المكالمات والإشعارات في الخلفية.",
     "perm.battWarn": "تحسين البطارية قد يمنع تلقي المكالمات والإشعارات في الخلفية.",
+
+    /* ── إعداد الترحيب ── */
+    "onboarding.welcomeTitle": "!مرحبًا بك في Kin-Sell",
+    "onboarding.welcomeSubtitle": "ماذا تريد أن تفعل اليوم؟",
+    "onboarding.wantBuy": "أريد الشراء",
+    "onboarding.wantSell": "أريد بيع منتج",
+    "onboarding.wantService": "أريد تقديم خدماتي",
+    "onboarding.buyInfoTitle": "كيفية الشراء على Kin-Sell",
+    "onboarding.buyInfoDesc": "يمكنك تصفح المنتجات المنشورة وإعلانات So-Kin مباشرة على الصفحة الرئيسية. لرؤية جميع المنتجات والإعلانات المتاحة، اضغط على \"عرض المزيد\" في كل قسم.",
+    "onboarding.understood": "فهمت",
 };
