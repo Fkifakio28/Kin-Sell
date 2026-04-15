@@ -428,12 +428,20 @@ function VideoItem({
     video.currentTime = ratio * video.duration;
   }, []);
 
+  // Générer une URL poster à partir du premier frame de la vidéo
+  const videoSrc = resolveMediaUrl(item.url);
+  const posterUrl = useMemo(() => {
+    // Ajoute #t=0.1 pour capturer la 1ère image (poster natif du navigateur)
+    return `${videoSrc}#t=0.1`;
+  }, [videoSrc]);
+
   return (
     <>
       <video
-        src={resolveMediaUrl(item.url)}
+        src={videoSrc}
         ref={setVideoRef}
         loop
+        poster={posterUrl}
         onTimeUpdate={(e) => {
           const v = e.currentTarget;
           const fill = v.parentElement?.querySelector('.sk-video-progress') as HTMLElement | null;
@@ -445,7 +453,7 @@ function VideoItem({
         }}
         data-autoplay={isAutoPlay ? 'true' : undefined}
         playsInline
-        preload="none"
+        preload="metadata"
         disablePictureInPicture
         tabIndex={-1}
       />
@@ -746,7 +754,7 @@ export function AnnounceCard({
           userPausedRef.current = false;
         }
       });
-    }, { threshold: [0, 0.25, 0.5], rootMargin: '200px 0px' });
+    }, { threshold: [0, 0.5], rootMargin: '0px 0px' });
 
     observer.observe(cardEl);
 

@@ -401,6 +401,12 @@ a:hover {
   .ks-bubble {
     opacity: 0.2;
     filter: blur(1px);
+    animation-duration: 30s;
+    will-change: auto;
+  }
+
+  .live-background-overlay {
+    animation-duration: 24s;
   }
 
   .ks-showcase-grid {

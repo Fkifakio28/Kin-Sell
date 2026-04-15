@@ -1,5 +1,6 @@
 import { Suspense, useState } from "react";
 import { Outlet, ScrollRestoration, useLocation } from "react-router-dom";
+import { Capacitor } from "@capacitor/core";
 import { CookieConsent } from "../../components/CookieConsent";
 import { Footer } from "../../components/Footer";
 import { shouldShowSplash, SplashScreen } from "../../components/SplashScreen";
@@ -12,6 +13,9 @@ import { useIsMobile } from "../../hooks/useIsMobile";
 export function RootLayout() {
   const location = useLocation();
   const isMobile = useIsMobile();
+  const isNative = Capacitor.isNativePlatform();
+  // Désactiver la vidéo de fond sur mobile/natif pour économiser batterie et CPU
+  const disableBgVideo = isMobile || isNative;
   const hideFooter = isMobile
     || location.pathname === "/login"
     || location.pathname === "/register"
@@ -26,10 +30,12 @@ export function RootLayout() {
   return (
     <div className="live-background-shell">
       <div className="live-background-media" aria-hidden="true">
-        <video autoPlay loop muted playsInline preload="none" poster="/assets/kin-sell/live-background-poster.webp">
-          <source src="/assets/kin-sell/live-background.mp4" type="video/mp4" />
-          <source src="/assets/kin-sell/live-background.gif" type="image/gif" />
-        </video>
+        {!disableBgVideo && (
+          <video autoPlay loop muted playsInline preload="none" poster="/assets/kin-sell/live-background-poster.webp">
+            <source src="/assets/kin-sell/live-background.mp4" type="video/mp4" />
+            <source src="/assets/kin-sell/live-background.gif" type="image/gif" />
+          </video>
+        )}
       </div>
       <div className="live-background-overlay" aria-hidden="true" />
       <div className="ks-theme-bubbles" aria-hidden="true">
