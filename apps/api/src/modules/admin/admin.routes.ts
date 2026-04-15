@@ -14,6 +14,9 @@ import * as iaMessengerPromo from "../ads/ia-messenger-promo.service.js";
 import * as marketIntelligence from "../market-intelligence/market-intelligence.service.js";
 import * as billingService from "../billing/billing.service.js";
 import * as aiTrigger from "../analytics/ai-trigger.service.js";
+import { getFusedIntelligence } from "../external-intel/external-intelligence-fusion.service.js";
+import { getCategoryDemandAnalysis } from "../analytics/analytics-external-intelligence.service.js";
+import { logger } from "../../shared/logger.js";
 
 const router = Router();
 
@@ -1226,6 +1229,38 @@ router.get("/ia/market-intelligence", asyncHandler(async (req: AuthenticatedRequ
     .sort((a, b) => b.opportunityScore - a.opportunityScore)
     .slice(0, 10);
 
+  // ── External Intelligence enrichment (best-effort) ──
+  let externalEnrichment: {
+    topCategoryForecasts: Array<{ category: string; demandForecast7d: string; pricingAdjustPercent: number; triggers: string[]; confidence: number }>;
+    sourceAttribution: string[];
+  } = { topCategoryForecasts: [], sourceAttribution: [] };
+
+  try {
+    const topCats = categoryDistribution.slice(0, 5).map(c => c.category);
+    const targetCity = (city && typeof city === "string") ? city : "Kinshasa";
+    const fusionResults = await Promise.allSettled(
+      topCats.map(cat => getFusedIntelligence(cat, "CD", targetCity))
+    );
+    const allSources = new Set<string>();
+    for (let i = 0; i < fusionResults.length; i++) {
+      const r = fusionResults[i];
+      if (r.status === "fulfilled" && r.value.confidence > 10) {
+        const f = r.value;
+        externalEnrichment.topCategoryForecasts.push({
+          category: topCats[i],
+          demandForecast7d: f.demandForecast7d,
+          pricingAdjustPercent: f.pricingAdjustmentPercent,
+          triggers: f.activeTriggers.filter(t => t.severity > 40).map(t => t.explanation),
+          confidence: f.confidence,
+        });
+        f.sourceAttribution.forEach(s => allSources.add(s));
+      }
+    }
+    externalEnrichment.sourceAttribution = [...allSources];
+  } catch (err) {
+    logger.warn({ err }, "[MarketIntel] External enrichment failed (non-blocking)");
+  }
+
   res.json({
     summary: {
       totalListings: priceAnalysis._count,
@@ -1240,6 +1275,11 @@ router.get("/ia/market-intelligence", asyncHandler(async (req: AuthenticatedRequ
     competition: competitionData,
     supplyDemand: supplyDemand.map(sd => ({ category: sd.category, city: sd.marketCity.city, demandScore: sd.demandScore, supplyScore: sd.supplyScore, trend: sd.trendDirection, avgPrice: sd.avgPriceUsdCents, sampleSize: sd.sampleSize })),
     opportunities,
+    externalIntelligence: {
+      available: externalEnrichment.topCategoryForecasts.length > 0,
+      forecasts: externalEnrichment.topCategoryForecasts,
+      sourceAttribution: externalEnrichment.sourceAttribution,
+    },
   });
 }));
 
@@ -1276,6 +1316,78 @@ router.post("/ia/case-study/generate", asyncHandler(async (req: AuthenticatedReq
   const competitionLevel = sellerCount > 20 ? "Élevée" : sellerCount > 5 ? "Modérée" : "Faible";
   const opportunityScore = Math.round(((marketData?.demandScore ?? 50) - (marketData?.supplyScore ?? 50)) * 0.6 + (marketData?.demandScore ?? 50) * 0.4);
 
+  // ── External Intelligence (best-effort) ──
+  let externalIntel: {
+    fusedOpportunityScore: number | null;
+    demandForecast7d: string | null;
+    demandForecast30d: string | null;
+    pricingAdjustmentPercent: number | null;
+    activeTriggers: Array<{ trigger: string; explanation: string; severity: number; recommendedAction: string }>;
+    externalDemand: string | null;
+    externalTrend: string | null;
+    externalPriceRange: { minUsdCents: number; maxUsdCents: number } | null;
+    seasonalNote: string | null;
+    fusionExplanation: string | null;
+    sourceAttribution: string[];
+    confidence: number;
+  } = {
+    fusedOpportunityScore: null, demandForecast7d: null, demandForecast30d: null,
+    pricingAdjustmentPercent: null, activeTriggers: [], externalDemand: null,
+    externalTrend: null, externalPriceRange: null, seasonalNote: null,
+    fusionExplanation: null, sourceAttribution: [], confidence: 0,
+  };
+
+  try {
+    const [fusedResult, enrichedResult] = await Promise.allSettled([
+      getFusedIntelligence(category, "CD", city),
+      getCategoryDemandAnalysis(category, city),
+    ]);
+
+    if (fusedResult.status === "fulfilled" && fusedResult.value.confidence > 10) {
+      const f = fusedResult.value;
+      externalIntel.fusedOpportunityScore = f.opportunityScore;
+      externalIntel.demandForecast7d = f.demandForecast7d;
+      externalIntel.demandForecast30d = f.demandForecast30d;
+      externalIntel.pricingAdjustmentPercent = f.pricingAdjustmentPercent;
+      externalIntel.activeTriggers = f.activeTriggers.map(t => ({
+        trigger: t.trigger, explanation: t.explanation,
+        severity: t.severity, recommendedAction: t.recommendedAction,
+      }));
+      externalIntel.fusionExplanation = f.explanation;
+      externalIntel.sourceAttribution = f.sourceAttribution;
+      externalIntel.confidence = f.confidence;
+    }
+
+    if (enrichedResult.status === "fulfilled") {
+      const e = enrichedResult.value.data;
+      externalIntel.externalDemand = e.externalDemand !== "UNKNOWN" ? e.externalDemand : null;
+      externalIntel.externalTrend = e.externalTrend !== "UNKNOWN" ? e.externalTrend : null;
+      externalIntel.externalPriceRange = e.externalPriceRange;
+      externalIntel.seasonalNote = e.seasonalNote;
+    }
+  } catch (err) {
+    logger.warn({ err }, "[CaseStudy] External intelligence enrichment failed (non-blocking)");
+  }
+
+  // ── Build enriched recommendations (internal + external) ──
+  const recommendations: string[] = [
+    opportunityScore > 70 ? `Forte opportunité : la demande dépasse l'offre pour "${category}" à ${city}. Potentiel d'entrée.` : null,
+    sellerCount < 5 ? `Marché peu concurrentiel (${sellerCount} vendeurs). Avantage premier arrivé.` : null,
+    (marketData?.trendDirection ?? "STABLE") === "UP" ? `Tendance haussière : les prix montent. Moment favorable pour vendre.` : null,
+    avgP > 0 ? `Prix recommandé: entre ${((avgP * 0.85) / 100).toFixed(2)} et ${((avgP * 1.15) / 100).toFixed(2)} USD pour rester compétitif.` : null,
+    // External enrichments
+    externalIntel.pricingAdjustmentPercent && Math.abs(externalIntel.pricingAdjustmentPercent) > 3
+      ? `📊 Ajustement prix externe : ${externalIntel.pricingAdjustmentPercent > 0 ? "+" : ""}${externalIntel.pricingAdjustmentPercent.toFixed(1)}% recommandé par les signaux marché (${externalIntel.sourceAttribution.join(", ")}).`
+      : null,
+    externalIntel.demandForecast7d === "RISING"
+      ? `📈 Prévision 7j : demande en hausse — moment optimal pour publier.`
+      : externalIntel.demandForecast7d === "DECLINING"
+      ? `📉 Prévision 7j : demande en baisse — considérez un prix compétitif.`
+      : null,
+    externalIntel.seasonalNote ? `🗓️ Saisonnalité : ${externalIntel.seasonalNote}` : null,
+    ...externalIntel.activeTriggers.filter(t => t.severity > 50).map(t => `⚡ ${t.explanation} → ${t.recommendedAction}`),
+  ].filter(Boolean) as string[];
+
   const study = {
     id: `cs-${Date.now()}`,
     generatedAt: new Date().toISOString(),
@@ -1284,7 +1396,9 @@ router.post("/ia/case-study/generate", asyncHandler(async (req: AuthenticatedReq
     market: city,
     category,
     period: `${periodDays} jours`,
-    executiveSummary: `Analyse du marché "${category}" à ${city} sur ${periodDays} jours. ${listingsCount} articles actifs, ${newListings} nouvelles publications. Prix moyen: ${(avgP / 100).toFixed(2)} USD. Concurrence: ${competitionLevel}.`,
+    executiveSummary: `Analyse du marché "${category}" à ${city} sur ${periodDays} jours. ${listingsCount} articles actifs, ${newListings} nouvelles publications. Prix moyen: ${(avgP / 100).toFixed(2)} USD. Concurrence: ${competitionLevel}.`
+      + (externalIntel.externalDemand ? ` Demande externe: ${externalIntel.externalDemand}.` : "")
+      + (externalIntel.fusedOpportunityScore != null ? ` Score opportunité fusionné: ${externalIntel.fusedOpportunityScore}/100.` : ""),
     marketData: {
       totalListings: listingsCount,
       newListings,
@@ -1303,12 +1417,24 @@ router.post("/ia/case-study/generate", asyncHandler(async (req: AuthenticatedReq
       supplyScore: marketData?.supplyScore ?? 50,
       opportunityScore,
     },
-    recommendations: [
-      opportunityScore > 70 ? `Forte opportunité : la demande dépasse l'offre pour "${category}" à ${city}. Potentiel d'entrée.` : null,
-      sellerCount < 5 ? `Marché peu concurrentiel (${sellerCount} vendeurs). Avantage premier arrivé.` : null,
-      (marketData?.trendDirection ?? "STABLE") === "UP" ? `Tendance haussière : les prix montent. Moment favorable pour vendre.` : null,
-      avgP > 0 ? `Prix recommandé: entre ${((avgP * 0.85) / 100).toFixed(2)} et ${((avgP * 1.15) / 100).toFixed(2)} USD pour rester compétitif.` : null,
-    ].filter(Boolean),
+    externalIntelligence: {
+      available: externalIntel.confidence > 0,
+      confidence: externalIntel.confidence,
+      fusedOpportunityScore: externalIntel.fusedOpportunityScore,
+      demandForecast: {
+        sevenDays: externalIntel.demandForecast7d,
+        thirtyDays: externalIntel.demandForecast30d,
+      },
+      pricingAdjustmentPercent: externalIntel.pricingAdjustmentPercent,
+      externalDemand: externalIntel.externalDemand,
+      externalTrend: externalIntel.externalTrend,
+      externalPriceRange: externalIntel.externalPriceRange,
+      seasonalNote: externalIntel.seasonalNote,
+      activeTriggers: externalIntel.activeTriggers,
+      sourceAttribution: externalIntel.sourceAttribution,
+      fusionExplanation: externalIntel.fusionExplanation,
+    },
+    recommendations,
     metadata: {
       market: city,
       city,

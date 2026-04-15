@@ -877,6 +877,11 @@ export type MarketIntelligenceData = {
   competition: Array<{ category: string; count: number; share: number }>;
   supplyDemand: Array<{ category: string; city: string; demandScore: number; supplyScore: number; trend: string; avgPrice: number; sampleSize: number }>;
   opportunities: Array<{ category: string; city: string; demandScore: number; supplyScore: number; opportunityScore: number; avgPrice: number; trend: string }>;
+  externalIntelligence?: {
+    available: boolean;
+    forecasts: Array<{ category: string; demandForecast7d: string; pricingAdjustPercent: number; triggers: string[]; confidence: number }>;
+    sourceAttribution: string[];
+  };
 };
 
 export type CaseStudyData = {
@@ -905,6 +910,20 @@ export type CaseStudyData = {
     demandScore: number;
     supplyScore: number;
     opportunityScore: number;
+  };
+  externalIntelligence?: {
+    available: boolean;
+    confidence: number;
+    fusedOpportunityScore: number | null;
+    demandForecast: { sevenDays: string | null; thirtyDays: string | null };
+    pricingAdjustmentPercent: number | null;
+    externalDemand: string | null;
+    externalTrend: string | null;
+    externalPriceRange: { minUsdCents: number; maxUsdCents: number } | null;
+    seasonalNote: string | null;
+    activeTriggers: Array<{ trigger: string; explanation: string; severity: number; recommendedAction: string }>;
+    sourceAttribution: string[];
+    fusionExplanation: string | null;
   };
   recommendations: string[];
   metadata: {

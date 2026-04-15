@@ -247,35 +247,79 @@ export default function AdminAnalyticsPanel() {
     admin.logExport({ type: "case-study", title: filename, tier: csTier, format: "XML", size: `${(xml.length / 1024).toFixed(1)} KB` }).catch(() => {});
   };
 
-  // ── PDF Export (simple text-based) ──
+  // ── PDF Export (structured text report with external intelligence) ──
   const exportPDF = (study: CaseStudyData) => {
+    const ext = study.externalIntelligence;
     const content = [
       study.title,
       `Généré le : ${new Date(study.generatedAt).toLocaleDateString("fr-FR")}`,
       `Tier: ${study.tier.toUpperCase()}`,
       "",
+      "═══════════════════════════════════════",
       "RÉSUMÉ EXÉCUTIF",
+      "═══════════════════════════════════════",
       study.executiveSummary,
       "",
-      "DONNÉES MARCHÉ",
+      "═══════════════════════════════════════",
+      "DONNÉES MARCHÉ (INTERNES KIN-SELL)",
+      "═══════════════════════════════════════",
       `Articles actifs: ${study.marketData.totalListings}`,
       `Nouvelles publications: ${study.marketData.newListings}`,
       `Prix moyen: ${money(study.marketData.avgPriceUsdCents)}`,
       `Prix min: ${money(study.marketData.minPriceUsdCents)}`,
       `Prix max: ${money(study.marketData.maxPriceUsdCents)}`,
+      `Prix médian: ${money(study.marketData.medianPriceUsdCents)}`,
       `Vendeurs: ${study.marketData.sellerCount}`,
       `Commandes livrées: ${study.marketData.ordersDelivered}`,
       `Revenu: ${money(study.marketData.revenueUsdCents)}`,
       "",
-      "ANALYSE",
+      "═══════════════════════════════════════",
+      "ANALYSE INTERNE",
+      "═══════════════════════════════════════",
       `Concurrence: ${study.analysis.competitionLevel}`,
       `Tendance: ${study.analysis.trendDirection}`,
       `Score demande: ${study.analysis.demandScore}/100`,
       `Score offre: ${study.analysis.supplyScore}/100`,
       `Score opportunité: ${study.analysis.opportunityScore}/100`,
       "",
-      "RECOMMANDATIONS",
+      // External Intelligence section
+      ...(ext?.available ? [
+        "═══════════════════════════════════════",
+        "INTELLIGENCE EXTERNE (DONNÉES FUSIONNÉES)",
+        "═══════════════════════════════════════",
+        `Confiance: ${ext.confidence}%`,
+        ...(ext.fusedOpportunityScore != null ? [`Score opportunité fusionné (interne+externe): ${ext.fusedOpportunityScore}/100`] : []),
+        ...(ext.externalDemand ? [`Demande externe: ${ext.externalDemand}`] : []),
+        ...(ext.externalTrend ? [`Tendance externe: ${ext.externalTrend}`] : []),
+        ...(ext.externalPriceRange ? [`Fourchette prix externe: ${money(ext.externalPriceRange.minUsdCents)} — ${money(ext.externalPriceRange.maxUsdCents)}`] : []),
+        ...(ext.pricingAdjustmentPercent != null && Math.abs(ext.pricingAdjustmentPercent) > 1 ? [`Ajustement prix recommandé: ${ext.pricingAdjustmentPercent > 0 ? "+" : ""}${ext.pricingAdjustmentPercent.toFixed(1)}%`] : []),
+        "",
+        "── Prévisions de demande ──",
+        ...(ext.demandForecast.sevenDays ? [`7 jours: ${ext.demandForecast.sevenDays}`] : []),
+        ...(ext.demandForecast.thirtyDays ? [`30 jours: ${ext.demandForecast.thirtyDays}`] : []),
+        ...(ext.seasonalNote ? ["", `Saisonnalité: ${ext.seasonalNote}`] : []),
+        ...(ext.activeTriggers.length > 0 ? [
+          "",
+          "── Alertes & Triggers actifs ──",
+          ...ext.activeTriggers.map((t, i) => `  ${i + 1}. [${t.trigger}] ${t.explanation} (sévérité: ${t.severity}/100)\n     → Action: ${t.recommendedAction}`),
+        ] : []),
+        ...(ext.fusionExplanation ? ["", `Analyse fusion: ${ext.fusionExplanation}`] : []),
+        ...(ext.sourceAttribution.length > 0 ? ["", `Sources: ${ext.sourceAttribution.join(", ")}`] : []),
+        "",
+      ] : [
+        "═══════════════════════════════════════",
+        "INTELLIGENCE EXTERNE",
+        "═══════════════════════════════════════",
+        "Aucune donnée externe disponible pour cette catégorie/ville.",
+        "",
+      ]),
+      "═══════════════════════════════════════",
+      "RECOMMANDATIONS (INTERNES + EXTERNES)",
+      "═══════════════════════════════════════",
       ...study.recommendations.map((r, i) => `${i + 1}. ${r}`),
+      "",
+      "───────────────────────────────────────",
+      `Rapport généré par Kin-Sell IA · ${new Date().toLocaleDateString("fr-FR")}`,
     ].join("\n");
 
     const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
@@ -756,6 +800,38 @@ function renderMarketIntel(
               </Card>
             </>
           )}
+
+          {/* External Intelligence Forecasts */}
+          {data.externalIntelligence?.available && data.externalIntelligence.forecasts.length > 0 && (
+            <>
+              <SectionTitle icon="🌐" text="Intelligence Externe (Données Fusionnées)" />
+              <Card>
+                <div className="ad-table-wrap">
+                  <table className="ad-table" style={{ fontSize: 12 }}>
+                    <thead><tr><th>Catégorie</th><th>Prévision 7j</th><th>Ajustement prix</th><th>Confiance</th><th>Alertes</th></tr></thead>
+                    <tbody>
+                      {data.externalIntelligence.forecasts.map((f, i) => (
+                        <tr key={i}>
+                          <td style={{ fontWeight: 600 }}>{f.category}</td>
+                          <td><Badge color={f.demandForecast7d === "RISING" ? C.success : f.demandForecast7d === "DECLINING" ? C.danger : C.text3}>{f.demandForecast7d}</Badge></td>
+                          <td style={{ color: f.pricingAdjustPercent > 0 ? C.success : f.pricingAdjustPercent < 0 ? C.danger : C.text2 }}>
+                            {f.pricingAdjustPercent > 0 ? "+" : ""}{f.pricingAdjustPercent.toFixed(1)}%
+                          </td>
+                          <td><ScoreBar value={f.confidence} color={f.confidence > 60 ? C.success : f.confidence > 30 ? C.amber : C.text3} /></td>
+                          <td style={{ fontSize: 11, maxWidth: 200 }}>{f.triggers.length > 0 ? f.triggers.join(" · ") : "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {data.externalIntelligence.sourceAttribution.length > 0 && (
+                  <p style={{ color: C.text3, fontSize: 10, marginTop: 8, fontStyle: "italic" }}>
+                    Sources : {data.externalIntelligence.sourceAttribution.join(", ")}
+                  </p>
+                )}
+              </Card>
+            </>
+          )}
         </>
       )}
     </>
@@ -893,7 +969,7 @@ function renderCaseStudy(
           {/* Recommendations */}
           {data.recommendations.length > 0 && (
             <>
-              <SectionTitle icon="💡" text="Recommandations" />
+              <SectionTitle icon="💡" text="Recommandations (Internes + Externes)" />
               <Card>
                 <ul style={{ margin: 0, paddingLeft: 20, fontSize: 13, color: C.text, lineHeight: 1.8 }}>
                   {data.recommendations.map((r, i) => (
@@ -901,6 +977,67 @@ function renderCaseStudy(
                   ))}
                 </ul>
               </Card>
+            </>
+          )}
+
+          {/* External Intelligence */}
+          {data.externalIntelligence?.available && (
+            <>
+              <SectionTitle icon="🌐" text="Intelligence Externe Fusionnée" />
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 10, marginBottom: 12 }}>
+                {data.externalIntelligence.fusedOpportunityScore != null && (
+                  <Card style={{ padding: 14 }}>
+                    <div style={{ fontSize: 11, color: C.text3, marginBottom: 4 }}>Score fusionné</div>
+                    <ScoreBar value={data.externalIntelligence.fusedOpportunityScore} color={data.externalIntelligence.fusedOpportunityScore > 70 ? C.success : data.externalIntelligence.fusedOpportunityScore > 40 ? C.amber : C.text3} />
+                  </Card>
+                )}
+                {data.externalIntelligence.externalDemand && (
+                  <Card style={{ padding: 14 }}>
+                    <div style={{ fontSize: 11, color: C.text3, marginBottom: 4 }}>Demande externe</div>
+                    <Badge color={data.externalIntelligence.externalDemand === "HIGH" ? C.success : data.externalIntelligence.externalDemand === "MEDIUM" ? C.amber : C.text3}>{data.externalIntelligence.externalDemand}</Badge>
+                  </Card>
+                )}
+                {data.externalIntelligence.demandForecast.sevenDays && (
+                  <Card style={{ padding: 14 }}>
+                    <div style={{ fontSize: 11, color: C.text3, marginBottom: 4 }}>Prévision 7j</div>
+                    <Badge color={data.externalIntelligence.demandForecast.sevenDays === "RISING" ? C.success : data.externalIntelligence.demandForecast.sevenDays === "DECLINING" ? C.danger : C.text3}>{data.externalIntelligence.demandForecast.sevenDays}</Badge>
+                  </Card>
+                )}
+                {data.externalIntelligence.pricingAdjustmentPercent != null && Math.abs(data.externalIntelligence.pricingAdjustmentPercent) > 1 && (
+                  <Card style={{ padding: 14 }}>
+                    <div style={{ fontSize: 11, color: C.text3, marginBottom: 4 }}>Ajustement prix</div>
+                    <span style={{ fontSize: 16, fontWeight: 700, color: data.externalIntelligence.pricingAdjustmentPercent > 0 ? C.success : C.danger }}>
+                      {data.externalIntelligence.pricingAdjustmentPercent > 0 ? "+" : ""}{data.externalIntelligence.pricingAdjustmentPercent.toFixed(1)}%
+                    </span>
+                  </Card>
+                )}
+                <Card style={{ padding: 14 }}>
+                  <div style={{ fontSize: 11, color: C.text3, marginBottom: 4 }}>Confiance</div>
+                  <ScoreBar value={data.externalIntelligence.confidence} color={data.externalIntelligence.confidence > 60 ? C.success : data.externalIntelligence.confidence > 30 ? C.amber : C.text3} />
+                </Card>
+              </div>
+              {data.externalIntelligence.activeTriggers.length > 0 && (
+                <Card style={{ marginBottom: 12 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: C.text, marginBottom: 8 }}>⚡ Alertes actives</div>
+                  {data.externalIntelligence.activeTriggers.map((t, i) => (
+                    <div key={i} style={{ padding: "6px 0", borderBottom: i < data.externalIntelligence!.activeTriggers.length - 1 ? `1px solid ${C.border}` : "none", fontSize: 12 }}>
+                      <span style={{ fontWeight: 600, color: t.severity > 70 ? C.danger : t.severity > 40 ? C.amber : C.text2 }}>[{t.trigger}]</span>{" "}
+                      <span style={{ color: C.text }}>{t.explanation}</span>
+                      <div style={{ color: C.text3, fontSize: 11, marginTop: 2 }}>→ {t.recommendedAction}</div>
+                    </div>
+                  ))}
+                </Card>
+              )}
+              {data.externalIntelligence.seasonalNote && (
+                <Card style={{ marginBottom: 12, padding: 14 }}>
+                  <span style={{ fontSize: 12 }}>🗓️ <strong>Saisonnalité :</strong> {data.externalIntelligence.seasonalNote}</span>
+                </Card>
+              )}
+              {data.externalIntelligence.sourceAttribution.length > 0 && (
+                <p style={{ color: C.text3, fontSize: 10, fontStyle: "italic" }}>
+                  Sources : {data.externalIntelligence.sourceAttribution.join(", ")}
+                </p>
+              )}
             </>
           )}
 
