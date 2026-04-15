@@ -1,11 +1,11 @@
 import { useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
-import { clearAuthSession, request } from "../../lib/api-client";
+import { API_BASE, clearAuthSession, request } from "../../lib/api-client";
 import { useLocaleCurrency } from "../../app/providers/LocaleCurrencyProvider";
 
 function logOAuthDebug(stage: string, info?: string) {
   try {
-    fetch("/api/auth/oauth/debug", {
+    fetch(`${API_BASE}/auth/oauth/debug`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",

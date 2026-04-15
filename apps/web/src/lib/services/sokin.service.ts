@@ -118,10 +118,6 @@ export const sokin = {
     }),
   createComment: (id: string, body: { content: string; parentCommentId?: string }) =>
     mutate<{ comment: SoKinApiComment }>(`/sokin/posts/${encodeURIComponent(id)}/comments`, { method: 'POST', body }, [`/sokin/posts/${encodeURIComponent(id)}/comments`, `/sokin/posts/${encodeURIComponent(id)}`]),
-  publicUsers: (params?: { city?: string; search?: string; country?: string }) =>
-    request<{ users: SoKinPublicUser[] }>('/sokin/users', {
-      params: params as Record<string, string | undefined>,
-    }),
 
   // ── Interactions sociales ──
 

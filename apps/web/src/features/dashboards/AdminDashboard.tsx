@@ -3,6 +3,7 @@ import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../app/providers/AuthProvider';
 import { getDashboardPath } from '../../utils/role-routing';
 import { useLocaleCurrency } from '../../app/providers/LocaleCurrencyProvider';
+import { API_BASE } from '../../lib/api-client';
 import {
   admin,
   invalidateCache,
@@ -796,7 +797,7 @@ export function AdminDashboard() {
     try {
       const formData = new FormData();
       formData.append('files', file);
-      const res = await fetch(`${import.meta.env.VITE_API_URL || ''}/uploads`, {
+      const res = await fetch(`${API_BASE}/uploads`, {
         method: 'POST',
         credentials: 'include',
         body: formData,
@@ -3683,7 +3684,7 @@ export function AdminDashboard() {
     setIaLoading(true);
     setIaData(null);
     try {
-      const res = await fetch(`${(import.meta as any).env?.VITE_API_URL ?? '/api'}/admin/ia/${endpoint}`, {
+      const res = await fetch(`${API_BASE}/admin/ia/${endpoint}`, {
         credentials: 'include',
       });
       if (res.ok) setIaData(await res.json());

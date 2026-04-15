@@ -187,7 +187,10 @@ export async function checkStatus(userId: string, paymentId: string) {
 export function verifyWebhookToken(req: { headers: Record<string, string | string[] | undefined>; query: Record<string, unknown> }): void {
   const secret = env.MOMO_WEBHOOK_SECRET;
   if (!secret) {
-    // Pas de secret configuré → log warning mais laisser passer (backward compat dev)
+    if (env.NODE_ENV === "production") {
+      throw new HttpError(503, "Configuration webhook incomplète");
+    }
+    // Dev/test: log warning mais laisser passer
     logger.warn("MOMO_WEBHOOK_SECRET non configuré — webhook non vérifié");
     return;
   }
