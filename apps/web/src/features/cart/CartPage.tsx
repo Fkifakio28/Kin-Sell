@@ -732,6 +732,9 @@ export function CartPage() {
                   <span className="cart-history-card-meta">
                     {order.itemsCount} article{order.itemsCount > 1 ? 's' : ''} · {new Date(order.createdAt).toLocaleDateString('fr-FR')}
                   </span>
+                  {order.autoExpireAt && (
+                    <span className="ud-ord-expire-deadline" style={{ display: 'block', marginTop: '4px' }}>⏳ Expire le {new Date(order.autoExpireAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}</span>
+                  )}
                 </div>
                 <div className="cart-history-card-actions" onClick={(e) => e.stopPropagation()}>
                   {(order.status === 'PROCESSING' || order.status === 'SHIPPED') && (
@@ -1203,6 +1206,7 @@ export function CartPage() {
                           ))}
                           <div className="cart-history-card-dates">
                             <span>Créée : {new Date(order.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                            {order.autoExpireAt && <span className="ud-ord-expire-deadline">⏳ Expire le {new Date(order.autoExpireAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}</span>}
                             {order.deliveredAt && <span>Livrée : {new Date(order.deliveredAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>}
                             {order.canceledAt && <span>Annulée : {new Date(order.canceledAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>}
                           </div>

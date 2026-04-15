@@ -3400,6 +3400,13 @@
   text-overflow: ellipsis;
 }
 
+.ud-ord-expire-deadline {
+  font-size: 0.68rem;
+  color: #ff9800;
+  margin: 4px 0 0;
+  font-weight: 600;
+}
+
 /* Card: Actions */
 .ud-ord-card-actions {
   display: flex;

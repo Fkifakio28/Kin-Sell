@@ -172,7 +172,14 @@ const mapOrder = (order: {
     lineTotalUsdCents: number;
     listing?: { imageUrl: string | null } | null;
   }>;
-}) => ({
+}) => {
+  const ORDER_EXPIRY_DAYS = 30;
+  const isActive = !(["DELIVERED", "CANCELED"] as string[]).includes(order.status);
+  const autoExpireAt = isActive
+    ? new Date(order.createdAt.getTime() + ORDER_EXPIRY_DAYS * 24 * 60 * 60 * 1000).toISOString()
+    : null;
+
+  return {
   id: order.id,
   status: order.status,
   currency: order.currency,
@@ -182,6 +189,7 @@ const mapOrder = (order: {
   confirmedAt: order.confirmedAt?.toISOString() ?? null,
   deliveredAt: order.deliveredAt?.toISOString() ?? null,
   canceledAt: order.canceledAt?.toISOString() ?? null,
+  autoExpireAt,
   buyer: {
     userId: order.buyer.id,
     displayName: order.buyer.profile?.displayName ?? "Acheteur Kin-Sell",
@@ -208,7 +216,8 @@ const mapOrder = (order: {
     lineTotalUsdCents: item.lineTotalUsdCents,
     imageUrl: item.listing?.imageUrl ?? null
   }))
-});
+};
+};
 
 const getOpenCartId = async (userId: string) => {
   const existing = await prisma.cart.findFirst({
@@ -921,4 +930,47 @@ export const updateSellerOrderStatus = async (userId: string, orderId: string, n
 
   const mapped = mapOrder(updated);
   return { ...mapped, _exhaustedListings: exhaustedListings };
+};
+
+// ── Auto-annulation des commandes sans validation depuis 30 jours ──
+const ORDER_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000; // 30 jours
+
+export const cancelExpiredOrders = async (): Promise<{ canceled: number }> => {
+  const cutoff = new Date(Date.now() - ORDER_EXPIRY_MS);
+
+  const expiredOrders = await prisma.order.findMany({
+    where: {
+      status: { in: [OrderStatus.PENDING, OrderStatus.CONFIRMED, OrderStatus.PROCESSING, OrderStatus.SHIPPED] },
+      createdAt: { lt: cutoff },
+    },
+    select: { id: true, buyerUserId: true, sellerUserId: true, status: true, totalUsdCents: true },
+    take: 200,
+  });
+
+  if (expiredOrders.length === 0) return { canceled: 0 };
+
+  const ids = expiredOrders.map((o) => o.id);
+  await prisma.order.updateMany({
+    where: { id: { in: ids } },
+    data: { status: OrderStatus.CANCELED, canceledAt: new Date() },
+  });
+
+  // Audit + notifications
+  for (const order of expiredOrders) {
+    await prisma.auditLog.create({
+      data: {
+        actorUserId: "SYSTEM",
+        action: "ORDER_AUTO_CANCELED_30_DAYS",
+        entityType: "ORDER",
+        entityId: order.id,
+        metadata: {
+          reason: "Validation code not entered within 30 days",
+          previousStatus: order.status,
+          totalUsdCents: order.totalUsdCents,
+        },
+      },
+    }).catch(() => {});
+  }
+
+  return { canceled: expiredOrders.length };
 };

@@ -2547,6 +2547,12 @@ export function BusinessDashboard() {
                             <span>Date</span>
                             <span className="ud-neg-price-original">{new Date(order.createdAt).toLocaleDateString('fr-FR')}</span>
                           </div>
+                          {order.autoExpireAt && (
+                            <div className="ud-neg-price-row">
+                              <span>⏳ Expire</span>
+                              <span className="ud-ord-expire-deadline">{new Date(order.autoExpireAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
+                            </div>
+                          )}
                         </div>
 
                         {/* Actions vendeur */}

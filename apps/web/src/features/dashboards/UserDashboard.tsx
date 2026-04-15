@@ -3288,6 +3288,9 @@ export function UserDashboard() {
                             <div className="ud-ord-card-body">
                               <p className="ud-ord-card-amount">{money(order.totalUsdCents)}</p>
                               <p className="ud-ord-card-meta">{order.itemsCount} {order.itemsCount > 1 ? t('user.articlesLabel') : t('user.articleLabel')} · {new Date(order.createdAt).toLocaleDateString('fr-FR')}</p>
+                              {order.autoExpireAt && (
+                                <p className="ud-ord-expire-deadline">⏳ Expire le {new Date(order.autoExpireAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+                              )}
                             </div>
                             <div className="ud-ord-card-actions">
                               <button type="button" className="ud-ord-action ud-ord-action--detail" title={t('user.orderDetailLabel')} onClick={() => void handleOrderDetail(order.id)}>

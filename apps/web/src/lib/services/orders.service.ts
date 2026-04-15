@@ -50,6 +50,7 @@ export type OrderSummary = {
   confirmedAt: string | null;
   deliveredAt: string | null;
   canceledAt: string | null;
+  autoExpireAt: string | null;
   buyer: {
     userId: string;
     displayName: string;
