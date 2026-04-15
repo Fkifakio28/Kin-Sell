@@ -1239,7 +1239,8 @@ export function CartPage() {
               ) : (
                 <div className="cart-history-list">
                   {filteredBuyerNegos.map((nego) => {
-                    const lastOffer = nego.offers[nego.offers.length - 1];
+                    const offers = Array.isArray(nego.offers) ? nego.offers : [];
+                    const lastOffer = offers.length > 0 ? offers[offers.length - 1] : null;
                     const isActive = NEGO_ACTIVE_STATUSES.includes(nego.status);
                     return (
                       <div
@@ -1296,8 +1297,15 @@ export function CartPage() {
                         {selectedNego?.id === nego.id && (
                           <div className="cart-history-card-detail">
                             <div className="cart-nego-timeline">
-                              {nego.offers.map((offer, idx) => (
-                                <div key={offer.id} className={`cart-nego-timeline-item ${offer.fromUserId === nego.buyerUserId ? 'cart-nego-timeline--buyer' : 'cart-nego-timeline--seller'}`}>
+                              {offers.length === 0 ? (
+                                <div className="cart-nego-timeline-item cart-nego-timeline--event">
+                                  <div className="cart-nego-timeline-dot" />
+                                  <div className="cart-nego-timeline-content">
+                                    <span className="cart-nego-timeline-date">Historique des offres indisponible pour ce marchandage.</span>
+                                  </div>
+                                </div>
+                              ) : offers.map((offer, idx) => (
+                                <div key={offer.id ?? `${nego.id}-${idx}`} className={`cart-nego-timeline-item ${offer.fromUserId === nego.buyerUserId ? 'cart-nego-timeline--buyer' : 'cart-nego-timeline--seller'}`}>
                                   <div className="cart-nego-timeline-dot" />
                                   <div className="cart-nego-timeline-content">
                                     <div className="cart-nego-timeline-head">
