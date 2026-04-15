@@ -41,15 +41,17 @@ export function NegotiationRespondPopup({ negotiation, onClose, onUpdated, showA
     return () => { cancelled = true; };
   }, [negotiation.id, showAi]);
 
+  const offers = Array.isArray(negotiation.offers) ? negotiation.offers : [];
+
   // Auto-scroll to bottom of chat
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [negotiation.offers.length]);
+  }, [offers.length]);
 
-  const lastOffer = negotiation.offers[negotiation.offers.length - 1];
+  const lastOffer = offers.length > 0 ? offers[offers.length - 1] : null;
 
   // Price evolution
-  const firstPrice = negotiation.offers[0]?.priceUsdCents ?? negotiation.originalPriceUsdCents;
+  const firstPrice = offers[0]?.priceUsdCents ?? negotiation.originalPriceUsdCents;
   const currentPrice = lastOffer?.priceUsdCents ?? firstPrice;
   const priceChangePercent = firstPrice > 0 ? Math.round(((currentPrice - firstPrice) / firstPrice) * 100) : 0;
 
@@ -146,7 +148,7 @@ export function NegotiationRespondPopup({ negotiation, onClose, onUpdated, showA
         </div>
 
         {/* ── Progress bar: original price → current offer ── */}
-        {negotiation.offers.length > 0 && (() => {
+        {offers.length > 0 && (() => {
           const orig = negotiation.originalPriceUsdCents;
           const progress = orig > 0 ? Math.min(100, Math.max(0, Math.round((currentPrice / orig) * 100))) : 0;
           return (
@@ -169,9 +171,9 @@ export function NegotiationRespondPopup({ negotiation, onClose, onUpdated, showA
             <span>🏷 Prix catalogue : {formatMoneyFromUsdCents(negotiation.originalPriceUsdCents)} • Quantité : {negotiation.quantity}</span>
           </div>
 
-          {negotiation.offers.map((offer, i) => {
+          {offers.map((offer, i) => {
             const isBuyer = offer.fromUserId === negotiation.buyerUserId;
-            const isLast = i === negotiation.offers.length - 1;
+            const isLast = i === offers.length - 1;
             return (
               <div
                 key={offer.id}
@@ -209,10 +211,10 @@ export function NegotiationRespondPopup({ negotiation, onClose, onUpdated, showA
           )}
 
           {/* Engagement message */}
-          {!sendingAction && negotiation.offers.length >= 1 && (negotiation.status === "PENDING" || negotiation.status === "COUNTERED") && (
+          {!sendingAction && offers.length >= 1 && (negotiation.status === "PENDING" || negotiation.status === "COUNTERED") && (
             <div className="neg-chat-system neg-chat-system--hint">
               <span>{
-                negotiation.offers.length === 1 ? "💬 Le vendeur attend votre réponse" :
+                offers.length === 1 ? "💬 Le vendeur attend votre réponse" :
                 priceChangePercent < -10 ? "🔥 Vous êtes proche d'un accord !" :
                 priceChangePercent !== 0 ? "💡 Les négociations avancent bien !" :
                 "💬 Continuez la discussion..."

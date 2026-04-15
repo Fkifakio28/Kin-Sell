@@ -418,7 +418,7 @@ function ExplorerPageMobile() {
           promoExpiresAt: item.promoActive ? (item as any).promoExpiresAt ?? null : null,
           latitude: item.latitude ?? undefined, longitude: item.longitude ?? undefined,
         });
-        if (!cancelled) setLiveArticles([...pRes.results.map(map), ...sRes.results.map(map)]);
+        if (!cancelled) setLiveArticles([...(pRes.results ?? []).map(map), ...(sRes.results ?? []).map(map)]);
       } catch { if (!cancelled) setLiveArticles([]); } finally { if (!cancelled) setIsLoadingArticles(false); }
     };
     void load();

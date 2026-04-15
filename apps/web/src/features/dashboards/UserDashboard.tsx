@@ -2809,7 +2809,8 @@ export function UserDashboard() {
                       <div className="ud-neg-grid">
                         {/* Négociations actives */}
                         {activeNegs.map((neg) => {
-                          const lastOffer = neg.offers[neg.offers.length - 1];
+                          const offers = Array.isArray(neg.offers) ? neg.offers : [];
+                          const lastOffer = offers.length > 0 ? offers[offers.length - 1] : null;
                           const canRespond = (neg.status === 'PENDING' || neg.status === 'COUNTERED') && lastOffer && lastOffer.fromUserId !== neg.sellerUserId;
                           return (
                             <div key={`neg-${neg.id}`} className={`ud-neg-card glass-card ud-neg-card--${neg.status.toLowerCase()}`}>
@@ -2990,7 +2991,8 @@ export function UserDashboard() {
                       <div className="ud-neg-grid">
                         {/* Négociations terminées */}
                         {doneNegs.map((neg) => {
-                          const lastOffer = neg.offers[neg.offers.length - 1];
+                          const offers = Array.isArray(neg.offers) ? neg.offers : [];
+                          const lastOffer = offers.length > 0 ? offers[offers.length - 1] : null;
                           return (
                             <div key={`neg-${neg.id}`} className={`ud-neg-card glass-card ud-neg-card--${neg.status.toLowerCase()}`}>
                               <span className="ud-tx-type-label">🤝 Marchandage</span>
@@ -3187,7 +3189,8 @@ export function UserDashboard() {
                       <div className="ud-neg-grid">
                         {/* Négociations actives */}
                         {activeNegs.map((neg) => {
-                          const lastOffer = neg.offers[neg.offers.length - 1];
+                          const offers = Array.isArray(neg.offers) ? neg.offers : [];
+                          const lastOffer = offers.length > 0 ? offers[offers.length - 1] : null;
                           const canRespond = neg.status === 'COUNTERED' && lastOffer && lastOffer.fromUserId !== neg.buyerUserId;
                           const canCancel = neg.status === 'PENDING' || neg.status === 'COUNTERED';
                           return (
@@ -3339,7 +3342,8 @@ export function UserDashboard() {
                     return (
                       <div className="ud-neg-grid">
                         {doneNegs.map((neg) => {
-                          const lastOffer = neg.offers[neg.offers.length - 1];
+                          const offers = Array.isArray(neg.offers) ? neg.offers : [];
+                          const lastOffer = offers.length > 0 ? offers[offers.length - 1] : null;
                           return (
                             <div key={`neg-${neg.id}`} className={`ud-neg-card glass-card ud-neg-card--${neg.status.toLowerCase()}`}>
                               <span className="ud-tx-type-label">🤝 Marchandage</span>

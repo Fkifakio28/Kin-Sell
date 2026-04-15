@@ -24,10 +24,11 @@ export function BlogPage() {
     const load = async () => {
       try {
         const data = await blog.publicPosts({ limit: 12 });
+        const posts = Array.isArray(data.posts) ? data.posts : [];
         if (!cancelled) {
-          setPosts(data.posts);
-          if (isLoggedIn && data.posts.length > 0) {
-            const reactionState = await blog.myReactions(data.posts.map((p) => p.id));
+          setPosts(posts);
+          if (isLoggedIn && posts.length > 0) {
+            const reactionState = await blog.myReactions(posts.map((p) => p.id));
             if (!cancelled) setMyReactions(reactionState.reactions);
           }
         }

@@ -1,7 +1,7 @@
 /* Service Worker for Push Notifications */
 const DEFAULT_ICON = "/apple-touch-icon.png";
 const DEFAULT_BADGE = "/favicon-32.png";
-const STATIC_CACHE_NAME = "kin-sell-static-v1";
+const STATIC_CACHE_NAME = "kin-sell-static-v2";
 
 function resolveTarget(data) {
   if (!data || typeof data !== "object") return "/";

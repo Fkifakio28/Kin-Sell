@@ -420,8 +420,8 @@ export function ExplorerPageDesktop() {
           longitude: item.longitude ?? undefined,
         });
 
-        const products: ExplorerArticlePreview[] = productsRes.results.map(mapToPreview);
-        const services: ExplorerArticlePreview[] = servicesRes.results.map(mapToPreview);
+        const products: ExplorerArticlePreview[] = (productsRes.results ?? []).map(mapToPreview);
+        const services: ExplorerArticlePreview[] = (servicesRes.results ?? []).map(mapToPreview);
 
         const combined = [...products, ...services];
         if (!cancelled) setLiveArticles(combined);
