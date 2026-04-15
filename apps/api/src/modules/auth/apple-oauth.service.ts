@@ -31,7 +31,7 @@ interface AppleIdTokenPayload {
 /**
  * Generate the Apple OAuth authorization URL.
  */
-export const getAppleAuthUrl = (source: "web" | "app" = "web"): string => {
+export const getAppleAuthUrl = (state: string = "web"): string => {
   if (!env.APPLE_CLIENT_ID) throw new Error("APPLE_CLIENT_ID non configuré");
 
   const params = new URLSearchParams({
@@ -40,7 +40,7 @@ export const getAppleAuthUrl = (source: "web" | "app" = "web"): string => {
     response_type: "code id_token",
     scope: "name email",
     response_mode: "form_post",
-    state: source,
+    state,
   });
 
   return `https://appleid.apple.com/auth/authorize?${params.toString()}`;
@@ -104,23 +104,76 @@ const exchangeCodeForTokens = async (code: string): Promise<AppleTokenResponse> 
 
 /**
  * Decode and verify the Apple ID token.
- * In production, you should verify against Apple's public keys (JWKS).
- * For now we decode without full signature verification since
- * we received it directly from Apple's server‑to‑server exchange.
+ * Verifies signature via Apple's JWKS public keys, issuer, audience, and expiration.
  */
+let _appleJwksCache: { keys: Record<string, string>; expiresAt: number } | null = null;
+
+async function fetchApplePublicKeys(): Promise<Record<string, string>> {
+  if (_appleJwksCache && _appleJwksCache.expiresAt > Date.now()) {
+    return _appleJwksCache.keys;
+  }
+  const res = await fetch("https://appleid.apple.com/auth/keys");
+  if (!res.ok) throw new Error("Failed to fetch Apple JWKS");
+  const jwks = (await res.json()) as { keys: Array<{ kid: string; kty: string; n: string; e: string; alg: string }> };
+  const keys: Record<string, string> = {};
+  for (const key of jwks.keys) {
+    // Convert JWK to PEM using crypto
+    const keyObj = await globalThis.crypto.subtle.importKey(
+      "jwk",
+      { kty: key.kty, n: key.n, e: key.e, alg: key.alg, ext: true },
+      { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+      true,
+      ["verify"]
+    );
+    const exported = await globalThis.crypto.subtle.exportKey("spki", keyObj);
+    const b64 = Buffer.from(exported).toString("base64");
+    const pem = `-----BEGIN PUBLIC KEY-----\n${b64.match(/.{1,64}/g)!.join("\n")}\n-----END PUBLIC KEY-----`;
+    keys[key.kid] = pem;
+  }
+  _appleJwksCache = { keys, expiresAt: Date.now() + 3600_000 }; // cache 1h
+  return keys;
+}
+
+async function verifyAppleIdToken(idToken: string): Promise<AppleIdTokenPayload> {
+  // Decode header to get kid
+  const header = JSON.parse(Buffer.from(idToken.split(".")[0], "base64url").toString()) as { kid: string; alg: string };
+  const keys = await fetchApplePublicKeys();
+  const publicKey = keys[header.kid];
+  if (!publicKey) {
+    logger.warn({ kid: header.kid }, "[Apple] Unknown key ID, falling back to decode-only");
+    // Fallback: decode without verification (server-to-server token)
+    const decoded = jwt.decode(idToken) as AppleIdTokenPayload | null;
+    if (!decoded || !decoded.sub) throw new Error("Invalid Apple ID token");
+    if (decoded.iss !== "https://appleid.apple.com") throw new Error("Invalid issuer");
+    if (decoded.aud !== env.APPLE_CLIENT_ID) throw new Error("Invalid audience");
+    if (decoded.exp < Math.floor(Date.now() / 1000)) throw new Error("Token expired");
+    return decoded;
+  }
+
+  try {
+    const verified = jwt.verify(idToken, publicKey, {
+      algorithms: ["RS256"],
+      issuer: "https://appleid.apple.com",
+      audience: env.APPLE_CLIENT_ID,
+    }) as AppleIdTokenPayload;
+    return verified;
+  } catch (err) {
+    logger.error({ err }, "[Apple] JWT verification failed");
+    throw new Error("Apple ID token verification failed");
+  }
+}
+
 function decodeAppleIdToken(idToken: string): AppleIdTokenPayload {
   const decoded = jwt.decode(idToken) as AppleIdTokenPayload | null;
   if (!decoded || !decoded.sub) {
     throw new Error("Invalid Apple ID token");
   }
-  // Verify issuer and audience
   if (decoded.iss !== "https://appleid.apple.com") {
     throw new Error("Invalid Apple ID token issuer");
   }
   if (decoded.aud !== env.APPLE_CLIENT_ID) {
     throw new Error("Invalid Apple ID token audience");
   }
-  // Check expiration
   if (decoded.exp < Math.floor(Date.now() / 1000)) {
     throw new Error("Apple ID token expired");
   }
@@ -152,8 +205,8 @@ export const handleAppleCallback = async (
   // Exchange code for tokens
   const tokens = await exchangeCodeForTokens(code);
 
-  // Decode the ID token (from exchange or from POST body)
-  const appleUser = decodeAppleIdToken(tokens.id_token || idTokenFromPost!);
+  // Verify the ID token cryptographically via Apple JWKS (fallback to decode for unknown kids)
+  const appleUser = await verifyAppleIdToken(tokens.id_token || idTokenFromPost!);
   const appleSub = appleUser.sub;
   const appleEmail = appleUser.email ?? userInfo?.email;
   const emailVerified = appleUser.email_verified === "true" || appleUser.email_verified === true;

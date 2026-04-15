@@ -24,16 +24,42 @@ interface AppCodeEntry {
   displayName: string;
   expiresAt: number;
   consumed?: boolean;
+  ip?: string; // SECURITY: bind code to requester IP
 }
 const appCodeStore = new Map<string, AppCodeEntry>();
 
-// Purge expired codes every 60s
+/* ── OAuth state store (anti-CSRF random tokens) ── */
+const oauthStateStore = new Map<string, { source: string; expiresAt: number }>();
+
+// Purge expired codes & states every 60s
 setInterval(() => {
   const now = Date.now();
   for (const [k, v] of appCodeStore) {
     if (v.expiresAt < now) appCodeStore.delete(k);
   }
+  for (const [k, v] of oauthStateStore) {
+    if (v.expiresAt < now) oauthStateStore.delete(k);
+  }
 }, 60_000);
+
+function createOAuthState(source: string): string {
+  const token = crypto.randomBytes(24).toString("hex");
+  const state = `${source}:${token}`;
+  oauthStateStore.set(token, { source, expiresAt: Date.now() + 10 * 60 * 1000 });
+  return state;
+}
+
+function verifyOAuthState(state: string | undefined): string {
+  if (!state || !state.includes(":")) throw new Error("Missing OAuth state");
+  const [source, token] = state.split(":", 2);
+  const entry = oauthStateStore.get(token);
+  if (!entry || entry.expiresAt < Date.now()) {
+    oauthStateStore.delete(token);
+    throw new Error("Invalid or expired OAuth state");
+  }
+  oauthStateStore.delete(token);
+  return source;
+}
 
 const registerSchema = z.object({
   email: z.string().email(),
@@ -173,12 +199,19 @@ router.get("/google", (req, res) => {
     return;
   }
   const source = req.query.source === "app" ? "app" : "web";
-  res.redirect(getGoogleAuthUrl(source));
+  const state = createOAuthState(source);
+  res.redirect(getGoogleAuthUrl(state));
 });
 
 router.get("/google/callback", asyncHandler(async (req, res) => {
+  let source: string;
+  try {
+    source = verifyOAuthState(req.query.state as string | undefined);
+  } catch {
+    res.status(403).json({ error: "Invalid OAuth state" });
+    return;
+  }
   const code = req.query.code as string;
-  const source = req.query.state === "app" ? "app" : "web";
   const callbackBase = source === "app"
     ? `${env.FRONTEND_URL}/auth/app-redirect.html`
     : `${env.FRONTEND_URL}/auth/callback`;
@@ -204,6 +237,7 @@ router.get("/google/callback", asyncHandler(async (req, res) => {
         role: result.user.role,
         displayName: result.user.displayName ?? "",
         expiresAt: Date.now() + 5 * 60 * 1000, // 5 min
+        ip: req.ip,
       });
       const params = new URLSearchParams({
         appCode,
@@ -242,15 +276,22 @@ router.get("/apple", (req, res) => {
     return;
   }
   const source = req.query.source === "app" ? "app" : "web";
-  res.redirect(getAppleAuthUrl(source));
+  const state = createOAuthState(source);
+  res.redirect(getAppleAuthUrl(state));
 });
 
 // Apple uses form_post — callback is a POST
 router.post("/apple/callback", asyncHandler(async (req, res) => {
   const code = req.body?.code as string | undefined;
   const idToken = req.body?.id_token as string | undefined;
-  const state = req.body?.state === "app" ? "app" : "web";
-  const callbackBase = state === "app"
+  let source: string;
+  try {
+    source = verifyOAuthState(req.body?.state as string | undefined);
+  } catch {
+    res.status(403).json({ error: "Invalid OAuth state" });
+    return;
+  }
+  const callbackBase = source === "app"
     ? `${env.FRONTEND_URL}/auth/app-redirect.html`
     : `${env.FRONTEND_URL}/auth/callback`;
 
@@ -271,7 +312,7 @@ router.post("/apple/callback", asyncHandler(async (req, res) => {
   try {
     const result = await handleAppleCallback(code, idToken ?? undefined, userInfo);
 
-    if (state === "app") {
+    if (source === "app") {
       const appCode = crypto.randomBytes(32).toString("hex");
       appCodeStore.set(appCode, {
         accessToken: result.accessToken,
@@ -281,6 +322,7 @@ router.post("/apple/callback", asyncHandler(async (req, res) => {
         role: result.user.role,
         displayName: result.user.displayName ?? "",
         expiresAt: Date.now() + 5 * 60 * 1000,
+        ip: req.ip,
       });
       const params = new URLSearchParams({
         appCode,
@@ -310,6 +352,7 @@ router.post("/apple/callback", asyncHandler(async (req, res) => {
     res.redirect(`${callbackBase}?${params.toString()}`);
   }
 }));
+
 
 // Apple native SDK: verify identity token from iOS Sign in with Apple
 router.post("/apple/native", rateLimit(RateLimits.LOGIN), asyncHandler(async (req, res) => {
@@ -354,6 +397,14 @@ router.post("/app/exchange", rateLimit(RateLimits.APP_EXCHANGE), asyncHandler(as
   if (!entry || entry.expiresAt < Date.now()) {
     appCodeStore.delete(appCode);
     res.status(401).json({ error: "Code invalide ou expiré" });
+    return;
+  }
+
+  // SECURITY: verify IP matches the one that created the code (prevent interception)
+  if (entry.ip && entry.ip !== req.ip) {
+    logger.warn({ expected: entry.ip, got: req.ip }, "[AppCode] IP mismatch on exchange");
+    appCodeStore.delete(appCode);
+    res.status(403).json({ error: "Code invalide" });
     return;
   }
 

@@ -202,6 +202,11 @@ export const login = async (input: LoginInput) => {
     throw new HttpError(403, "Ce compte est en cours de suppression");
   }
 
+  // SECURITY: block legacy login for accounts with 2FA enabled — use /account/entry instead
+  if (user.totpEnabled) {
+    throw new HttpError(403, "Ce compte utilise la 2FA. Veuillez utiliser la connexion sécurisée.");
+  }
+
   await prisma.auditLog.create({
     data: {
       actorUserId: user.id,

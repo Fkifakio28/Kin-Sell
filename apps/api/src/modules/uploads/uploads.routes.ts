@@ -24,12 +24,29 @@ const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10 MB
 const MAX_VIDEO_SIZE = 50 * 1024 * 1024; // 50 MB
 const MAX_FILES = 6; // 5 photos + 1 video
 
+// SECURITY: derive extension from validated MIME type, not from user-supplied filename
+const MIME_TO_EXT: Record<string, string> = {
+  "image/jpeg": ".jpg",
+  "image/png": ".png",
+  "image/webp": ".webp",
+  "image/gif": ".gif",
+  "audio/webm": ".webm",
+  "audio/ogg": ".ogg",
+  "audio/mpeg": ".mp3",
+  "audio/mp4": ".m4a",
+  "audio/wav": ".wav",
+  "audio/x-m4a": ".m4a",
+  "video/mp4": ".mp4",
+  "video/webm": ".webm",
+  "video/quicktime": ".mov",
+};
+
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => {
     cb(null, UPLOADS_DIR);
   },
   filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
+    const ext = MIME_TO_EXT[file.mimetype] || path.extname(file.originalname).toLowerCase().replace(/[^a-z0-9.]/g, "");
     const safeName = `${Date.now()}-${crypto.randomBytes(8).toString("hex")}${ext}`;
     cb(null, safeName);
   },

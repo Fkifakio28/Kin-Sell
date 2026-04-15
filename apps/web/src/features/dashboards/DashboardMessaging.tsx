@@ -8,6 +8,7 @@ import {
 } from "../../lib/api-client";
 import { useSocket } from "../../hooks/useSocket";
 import { createOptimizedAudioRecorder, createUploadFile, prepareMediaUrl } from "../../utils/media-upload";
+import { resolveMediaUrl } from "../../lib/api-core";
 import { useGlobalNotification } from "../../app/providers/GlobalNotificationProvider";
 import { useAudioCallState } from "../../hooks/useAudioCallState";
 import AudioCallScreen from "../messaging/AudioCallScreen";
@@ -618,10 +619,10 @@ export function DashboardMessaging() {
                       <div className={`dm-bubble${isMine ? " dm-bubble--mine" : ""}${msg.isDeleted ? " dm-bubble--deleted" : ""}`}>
                         {msg.replyTo && !msg.isDeleted && <div className="dm-reply-preview"><strong>{msg.replyTo.sender.profile.displayName}</strong><span>{msg.replyTo.type !== "TEXT" ? `📎 ${msg.replyTo.type}` : msg.replyTo.content?.slice(0, 50)}</span></div>}
                         {msg.isDeleted ? <p className="dm-deleted-text">🚫 Supprimé</p>
-                        : msg.type === "IMAGE" && msg.mediaUrl ? <img src={msg.mediaUrl} alt="" className="dm-media-img" onClick={() => window.open(msg.mediaUrl!, "_blank")} />
-                        : msg.type === "AUDIO" && msg.mediaUrl ? <DmAudioPlayer src={msg.mediaUrl} />
-                        : msg.type === "VIDEO" && msg.mediaUrl ? <video controls src={msg.mediaUrl} className="dm-media-video" />
-                        : msg.type === "FILE" && msg.mediaUrl ? <a href={msg.mediaUrl} download={msg.fileName ?? "file"} className="dm-file-link">📎 {msg.fileName ?? "Fichier"}</a>
+                        : msg.type === "IMAGE" && msg.mediaUrl ? <img src={resolveMediaUrl(msg.mediaUrl)} alt="" className="dm-media-img" onClick={() => window.open(resolveMediaUrl(msg.mediaUrl), "_blank")} />
+                        : msg.type === "AUDIO" && msg.mediaUrl ? <DmAudioPlayer src={resolveMediaUrl(msg.mediaUrl)} />
+                        : msg.type === "VIDEO" && msg.mediaUrl ? <video controls src={resolveMediaUrl(msg.mediaUrl)} className="dm-media-video" />
+                        : msg.type === "FILE" && msg.mediaUrl ? <a href={resolveMediaUrl(msg.mediaUrl)} download={msg.fileName ?? "file"} className="dm-file-link">📎 {msg.fileName ?? "Fichier"}</a>
                         : <p className="dm-text">{msg.content}</p>}
                         <div className="dm-meta">
                           <span className="dm-time">{new Date(msg.createdAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</span>

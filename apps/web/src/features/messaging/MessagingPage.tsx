@@ -13,6 +13,7 @@ import { useSocket } from "../../hooks/useSocket";
 import { useScrollDirection } from "../../hooks/useScrollDirection";
 import { useLocaleCurrency } from "../../app/providers/LocaleCurrencyProvider";
 import { createOptimizedAudioRecorder, createUploadFile, prepareMediaUrl } from "../../utils/media-upload";
+import { resolveMediaUrl } from "../../lib/api-core";
 import { useGlobalNotification } from "../../app/providers/GlobalNotificationProvider";
 import { getDashboardPath } from "../../utils/role-routing";
 import { useAudioCallState } from "../../hooks/useAudioCallState";
@@ -1442,13 +1443,13 @@ export function MessagingPage() {
                       {msg.isDeleted ? (
                         <p className="mg-deleted-text">🚫 {t("msg.deletedMessage")}</p>
                       ) : msg.type === "IMAGE" && msg.mediaUrl ? (
-                        <img src={msg.mediaUrl} alt="Image" className="mg-media-img" onClick={() => window.open(msg.mediaUrl!, "_blank")} />
+                        <img src={resolveMediaUrl(msg.mediaUrl)} alt="Image" className="mg-media-img" onClick={() => window.open(resolveMediaUrl(msg.mediaUrl), "_blank")} />
                       ) : msg.type === "AUDIO" && msg.mediaUrl ? (
-                        <AudioPlayer src={msg.mediaUrl} />
+                        <AudioPlayer src={resolveMediaUrl(msg.mediaUrl)} />
                       ) : msg.type === "VIDEO" && msg.mediaUrl ? (
-                        <video controls src={msg.mediaUrl} className="mg-media-video" />
+                        <video controls src={resolveMediaUrl(msg.mediaUrl)} className="mg-media-video" />
                       ) : msg.type === "FILE" && msg.mediaUrl ? (
-                        <a href={msg.mediaUrl} download={msg.fileName ?? "file"} className="mg-file-link">📎 {msg.fileName ?? t("msg.file")}</a>
+                        <a href={resolveMediaUrl(msg.mediaUrl)} download={msg.fileName ?? "file"} className="mg-file-link">📎 {msg.fileName ?? t("msg.file")}</a>
                       ) : pinnedFromMsg ? (
                         <div className="mg-sokin-pin mg-sokin-pin--inline" aria-label="Annonce So-Kin liée">
                           <div className="mg-sokin-pin-head">

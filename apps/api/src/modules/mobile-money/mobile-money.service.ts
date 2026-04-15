@@ -202,7 +202,13 @@ export function verifyWebhookToken(req: { headers: Record<string, string | strin
   const queryToken = typeof req.query.secret === "string" ? req.query.secret : undefined;
 
   const provided = bearerToken ?? queryToken;
-  if (!provided || !crypto.timingSafeEqual(Buffer.from(provided), Buffer.from(secret))) {
+  if (!provided) {
+    throw new HttpError(403, "Webhook token invalide");
+  }
+  // SECURITY: timingSafeEqual requires equal-length buffers
+  const providedBuf = Buffer.from(provided);
+  const secretBuf = Buffer.from(secret);
+  if (providedBuf.length !== secretBuf.length || !crypto.timingSafeEqual(providedBuf, secretBuf)) {
     throw new HttpError(403, "Webhook token invalide");
   }
 }
