@@ -12,6 +12,7 @@ import * as aiTrigger from "./ai-trigger.service.js";
 import * as pricingNudge from "./pricing-nudge.service.js";
 import * as commercialAdvisor from "./commercial-advisor.service.js";
 import { getPostPublishAdvice, type PublishContext } from "../ads/post-publish-advisor.service.js";
+import { resolveFreemiumState, consumeFreeCredit, applyFreemiumGating } from "../ads/post-publish-freemium.service.js";
 import { getPostSaleAdvice } from "../ads/post-sale-advisor.service.js";
 import { evaluateAnalyticsCTAs } from "./analytics-cta.service.js";
 import { getEnrichedAnalytics, getCategoryDemandAnalysis } from "./analytics-external-intelligence.service.js";
@@ -293,12 +294,11 @@ router.get(
 /**
  * GET /analytics/ai/post-publish-advice?type=SINGLE|PROMO|BULK&listingId=X&promoCount=N
  * Analyse post-publication : qualité, boost, pub, forfait, analytics, tips contenu
- * 🔐 Requiert IA_MERCHANT
+ * � Ouvert à tous (freemium gating intégré — 1 conseil gratuit par type)
  */
 router.get(
   "/ai/post-publish-advice",
   requireAuth,
-  asyncHandler(async (req: AuthenticatedRequest, res, next) => { await requireIa("IA_MERCHANT")(req, res, next); }),
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     const type = (req.query.type as string) || "SINGLE";
     if (!["SINGLE", "PROMO", "BULK"].includes(type)) {
@@ -309,8 +309,39 @@ router.get(
       listingId: req.query.listingId as string | undefined,
       promoCount: req.query.promoCount ? Number(req.query.promoCount) : undefined,
     };
-    const report = await getPostPublishAdvice(req.auth!.userId, ctx);
-    res.json(report);
+
+    // Résoudre le type du listing pour le gating
+    let listingType: string | null = null;
+    if (ctx.listingId) {
+      const listing = await prisma.listing.findUnique({
+        where: { id: ctx.listingId },
+        select: { type: true },
+      });
+      listingType = listing?.type ?? null;
+    }
+
+    const userId = req.auth!.userId;
+    const report = await getPostPublishAdvice(userId, ctx);
+    const freemiumState = await resolveFreemiumState(userId, ctx, listingType);
+
+    // Consommer le crédit gratuit si PREVIEW mode (1er usage)
+    if (freemiumState.mode === "PREVIEW" && listingType && ctx.listingId) {
+      await consumeFreeCredit(userId, listingType, ctx.listingId);
+      // Mettre à jour l'état après consommation
+      if (listingType === "SERVICE") freemiumState.usedServiceFree = true;
+      else freemiumState.usedProductFree = true;
+    }
+
+    const gatedReport = applyFreemiumGating(
+      report,
+      freemiumState.mode,
+      freemiumState.usedProductFree,
+      freemiumState.usedServiceFree,
+      listingType,
+      freemiumState.planCode
+    );
+
+    res.json(gatedReport);
   })
 );
 

@@ -317,6 +317,20 @@ export type PostPublishAdvice = {
   ctaTarget: string;
   ctaAction?: string;
   metric?: Record<string, number | string>;
+  isLocked?: boolean;
+  lockReason?: string | null;
+  previewText?: string | null;
+};
+
+export type FreemiumMeta = {
+  mode: "FULL" | "PREVIEW" | "LOCKED";
+  listingType: string | null;
+  visibleAdviceCount: number;
+  blurredAdviceCount: number;
+  usedProductFree: boolean;
+  usedServiceFree: boolean;
+  upgradeCtaTarget: string;
+  upgradeCtaLabel: string;
 };
 
 export type PostPublishReport = {
@@ -326,6 +340,7 @@ export type PostPublishReport = {
   qualitySignals: string[];
   advice: PostPublishAdvice[];
   sellerLifecycle: string;
+  freemium?: FreemiumMeta;
 };
 
 export const postPublishAdvisor = {

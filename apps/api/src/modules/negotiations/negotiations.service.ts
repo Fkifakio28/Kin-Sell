@@ -4,9 +4,28 @@ import { HttpError } from "../../shared/errors/http-error.js";
 import { randomBytes } from "crypto";
 import { sendPushToUser } from "../notifications/push.service.js";
 import { emitToUsers, emitToUser, isUserOnline } from "../messaging/socket.js";
+import { getEffectiveItemPrice } from "../../shared/promo/promo-engine.js";
 
 const NEGOTIATION_TTL_MS = 48 * 60 * 60 * 1000; // 48 heures
 const GROUPED_TTL_MS = 72 * 60 * 60 * 1000; // 72 heures pour groupé
+
+/**
+ * Prix effectif d'un listing au moment présent (promo-aware).
+ * Utilise la logique canonique promo-engine.
+ */
+function effectiveListingPrice(listing: {
+  priceUsdCents: number;
+  promoActive?: boolean;
+  promoPriceUsdCents?: number | null;
+  promoExpiresAt?: Date | string | null;
+}): number {
+  return getEffectiveItemPrice({
+    priceUsdCents: listing.priceUsdCents,
+    promoActive: listing.promoActive ?? false,
+    promoPriceUsdCents: listing.promoPriceUsdCents ?? null,
+    promoExpiresAt: listing.promoExpiresAt ?? null,
+  });
+}
 
 type CreateNegotiationPayload = {
   listingId: string;
@@ -100,7 +119,7 @@ const negotiationInclude = {
 export const createNegotiation = async (buyerUserId: string, payload: CreateNegotiationPayload) => {
   const listing = await prisma.listing.findUnique({
     where: { id: payload.listingId },
-    select: { id: true, ownerUserId: true, isPublished: true, priceUsdCents: true, isNegotiable: true, category: true }
+    select: { id: true, ownerUserId: true, isPublished: true, priceUsdCents: true, isNegotiable: true, category: true, promoActive: true, promoPriceUsdCents: true, promoExpiresAt: true }
   });
 
   if (!listing || !listing.isPublished) {
@@ -152,6 +171,9 @@ export const createNegotiation = async (buyerUserId: string, payload: CreateNego
   const minBuyers = isGrouped ? Math.max(2, payload.minBuyers ?? 2) : null;
   const ttl = isGrouped ? GROUPED_TTL_MS : NEGOTIATION_TTL_MS;
 
+  // Snapshot du prix effectif (promo-aware) au moment de la création
+  const snapshotPrice = effectiveListingPrice(listing);
+
   const negotiation = await prisma.negotiation.create({
     data: {
       buyerUserId,
@@ -159,7 +181,7 @@ export const createNegotiation = async (buyerUserId: string, payload: CreateNego
       listingId: payload.listingId,
       type: negoType,
       status: NegotiationStatus.PENDING,
-      originalPriceUsdCents: listing.priceUsdCents,
+      originalPriceUsdCents: snapshotPrice,
       quantity,
       groupId,
       minBuyers,
@@ -243,29 +265,38 @@ export const respondToNegotiation = async (userId: string, negotiationId: string
     const acceptedPrice = lastOffer?.priceUsdCents ?? negotiation.originalPriceUsdCents;
     const isBundle = !!negotiation.bundleId;
 
-    const updated = await prisma.negotiation.update({
-      where: { id: negotiationId },
-      data: {
-        status: NegotiationStatus.ACCEPTED,
-        finalPriceUsdCents: acceptedPrice,
-        resolvedAt: now,
-        offers: {
-          create: {
-            fromUserId: userId,
-            priceUsdCents: acceptedPrice,
-            quantity: negotiation.quantity,
-            message: payload.message ?? "Offre acceptée"
+    // ── Transaction atomique : négo ACCEPTED + commande auto ──
+    const { updated, order, notifCtx } = await prisma.$transaction(async (tx) => {
+      const updated = await tx.negotiation.update({
+        where: { id: negotiationId },
+        data: {
+          status: NegotiationStatus.ACCEPTED,
+          finalPriceUsdCents: acceptedPrice,
+          resolvedAt: now,
+          offers: {
+            create: {
+              fromUserId: userId,
+              priceUsdCents: acceptedPrice,
+              quantity: negotiation.quantity,
+              message: payload.message ?? "Offre acceptée"
+            }
           }
-        }
-      },
-      include: negotiationInclude
-    });
+        },
+        include: negotiationInclude
+      });
 
-    // ── Auto-création de commande à partir de la négo acceptée ──
-    try {
+      let order: any = null;
+      let notifCtx: { sellerUserId: string; itemsCount: number; totalUsdCents: number; listingTitle?: string } | null = null;
+
       if (isBundle) {
-        // ── BUNDLE: charger TOUS les items du panier liés à cette négo ──
-        const cartItems = await prisma.cartItem.findMany({
+        // Charger les snapshots de prix du bundle
+        const bundleItems = await tx.negotiationBundleItem.findMany({
+          where: { bundle: { negotiations: { some: { id: negotiationId } } } },
+          select: { listingId: true, quantity: true, snapshotPriceUsdCents: true }
+        });
+        const snapshotMap = new Map(bundleItems.map(bi => [bi.listingId, bi.snapshotPriceUsdCents]));
+
+        const cartItems = await tx.cartItem.findMany({
           where: { negotiationId: negotiationId },
           include: {
             cart: true,
@@ -274,17 +305,20 @@ export const respondToNegotiation = async (userId: string, negotiationId: string
         });
 
         if (cartItems.length > 0) {
-          // Allocation proportionnelle du prix bundle par item
-          const totalOriginal = cartItems.reduce((s, ci) => s + ci.listing.priceUsdCents * ci.quantity, 0);
+          // Allocation proportionnelle basée sur les snapshots (pas les prix catalogue actuels)
+          const totalOriginal = cartItems.reduce((s, ci) => {
+            const snap = snapshotMap.get(ci.listingId) ?? ci.listing.priceUsdCents;
+            return s + snap * ci.quantity;
+          }, 0);
           let allocated = 0;
           const allocatedItems = cartItems.map((ci, idx) => {
+            const snap = snapshotMap.get(ci.listingId) ?? ci.listing.priceUsdCents;
             let itemPrice: number;
             if (idx === cartItems.length - 1) {
-              // Dernier item reçoit le reste pour éviter l'erreur d'arrondi
               itemPrice = acceptedPrice - allocated;
             } else {
               const ratio = totalOriginal > 0
-                ? (ci.listing.priceUsdCents * ci.quantity) / totalOriginal
+                ? (snap * ci.quantity) / totalOriginal
                 : 1 / cartItems.length;
               itemPrice = Math.round(acceptedPrice * ratio);
             }
@@ -293,16 +327,15 @@ export const respondToNegotiation = async (userId: string, negotiationId: string
             return { ...ci, allocatedTotal: itemPrice, allocatedUnit: unitPrice };
           });
 
-          // Mettre à jour les prix unitaires dans le panier (prix alloué, pas le total bundle)
           for (const ai of allocatedItems) {
-            await prisma.cartItem.update({
+            await tx.cartItem.update({
               where: { id: ai.id },
               data: { unitPriceUsdCents: ai.allocatedUnit },
             });
           }
 
           const validationCode = randomBytes(3).toString("hex").toUpperCase();
-          const order = await prisma.order.create({
+          order = await tx.order.create({
             data: {
               buyerUserId: negotiation.buyerUserId,
               sellerUserId: cartItems[0].listing.ownerUserId,
@@ -326,51 +359,24 @@ export const respondToNegotiation = async (userId: string, negotiationId: string
             },
           });
 
-          // Retirer TOUS les articles du panier
-          await prisma.cartItem.deleteMany({
+          await tx.cartItem.deleteMany({
             where: { id: { in: cartItems.map((ci) => ci.id) } },
           });
 
-          // Notifications
-          if (!isUserOnline(negotiation.buyerUserId)) {
-            void sendPushToUser(negotiation.buyerUserId, {
-              title: "✅ Lot accepté !",
-              body: `Votre offre groupée pour ${cartItems.length} articles a été acceptée. Commande #${order.id.slice(-6)} créée.`,
-              tag: `nego-accepted-${negotiationId}`,
-              data: { type: "order", orderId: order.id, negotiationId },
-            });
-          }
-          if (!isUserOnline(cartItems[0].listing.ownerUserId)) {
-            void sendPushToUser(cartItems[0].listing.ownerUserId, {
-              title: "🛒 Commande lot créée",
-              body: `Commande #${order.id.slice(-6)} créée — ${cartItems.length} articles, marchandage lot accepté.`,
-              tag: `order-${order.id}`,
-              data: { type: "order", orderId: order.id },
-            });
-          }
-          const orderCreatedPayload = {
-            type: "ORDER_CREATED" as const,
-            orderId: order.id,
-            buyerUserId: negotiation.buyerUserId,
+          notifCtx = {
             sellerUserId: cartItems[0].listing.ownerUserId,
             itemsCount: cartItems.length,
             totalUsdCents: acceptedPrice,
-            fromNegotiation: true,
-            negotiationId,
-            createdAt: new Date().toISOString(),
           };
-          emitToUser(negotiation.buyerUserId, "order:created", orderCreatedPayload);
-          emitToUser(cartItems[0].listing.ownerUserId, "order:created", orderCreatedPayload);
         }
       } else {
         // ── SINGLE ITEM ──
-        // Mettre à jour le prix dans le panier avec le prix final
-        await prisma.cartItem.updateMany({
+        await tx.cartItem.updateMany({
           where: { negotiationId: negotiationId },
           data: { unitPriceUsdCents: acceptedPrice }
         });
 
-        const cartItem = await prisma.cartItem.findFirst({
+        const cartItem = await tx.cartItem.findFirst({
           where: { negotiationId: negotiationId },
           include: {
             cart: true,
@@ -381,7 +387,7 @@ export const respondToNegotiation = async (userId: string, negotiationId: string
         if (cartItem) {
           const validationCode = randomBytes(3).toString("hex").toUpperCase();
           const lineTotalUsdCents = acceptedPrice * negotiation.quantity;
-          const order = await prisma.order.create({
+          order = await tx.order.create({
             data: {
               buyerUserId: negotiation.buyerUserId,
               sellerUserId: cartItem.listing.ownerUserId,
@@ -405,41 +411,71 @@ export const respondToNegotiation = async (userId: string, negotiationId: string
             },
           });
 
-          await prisma.cartItem.delete({ where: { id: cartItem.id } });
+          await tx.cartItem.delete({ where: { id: cartItem.id } });
 
-          if (!isUserOnline(negotiation.buyerUserId)) {
-            void sendPushToUser(negotiation.buyerUserId, {
-              title: "✅ Marchandage accepté !",
-              body: `Votre offre pour "${cartItem.listing.title}" a été acceptée. Commande #${order.id.slice(-6)} créée.`,
-              tag: `nego-accepted-${negotiationId}`,
-              data: { type: "order", orderId: order.id, negotiationId },
-            });
-          }
-          if (!isUserOnline(cartItem.listing.ownerUserId)) {
-            void sendPushToUser(cartItem.listing.ownerUserId, {
-              title: "🛒 Commande créée automatiquement",
-              body: `Commande #${order.id.slice(-6)} créée suite au marchandage accepté.`,
-              tag: `order-${order.id}`,
-              data: { type: "order", orderId: order.id },
-            });
-          }
-          const orderCreatedPayload = {
-            type: "ORDER_CREATED" as const,
-            orderId: order.id,
-            buyerUserId: negotiation.buyerUserId,
+          notifCtx = {
             sellerUserId: cartItem.listing.ownerUserId,
             itemsCount: 1,
             totalUsdCents: lineTotalUsdCents,
-            fromNegotiation: true,
-            negotiationId,
-            createdAt: new Date().toISOString(),
+            listingTitle: cartItem.listing.title,
           };
-          emitToUser(negotiation.buyerUserId, "order:created", orderCreatedPayload);
-          emitToUser(cartItem.listing.ownerUserId, "order:created", orderCreatedPayload);
         }
       }
-    } catch {
-      // Silently continue — the negotiation is still accepted even if auto-order fails
+
+      return { updated, order, notifCtx };
+    });
+
+    // ── Notifications (hors transaction — fire-and-forget) ──
+    if (order && notifCtx) {
+      if (isBundle) {
+        if (!isUserOnline(negotiation.buyerUserId)) {
+          void sendPushToUser(negotiation.buyerUserId, {
+            title: "✅ Lot accepté !",
+            body: `Votre offre groupée pour ${notifCtx.itemsCount} articles a été acceptée. Commande #${order.id.slice(-6)} créée.`,
+            tag: `nego-accepted-${negotiationId}`,
+            data: { type: "order", orderId: order.id, negotiationId },
+          });
+        }
+        if (!isUserOnline(notifCtx.sellerUserId)) {
+          void sendPushToUser(notifCtx.sellerUserId, {
+            title: "🛒 Commande lot créée",
+            body: `Commande #${order.id.slice(-6)} créée — ${notifCtx.itemsCount} articles, marchandage lot accepté.`,
+            tag: `order-${order.id}`,
+            data: { type: "order", orderId: order.id },
+          });
+        }
+      } else {
+        if (!isUserOnline(negotiation.buyerUserId)) {
+          void sendPushToUser(negotiation.buyerUserId, {
+            title: "✅ Marchandage accepté !",
+            body: `Votre offre pour "${notifCtx.listingTitle}" a été acceptée. Commande #${order.id.slice(-6)} créée.`,
+            tag: `nego-accepted-${negotiationId}`,
+            data: { type: "order", orderId: order.id, negotiationId },
+          });
+        }
+        if (!isUserOnline(notifCtx.sellerUserId)) {
+          void sendPushToUser(notifCtx.sellerUserId, {
+            title: "🛒 Commande créée automatiquement",
+            body: `Commande #${order.id.slice(-6)} créée suite au marchandage accepté.`,
+            tag: `order-${order.id}`,
+            data: { type: "order", orderId: order.id },
+          });
+        }
+      }
+
+      const orderCreatedPayload = {
+        type: "ORDER_CREATED" as const,
+        orderId: order.id,
+        buyerUserId: negotiation.buyerUserId,
+        sellerUserId: notifCtx.sellerUserId,
+        itemsCount: notifCtx.itemsCount,
+        totalUsdCents: notifCtx.totalUsdCents,
+        fromNegotiation: true,
+        negotiationId,
+        createdAt: new Date().toISOString(),
+      };
+      emitToUser(negotiation.buyerUserId, "order:created", orderCreatedPayload);
+      emitToUser(notifCtx.sellerUserId, "order:created", orderCreatedPayload);
     }
 
     return mapNegotiation(updated);
@@ -465,15 +501,24 @@ export const respondToNegotiation = async (userId: string, negotiationId: string
 
     // Restaurer les prix originaux mais garder le lien negotiationId (deadline 24h pour commander)
     if (negotiation.bundleId) {
+      // Utiliser les snapshots du bundle — pas les prix catalogue actuels
+      const bundleItems = await prisma.negotiationBundleItem.findMany({
+        where: { bundle: { negotiations: { some: { id: negotiationId } } } },
+        select: { listingId: true, snapshotPriceUsdCents: true }
+      });
+      const snapshotMap = new Map(bundleItems.map(bi => [bi.listingId, bi.snapshotPriceUsdCents]));
       const cartItems = await prisma.cartItem.findMany({
         where: { negotiationId: negotiationId },
-        include: { listing: { select: { priceUsdCents: true } } },
+        select: { id: true, listingId: true },
       });
       for (const ci of cartItems) {
-        await prisma.cartItem.update({
-          where: { id: ci.id },
-          data: { unitPriceUsdCents: ci.listing.priceUsdCents },
-        });
+        const snap = snapshotMap.get(ci.listingId);
+        if (snap != null) {
+          await prisma.cartItem.update({
+            where: { id: ci.id },
+            data: { unitPriceUsdCents: snap },
+          });
+        }
       }
     } else {
       await prisma.cartItem.updateMany({
@@ -509,20 +554,29 @@ export const respondToNegotiation = async (userId: string, negotiationId: string
 
     // Mettre à jour le prix dans le panier du buyer
     if (negotiation.bundleId) {
-      // Bundle: allocation proportionnelle du nouveau prix
+      // Bundle: allocation proportionnelle basée sur les snapshots
+      const bundleItems = await prisma.negotiationBundleItem.findMany({
+        where: { bundle: { negotiations: { some: { id: negotiationId } } } },
+        select: { listingId: true, quantity: true, snapshotPriceUsdCents: true }
+      });
+      const snapshotMap = new Map(bundleItems.map(bi => [bi.listingId, bi.snapshotPriceUsdCents]));
       const cartItems = await prisma.cartItem.findMany({
         where: { negotiationId: negotiationId },
-        include: { listing: { select: { priceUsdCents: true } } },
+        select: { id: true, listingId: true, quantity: true },
       });
-      const totalOriginal = cartItems.reduce((s, ci) => s + ci.listing.priceUsdCents * ci.quantity, 0);
+      const totalOriginal = cartItems.reduce((s, ci) => {
+        const snap = snapshotMap.get(ci.listingId) ?? 0;
+        return s + snap * ci.quantity;
+      }, 0);
       let allocated = 0;
       for (let i = 0; i < cartItems.length; i++) {
         const ci = cartItems[i];
+        const snap = snapshotMap.get(ci.listingId) ?? 0;
         let itemTotal: number;
         if (i === cartItems.length - 1) {
           itemTotal = payload.counterPriceUsdCents - allocated;
         } else {
-          const ratio = totalOriginal > 0 ? (ci.listing.priceUsdCents * ci.quantity) / totalOriginal : 1 / cartItems.length;
+          const ratio = totalOriginal > 0 ? (snap * ci.quantity) / totalOriginal : 1 / cartItems.length;
           itemTotal = Math.round(payload.counterPriceUsdCents * ratio);
         }
         allocated += itemTotal;
@@ -638,7 +692,7 @@ export const expireStaleNegotiations = async () => {
       status: { in: [NegotiationStatus.PENDING, NegotiationStatus.COUNTERED] },
       expiresAt: { lt: new Date() }
     },
-    select: { id: true, originalPriceUsdCents: true, buyerUserId: true, sellerUserId: true }
+    select: { id: true, originalPriceUsdCents: true, buyerUserId: true, sellerUserId: true, bundleId: true }
   });
 
   if (staleNegotiations.length === 0) return { expired: 0 };
@@ -656,10 +710,30 @@ export const expireStaleNegotiations = async () => {
 
   // Décrocher du panier et restaurer le prix original pour chaque négo
   for (const neg of staleNegotiations) {
-    await prisma.cartItem.updateMany({
-      where: { negotiationId: neg.id },
-      data: { negotiationId: null, unitPriceUsdCents: neg.originalPriceUsdCents }
-    });
+    if (neg.bundleId) {
+      // Bundle: restaurer les prix snapshot par item
+      const bundleItems = await prisma.negotiationBundleItem.findMany({
+        where: { bundleId: neg.bundleId },
+        select: { listingId: true, snapshotPriceUsdCents: true }
+      });
+      const snapshotMap = new Map(bundleItems.map(bi => [bi.listingId, bi.snapshotPriceUsdCents]));
+      const cartItems = await prisma.cartItem.findMany({
+        where: { negotiationId: neg.id },
+        select: { id: true, listingId: true },
+      });
+      for (const ci of cartItems) {
+        const snap = snapshotMap.get(ci.listingId) ?? neg.originalPriceUsdCents;
+        await prisma.cartItem.update({
+          where: { id: ci.id },
+          data: { negotiationId: null, unitPriceUsdCents: snap },
+        });
+      }
+    } else {
+      await prisma.cartItem.updateMany({
+        where: { negotiationId: neg.id },
+        data: { negotiationId: null, unitPriceUsdCents: neg.originalPriceUsdCents }
+      });
+    }
 
     // Socket: notify both parties of expiration
     emitToUsers([neg.buyerUserId, neg.sellerUserId], "negotiation:expired", {
@@ -709,11 +783,30 @@ export const cancelNegotiation = async (userId: string, negotiationId: string) =
     include: negotiationInclude
   });
 
-  // Décrocher du panier
-  await prisma.cartItem.updateMany({
-    where: { negotiationId: negotiationId },
-    data: { negotiationId: null }
-  });
+  // Décrocher du panier et restaurer le prix snapshot
+  if (negotiation.bundleId) {
+    const bundleItems = await prisma.negotiationBundleItem.findMany({
+      where: { bundleId: negotiation.bundleId },
+      select: { listingId: true, snapshotPriceUsdCents: true }
+    });
+    const snapshotMap = new Map(bundleItems.map(bi => [bi.listingId, bi.snapshotPriceUsdCents]));
+    const cartItems = await prisma.cartItem.findMany({
+      where: { negotiationId: negotiationId },
+      select: { id: true, listingId: true },
+    });
+    for (const ci of cartItems) {
+      const snap = snapshotMap.get(ci.listingId) ?? negotiation.originalPriceUsdCents;
+      await prisma.cartItem.update({
+        where: { id: ci.id },
+        data: { negotiationId: null, unitPriceUsdCents: snap },
+      });
+    }
+  } else {
+    await prisma.cartItem.updateMany({
+      where: { negotiationId: negotiationId },
+      data: { negotiationId: null, unitPriceUsdCents: negotiation.originalPriceUsdCents }
+    });
+  }
 
   return mapNegotiation(updated);
 };
@@ -890,7 +983,7 @@ export const createBundleNegotiation = async (buyerUserId: string, payload: Crea
   const listingIds = payload.items.map((i) => i.listingId);
   const listings = await prisma.listing.findMany({
     where: { id: { in: listingIds }, isPublished: true },
-    select: { id: true, ownerUserId: true, priceUsdCents: true, title: true, isNegotiable: true, category: true }
+    select: { id: true, ownerUserId: true, priceUsdCents: true, title: true, isNegotiable: true, category: true, promoActive: true, promoPriceUsdCents: true, promoExpiresAt: true }
   });
 
   if (listings.length !== listingIds.length) {
@@ -923,10 +1016,11 @@ export const createBundleNegotiation = async (buyerUserId: string, payload: Crea
     throw new HttpError(400, "Impossible de négocier vos propres articles");
   }
 
-  // Calculer le prix original total
+  // Calculer le prix original total (promo-aware snapshot)
   const itemsWithPrice = payload.items.map((item) => {
     const listing = listings.find((l) => l.id === item.listingId)!;
-    return { ...item, priceUsdCents: listing.priceUsdCents, quantity: Math.max(1, item.quantity) };
+    const snapshot = effectiveListingPrice(listing);
+    return { ...item, priceUsdCents: snapshot, quantity: Math.max(1, item.quantity) };
   });
   const totalOriginalUsdCents = itemsWithPrice.reduce((sum, i) => sum + i.priceUsdCents * i.quantity, 0);
 
@@ -950,7 +1044,8 @@ export const createBundleNegotiation = async (buyerUserId: string, payload: Crea
       items: {
         create: itemsWithPrice.map((i) => ({
           listingId: i.listingId,
-          quantity: i.quantity
+          quantity: i.quantity,
+          snapshotPriceUsdCents: i.priceUsdCents,
         }))
       }
     },

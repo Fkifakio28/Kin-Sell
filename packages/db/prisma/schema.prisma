@@ -243,6 +243,7 @@ model User {
   businessFollows          BusinessFollow[]          @relation("BusinessFollows")
   aiRecommendations        AiRecommendation[]        @relation("AiRecommendations")
   aiTrials                 AiTrial[]                 @relation("AiTrials")
+  aiFreemiumUsages         AiFreemiumUsage[]         @relation("AiFreemiumUsages")
   adCreatives              AiAdCreative[]            @relation("AiAdCreativeUser")
   adCampaigns              AiAdCampaign[]            @relation("AiAdCampaignUser")
   verificationRequests     VerificationRequest[]     @relation("VerificationRequests")
@@ -736,10 +737,11 @@ model NegotiationBundle {
 }
 
 model NegotiationBundleItem {
-  id        String @id @default(cuid())
-  bundleId  String
-  listingId String
-  quantity  Int    @default(1)
+  id                    String @id @default(cuid())
+  bundleId              String
+  listingId             String
+  quantity              Int    @default(1)
+  snapshotPriceUsdCents Int    @default(0) // prix effectif au moment de la création (promo-aware)
 
   bundle  NegotiationBundle @relation(fields: [bundleId], references: [id], onDelete: Cascade)
   listing Listing           @relation(fields: [listingId], references: [id], onDelete: Cascade)
@@ -2588,4 +2590,161 @@ model KnowledgeBaseRefreshLog {
   metadata          Json?
   startedAt         DateTime  @default(now())
   completedAt       DateTime?
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// EXTERNAL INTELLIGENCE — Sources de données externes Afrique
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Répertoire des sources de données externes configurées
+model ExternalDataSource {
+  id             String   @id @default(cuid())
+  name           String   @unique // e.g. "WORLDBANK", "FAOSTAT", "OPEN_METEO"
+  type           String   // MARKET, JOB, SEASONAL, FX, WEATHER
+  baseUrl        String
+  apiKeyEnvVar   String?  // nom de la variable d'environnement pour la clé API
+  license        String   @default("OPEN") // OPEN, RESTRICTED, COMMERCIAL
+  refreshCadence String   @default("DAILY") // DAILY, WEEKLY, MONTHLY
+  isActive       Boolean  @default(true)
+  lastSuccessAt  DateTime?
+  lastErrorAt    DateTime?
+  lastError      String?
+  avgLatencyMs   Int      @default(0)
+  totalCalls     Int      @default(0)
+  totalErrors    Int      @default(0)
+  metadata       Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  ingestionRuns  ExternalIngestionRun[]
+  marketSignals  ExternalMarketSignalDaily[]
+  jobSignals     ExternalJobSignalDaily[]
+  seasonalSignals ExternalSeasonalSignalDaily[]
+
+  @@index([type, isActive])
+}
+
+/// Log d'exécution d'une ingestion externe
+model ExternalIngestionRun {
+  id              String    @id @default(cuid())
+  sourceId        String
+  runDate         DateTime  // date du jour traité
+  status          String    @default("RUNNING") // RUNNING, SUCCESS, PARTIAL, FAILED
+  recordsFetched  Int       @default(0)
+  recordsStored   Int       @default(0)
+  errors          Int       @default(0)
+  errorDetails    String?
+  latencyMs       Int       @default(0)
+  startedAt       DateTime  @default(now())
+  completedAt     DateTime?
+
+  source ExternalDataSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@index([sourceId, runDate])
+  @@index([runDate, status])
+  @@index([status])
+}
+
+/// Signaux marché quotidiens (prix, volumes, FX) par source externe
+model ExternalMarketSignalDaily {
+  id             String     @id @default(cuid())
+  date           DateTime   @db.Date
+  countryCode    CountryCode
+  city           String?
+  category       String     // taxonomie Kin-Sell
+  subcategory    String?
+  sourceId       String
+  signalType     String     // PRICE_INDEX, TRADE_VOLUME, FOOD_PRICE, FX_RATE, COMMODITY
+  value          Float      // valeur normalisée
+  unit           String     // USD_CENTS, INDEX, PERCENT, RATIO
+  previousValue  Float?     // valeur précédente pour calcul delta
+  deltaPercent   Float?     // variation en %
+  confidence     Int        @default(50) // 0-100
+  sourceUrl      String?
+  observedAt     DateTime   @default(now())
+  metadata       Json?
+  createdAt      DateTime   @default(now())
+
+  source ExternalDataSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@unique([date, countryCode, category, sourceId, signalType])
+  @@index([date, countryCode])
+  @@index([category, countryCode, date])
+  @@index([signalType, date])
+  @@index([sourceId])
+}
+
+/// Signaux emploi quotidiens (offres, demandes, salaires) multi-pays
+model ExternalJobSignalDaily {
+  id             String     @id @default(cuid())
+  date           DateTime   @db.Date
+  countryCode    CountryCode
+  city           String?
+  serviceType    String     // e.g. "PLUMBER", "DEVELOPER", "TAILOR", "DELIVERY"
+  category       String     // taxonomie Kin-Sell (Services, Transport, etc.)
+  sourceId       String
+  jobCount       Int        @default(0)
+  avgSalaryLocal Float?
+  avgSalaryUsd   Float?
+  demandTrend    String     @default("STABLE") // RISING, STABLE, DECLINING
+  topSkills      String[]   @default([])
+  confidence     Int        @default(50) // 0-100
+  sourceUrl      String?
+  observedAt     DateTime   @default(now())
+  metadata       Json?
+  createdAt      DateTime   @default(now())
+
+  source ExternalDataSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@unique([date, countryCode, serviceType, sourceId])
+  @@index([date, countryCode])
+  @@index([category, countryCode, date])
+  @@index([serviceType, date])
+  @@index([sourceId])
+}
+
+/// Signaux saisonniers quotidiens (météo, événements, calendrier)
+model ExternalSeasonalSignalDaily {
+  id             String     @id @default(cuid())
+  date           DateTime   @db.Date
+  countryCode    CountryCode
+  city           String?
+  signalType     String     // WEATHER, RELIGIOUS_EVENT, SCHOOL_CALENDAR, HARVEST, TOURISM, CURRENCY
+  eventName      String?    // e.g. "Ramadan", "Rentrée scolaire", "Saison pluies"
+  impactCategory String?    // catégorie Kin-Sell impactée
+  severity       Int        @default(50) // 0-100 (impact sur le commerce)
+  priceImpact    Float      @default(0) // % impact sur les prix (-20 à +50)
+  demandImpact   Float      @default(0) // % impact sur la demande
+  sourceId       String
+  confidence     Int        @default(50)
+  sourceUrl      String?
+  observedAt     DateTime   @default(now())
+  metadata       Json?      // données brutes (temp, précipitations, etc.)
+  createdAt      DateTime   @default(now())
+
+  source ExternalDataSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@unique([date, countryCode, signalType, sourceId])
+  @@index([date, countryCode])
+  @@index([signalType, date])
+  @@index([impactCategory, date])
+  @@index([sourceId])
+}
+
+// ══════════════════════════════════════════════
+// AI FREEMIUM USAGE — Consommation gratuite IA post-publication
+// ══════════════════════════════════════════════
+
+model AiFreemiumUsage {
+  id          String   @id @default(cuid())
+  userId      String
+  feature     String   @default("POST_PUBLISH_ADVISOR") // feature IA concernée
+  listingType String   // PRODUCT | SERVICE
+  listingId   String   // listing qui a consommé le crédit
+  consumedAt  DateTime @default(now())
+
+  user User @relation("AiFreemiumUsages", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, feature, listingType])
+  @@index([userId, feature])
 }

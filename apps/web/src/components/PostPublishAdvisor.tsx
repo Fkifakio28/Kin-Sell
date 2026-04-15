@@ -11,11 +11,13 @@
 
 import { useState, useEffect, useCallback, type FC } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useLocaleCurrency } from '../app/providers/LocaleCurrencyProvider';
 import {
   postPublishAdvisor,
   type PostPublishReport,
   type PostPublishAdvice,
   type AdviceCategory,
+  type FreemiumMeta,
 } from '../lib/services/ai.service';
 import './post-publish-advisor.css';
 
@@ -67,6 +69,10 @@ export const PostPublishAdvisor: FC<PostPublishAdvisorProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
   const navigate = useNavigate();
+  const { t } = useLocaleCurrency();
+
+  const freemium: FreemiumMeta | null = report?.freemium ?? null;
+  const isLimited = freemium && freemium.mode !== 'FULL';
 
   useEffect(() => {
     let cancelled = false;
@@ -91,6 +97,11 @@ export const PostPublishAdvisor: FC<PostPublishAdvisorProps> = ({
   }, [listingId, promoPublished, bulkCount]);
 
   const handleCTA = useCallback((advice: PostPublishAdvice) => {
+    if (advice.isLocked) {
+      navigate(freemium?.upgradeCtaTarget ?? '/forfaits');
+      onClose();
+      return;
+    }
     if (advice.ctaAction === 'BOOST') {
       onBoost?.();
       onClose();
@@ -98,11 +109,13 @@ export const PostPublishAdvisor: FC<PostPublishAdvisorProps> = ({
       navigate(advice.ctaTarget);
       onClose();
     }
-  }, [navigate, onClose, onBoost]);
+  }, [navigate, onClose, onBoost, freemium]);
 
   const toggleExpand = useCallback((idx: number) => {
+    const adv = report?.advice[idx];
+    if (adv?.isLocked) return;
     setExpandedIdx((prev) => (prev === idx ? null : idx));
-  }, []);
+  }, [report]);
 
   return (
     <div className="ppa-overlay" onClick={onClose}>
@@ -111,17 +124,17 @@ export const PostPublishAdvisor: FC<PostPublishAdvisorProps> = ({
         <header className="ppa-header">
           <div className="ppa-header-icon">🤖</div>
           <div className="ppa-header-text">
-            <h3 className="ppa-title">Conseiller IA Post-Publication</h3>
+            <h3 className="ppa-title">{t('ppa.title', 'Conseiller IA Post-Publication')}</h3>
             <p className="ppa-subtitle">
               {loading
-                ? 'Analyse en cours…'
+                ? t('ppa.analyzing', 'Analyse en cours…')
                 : report?.listingTitle
                   ? `« ${report.listingTitle} »`
                   : report?.context === 'PROMO'
-                    ? 'Promotion publiée'
+                    ? t('ppa.promoPublished', 'Promotion publiée')
                     : report?.context === 'BULK'
-                      ? `${bulkCount ?? 0} articles publiés`
-                      : 'Analyse de votre publication'}
+                      ? `${bulkCount ?? 0} ${t('ppa.articlesPublished', 'articles publiés')}`
+                      : t('ppa.analysisSubtitle', 'Analyse de votre publication')}
             </p>
           </div>
           <button type="button" className="ppa-close" onClick={onClose}>✕</button>
@@ -132,20 +145,41 @@ export const PostPublishAdvisor: FC<PostPublishAdvisorProps> = ({
           {loading ? (
             <div className="ppa-loading">
               <span className="ppa-spinner" />
-              <p>L'IA Kin-Sell analyse votre publication et prépare des recommandations personnalisées…</p>
+              <p>{t('ppa.loadingMessage', "L'IA Kin-Sell analyse votre publication et prépare des recommandations personnalisées…")}</p>
             </div>
           ) : error ? (
             <div className="ppa-error">
               <p>{error}</p>
-              <button type="button" className="ppa-btn ppa-btn--ghost" onClick={onClose}>Fermer</button>
+              <button type="button" className="ppa-btn ppa-btn--ghost" onClick={onClose}>{t('common.close', 'Fermer')}</button>
             </div>
           ) : report ? (
             <>
+              {/* Freemium CTA Banner */}
+              {isLimited && (
+                <div className="ppa-freemium-banner">
+                  <div className="ppa-freemium-banner-text">
+                    <span className="ppa-freemium-icon">🔒</span>
+                    <p>
+                      {freemium.mode === 'PREVIEW'
+                        ? t('ppa.freemiumPreview', '1 conseil offert — débloquez toutes les recommandations IA avec un forfait adapté.')
+                        : t('ppa.freemiumLocked', 'Crédit gratuit épuisé — passez à un forfait supérieur pour accéder à toutes les recommandations.')}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="ppa-btn ppa-btn--upgrade"
+                    onClick={() => { navigate(freemium.upgradeCtaTarget); onClose(); }}
+                  >
+                    {freemium.upgradeCtaLabel}
+                  </button>
+                </div>
+              )}
+
               {/* Quality Score */}
               <div className="ppa-quality">
                 <div className="ppa-quality-bar-container">
                   <div className="ppa-quality-label">
-                    <span>Qualité de l'annonce</span>
+                    <span>{t('ppa.qualityLabel', "Qualité de l'annonce")}</span>
                     <strong style={{ color: getQualityColor(report.qualityScore) }}>
                       {report.qualityScore}/100 — {getQualityLabel(report.qualityScore)}
                     </strong>
@@ -171,7 +205,10 @@ export const PostPublishAdvisor: FC<PostPublishAdvisorProps> = ({
 
               {/* AI Badge */}
               <div className="ppa-ai-badge">
-                <span>🤖</span> Recommandations IA — {report.advice.length} suggestion{report.advice.length > 1 ? 's' : ''}
+                <span>🤖</span> {t('ppa.aiBadge', 'Recommandations IA')} — {report.advice.length} suggestion{report.advice.length > 1 ? 's' : ''}
+                {isLimited && freemium.blurredAdviceCount > 0 && (
+                  <span className="ppa-ai-badge-lock"> · 🔒 {freemium.blurredAdviceCount} {t('ppa.locked', 'verrouillée(s)')}</span>
+                )}
               </div>
 
               {/* Advice Cards */}
@@ -179,30 +216,51 @@ export const PostPublishAdvisor: FC<PostPublishAdvisorProps> = ({
                 {report.advice.map((adv, idx) => {
                   const config = CATEGORY_CONFIG[adv.category];
                   const isExpanded = expandedIdx === idx;
+                  const locked = !!adv.isLocked;
+
                   return (
                     <div
                       key={idx}
-                      className={`ppa-advice-card ${isExpanded ? 'ppa-advice-card--expanded' : ''}`}
+                      className={`ppa-advice-card ${isExpanded ? 'ppa-advice-card--expanded' : ''} ${locked ? 'ppa-advice-card--locked' : ''}`}
                       style={{ '--ppa-card-accent': config.color } as React.CSSProperties}
                     >
-                      <div className="ppa-advice-top" onClick={() => toggleExpand(idx)}>
-                        <span className="ppa-advice-icon">{adv.icon}</span>
+                      <div className="ppa-advice-top" onClick={() => locked ? handleCTA(adv) : toggleExpand(idx)}>
+                        <span className="ppa-advice-icon">{locked ? '🔒' : adv.icon}</span>
                         <div className="ppa-advice-content">
                           <div className="ppa-advice-header-row">
                             <span className="ppa-advice-tag" style={{ borderColor: config.color, color: config.color }}>
                               {config.label}
                             </span>
-                            <h4 className="ppa-advice-title">{adv.title}</h4>
+                            <h4 className="ppa-advice-title">{adv.previewText ?? adv.title}</h4>
                           </div>
-                          <p className="ppa-advice-message">{adv.message}</p>
+                          <p className={`ppa-advice-message ${locked ? 'ppa-advice-message--blur' : ''}`}>
+                            {adv.message}
+                          </p>
                         </div>
-                        <span className={`ppa-advice-chevron ${isExpanded ? 'ppa-advice-chevron--open' : ''}`}>▾</span>
+                        {locked ? (
+                          <span className="ppa-advice-lock-badge">{t('ppa.seePlan', 'Voir le forfait')}</span>
+                        ) : (
+                          <span className={`ppa-advice-chevron ${isExpanded ? 'ppa-advice-chevron--open' : ''}`}>▾</span>
+                        )}
                       </div>
 
-                      {isExpanded && (
+                      {/* Lock overlay */}
+                      {locked && (
+                        <div className="ppa-advice-lock-overlay">
+                          <button
+                            type="button"
+                            className="ppa-btn ppa-btn--upgrade-sm"
+                            onClick={() => handleCTA(adv)}
+                          >
+                            🔓 {freemium?.upgradeCtaLabel ?? t('ppa.upgrade', 'Voir les forfaits')}
+                          </button>
+                        </div>
+                      )}
+
+                      {!locked && isExpanded && (
                         <div className="ppa-advice-detail">
                           <div className="ppa-advice-rationale">
-                            <strong>💡 Pourquoi ?</strong>
+                            <strong>💡 {t('ppa.why', 'Pourquoi ?')}</strong>
                             <p>{adv.rationale}</p>
                           </div>
 
@@ -234,20 +292,20 @@ export const PostPublishAdvisor: FC<PostPublishAdvisorProps> = ({
               {/* Explainer */}
               <div className="ppa-explainer">
                 <p>
-                  <strong>📌 Comprendre les options :</strong>
+                  <strong>📌 {t('ppa.explainerTitle', 'Comprendre les options')} :</strong>
                 </p>
                 <ul>
-                  <li><span style={{ color: CATEGORY_CONFIG.BOOST.color }}>Boost</span> — Visibilité immédiate, courte durée (1-14 jours)</li>
-                  <li><span style={{ color: CATEGORY_CONFIG.ADS_PACK.color }}>Publicité</span> — Annonces sponsorisées ciblées, budget maîtrisé</li>
-                  <li><span style={{ color: CATEGORY_CONFIG.PLAN.color }}>Forfait</span> — Engagement mensuel, fonctionnalités permanentes</li>
-                  <li><span style={{ color: CATEGORY_CONFIG.ANALYTICS.color }}>Analytique</span> — Insights et prédictions IA personnalisées</li>
+                  <li><span style={{ color: CATEGORY_CONFIG.BOOST.color }}>Boost</span> — {t('ppa.explainBoost', 'Visibilité immédiate, courte durée (1-14 jours)')}</li>
+                  <li><span style={{ color: CATEGORY_CONFIG.ADS_PACK.color }}>{t('ppa.ads', 'Publicité')}</span> — {t('ppa.explainAds', 'Annonces sponsorisées ciblées, budget maîtrisé')}</li>
+                  <li><span style={{ color: CATEGORY_CONFIG.PLAN.color }}>{t('ppa.plan', 'Forfait')}</span> — {t('ppa.explainPlan', 'Engagement mensuel, fonctionnalités permanentes')}</li>
+                  <li><span style={{ color: CATEGORY_CONFIG.ANALYTICS.color }}>{t('ppa.analytics', 'Analytique')}</span> — {t('ppa.explainAnalytics', 'Insights et prédictions IA personnalisées')}</li>
                 </ul>
               </div>
 
               {/* Dismiss */}
               <div className="ppa-actions">
                 <button type="button" className="ppa-btn ppa-btn--ghost" onClick={onClose}>
-                  Continuer sans changement
+                  {t('ppa.dismiss', 'Continuer sans changement')}
                 </button>
               </div>
             </>

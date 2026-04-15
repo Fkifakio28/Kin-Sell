@@ -67,7 +67,7 @@ const USER_PLANS: Plan[] = [
     highlight: "Vendez sans limite, sans frais",
     tagline: "Tout ce qu'il faut pour votre première vente",
     ctaText: "Commencer gratuitement",
-    features: ["Publications illimitées", "Messagerie directe acheteur", "IA Marchande incluse", "Conseils IA après publication"],
+    features: ["Publications illimitées", "Messagerie directe acheteur", "IA Marchande incluse", "1 conseil IA offert (1er produit + 1er service)"],
     upgradeHint: "Envie d'être vu ? → BOOST"
   },
   {
@@ -651,7 +651,7 @@ export function PricingPage() {
                 { feat: 'Publications illimitées', vals: ['✅', '✅', '✅', '✅'] },
                 { feat: 'Achat & messagerie', vals: ['✅', '✅', '✅', '✅'] },
                 { feat: 'IA marchande (prix & négo)', vals: ['✅', '✅', '✅', '✅'] },
-                { feat: 'Conseils IA post-publication', vals: ['✅', '✅', '✅', '✅'] },
+                { feat: 'Conseils IA post-publication', vals: ['1 offert', '✅', '✅', '✅'] },
                 { feat: 'Publicité marketplace', vals: ['—', '✅', '✅', '✅'] },
                 { feat: 'IA Commande (suivi & relances)', vals: ['—', '—', '✅', '✅'] },
                 { feat: 'Kin-Sell Analytique', vals: ['—', '—', '—', '✅ Medium'] },
@@ -698,7 +698,7 @@ export function PricingPage() {
                 { feat: 'Profil business vérifiable', vals: ['✅', '✅', '✅'] },
                 { feat: 'IA marchande (prix & négo)', vals: ['✅', '✅', '✅'] },
                 { feat: 'Publicité marketplace', vals: ['✅', '✅', '✅'] },
-                { feat: 'Conseils IA post-publication', vals: ['✅', '✅', '✅'] },
+                { feat: 'Conseils IA post-publication', vals: ['✅ illimité', '✅ illimité', '✅ illimité'] },
                 { feat: 'IA Commande (suivi & relances)', vals: ['—', '✅', '✅'] },
                 { feat: 'Kin-Sell Analytique', vals: ['—', '✅ Medium', '✅ Premium'] },
                 { feat: 'Diagnostic de performance', vals: ['—', '✅', '✅'] },

@@ -40,7 +40,8 @@ import verificationRoutes from "./modules/verification/verification.routes.js";
 import vitrinesRoutes from "./modules/vitrines/vitrines.routes.js";
 import appVersionRoutes from "./modules/app-version/app-version.routes.js";
 import knowledgeBaseRoutes from "./modules/knowledge-base/knowledge-base.routes.js";
-import { runNightlyKnowledgeBaseRefresh } from "./modules/knowledge-base/knowledge-base.service.js";
+import externalIntelRoutes from "./modules/external-intel/external-intel.routes.js";
+import { startMidnightScheduler, stopMidnightScheduler } from "./modules/external-intel/midnight-scheduler.service.js";
 import { startVerificationScheduler } from "./modules/verification/verification.service.js";
 import { startAdScheduler } from "./modules/ads/ads.service.js";
 import { setupSocketServer } from "./modules/messaging/socket.js";
@@ -201,6 +202,7 @@ app.use("/verification", verificationRoutes);
 app.use("/vitrines", vitrinesRoutes);
 app.use("/app-version", appVersionRoutes);
 app.use("/knowledge-base", knowledgeBaseRoutes);
+app.use("/market/external", externalIntelRoutes);
 
 // ── Client-side error reporting endpoint ──
 const _errorRateLimit = new Map<string, number>();
@@ -327,25 +329,14 @@ httpServer.listen(env.API_PORT, async () => {
   setInterval(() => { void runBoostScheduler(); }, 10 * 60 * 1000);
   logger.info("[Boost] Expiration scheduler démarré (toutes les 10 min)");
 
-  // ── Knowledge Base nightly refresh (every 24h at midnight local) ──
-  const scheduleKBRefresh = () => {
-    const now = new Date();
-    const nextMidnight = new Date(now);
-    nextMidnight.setDate(nextMidnight.getDate() + 1);
-    nextMidnight.setHours(0, 0, 0, 0);
-    const delay = nextMidnight.getTime() - now.getTime();
-    setTimeout(() => {
-      void runNightlyKnowledgeBaseRefresh().catch(() => {});
-      setInterval(() => { void runNightlyKnowledgeBaseRefresh().catch(() => {}); }, 24 * 60 * 60 * 1000);
-    }, delay);
-    logger.info(`[KB] Knowledge Base refresh scheduler: prochain à minuit (dans ${Math.round(delay / 3600_000)}h)`);
-  };
-  scheduleKBRefresh();
+  // ── Midnight Scheduler (External Intel + KB refresh) ──
+  startMidnightScheduler();
 });
 
 // ── Graceful shutdown ──
 const shutdown = async (signal: string) => {
   logger.info(`${signal} reçu — arrêt gracieux...`);
+  stopMidnightScheduler();
   httpServer.close(async () => {
     await disconnectRedis();
     await prisma.$disconnect();

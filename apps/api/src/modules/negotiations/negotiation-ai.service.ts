@@ -26,6 +26,7 @@ import {
 } from "../../shared/billing/subscription-guard.js";
 import { sendPushToUser } from "../notifications/push.service.js";
 import { getExternalPriceIntel, getBlendedInsight } from "../knowledge-base/knowledge-base.service.js";
+import { getFusedIntelligence } from "../external-intel/external-intelligence-fusion.service.js";
 
 // ─────────────────────────────────────────────
 // Types
@@ -543,6 +544,35 @@ export async function getBuyerNegotiationHint(
       }
     }
   } catch { /* KB non critique */ }
+
+  // ── External Intelligence fusion (best-effort) ──
+  try {
+    const fused = await getFusedIntelligence(listing.category, "CD", listing.city ?? undefined);
+    if (fused.confidence > 30) {
+      // Ajuster seuils selon score d'opportunité
+      if (fused.opportunityScore > 70) {
+        // Marché chaud = vendeur en position de force
+        adaptiveMaxDiscount = Math.max(10, adaptiveMaxDiscount - 3);
+        adaptiveFloor = Math.min(85, adaptiveFloor + 3);
+      } else if (fused.opportunityScore < 30) {
+        // Marché froid = acheteur peut négocier plus
+        adaptiveMaxDiscount = Math.min(35, adaptiveMaxDiscount + 3);
+        adaptiveFloor = Math.max(60, adaptiveFloor - 3);
+      }
+      // Ajuster selon pricingAdjustment
+      if (fused.pricingAdjustmentPercent > 5) {
+        adaptiveFloor = Math.min(90, adaptiveFloor + 2);
+      } else if (fused.pricingAdjustmentPercent < -5) {
+        adaptiveFloor = Math.max(55, adaptiveFloor - 2);
+      }
+      // Enrichir insight avec triggers actifs
+      if (fused.activeTriggers.length > 0 && enrichmentData) {
+        const triggerSummary = fused.activeTriggers.map((t) => t.explanation).join(" | ");
+        enrichmentData.externalInsight =
+          (enrichmentData.externalInsight ?? "") + ` 🌍 ${triggerSummary}`;
+      }
+    }
+  } catch { /* external intel non critique */ }
 
   const originalPrice = listing.priceUsdCents;
   const suggestedDiscount = Math.min(avgDiscountPercent, adaptiveMaxDiscount);

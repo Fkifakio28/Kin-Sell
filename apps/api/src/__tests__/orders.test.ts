@@ -512,3 +512,56 @@ describe("updateSellerOrderStatus() — stock decrement", () => {
     expect(mockPrisma.listing.update).not.toHaveBeenCalled();
   });
 });
+
+// ════════════════════════════════════════════════════════════
+// mapCart — originalPriceUsdCents régression
+// ════════════════════════════════════════════════════════════
+
+describe("getCart() — originalPriceUsdCents snapshot", () => {
+  it("originalPriceUsdCents reflète le snapshot négo (pas le prix catalogue actuel)", async () => {
+    mockPrisma.cart.findFirst.mockResolvedValue({ id: "cart-snap" });
+    mockPrisma.cart.findUnique.mockResolvedValue({
+      id: "cart-snap",
+      status: "OPEN",
+      currency: "USD",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      items: [
+        {
+          id: "ci-snap",
+          listingId: "lst-snap",
+          quantity: 1,
+          unitPriceUsdCents: 1100,
+          negotiationId: "neg-snap",
+          createdAt: new Date(),
+          negotiation: {
+            id: "neg-snap",
+            status: "ACCEPTED",
+            originalPriceUsdCents: 1200, // snapshot promo-aware
+            finalPriceUsdCents: 1100,
+            resolvedAt: new Date(),
+          },
+          listing: {
+            id: "lst-snap",
+            type: "PRODUCT",
+            title: "Test Promo",
+            category: "electronique",
+            city: "Kinshasa",
+            imageUrl: null,
+            priceUsdCents: 1500, // prix catalogue actuel (different du snapshot!)
+            isNegotiable: true,
+            ownerUserId: "seller-1",
+            ownerUser: { id: "seller-1", profile: { displayName: "Vendeur", avatarUrl: null, username: null, city: null } },
+            business: null,
+          },
+        },
+      ],
+    });
+
+    const cart = await ordersService.getBuyerCart("buyer-1");
+
+    // Doit retourner 1200 (snapshot de la négo), pas 1500 (prix catalogue courant)
+    expect(cart.items[0].originalPriceUsdCents).toBe(1200);
+    expect(cart.items[0].unitPriceUsdCents).toBe(1100);
+  });
+});

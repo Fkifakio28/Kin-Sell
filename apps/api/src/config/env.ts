@@ -89,6 +89,19 @@ const schema = z.object({
   MAX_AI_ADS_PER_DAY: z.coerce.number().min(0).max(20).default(2),
   AI_MODE: z.enum(["ECONOMY", "STANDARD", "FULL"]).default("ECONOMY"),
 
+  // ── External Intelligence ──
+  MARKET_REFRESH_TIME: z.string().default("00:00"),
+  MARKET_REFRESH_TZ: z.string().default("Africa/Kinshasa"),
+  WORLDBANK_API_URL: z.string().default("https://api.worldbank.org/v2"),
+  FAOSTAT_API_URL: z.string().default("https://www.fao.org/faostat/api/v1"),
+  OPEN_METEO_API_URL: z.string().default("https://api.open-meteo.com/v1"),
+  ECB_DATA_API_URL: z.string().default("https://data-api.ecb.europa.eu/service"),
+  JOOBLE_API_KEY: z.string().optional(),
+  ADZUNA_APP_ID: z.string().optional(),
+  ADZUNA_API_KEY: z.string().optional(),
+  EXTERNAL_INTEL_TIMEOUT_MS: z.coerce.number().default(15000),
+  EXTERNAL_INTEL_RETRY_COUNT: z.coerce.number().default(3),
+
   // ── Firebase (FCM push) ──
   FIREBASE_PROJECT_ID: z.string().optional(),
   FIREBASE_CLIENT_EMAIL: z.string().optional(),

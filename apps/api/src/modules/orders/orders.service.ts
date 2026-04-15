@@ -123,7 +123,7 @@ const mapCart = (cart: {
         lineTotalUsdCents: item.unitPriceUsdCents * item.quantity,
         negotiationId: item.negotiationId,
         negotiationStatus: item.negotiation?.status ?? null,
-        originalPriceUsdCents: item.listing.priceUsdCents,
+        originalPriceUsdCents: item.negotiation?.originalPriceUsdCents ?? item.listing.priceUsdCents,
         itemState: isNegotiating ? "MARCHANDAGE" as const : "COMMANDE" as const,
         refusalDeadline,
         listing: {
