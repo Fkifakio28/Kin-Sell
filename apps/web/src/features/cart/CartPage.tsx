@@ -203,7 +203,8 @@ export function CartPage() {
     try {
       const data = await orders.buyerOrders({ limit: 50 });
       const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
-      setBuyerOrders(data.orders.filter((o) => new Date(o.createdAt).getTime() >= thirtyDaysAgo));
+      const ordersList = Array.isArray(data.orders) ? data.orders : [];
+      setBuyerOrders(ordersList.filter((o) => new Date(o.createdAt).getTime() >= thirtyDaysAgo));
     } catch {
       setBuyerOrders([]);
     } finally {
@@ -222,7 +223,8 @@ export function CartPage() {
     try {
       const data = await negotiations.buyerList({ limit: 50 });
       const sixtyDaysAgo = Date.now() - 60 * 24 * 60 * 60 * 1000;
-      setBuyerNegos(data.negotiations.filter((n) => new Date(n.createdAt).getTime() >= sixtyDaysAgo));
+      const negosList = Array.isArray(data.negotiations) ? data.negotiations : [];
+      setBuyerNegos(negosList.filter((n) => new Date(n.createdAt).getTime() >= sixtyDaysAgo));
     } catch {
       setBuyerNegos([]);
     } finally {
@@ -608,15 +610,16 @@ export function CartPage() {
   }, []);
 
   // Check items breakdown: COMMANDE vs MARCHANDAGE
-  const hasNegotiatingItems = cart?.items.some((item) => item.itemState === "MARCHANDAGE") ?? false;
+  const cartItems = cart?.items ?? [];
+  const hasNegotiatingItems = cartItems.some((item) => item.itemState === "MARCHANDAGE");
   const tutorial = useTutorial('cart');
-  const readyItemsCount = cart?.items.filter((item) => item.itemState !== "MARCHANDAGE").length ?? 0;
-  const negotiatingItemsCount = cart?.items.filter((item) => item.itemState === "MARCHANDAGE").length ?? 0;
+  const readyItemsCount = cartItems.filter((item) => item.itemState !== "MARCHANDAGE").length;
+  const negotiatingItemsCount = cartItems.filter((item) => item.itemState === "MARCHANDAGE").length;
   const allNegotiating = readyItemsCount === 0 && negotiatingItemsCount > 0;
-  const readyItems = cart?.items.filter((item) => item.itemState !== "MARCHANDAGE") ?? [];
+  const readyItems = cartItems.filter((item) => item.itemState !== "MARCHANDAGE");
   const hasProductItems = readyItems.some((item) => item.listing.type === "PRODUIT");
   const hasServiceItems = readyItems.some((item) => item.listing.type === "SERVICE");
-    const items = cart?.items ?? [];
+    const items = cartItems;
     const isEmpty = items.length === 0;
 
     /* ── Group items by seller ── */
@@ -760,7 +763,7 @@ export function CartPage() {
 
                 {selectedOrder?.id === order.id && (
                   <div className="cart-history-card-detail">
-                    {order.items.map((item) => (
+                    {(order.items ?? []).map((item) => (
                       <div key={item.id} className="cart-history-item">
                         {item.imageUrl ? (
                           <img src={resolveMediaUrl(item.imageUrl)} alt={item.title} className="cart-history-item-img" />
@@ -1033,10 +1036,10 @@ export function CartPage() {
                 </button>
                 {!aiCommandeCollapsed && checkoutAdviceData && (
                   <div className="cart-ai-body cart-ai-body--animated">
-                    {checkoutAdviceData.bundles.length > 0 && (
+                    {(checkoutAdviceData.bundles ?? []).length > 0 && (
                       <div className="cart-ai-section">
                         <strong>📦 Offres groupées</strong>
-                        {checkoutAdviceData.bundles.map((b, i) => (
+                        {(checkoutAdviceData.bundles ?? []).map((b, i) => (
                           <div key={i} className="cart-ai-bundle">
                             <span>{b.title}</span>
                             <span className="cart-ai-bundle-save">-{b.discount}% ({formatMoneyFromUsdCents(b.savingsCents)} économisés)</span>
@@ -1053,11 +1056,11 @@ export function CartPage() {
                         <p>{checkoutAdviceData.shippingEstimate.minDays}–{checkoutAdviceData.shippingEstimate.maxDays} jours vers {checkoutAdviceData.shippingEstimate.city}</p>
                       </div>
                     )}
-                    {checkoutAdviceData.tips.length > 0 && (
+                    {(checkoutAdviceData.tips ?? []).length > 0 && (
                       <div className="cart-ai-section">
                         <strong>💡 Conseils</strong>
                         <ul className="cart-ai-tips">
-                          {checkoutAdviceData.tips.map((tip, i) => <li key={i}>{tip}</li>)}
+                          {(checkoutAdviceData.tips ?? []).map((tip, i) => <li key={i}>{tip}</li>)}
                         </ul>
                       </div>
                     )}
@@ -1194,7 +1197,7 @@ export function CartPage() {
 
                       {selectedOrder?.id === order.id && (
                         <div className="cart-history-card-detail">
-                          {order.items.map((item) => (
+                          {(order.items ?? []).map((item) => (
                             <div key={item.id} className="cart-history-item">
                               {item.imageUrl ? (
                                 <img src={resolveMediaUrl(item.imageUrl)} alt={item.title} className="cart-history-item-img" />
