@@ -4,7 +4,7 @@
  * Utilisé dans SoKinPage ET HomePage pour un rendu identique.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   sokin as sokinApi,
@@ -428,24 +428,29 @@ function VideoItem({
     video.currentTime = ratio * video.duration;
   }, []);
 
-  // Générer une URL poster à partir du premier frame de la vidéo
   const videoSrc = resolveMediaUrl(item.url);
-  const posterUrl = useMemo(() => {
-    // Ajoute #t=0.1 pour capturer la 1ère image (poster natif du navigateur)
-    return `${videoSrc}#t=0.1`;
-  }, [videoSrc]);
+  const fillRef = useRef<HTMLDivElement>(null);
+  const rafRef = useRef<number>();
+
+  // Cleanup rAF on unmount
+  useEffect(() => {
+    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
+  }, []);
 
   return (
     <>
       <video
-        src={videoSrc}
+        src={`${videoSrc}#t=0.1`}
         ref={setVideoRef}
         loop
-        poster={posterUrl}
         onTimeUpdate={(e) => {
           const v = e.currentTarget;
-          const fill = v.parentElement?.querySelector('.sk-video-progress') as HTMLElement | null;
-          if (fill && v.duration) fill.style.width = `${(v.currentTime / v.duration) * 100}%`;
+          if (rafRef.current) cancelAnimationFrame(rafRef.current);
+          rafRef.current = requestAnimationFrame(() => {
+            if (fillRef.current && v.duration) {
+              fillRef.current.style.width = `${(v.currentTime / v.duration) * 100}%`;
+            }
+          });
         }}
         onLoadedMetadata={(e) => {
           const v = e.currentTarget;
@@ -469,7 +474,7 @@ function VideoItem({
       <div ref={skipRef} className="sk-skip-indicator" />
       <span className="sk-media-play-icon" aria-hidden="true">&#9654;</span>
       <div className="sk-video-progress-bar" onPointerDown={handleProgressSeek} onClick={(e) => e.stopPropagation()}>
-        <div className="sk-video-progress" style={{ width: 0 }} />
+        <div ref={fillRef} className="sk-video-progress" style={{ width: 0 }} />
       </div>
     </>
   );
@@ -597,7 +602,7 @@ export type AnnounceCardProps = {
   onBoost?: (postId: string) => void;
 };
 
-export function AnnounceCard({
+export const AnnounceCard = React.memo(function AnnounceCard({
   post,
   t,
   isLoggedIn,
@@ -839,7 +844,7 @@ export function AnnounceCard({
         >
           <div className="sk-card-avatar-wrap">
             {authorAvatar ? (
-              <img src={resolveMediaUrl(authorAvatar)} alt={authorName} className="sk-card-avatar" />
+              <img src={resolveMediaUrl(authorAvatar)} alt={authorName} className="sk-card-avatar" loading="lazy" />
             ) : (
               <span className="sk-card-avatar-empty" aria-hidden="true">
                 {authorName.charAt(0).toUpperCase()}
@@ -1344,7 +1349,7 @@ export function AnnounceCard({
       )}
     </article>
   );
-}
+});
 
 
 

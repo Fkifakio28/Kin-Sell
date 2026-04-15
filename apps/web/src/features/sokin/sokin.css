@@ -1012,6 +1012,8 @@
   overflow: hidden;
   transition: transform 0.22s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.22s ease, background 0.22s ease;
   animation: skCardAppear 0.35s ease both;
+  /* Isolation de layout — empêche les reflows de cascader entre cartes */
+  contain: layout style paint;
 }
 
 .sk-card:hover {

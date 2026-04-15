@@ -262,6 +262,7 @@ function ComposeZone({
             src={resolveMediaUrl(avatarUrl)}
             alt={displayName}
             className="sk-compose-avatar"
+            loading="lazy"
           />
         ) : (
           <span className="sk-compose-avatar sk-compose-avatar--empty" aria-hidden="true">
@@ -955,7 +956,7 @@ function DesktopStudioComposer({
       <article className="sk-studio-card">
         <header className="sk-studio-profile">
           {avatarUrl ? (
-            <img src={resolveMediaUrl(avatarUrl)} alt={displayName} className="sk-studio-avatar" />
+            <img src={resolveMediaUrl(avatarUrl)} alt={displayName} className="sk-studio-avatar" loading="lazy" />
           ) : (
             <span className="sk-studio-avatar sk-studio-avatar--empty" aria-hidden="true">{(displayName.charAt(0) || '?').toUpperCase()}</span>
           )}
@@ -1053,7 +1054,7 @@ function DesktopStudioComposer({
                 ) : isAudioFile(f) ? (
                   <div className="sk-modal-preview-audio" aria-label="Aperçu audio MP3">🎵</div>
                 ) : (
-                  <img src={previewUrls[i]} alt="" className="sk-modal-preview-thumb" />
+                  <img src={previewUrls[i]} alt="" className="sk-modal-preview-thumb" loading="lazy" />
                 )}
               </div>
             ))}
@@ -1091,7 +1092,7 @@ function DesktopStudioComposer({
               <div className="sk-modal-suggestions">
                 {tagSuggestions.map((item) => (
                   <button key={item.key} type="button" className="sk-modal-suggestion-item" onClick={() => addTag(item.handle)}>
-                    {item.avatarUrl ? <img src={resolveMediaUrl(item.avatarUrl)} className="sk-modal-suggestion-avatar" alt="" /> : <span className="sk-modal-suggestion-avatar">👤</span>}
+                    {item.avatarUrl ? <img src={resolveMediaUrl(item.avatarUrl)} className="sk-modal-suggestion-avatar" alt="" loading="lazy" /> : <span className="sk-modal-suggestion-avatar">👤</span>}
                     <span className="sk-modal-suggestion-text">
                       <strong>{item.label}</strong>
                       <span className="sk-modal-suggestion-handle">{item.handle}</span>
@@ -1183,7 +1184,7 @@ function DesktopStudioComposer({
                     ) : mediaFiles[i] && isAudioFile(mediaFiles[i]) ? (
                       <div className="sk-modal-preview-audio" aria-label="Aperçu audio MP3">🎵</div>
                     ) : (
-                      <img src={url} alt="" className="sk-modal-preview-thumb" />
+                      <img src={url} alt="" className="sk-modal-preview-thumb" loading="lazy" />
                     )}
                   </div>
                 ))}
@@ -1771,7 +1772,7 @@ function CreateAnnounceScreen({
             <article className="sk-studio-card" aria-label="Zone de création de publication">
               <header className="sk-studio-profile">
                 {avatarUrl ? (
-                  <img src={resolveMediaUrl(avatarUrl)} alt={displayName} className="sk-studio-avatar" />
+                  <img src={resolveMediaUrl(avatarUrl)} alt={displayName} className="sk-studio-avatar" loading="lazy" />
                 ) : (
                   <span className="sk-studio-avatar sk-studio-avatar--empty" aria-hidden="true">{(displayName.charAt(0) || '?').toUpperCase()}</span>
                 )}
@@ -1892,7 +1893,7 @@ function CreateAnnounceScreen({
                     ) : isAudioUrl(url) ? (
                       <div className="sk-modal-preview-audio" aria-label="Aperçu audio MP3">🎵</div>
                     ) : (
-                      <img src={url} alt="" className="sk-modal-preview-thumb" />
+                      <img src={url} alt="" className="sk-modal-preview-thumb" loading="lazy" />
                     )}
                     <button
                       type="button"
@@ -1911,7 +1912,7 @@ function CreateAnnounceScreen({
                     ) : isAudioFile(f) ? (
                       <div className="sk-modal-preview-audio" aria-label="Aperçu audio MP3">🎵</div>
                     ) : (
-                      <img src={previewUrls[i]} alt="" className="sk-modal-preview-thumb" />
+                      <img src={previewUrls[i]} alt="" className="sk-modal-preview-thumb" loading="lazy" />
                     )}
                     <button
                       type="button"
@@ -1994,7 +1995,7 @@ function CreateAnnounceScreen({
                 <div className="sk-modal-suggestions">
                   {tagSuggestions.map((item) => (
                     <button key={item.key} type="button" className="sk-modal-suggestion-item" onClick={() => addTag(item.handle)}>
-                      {item.avatarUrl ? <img src={resolveMediaUrl(item.avatarUrl)} className="sk-modal-suggestion-avatar" alt="" /> : <span className="sk-modal-suggestion-avatar">👤</span>}
+                      {item.avatarUrl ? <img src={resolveMediaUrl(item.avatarUrl)} className="sk-modal-suggestion-avatar" alt="" loading="lazy" /> : <span className="sk-modal-suggestion-avatar">👤</span>}
                       <span className="sk-modal-suggestion-text">
                         <strong>{item.label}</strong>
                         <span className="sk-modal-suggestion-handle">{item.handle}</span>
@@ -2112,7 +2113,7 @@ function CreateAnnounceScreen({
           <article className="sk-create-preview-card" aria-label="Prévisualisation annonce">
             <header className="sk-studio-profile">
               {avatarUrl ? (
-                <img src={resolveMediaUrl(avatarUrl)} alt={displayName} className="sk-studio-avatar" />
+                <img src={resolveMediaUrl(avatarUrl)} alt={displayName} className="sk-studio-avatar" loading="lazy" />
               ) : (
                 <span className="sk-studio-avatar sk-studio-avatar--empty" aria-hidden="true">{(displayName.charAt(0) || '?').toUpperCase()}</span>
               )}
@@ -2139,7 +2140,7 @@ function CreateAnnounceScreen({
                     ) : isAudioFile(f) ? (
                       <div className="sk-modal-preview-audio" aria-label="Aperçu audio MP3">🎵</div>
                     ) : (
-                      <img src={previewUrls[i]} alt="" className="sk-modal-preview-thumb" />
+                      <img src={previewUrls[i]} alt="" className="sk-modal-preview-thumb" loading="lazy" />
                     )}
                   </div>
                 ))}
@@ -3376,7 +3377,7 @@ function SoKinPageInner() {
                         <article key={post.id} className="sk-mobile-manage-item sk-mobile-manage-item--bookmark">
                           <button type="button" className="sk-mobile-manage-main" onClick={() => { setShowMobileManage(false); void handleOpenPublishedPost(post.id); }}>
                             {post.author?.profile?.avatarUrl && (
-                              <img src={resolveMediaUrl(post.author.profile.avatarUrl)} alt="" className="sk-bookmark-avatar" />
+                              <img src={resolveMediaUrl(post.author.profile.avatarUrl)} alt="" className="sk-bookmark-avatar" loading="lazy" />
                             )}
                             <div className="sk-bookmark-info">
                               <strong>{post.text?.slice(0, 60) || 'Publication sans texte'}</strong>
@@ -3712,7 +3713,7 @@ function SoKinPageInner() {
                     <div key={profile.userId} className="sk-desktop-suggestion-item">
                       <span className="sk-desktop-suggestion-avatar">
                         {profile.avatarUrl ? (
-                          <img src={profile.avatarUrl} alt="" className="sk-desktop-suggestion-avatar-img" />
+                          <img src={profile.avatarUrl} alt="" className="sk-desktop-suggestion-avatar-img" loading="lazy" />
                         ) : (
                           profile.displayName.charAt(0).toUpperCase()
                         )}

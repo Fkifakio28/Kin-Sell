@@ -125,7 +125,7 @@ export function MediaViewer({ items, startIndex, onClose }: { items: MediaItem[]
         />
       );
     }
-    return <img src={resolveMediaUrl(mi.url)} alt="" className="sk-viewer-media" />;
+    return <img src={resolveMediaUrl(mi.url)} alt="" className="sk-viewer-media" loading="lazy" />;
   };
 
   return (
@@ -255,7 +255,7 @@ export function CommentsDrawer({
       <article key={comment.id} className={`sk-comment-item${isReply ? ' sk-comment-item--reply' : ''}`}>
         <div className="sk-comment-avatar-wrap">
           {avatar ? (
-            <img src={resolveMediaUrl(avatar)} alt={name} className="sk-comment-avatar" />
+            <img src={resolveMediaUrl(avatar)} alt={name} className="sk-comment-avatar" loading="lazy" />
           ) : (
             <span className="sk-comment-avatar sk-comment-avatar--empty" aria-hidden="true">{name.charAt(0).toUpperCase()}</span>
           )}
@@ -348,7 +348,7 @@ export function CommentsDrawer({
         <section className="sk-missing-profile" aria-label="Profil public non disponible">
           <div className="sk-missing-profile-box">
             {profileState.profile.avatarUrl ? (
-              <img src={resolveMediaUrl(profileState.profile.avatarUrl)} alt={profileState.profile.displayName} className="sk-missing-profile-avatar" />
+              <img src={resolveMediaUrl(profileState.profile.avatarUrl)} alt={profileState.profile.displayName} className="sk-missing-profile-avatar" loading="lazy" />
             ) : (
               <span className="sk-missing-profile-avatar sk-missing-profile-avatar--empty" aria-hidden="true">{profileState.profile.displayName.charAt(0).toUpperCase()}</span>
             )}
