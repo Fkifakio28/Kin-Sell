@@ -130,7 +130,7 @@ public class KinSellConnectionService extends Service {
                 wakeLock = pm.newWakeLock(
                         PowerManager.PARTIAL_WAKE_LOCK,
                         "kinsell:connection_service");
-                wakeLock.acquire();
+                wakeLock.acquire(4 * 60 * 60 * 1000L); // 4h max, renouvelé au prochain onStartCommand
             }
         } catch (Exception ignored) {}
     }
