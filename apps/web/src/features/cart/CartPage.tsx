@@ -871,6 +871,14 @@ export function CartPage() {
                     </div>
                   )}
 
+                  {/* Deadline 24h après refus de négociation */}
+                  {item.negotiationStatus === "REFUSED" && (item as any).refusalDeadline && (
+                    <div className="cart-item-refusal-deadline">
+                      <span>⏰</span>
+                      <span>Commandez au prix original avant : <strong>{new Date((item as any).refusalDeadline).toLocaleString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</strong></span>
+                    </div>
+                  )}
+
                   {/* Animated new price on counter */}
                   {item.negotiationId && negPriceFlash[item.negotiationId] && (
                     <div className="cart-neg-price-flash">
@@ -1439,9 +1447,10 @@ export function CartPage() {
             <label className="cart-checkout-modal-field">
               <span>Mode de paiement</span>
               <select value={checkoutForm.paymentMethod} onChange={(e) => setCheckoutForm((prev) => ({ ...prev, paymentMethod: e.target.value as "PAYPAL" | "CASH_ON_DELIVERY" }))}>
-                <option value="CASH_ON_DELIVERY">Paiement à la livraison</option>
-                <option value="PAYPAL">PayPal</option>
+                <option value="CASH_ON_DELIVERY">💵 Paiement à la livraison</option>
+                <option value="PAYPAL" disabled>PayPal — en cours de configuration</option>
               </select>
+              <span style={{ fontSize: '.78rem', opacity: 0.55, marginTop: 4 }}>D'autres moyens de paiement seront bientôt disponibles.</span>
             </label>
 
             <label className="cart-checkout-modal-field">

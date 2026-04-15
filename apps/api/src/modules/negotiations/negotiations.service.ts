@@ -463,9 +463,8 @@ export const respondToNegotiation = async (userId: string, negotiationId: string
       include: negotiationInclude
     });
 
-    // Décrocher la négo du panier et restaurer les prix originaux
+    // Restaurer les prix originaux mais garder le lien negotiationId (deadline 24h pour commander)
     if (negotiation.bundleId) {
-      // Bundle: restaurer le vrai prix unitaire de chaque item
       const cartItems = await prisma.cartItem.findMany({
         where: { negotiationId: negotiationId },
         include: { listing: { select: { priceUsdCents: true } } },
@@ -473,13 +472,13 @@ export const respondToNegotiation = async (userId: string, negotiationId: string
       for (const ci of cartItems) {
         await prisma.cartItem.update({
           where: { id: ci.id },
-          data: { negotiationId: null, unitPriceUsdCents: ci.listing.priceUsdCents },
+          data: { unitPriceUsdCents: ci.listing.priceUsdCents },
         });
       }
     } else {
       await prisma.cartItem.updateMany({
         where: { negotiationId: negotiationId },
-        data: { negotiationId: null, unitPriceUsdCents: negotiation.originalPriceUsdCents }
+        data: { unitPriceUsdCents: negotiation.originalPriceUsdCents }
       });
     }
 

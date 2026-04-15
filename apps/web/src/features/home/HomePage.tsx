@@ -26,6 +26,7 @@ import TutorialOverlay, { useTutorial, TutorialRelaunchBtn } from "../../compone
 import { homeDesktopSteps } from "../../components/tutorial-steps";
 import { WelcomeOnboarding } from "../onboarding/WelcomeOnboarding";
 import { SK_WELCOME_ONBOARDING_DONE } from "../../shared/constants/storage-keys";
+import { OnboardingHelpFab } from "../../components/OnboardingHelpFab";
 import "../sokin/sokin.css";
 import "./home.css";
 
@@ -1316,6 +1317,7 @@ export function HomePage() {
 
       <TutorialOverlay pageKey="home-desktop" steps={homeDesktopSteps} open={tutorial.isOpen} onClose={tutorial.close} />
       {!tutorial.isOpen && <TutorialRelaunchBtn reset={tutorial.reset} start={tutorial.start} />}
+      <OnboardingHelpFab />
 
       {showWelcome && <WelcomeOnboarding onClose={() => setShowWelcome(false)} />}
     </div>

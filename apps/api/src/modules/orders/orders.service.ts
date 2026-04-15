@@ -66,6 +66,7 @@ const mapCart = (cart: {
       status: NegotiationStatus;
       originalPriceUsdCents: number;
       finalPriceUsdCents: number | null;
+      resolvedAt: Date | null;
     } | null;
     listing: {
       id: string;
@@ -83,20 +84,36 @@ const mapCart = (cart: {
   }>;
   [key: string]: unknown;
 }) => {
-  const subtotalUsdCents = cart.items.reduce((sum, item) => sum + item.unitPriceUsdCents * item.quantity, 0);
+  const REFUSAL_DEADLINE_MS = 24 * 60 * 60 * 1000; // 24h
+  const now = Date.now();
+
+  // Filtrer les items dont la négo refusée a expiré (> 24h)
+  const validItems = cart.items.filter((item) => {
+    if (item.negotiation?.status === "REFUSED" && item.negotiation.resolvedAt) {
+      const deadline = new Date(item.negotiation.resolvedAt).getTime() + REFUSAL_DEADLINE_MS;
+      if (now > deadline) return false; // expiré, sera nettoyé
+    }
+    return true;
+  });
+
+  const subtotalUsdCents = validItems.reduce((sum, item) => sum + item.unitPriceUsdCents * item.quantity, 0);
 
   return {
     id: cart.id,
     status: cart.status,
     currency: cart.currency,
     subtotalUsdCents,
-    itemsCount: cart.items.length,
+    itemsCount: validItems.length,
     createdAt: cart.createdAt.toISOString(),
     updatedAt: cart.updatedAt.toISOString(),
-    items: cart.items.map((item) => {
+    items: validItems.map((item) => {
       const isNegotiating = !!item.negotiationId && item.negotiation
         && ["PENDING", "COUNTERED"].includes(item.negotiation.status);
       const isAccepted = !!item.negotiation && item.negotiation.status === "ACCEPTED";
+      const isRefused = !!item.negotiation && item.negotiation.status === "REFUSED";
+      const refusalDeadline = isRefused && item.negotiation?.resolvedAt
+        ? new Date(new Date(item.negotiation.resolvedAt).getTime() + REFUSAL_DEADLINE_MS).toISOString()
+        : null;
 
       return {
         id: item.id,
@@ -108,6 +125,7 @@ const mapCart = (cart: {
         negotiationStatus: item.negotiation?.status ?? null,
         originalPriceUsdCents: item.listing.priceUsdCents,
         itemState: isNegotiating ? "MARCHANDAGE" as const : "COMMANDE" as const,
+        refusalDeadline,
         listing: {
           id: item.listing.id,
           type: item.listing.type,
@@ -247,7 +265,7 @@ export const getBuyerCart = async (userId: string) => {
             }
           },
           negotiation: {
-            select: { id: true, status: true, originalPriceUsdCents: true, finalPriceUsdCents: true }
+            select: { id: true, status: true, originalPriceUsdCents: true, finalPriceUsdCents: true, resolvedAt: true }
           }
         },
         orderBy: { createdAt: "desc" }
@@ -257,6 +275,42 @@ export const getBuyerCart = async (userId: string) => {
 
   if (!cart) {
     throw new HttpError(404, "Panier introuvable");
+  }
+
+  // Nettoyer les items dont la négo refusée a dépassé 24h
+  const REFUSAL_DEADLINE_MS = 24 * 60 * 60 * 1000;
+  const now = Date.now();
+  const expiredItemIds = cart.items
+    .filter((item) =>
+      item.negotiation?.status === "REFUSED"
+      && item.negotiation.resolvedAt
+      && now > new Date(item.negotiation.resolvedAt).getTime() + REFUSAL_DEADLINE_MS
+    )
+    .map((item) => item.id);
+
+  if (expiredItemIds.length > 0) {
+    await prisma.cartItem.deleteMany({ where: { id: { in: expiredItemIds } } });
+    // Re-fetch sans les items expirés
+    const cleaned = await prisma.cart.findUnique({
+      where: { id: cartId },
+      include: {
+        items: {
+          include: {
+            listing: {
+              include: {
+                ownerUser: { select: { id: true, profile: { select: { displayName: true, avatarUrl: true, username: true, city: true } } } },
+                business: { select: { id: true, publicName: true, slug: true } }
+              }
+            },
+            negotiation: {
+              select: { id: true, status: true, originalPriceUsdCents: true, finalPriceUsdCents: true, resolvedAt: true }
+            }
+          },
+          orderBy: { createdAt: "desc" }
+        }
+      }
+    });
+    return mapCart(cleaned!);
   }
 
   return mapCart(cart);
@@ -368,7 +422,7 @@ export const checkoutBuyerCart = async (userId: string, notes?: string, delivery
       items: {
         include: {
           listing: true,
-          negotiation: { select: { id: true, status: true } }
+          negotiation: { select: { id: true, status: true, resolvedAt: true } }
         }
       }
     },
@@ -397,6 +451,20 @@ export const checkoutBuyerCart = async (userId: string, notes?: string, delivery
 
   if (readyItems.length === 0) {
     throw new HttpError(400, "Tous les articles sont en cours de négociation. Attendez la résolution ou annulez les négociations.");
+  }
+
+  // ── Retirer les items dont la négo refusée dépasse 24h ──
+  const REFUSAL_DEADLINE_MS = 24 * 60 * 60 * 1000;
+  const checkoutNow = Date.now();
+  const expiredRefusalItems = readyItems.filter(
+    (item) => item.negotiation?.status === NegotiationStatus.REFUSED
+      && item.negotiation.resolvedAt
+      && checkoutNow > new Date(item.negotiation.resolvedAt).getTime() + REFUSAL_DEADLINE_MS
+  );
+  if (expiredRefusalItems.length > 0) {
+    // Supprimer les articles expirés du panier
+    await prisma.cartItem.deleteMany({ where: { id: { in: expiredRefusalItems.map((i) => i.id) } } });
+    throw new HttpError(400, `Le délai de 24h pour commander après refus de négociation a expiré pour ${expiredRefusalItems.length} article(s). Ils ont été retirés du panier.`);
   }
 
   const itemWithoutPrice = readyItems.find((item) => item.unitPriceUsdCents <= 0);

@@ -1,0 +1,44 @@
+/* OnboardingHelpFab — bouton guide flottant, positionné juste au-dessus du tuto-relaunch-btn */
+.onboarding-help-fab {
+  position: fixed;
+  bottom: 138px;
+  right: 18px;
+  z-index: 9990;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: none;
+  background: linear-gradient(135deg, var(--color-primary, #6f58ff) 0%, #ff7eb3 100%);
+  color: #fff;
+  font-size: 1.15rem;
+  cursor: pointer;
+  box-shadow:
+    0 4px 16px rgba(111, 88, 255, 0.35),
+    0 0 0 2px rgba(255, 126, 179, 0.2);
+  transition: transform 0.15s, box-shadow 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.onboarding-help-fab:hover {
+  transform: scale(1.1);
+  box-shadow:
+    0 6px 24px rgba(111, 88, 255, 0.45),
+    0 0 0 3px rgba(255, 126, 179, 0.25);
+}
+
+.onboarding-help-fab:active {
+  transform: scale(0.95);
+}
+
+@media (max-width: 480px) {
+  .onboarding-help-fab {
+    bottom: 124px;
+    right: 14px;
+    width: 36px;
+    height: 36px;
+    font-size: 1rem;
+  }
+}

@@ -55,6 +55,7 @@ import { homeMobileSteps } from "../../components/tutorial-steps";
 import { Capacitor } from "@capacitor/core";
 import { WelcomeOnboarding } from "../onboarding/WelcomeOnboarding";
 import { SK_WELCOME_ONBOARDING_DONE } from "../../shared/constants/storage-keys";
+import { OnboardingHelpFab } from "../../components/OnboardingHelpFab";
 import "./home-mobile.css";
 
 /* ────────────── Static data ────────────── */
@@ -1614,6 +1615,7 @@ export function HomePageMobile() {
 
       <TutorialOverlay pageKey="home-mobile" steps={homeMobileSteps} open={tutorial.isOpen} onClose={tutorial.close} />
       {!tutorial.isOpen && <TutorialRelaunchBtn reset={tutorial.reset} start={tutorial.start} />}
+      <OnboardingHelpFab />
 
       {showWelcome && <WelcomeOnboarding onClose={() => setShowWelcome(false)} />}
     </div>

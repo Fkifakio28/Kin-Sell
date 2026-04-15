@@ -11,6 +11,7 @@ import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../app/providers/AuthProvider";
 import { useScrollDirection } from "../hooks/useScrollDirection";
 import { getDashboardPath, DASHBOARD_PATHS } from "../shared/constants/roles";
+import { OnboardingHelpFab } from "./OnboardingHelpFab";
 import "./mobile-shell.css";
 
 // ─────────────────────────────────────────────────────────────
@@ -185,6 +186,7 @@ export function MobilePageShell() {
           <Outlet />
         </Suspense>
       </div>
+      <OnboardingHelpFab />
       {!isDashboard && (
         <>
           <div className="msh-bottom-spacer" aria-hidden="true" />
