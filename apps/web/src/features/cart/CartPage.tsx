@@ -1036,32 +1036,39 @@ export function CartPage() {
                 </button>
                 {!aiCommandeCollapsed && checkoutAdviceData && (
                   <div className="cart-ai-body cart-ai-body--animated">
-                    {(checkoutAdviceData.bundles ?? []).length > 0 && (
+                    {(checkoutAdviceData.bundleSuggestions ?? []).length > 0 && (
                       <div className="cart-ai-section">
-                        <strong>📦 Offres groupées</strong>
-                        {(checkoutAdviceData.bundles ?? []).map((b, i) => (
+                        <strong>📦 Suggestions</strong>
+                        {(checkoutAdviceData.bundleSuggestions ?? []).map((b, i) => (
                           <div key={i} className="cart-ai-bundle">
                             <span>{b.title}</span>
-                            <span className="cart-ai-bundle-save">-{b.discount}% ({formatMoneyFromUsdCents(b.savingsCents)} économisés)</span>
+                            <span className="cart-ai-bundle-save">{formatMoneyFromUsdCents(b.priceUsdCents)} — {b.reason}</span>
                           </div>
                         ))}
                       </div>
                     )}
-                    {checkoutAdviceData.urgency?.active && (
-                      <div className="cart-ai-urgency cart-ai-urgency--pulse">⚡ {checkoutAdviceData.urgency.message}</div>
-                    )}
-                    {checkoutAdviceData.shippingEstimate && (
-                      <div className="cart-ai-section">
-                        <strong>🚚 Livraison estimée</strong>
-                        <p>{checkoutAdviceData.shippingEstimate.minDays}–{checkoutAdviceData.shippingEstimate.maxDays} jours vers {checkoutAdviceData.shippingEstimate.city}</p>
+                    {checkoutAdviceData.discountTrigger?.message && (
+                      <div className={`cart-ai-urgency${checkoutAdviceData.discountTrigger.available ? ' cart-ai-urgency--pulse' : ''}`}>
+                        💰 {checkoutAdviceData.discountTrigger.message}
                       </div>
                     )}
-                    {(checkoutAdviceData.tips ?? []).length > 0 && (
+                    {(checkoutAdviceData.urgencySignals ?? []).length > 0 && (
                       <div className="cart-ai-section">
-                        <strong>💡 Conseils</strong>
-                        <ul className="cart-ai-tips">
-                          {(checkoutAdviceData.tips ?? []).map((tip, i) => <li key={i}>{tip}</li>)}
-                        </ul>
+                        {(checkoutAdviceData.urgencySignals ?? []).map((s, i) => (
+                          <div key={i} className="cart-ai-urgency cart-ai-urgency--pulse">⚡ {s.message}</div>
+                        ))}
+                      </div>
+                    )}
+                    {checkoutAdviceData.estimatedDeliveryHours && (
+                      <div className="cart-ai-section">
+                        <strong>🚚 Livraison estimée</strong>
+                        <p>{Math.round(checkoutAdviceData.estimatedDeliveryHours.min / 24)}–{Math.round(checkoutAdviceData.estimatedDeliveryHours.max / 24)} jours</p>
+                      </div>
+                    )}
+                    {checkoutAdviceData.paymentOptimization && (
+                      <div className="cart-ai-section">
+                        <strong>💡 Conseil</strong>
+                        <p>{checkoutAdviceData.paymentOptimization}</p>
                       </div>
                     )}
                   </div>

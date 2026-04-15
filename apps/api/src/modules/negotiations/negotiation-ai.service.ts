@@ -25,6 +25,7 @@ import {
   clearSubscriptionCache,
 } from "../../shared/billing/subscription-guard.js";
 import { sendPushToUser } from "../notifications/push.service.js";
+import { getExternalPriceIntel, getBlendedInsight } from "../knowledge-base/knowledge-base.service.js";
 
 // ─────────────────────────────────────────────
 // Types
@@ -515,6 +516,33 @@ export async function getBuyerNegotiationHint(
       externalInsight: enrichment.externalData?.insight ?? null,
     };
   } catch { /* enrichment non critique */ }
+
+  // ── Knowledge Base enrichissement (best-effort) ──
+  try {
+    const blended = await getBlendedInsight(listing.category, "CD", listing.city ?? undefined);
+    if (blended && blended.confidence > 40) {
+      // Ajuster les seuils avec les données KB
+      const kbPriceRatio = listing.priceUsdCents > 0
+        ? blended.blendedPrice / listing.priceUsdCents
+        : 1;
+      // Si le prix KB est nettement inférieur, l'acheteur peut être plus agressif
+      if (kbPriceRatio < 0.85) {
+        adaptiveMaxDiscount = Math.min(40, adaptiveMaxDiscount + 5);
+        adaptiveFloor = Math.max(55, adaptiveFloor - 5);
+      }
+      // Si le prix KB est supérieur, le vendeur est déjà compétitif
+      if (kbPriceRatio > 1.1) {
+        adaptiveMaxDiscount = Math.max(10, adaptiveMaxDiscount - 5);
+        adaptiveFloor = Math.min(85, adaptiveFloor + 5);
+      }
+      // Enrichir l'insight avec le facteur saisonnier
+      if (blended.seasonalFactor > 1.1 && enrichmentData) {
+        enrichmentData.externalInsight =
+          (enrichmentData.externalInsight ?? "") +
+          ` 📅 Période de forte demande saisonnière (×${blended.seasonalFactor.toFixed(1)}).`;
+      }
+    }
+  } catch { /* KB non critique */ }
 
   const originalPrice = listing.priceUsdCents;
   const suggestedDiscount = Math.min(avgDiscountPercent, adaptiveMaxDiscount);

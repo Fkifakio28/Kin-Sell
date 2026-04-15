@@ -3,10 +3,25 @@ import { request, mutate } from "../api-core";
 // ── IA Marchand (Negotiation AI) ──
 
 export type BuyerNegotiationHint = {
-  suggestedPrice: number;
+  listingId: string;
+  listingTitle: string;
+  originalPriceUsdCents: number;
+  suggestedOfferUsdCents: number;
+  minRealisticOfferUsdCents: number;
   successRate: number;
-  marketContext: { avgPriceCents: number; medianPriceCents: number; totalListings: number };
+  marketContext: "COMPETITIVE" | "FLEXIBLE" | "FIXED";
   messageSuggestion: string;
+  insight: string;
+  sampleSize: number;
+  enrichment: {
+    marketHeatScore: number;
+    priceFlexibilityScore: number;
+    regionalDemandScore: number;
+    competitionPressureScore: number;
+    confidenceScore: number;
+    sourceType: string;
+    externalInsight: string | null;
+  } | null;
 };
 
 export type SellerNegotiationAdvice = {
@@ -59,10 +74,28 @@ export const negotiationAi = {
 // ── IA Commande (Order AI) ──
 
 export type CheckoutAdvice = {
-  bundles: Array<{ title: string; discount: number; savingsCents: number }>;
-  urgency: { active: boolean; message: string } | null;
-  shippingEstimate: { minDays: number; maxDays: number; city: string } | null;
-  tips: string[];
+  cartId: string;
+  bundleSuggestions: Array<{
+    listingId: string;
+    title: string;
+    priceUsdCents: number;
+    reason: string;
+  }>;
+  discountTrigger: {
+    available: boolean;
+    thresholdUsdCents: number;
+    currentTotalUsdCents: number;
+    savingsPercent: number;
+    message: string | null;
+  };
+  urgencySignals: Array<{
+    listingId: string;
+    title: string;
+    signal: "LOW_STOCK" | "PRICE_INCREASE" | "HIGH_DEMAND";
+    message: string;
+  }>;
+  paymentOptimization: string;
+  estimatedDeliveryHours: { min: number; max: number } | null;
 };
 
 export type AbandonmentRisk = {
