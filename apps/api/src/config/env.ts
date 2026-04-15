@@ -44,6 +44,9 @@ const schema = z.object({
   MPESA_BASE_URL: z.string().default("https://openapi.m-pesa.com/sandbox/ipg/v2/vodacomDRC"),
   MPESA_CALLBACK_URL: z.string().default("http://localhost:4000/mobile-money/webhook/mpesa"),
 
+  // Secret partagé pour vérifier l'authenticité des callbacks webhook Mobile Money
+  MOMO_WEBHOOK_SECRET: z.string().min(16).optional(),
+
   // ── PayPal ──
   PAYPAL_CLIENT_ID: z.string().optional(),
   PAYPAL_CLIENT_SECRET: z.string().optional(),

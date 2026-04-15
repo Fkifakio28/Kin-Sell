@@ -43,10 +43,8 @@ const upload = multer({
       cb(new HttpError(400, `Type de fichier non autorisé: ${file.mimetype}. Acceptés: JPEG, PNG, WebP, GIF, MP4, WebM.`));
       return;
     }
-    if (ALLOWED_IMAGE_TYPES.includes(file.mimetype) && file.size > MAX_IMAGE_SIZE) {
-      cb(new HttpError(400, "Les images ne doivent pas dépasser 10 Mo."));
-      return;
-    }
+    // Note: file.size est 0 dans fileFilter (multer n'a pas encore lu le body).
+    // La vérif de taille par type se fait POST-upload ci-dessous.
     cb(null, true);
   },
 });
@@ -77,6 +75,13 @@ router.post(
     if (videos.length > 1) {
       for (const f of files) fs.unlinkSync(f.path);
       throw new HttpError(400, "Maximum 1 vidéo autorisée.");
+    }
+
+    // SÉCURITÉ: vérifier la taille réelle des images APRÈS upload (file.size fiable ici)
+    const oversizedImages = images.filter((f) => f.size > MAX_IMAGE_SIZE);
+    if (oversizedImages.length > 0) {
+      for (const f of files) fs.unlinkSync(f.path);
+      throw new HttpError(400, "Les images ne doivent pas dépasser 10 Mo.");
     }
 
     const urls = await Promise.all(

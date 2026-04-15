@@ -79,6 +79,36 @@ const corsOrigins = env.CORS_ORIGIN.includes(",")
   : env.CORS_ORIGIN;
 app.use(cors({ origin: corsOrigins, credentials: true }));
 
+// ── CSRF Origin guard — bloque les requêtes mutantes cross-origin non légitimes ──
+const allowedOrigins = new Set(
+  Array.isArray(corsOrigins) ? corsOrigins : [corsOrigins]
+);
+app.use((req, res, next) => {
+  // Seules les méthodes mutantes sont vérifiées (GET/HEAD/OPTIONS sont safe)
+  if (["GET", "HEAD", "OPTIONS"].includes(req.method)) return next();
+
+  // Exclure les webhooks tiers (Mobile Money, PayPal IPN) — ils ont leur propre auth
+  if (req.path.startsWith("/mobile-money/webhook") || req.path.startsWith("/billing/ipn")) {
+    return next();
+  }
+
+  const origin = req.get("Origin");
+  const referer = req.get("Referer");
+  const source = origin || (referer ? new URL(referer).origin : undefined);
+
+  // Si pas d'origin (ex: appels serveur-à-serveur, mobile natif sans Origin), 
+  // on laisse passer — l'auth cookie nécessite sameSite=none + secure donc seul un
+  // navigateur enverrait les cookies, et un navigateur inclut toujours Origin sur cross-origin.
+  if (!source) return next();
+
+  if (!allowedOrigins.has(source)) {
+    logger.warn({ origin: source, path: req.path, method: req.method }, "CSRF: origin rejeté");
+    res.status(403).json({ error: "Origin non autorisé" });
+    return;
+  }
+  next();
+});
+
 // ── Global scrape guard (block bots/scrapers on all routes) ──
 import { scrapeGuard } from "./shared/middleware/scrape-guard.middleware.js";
 app.use(scrapeGuard());

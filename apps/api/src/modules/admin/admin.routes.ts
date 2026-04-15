@@ -1840,6 +1840,7 @@ router.post("/billing/validate-order", asyncHandler(async (req: AuthenticatedReq
 
 // ── Admin: lister les commandes en attente de validation ──
 router.get("/billing/pending-orders", asyncHandler(async (req: AuthenticatedRequest, res) => {
+  await checkPermission(req, "SUBSCRIPTIONS");
   const page = Number(req.query.page) || 1;
   const limit = Math.min(Number(req.query.limit) || 20, 100);
   const status = req.query.status as string | undefined;

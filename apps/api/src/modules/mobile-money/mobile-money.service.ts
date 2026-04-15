@@ -9,8 +9,19 @@ import { HttpError } from "../../shared/errors/http-error.js";
 import * as orangeMoney from "../../shared/payment/orange-money.provider.js";
 import * as mpesa from "../../shared/payment/mpesa.provider.js";
 import { sendPushToUser } from "../notifications/push.service.js";
+import { env } from "../../config/env.js";
+import crypto from "node:crypto";
+import { logger } from "../../shared/logger.js";
 
 const PAYMENT_TTL_MINUTES = 30;
+
+// ─── Terminal statuses: une fois atteints, le paiement ne peut plus changer ───
+const TERMINAL_STATUSES: MomoStatus[] = [
+  MomoStatus.SUCCESS,
+  MomoStatus.FAILED,
+  MomoStatus.EXPIRED,
+  MomoStatus.CANCELED,
+];
 
 type InitiateInput = {
   provider: "ORANGE_MONEY" | "MPESA";
@@ -170,7 +181,32 @@ export async function checkStatus(userId: string, paymentId: string) {
 }
 
 /**
+ * Vérifier le token webhook partagé (MOMO_WEBHOOK_SECRET).
+ * Accepte soit header Authorization: Bearer <secret>, soit query ?secret=<secret>.
+ */
+export function verifyWebhookToken(req: { headers: Record<string, string | string[] | undefined>; query: Record<string, unknown> }): void {
+  const secret = env.MOMO_WEBHOOK_SECRET;
+  if (!secret) {
+    // Pas de secret configuré → log warning mais laisser passer (backward compat dev)
+    logger.warn("MOMO_WEBHOOK_SECRET non configuré — webhook non vérifié");
+    return;
+  }
+
+  const authHeader = req.headers["authorization"];
+  const bearerToken = typeof authHeader === "string" && authHeader.startsWith("Bearer ")
+    ? authHeader.slice(7)
+    : undefined;
+  const queryToken = typeof req.query.secret === "string" ? req.query.secret : undefined;
+
+  const provided = bearerToken ?? queryToken;
+  if (!provided || !crypto.timingSafeEqual(Buffer.from(provided), Buffer.from(secret))) {
+    throw new HttpError(403, "Webhook token invalide");
+  }
+}
+
+/**
  * Traiter un callback webhook Orange Money.
+ * Sécurité : vérification serveur-à-serveur via l'API Orange avant d'accepter le statut.
  */
 export async function handleOrangeWebhook(body: { pay_token?: string; status?: string; txnid?: string; [key: string]: unknown }) {
   const payToken = body.pay_token;
@@ -182,27 +218,46 @@ export async function handleOrangeWebhook(body: { pay_token?: string; status?: s
 
   if (!record) return { received: true, matched: false };
 
-  const newStatus = mapProviderStatus(body.status ?? "FAILED");
+  // SÉCURITÉ: ne jamais modifier un paiement en état terminal
+  if (TERMINAL_STATUSES.includes(record.status as MomoStatus)) {
+    logger.warn({ paymentId: record.id, currentStatus: record.status }, "Orange webhook ignoré — paiement en état terminal");
+    return { received: true, matched: true, status: record.status, reason: "terminal_status" };
+  }
+
+  // SÉCURITÉ: vérification serveur-à-serveur — interroger l'API Orange pour confirmer le vrai statut
+  let verifiedStatus: MomoStatus;
+  let verifiedTxnId: string | undefined;
+  try {
+    const providerCheck = await orangeMoney.checkPaymentStatus(payToken);
+    verifiedStatus = mapProviderStatus(providerCheck.status);
+    verifiedTxnId = providerCheck.transactionId;
+    logger.info({ paymentId: record.id, webhookStatus: body.status, verifiedStatus }, "Orange webhook — statut vérifié côté serveur");
+  } catch (err) {
+    // Si la vérification échoue, on ne fait PAS confiance au webhook
+    logger.error({ paymentId: record.id, error: err }, "Orange webhook — échec vérification serveur, webhook ignoré");
+    return { received: true, matched: true, status: record.status, reason: "verification_failed" };
+  }
 
   const updated = await prisma.mobileMoneyPayment.update({
     where: { id: record.id },
     data: {
-      status: newStatus,
-      providerTransactionId: (body.txnid as string) ?? record.providerTransactionId,
+      status: verifiedStatus,
+      providerTransactionId: verifiedTxnId ?? (body.txnid as string) ?? record.providerTransactionId,
       callbackPayload: body as object,
-      completedAt: ["SUCCESS", "FAILED", "EXPIRED"].includes(newStatus) ? new Date() : undefined,
+      completedAt: TERMINAL_STATUSES.includes(verifiedStatus) ? new Date() : undefined,
     },
   });
 
-  if (newStatus === MomoStatus.SUCCESS) {
+  if (verifiedStatus === MomoStatus.SUCCESS) {
     await handlePaymentSuccess(updated);
   }
 
-  return { received: true, matched: true, status: newStatus };
+  return { received: true, matched: true, status: verifiedStatus };
 }
 
 /**
  * Traiter un callback webhook M-Pesa.
+ * Sécurité : vérification serveur-à-serveur via l'API M-Pesa avant d'accepter le statut.
  */
 export async function handleMpesaWebhook(body: {
   output_ConversationID?: string;
@@ -221,25 +276,42 @@ export async function handleMpesaWebhook(body: {
 
   if (!record) return { received: true, matched: false };
 
-  const isSuccess = body.output_ResponseCode === "INS-0";
-  const newStatus = isSuccess ? MomoStatus.SUCCESS : MomoStatus.FAILED;
+  // SÉCURITÉ: ne jamais modifier un paiement en état terminal
+  if (TERMINAL_STATUSES.includes(record.status as MomoStatus)) {
+    logger.warn({ paymentId: record.id, currentStatus: record.status }, "M-Pesa webhook ignoré — paiement en état terminal");
+    return { received: true, matched: true, status: record.status, reason: "terminal_status" };
+  }
+
+  // SÉCURITÉ: vérification serveur-à-serveur — interroger l'API M-Pesa pour confirmer le vrai statut
+  let verifiedStatus: MomoStatus;
+  let verifiedTxnId: string | undefined;
+  try {
+    const providerCheck = await mpesa.checkTransactionStatus(conversationID);
+    verifiedStatus = mapProviderStatus(providerCheck.status);
+    verifiedTxnId = providerCheck.transactionId;
+    logger.info({ paymentId: record.id, webhookCode: body.output_ResponseCode, verifiedStatus }, "M-Pesa webhook — statut vérifié côté serveur");
+  } catch (err) {
+    // Si la vérification échoue, on ne fait PAS confiance au webhook
+    logger.error({ paymentId: record.id, error: err }, "M-Pesa webhook — échec vérification serveur, webhook ignoré");
+    return { received: true, matched: true, status: record.status, reason: "verification_failed" };
+  }
 
   const updated = await prisma.mobileMoneyPayment.update({
     where: { id: record.id },
     data: {
-      status: newStatus,
-      providerTransactionId: (body.output_TransactionID as string) ?? record.providerTransactionId,
+      status: verifiedStatus,
+      providerTransactionId: verifiedTxnId ?? (body.output_TransactionID as string) ?? record.providerTransactionId,
       callbackPayload: body as object,
-      completedAt: new Date(),
-      errorMessage: isSuccess ? undefined : body.output_ResponseDesc ?? undefined,
+      completedAt: TERMINAL_STATUSES.includes(verifiedStatus) ? new Date() : undefined,
+      errorMessage: verifiedStatus === MomoStatus.FAILED ? (body.output_ResponseDesc ?? undefined) : undefined,
     },
   });
 
-  if (isSuccess) {
+  if (verifiedStatus === MomoStatus.SUCCESS) {
     await handlePaymentSuccess(updated);
   }
 
-  return { received: true, matched: true, status: newStatus };
+  return { received: true, matched: true, status: verifiedStatus };
 }
 
 /**

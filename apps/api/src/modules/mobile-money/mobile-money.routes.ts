@@ -76,14 +76,16 @@ router.get(
   })
 );
 
-// ─── Webhooks (pas d'auth — appelés par les providers) ──
+// ─── Webhooks (pas d'auth utilisateur — vérifiés par token + confirmation serveur) ──
 
 /**
  * Callback Orange Money.
+ * Sécurité: token webhook vérifié + statut confirmé côté API Orange.
  */
 router.post(
   "/webhook/orange",
   asyncHandler(async (request, response) => {
+    momoService.verifyWebhookToken(request);
     const result = await momoService.handleOrangeWebhook(request.body);
     response.json(result);
   })
@@ -91,10 +93,12 @@ router.post(
 
 /**
  * Callback M-Pesa.
+ * Sécurité: token webhook vérifié + statut confirmé côté API M-Pesa.
  */
 router.post(
   "/webhook/mpesa",
   asyncHandler(async (request, response) => {
+    momoService.verifyWebhookToken(request);
     const result = await momoService.handleMpesaWebhook(request.body);
     response.json(result);
   })
