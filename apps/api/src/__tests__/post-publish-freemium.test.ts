@@ -53,10 +53,23 @@ function fakeReport(adviceCount = 3): PostPublishReport {
       title: `Conseil ${i + 1}`,
       message: `Description complète du conseil numéro ${i + 1} pour améliorer votre annonce`,
       priority: adviceCount - i,
-      category: "pricing" as const,
+      category: "CONTENT_TIP" as const,
       rationale: "Raison détaillée",
       emoji: "💡",
     })),
+  } as PostPublishReport;
+}
+
+/** Rapport mixte : 2 conseils commerciaux + 2 analytiques */
+function fakeMixedReport(): PostPublishReport {
+  return {
+    overallScore: 72,
+    advice: [
+      { id: "a1", title: "Boostez", message: "Utilisez le boost pour plus de visibilité sur votre annonce", priority: 10, category: "BOOST" as const, rationale: "", emoji: "🚀", ctaLabel: "Booster", ctaTarget: "/boost" },
+      { id: "a2", title: "Pub ciblée", message: "Lancez une pub ciblée pour atteindre plus de clients", priority: 8, category: "ADS_PACK" as const, rationale: "", emoji: "📣", ctaLabel: "Pub", ctaTarget: "/ads" },
+      { id: "a3", title: "Améliorez le titre", message: "Un meilleur titre augmentera vos vues de 30 pourcent", priority: 6, category: "CONTENT_TIP" as const, rationale: "", emoji: "💡", ctaLabel: "", ctaTarget: "" },
+      { id: "a4", title: "Analytics", message: "Suivez vos performances avec les analytics avancés", priority: 4, category: "ANALYTICS" as const, rationale: "", emoji: "📊", ctaLabel: "", ctaTarget: "" },
+    ],
   } as PostPublishReport;
 }
 
@@ -147,6 +160,53 @@ describe("resolveFreemiumState()", () => {
     expect(gated.freemium.visibleAdviceCount).toBe(5);
     expect(gated.freemium.blurredAdviceCount).toBe(0);
     expect(gated.advice.every((a) => !a.isLocked)).toBe(true);
+  });
+
+  it("LOCKED avec rapport mixte → BOOST/ADS visibles, CONTENT_TIP/ANALYTICS floutés", async () => {
+    mockPrisma.user.findUnique.mockResolvedValue(fakeUser());
+    mockPrisma.subscription.findFirst.mockResolvedValue(null);
+    mockPrisma.aiFreemiumUsage.findMany.mockResolvedValue([
+      { listingType: "PRODUCT" },
+    ]);
+
+    const state = await resolveFreemiumState("user-1", singleCtx, "PRODUCT");
+    expect(state.mode).toBe("LOCKED");
+
+    const report = fakeMixedReport(); // 2 commerciaux + 2 analytiques
+    const gated = applyFreemiumGating(report, state.mode, state.usedProductFree, state.usedServiceFree, "PRODUCT", state.planCode);
+
+    // Les 2 conseils commerciaux (BOOST + ADS_PACK) restent visibles
+    const visible = gated.advice.filter((a) => !a.isLocked);
+    expect(visible).toHaveLength(2);
+    expect(visible.map((a) => a.category)).toEqual(expect.arrayContaining(["BOOST", "ADS_PACK"]));
+
+    // Les 2 conseils analytiques (CONTENT_TIP + ANALYTICS) sont floutés
+    const locked = gated.advice.filter((a) => a.isLocked);
+    expect(locked).toHaveLength(2);
+    expect(locked.map((a) => a.category)).toEqual(expect.arrayContaining(["CONTENT_TIP", "ANALYTICS"]));
+
+    expect(gated.freemium.visibleAdviceCount).toBe(2);
+    expect(gated.freemium.blurredAdviceCount).toBe(2);
+  });
+
+  it("PREVIEW avec rapport mixte → commerciaux + 1 analytique visibles", async () => {
+    mockPrisma.user.findUnique.mockResolvedValue(fakeUser());
+    mockPrisma.subscription.findFirst.mockResolvedValue(null);
+    mockPrisma.aiFreemiumUsage.findMany.mockResolvedValue([]);
+
+    const state = await resolveFreemiumState("user-1", singleCtx, "PRODUCT");
+    expect(state.mode).toBe("PREVIEW");
+
+    const report = fakeMixedReport();
+    const gated = applyFreemiumGating(report, state.mode, state.usedProductFree, state.usedServiceFree, "PRODUCT", state.planCode);
+
+    // 2 commerciaux + 1 analytique gratuit = 3 visibles
+    const visible = gated.advice.filter((a) => !a.isLocked);
+    expect(visible).toHaveLength(3);
+
+    // 1 analytique flouté
+    const locked = gated.advice.filter((a) => a.isLocked);
+    expect(locked).toHaveLength(1);
   });
 });
 

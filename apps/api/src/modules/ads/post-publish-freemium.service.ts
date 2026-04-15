@@ -18,6 +18,9 @@ import type { PostPublishAdvice, PostPublishReport, PublishContext } from "./pos
 // Plans qui donnent un accès complet au conseiller post-publish
 const FULL_ACCESS_PLANS = ["AUTO", "PRO_VENDOR", "BUSINESS", "SCALE"];
 
+// Catégories commerciales : JAMAIS floutées (elles poussent vers les forfaits)
+const ALWAYS_VISIBLE_CATEGORIES = ["BOOST", "ADS_PACK", "ADS_PREMIUM", "PLAN"];
+
 export type FreemiumMode = "FULL" | "PREVIEW" | "LOCKED";
 
 export interface FreemiumMeta {
@@ -188,11 +191,18 @@ export function applyFreemiumGating(
     };
   }
 
-  // PREVIEW: 1er conseil visible, le reste lock
+  // PREVIEW: 1er conseil analytique visible, le reste lock — mais les conseils commerciaux restent toujours visibles
   if (mode === "PREVIEW") {
     const sorted = [...report.advice].sort((a, b) => b.priority - a.priority);
-    const gated: GatedAdvice[] = sorted.map((a, idx) => {
-      if (idx === 0) {
+    let analyticalFreeUsed = false;
+    const gated: GatedAdvice[] = sorted.map((a) => {
+      // Les conseils commerciaux (BOOST, ADS, PLAN) ne sont JAMAIS floutés
+      if (ALWAYS_VISIBLE_CATEGORIES.includes(a.category)) {
+        return { ...a, isLocked: false, lockReason: null, previewText: null };
+      }
+      // 1er conseil analytique gratuit
+      if (!analyticalFreeUsed) {
+        analyticalFreeUsed = true;
         return { ...a, isLocked: false, lockReason: null, previewText: null };
       }
       return {
@@ -205,14 +215,15 @@ export function applyFreemiumGating(
       };
     });
 
+    const visibleCount = gated.filter((a) => !a.isLocked).length;
     return {
       ...report,
       advice: gated,
       freemium: {
         mode: "PREVIEW",
         listingType,
-        visibleAdviceCount: Math.min(1, sorted.length),
-        blurredAdviceCount: Math.max(0, sorted.length - 1),
+        visibleAdviceCount: visibleCount,
+        blurredAdviceCount: gated.length - visibleCount,
         usedProductFree,
         usedServiceFree,
         upgradeCtaTarget,
@@ -221,24 +232,30 @@ export function applyFreemiumGating(
     };
   }
 
-  // LOCKED: tout lock
-  const gated: GatedAdvice[] = report.advice.map((a) => ({
-    ...a,
-    isLocked: true,
-    lockReason: "freemium_exhausted",
-    previewText: a.title,
-    message: "••• " + a.message.slice(0, 30) + "…",
-    rationale: "",
-  }));
+  // LOCKED: conseils analytiques lock, mais commerciaux toujours visibles
+  const gated: GatedAdvice[] = report.advice.map((a) => {
+    if (ALWAYS_VISIBLE_CATEGORIES.includes(a.category)) {
+      return { ...a, isLocked: false, lockReason: null, previewText: null };
+    }
+    return {
+      ...a,
+      isLocked: true,
+      lockReason: "freemium_exhausted",
+      previewText: a.title,
+      message: "••• " + a.message.slice(0, 30) + "…",
+      rationale: "",
+    };
+  });
 
+  const visibleCountLocked = gated.filter((a) => !a.isLocked).length;
   return {
     ...report,
     advice: gated,
     freemium: {
       mode: "LOCKED",
       listingType,
-      visibleAdviceCount: 0,
-      blurredAdviceCount: report.advice.length,
+      visibleAdviceCount: visibleCountLocked,
+      blurredAdviceCount: gated.length - visibleCountLocked,
       usedProductFree,
       usedServiceFree,
       upgradeCtaTarget,
