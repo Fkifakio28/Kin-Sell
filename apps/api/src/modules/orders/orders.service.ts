@@ -289,6 +289,18 @@ export const getBuyerCart = async (userId: string) => {
   // Nettoyer les items dont la négo refusée a dépassé 24h
   const REFUSAL_DEADLINE_MS = 24 * 60 * 60 * 1000;
   const now = Date.now();
+  const invalidItemIds = cart.items
+    .filter((item) => {
+      const listing = item.listing as typeof item.listing | null | undefined;
+      return !listing
+        || !listing.id
+        || !listing.ownerUserId
+        || !listing.title
+        || !listing.type
+        || !listing.category
+        || !listing.city;
+    })
+    .map((item) => item.id);
   const expiredItemIds = cart.items
     .filter((item) =>
       item.negotiation?.status === "REFUSED"
@@ -297,8 +309,10 @@ export const getBuyerCart = async (userId: string) => {
     )
     .map((item) => item.id);
 
-  if (expiredItemIds.length > 0) {
-    await prisma.cartItem.deleteMany({ where: { id: { in: expiredItemIds } } });
+  const itemIdsToDelete = Array.from(new Set([...expiredItemIds, ...invalidItemIds]));
+
+  if (itemIdsToDelete.length > 0) {
+    await prisma.cartItem.deleteMany({ where: { id: { in: itemIdsToDelete } } });
     // Re-fetch sans les items expirés
     const cleaned = await prisma.cart.findUnique({
       where: { id: cartId },

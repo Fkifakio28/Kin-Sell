@@ -203,6 +203,12 @@ public class MainActivity extends BridgeActivity {
         handleCallAcceptCleanup(intent);
     }
 
+    @Override
+    protected void onResume() {
+        super.onResume();
+        flushPendingFcmToken();
+    }
+
     /**
      * Réapplique les flags pour afficher l'activité par-dessus l'écran verrouillé
      * et demande au KeyguardManager de retirer le keyguard.

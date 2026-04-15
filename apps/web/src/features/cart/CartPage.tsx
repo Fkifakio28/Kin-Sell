@@ -143,10 +143,12 @@ export function CartPage() {
     try {
       const data = await orders.buyerCart();
       setCart(data);
-    } catch {
+      setError(null);
+    } catch (err) {
       setCart(null);
+      setError(err instanceof ApiError ? ((err.data as { error?: string })?.error ?? t('cart.loadingCart')) : t('cart.loadingCart'));
     }
-  }, []);
+  }, [t]);
 
   /* ── Show negotiate popup if redirected from public profile ── */
   useEffect(() => {
@@ -162,12 +164,14 @@ export function CartPage() {
     try {
       const data = await orders.buyerCart();
       setCart(data);
-    } catch {
+      setError(null);
+    } catch (err) {
       setCart(null);
+      setError(err instanceof ApiError ? ((err.data as { error?: string })?.error ?? t('cart.loadingCart')) : t('cart.loadingCart'));
     } finally {
       setLoading(false);
     }
-  }, [isLoggedIn]);
+  }, [isLoggedIn, t]);
 
   useEffect(() => {
     if (authLoading) return;

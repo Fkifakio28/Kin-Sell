@@ -11,6 +11,8 @@ import { logger } from "../../shared/logger.js";
 const onlineUsers = new Map<string, Set<string>>();
 /** userId → true si le statut en ligne est visible aux autres */
 const onlineVisibility = new Map<string, boolean>();
+/** userId → sockets réellement au premier plan (app active / onglet visible) */
+const foregroundSockets = new Map<string, Set<string>>();
 
 /** userId → { count, resetAt } for socket message rate limiting */
 const socketMessageRates = new Map<string, { count: number; resetAt: number }>();
@@ -61,6 +63,26 @@ const pendingOfflineTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const OFFLINE_GRACE_MS = 120_000;
 let ioInstance: SocketIOServer | null = null;
 
+function setSocketForeground(userId: string, socketId: string, isForeground: boolean) {
+  const sockets = foregroundSockets.get(userId) ?? new Set<string>();
+  if (isForeground) {
+    sockets.add(socketId);
+    foregroundSockets.set(userId, sockets);
+    return;
+  }
+
+  sockets.delete(socketId);
+  if (sockets.size === 0) {
+    foregroundSockets.delete(userId);
+  } else {
+    foregroundSockets.set(userId, sockets);
+  }
+}
+
+function hasForegroundPresence(userId: string): boolean {
+  return (foregroundSockets.get(userId)?.size ?? 0) > 0;
+}
+
 export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
   const io = new SocketIOServer(httpServer, {
     cors: { origin: corsOrigin, credentials: true },
@@ -107,6 +129,7 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
       if (oldest) { ioInstance?.sockets.sockets.get(oldest)?.disconnect(true); userSockets.delete(oldest); }
     }
     userSockets.add(socket.id);
+    setSocketForeground(userId, socket.id, true);
 
     const pendingOffline = pendingOfflineTimers.get(userId);
     if (pendingOffline) {
@@ -131,6 +154,11 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
         io.emit("user:online", { userId });
       }
     })();
+
+    socket.on("app:state", (data: { state?: string; visibility?: string }) => {
+      const isForeground = data?.state !== "background" && data?.visibility !== "hidden";
+      setSocketForeground(userId, socket.id, isForeground);
+    });
 
     /* ── Join user-specific room (for targeted order/negotiation/notification events) ── */
     void socket.join(`user:${userId}`);
@@ -210,8 +238,8 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
         io.to(`conv:${data.conversationId}`).emit("message:new", { message });
 
         // Push notification only to truly offline recipients (not connected via socket)
-        const offlineRecipients = participantIds.filter((pid) => pid !== userId && (onlineUsers.get(pid)?.size ?? 0) === 0);
-        if (offlineRecipients.length > 0) {
+        const pushRecipients = participantIds.filter((pid) => pid !== userId && !hasForegroundPresence(pid));
+        if (pushRecipients.length > 0) {
           const senderProfile = await prisma.userProfile.findUnique({ where: { userId }, select: { displayName: true } });
           const senderName = senderProfile?.displayName ?? "Quelqu'un";
           const bodyText = message.type === "TEXT"
@@ -220,7 +248,7 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
             : message.type === "AUDIO" ? `${senderName} a envoyé 🎵`
             : message.type === "VIDEO" ? `${senderName} a envoyé 🎬`
             : `${senderName} a envoyé 📎`;
-          void sendPushToUsers(offlineRecipients, {
+          void sendPushToUsers(pushRecipients, {
             title: senderName,
             body: bodyText,
             tag: `msg-${data.conversationId}`,
@@ -505,6 +533,7 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
 
     /* ── Disconnect ── */
     socket.on("disconnect", () => {
+      setSocketForeground(userId, socket.id, false);
       const sockets = onlineUsers.get(userId);
       if (sockets) {
         sockets.delete(socket.id);
@@ -517,6 +546,7 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
             }
 
             const wasVisible = onlineVisibility.get(userId) ?? true;
+                        foregroundSockets.delete(userId);
             onlineUsers.delete(userId);
             onlineVisibility.delete(userId);
             pendingOfflineTimers.delete(userId);

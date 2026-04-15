@@ -24,6 +24,16 @@ export function SocketProvider({ children }: { children: ReactNode }) {
   const socketRef = useRef<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
 
+  const emitAppState = useCallback((state: "active" | "background", visibility?: "visible" | "hidden") => {
+    const socket = socketRef.current;
+    if (!socket) return;
+    socket.emit("app:state", {
+      state,
+      visibility: visibility ?? (typeof document !== "undefined" && document.visibilityState === "hidden" ? "hidden" : "visible"),
+      platform: Capacitor.getPlatform(),
+    });
+  }, []);
+
   /* ── Connect / disconnect based on auth ── */
   useEffect(() => {
     if (!isLoggedIn) {
@@ -51,6 +61,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       const isReconnect = wasConnectedBefore;
       wasConnectedBefore = true;
       setIsConnected(true);
+      emitAppState("active");
       if (isReconnect) {
         window.dispatchEvent(new CustomEvent("ks:socket-reconnected"));
       }
@@ -62,7 +73,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       socketRef.current = null;
       setIsConnected(false);
     };
-  }, [isLoggedIn]);
+  }, [isLoggedIn, emitAppState]);
 
 
   /* ── Reconnexion réseau (offline → online) ── */
@@ -88,18 +99,35 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  /* ── Web visibility → signaler foreground/background au serveur ── */
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (Capacitor.isNativePlatform()) return;
+      emitAppState(document.visibilityState === "hidden" ? "background" : "active");
+    };
+
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, [emitAppState]);
+
   /* ── Capacitor appStateChange : reconnexion au retour du background ── */
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
     const listener = CapacitorApp.addListener("appStateChange", ({ isActive }) => {
       const s = socketRef.current;
       if (!s) return;
+      if (!isActive) {
+        emitAppState("background", "hidden");
+        return;
+      }
       if (isActive) {
         // App revenue au premier plan → rafraîchir le token AVANT de reconnecter
         // L'accès token (15min TTL) a probablement expiré pendant le background
         void refreshSession().then(() => {
           if (s.disconnected) {
             s.connect();
+          } else {
+            emitAppState("active", "visible");
           }
           // Dispatcher ks:app-resumed APRÈS un court délai pour que le socket ait le temps
           // de se connecter et que les listeners de call:incoming soient actifs
@@ -110,6 +138,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
           // Token refresh a échoué — tenter quand même la reconnexion socket
           // (le serveur refusera peut-être, mais au moins on essaie)
           if (s.disconnected) s.connect();
+          else emitAppState("active", "visible");
           setTimeout(() => {
             window.dispatchEvent(new CustomEvent("ks:app-resumed"));
           }, 500);
@@ -117,7 +146,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       }
     });
     return () => { listener.then(l => l.remove()); };
-  }, [isLoggedIn]);
+  }, [isLoggedIn, emitAppState]);
 
   /* ── Stable helpers ── */
   const emit = useCallback(
