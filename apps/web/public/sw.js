@@ -1,6 +1,7 @@
 /* Service Worker for Push Notifications */
 const DEFAULT_ICON = "/apple-touch-icon.png";
 const DEFAULT_BADGE = "/favicon-32.png";
+const STATIC_CACHE_NAME = "kin-sell-static-v1";
 
 function resolveTarget(data) {
   if (!data || typeof data !== "object") return "/";
@@ -25,6 +26,63 @@ function resolveTarget(data) {
       return "/";
   }
 }
+
+self.addEventListener("install", (event) => {
+  event.waitUntil(self.skipWaiting());
+});
+
+self.addEventListener("activate", (event) => {
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(
+      keys
+        .filter((key) => key.startsWith("kin-sell-static-") && key !== STATIC_CACHE_NAME)
+        .map((key) => caches.delete(key)),
+    );
+    await self.clients.claim();
+  })());
+});
+
+self.addEventListener("fetch", (event) => {
+  const req = event.request;
+  if (req.method !== "GET") return;
+
+  const url = new URL(req.url);
+  if (url.origin !== self.location.origin) return;
+
+  // On laisse les endpoints dynamiques hors cache SW pour éviter les données périmées.
+  if (url.pathname.startsWith("/api")) return;
+
+  const isStaticAsset = /\.(?:js|css|png|jpe?g|webp|avif|svg|ico|woff2?|ttf|map)$/i.test(url.pathname)
+    || url.pathname.startsWith("/assets/")
+    || url.pathname === "/"
+    || url.pathname.endsWith(".html");
+
+  if (!isStaticAsset) return;
+
+  event.respondWith((async () => {
+    const cache = await caches.open(STATIC_CACHE_NAME);
+    const cached = await cache.match(req);
+    if (cached) {
+      void fetch(req).then((networkResponse) => {
+        if (networkResponse && networkResponse.ok) {
+          void cache.put(req, networkResponse.clone());
+        }
+      }).catch(() => undefined);
+      return cached;
+    }
+
+    try {
+      const networkResponse = await fetch(req);
+      if (networkResponse && networkResponse.ok) {
+        await cache.put(req, networkResponse.clone());
+      }
+      return networkResponse;
+    } catch {
+      return new Response("Offline", { status: 503, statusText: "Offline" });
+    }
+  })());
+});
 
 self.addEventListener("push", (event) => {
   let payload = {};

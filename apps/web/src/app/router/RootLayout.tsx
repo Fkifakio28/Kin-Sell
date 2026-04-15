@@ -1,4 +1,4 @@
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { Outlet, ScrollRestoration, useLocation } from "react-router-dom";
 import { Capacitor } from "@capacitor/core";
 import { CookieConsent } from "../../components/CookieConsent";
@@ -22,6 +22,24 @@ export function RootLayout() {
     || location.pathname === "/suspended";
 
   const [splashVisible, setSplashVisible] = useState(() => shouldShowSplash());
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const applyVisibilityState = () => {
+      if (document.hidden) {
+        root.classList.add("ks-page-hidden");
+      } else {
+        root.classList.remove("ks-page-hidden");
+      }
+    };
+
+    applyVisibilityState();
+    document.addEventListener("visibilitychange", applyVisibilityState);
+    return () => {
+      document.removeEventListener("visibilitychange", applyVisibilityState);
+      root.classList.remove("ks-page-hidden");
+    };
+  }, []);
 
   function handleSplashDismiss() {
     setSplashVisible(false);

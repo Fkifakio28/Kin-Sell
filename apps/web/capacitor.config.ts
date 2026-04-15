@@ -1,17 +1,24 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
+const liveServerUrl = process.env.CAP_SERVER_URL?.trim();
+
 const config: CapacitorConfig = {
   appId: 'com.kinsell.app',
   appName: 'Kin-Sell',
   webDir: 'dist',
 
-  // ── Charge l'app depuis le serveur live (cookies, CORS, API fonctionnent) ──
-  server: {
-    url: 'https://kin-sell.com',
-    cleartext: false,
-    androidScheme: 'https',
-    iosScheme: 'https',
-  },
+  // CAP_SERVER_URL est réservé aux usages debug/QA.
+  // En production APK, l'app doit démarrer depuis webDir (dist) pour éviter la dépendance réseau.
+  ...(liveServerUrl
+    ? {
+        server: {
+          url: liveServerUrl,
+          cleartext: false,
+          androidScheme: 'https',
+          iosScheme: 'https',
+        },
+      }
+    : {}),
 
   android: {
     allowMixedContent: false,

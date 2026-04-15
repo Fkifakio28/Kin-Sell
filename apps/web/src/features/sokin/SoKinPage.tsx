@@ -468,6 +468,7 @@ function AnnouncesFeed({
   hasMore,
   loading,
   sentinelRef,
+  enableWindowing,
   t,
   isLoggedIn,
   openCommentsPostId,
@@ -494,6 +495,7 @@ function AnnouncesFeed({
   hasMore: boolean;
   loading: boolean;
   sentinelRef: React.RefObject<HTMLDivElement>;
+  enableWindowing?: boolean;
   t: (k: string) => string;
   isLoggedIn: boolean;
   openCommentsPostId: string | null;
@@ -672,9 +674,17 @@ function AnnouncesFeed({
     }
   }
 
+  const renderedItems = enableWindowing
+    ? items.map((item, index) => (
+      <div key={`sk-window-${index}`} className="sk-feed-window-item">
+        {item}
+      </div>
+    ))
+    : items;
+
   return (
     <section className={`sk-feed${immersiveDesktop ? ' sk-feed--immersive' : ''}`} aria-label="Fil d'annonces So-Kin">
-      {items}
+      {renderedItems}
       {hasMore && (
         <div ref={sentinelRef} className="sk-sentinel" aria-hidden="true" />
       )}
@@ -2199,6 +2209,7 @@ function SoKinPageInner() {
   const [loadingFeed, setLoadingFeed] = useState(true);
   const [hasMore, setHasMore] = useState(true);
   const loadingRef = useRef(false);
+  const lastFeedLoadAtRef = useRef(0);
   const offsetRef = useRef(0);
   const sentinelRef = useRef<HTMLDivElement>(null);
 
@@ -2275,6 +2286,7 @@ function SoKinPageInner() {
       if (loadingRef.current) return;
       if (!reset && !hasMore) return;
       loadingRef.current = true;
+      lastFeedLoadAtRef.current = Date.now();
       try {
         const limit = 20;
         const currentOffset = reset ? 0 : offsetRef.current;
@@ -2574,9 +2586,12 @@ function SoKinPageInner() {
     if (!sentinelRef.current || !hasMore) return;
     const obs = new IntersectionObserver(
       ([e]) => {
-        if (e.isIntersecting && !loadingRef.current) void loadFeed();
+        if (!e.isIntersecting || loadingRef.current) return;
+        const now = Date.now();
+        if (now - lastFeedLoadAtRef.current < 900) return;
+        void loadFeed();
       },
-      { rootMargin: '300px' }
+      { rootMargin: '180px' }
     );
     obs.observe(sentinelRef.current);
     return () => obs.disconnect();
@@ -3292,6 +3307,7 @@ function SoKinPageInner() {
               hasMore={hasMore}
               loading={loadingFeed}
               sentinelRef={sentinelRef}
+              enableWindowing={isMobile}
               t={t}
               isLoggedIn={isLoggedIn}
               openCommentsPostId={openCommentsPostId}
@@ -3638,6 +3654,7 @@ function SoKinPageInner() {
                 hasMore={hasMore}
                 loading={loadingFeed}
                 sentinelRef={sentinelRef}
+                enableWindowing={false}
                 t={t}
                 isLoggedIn={isLoggedIn}
                 openCommentsPostId={openCommentsPostId}

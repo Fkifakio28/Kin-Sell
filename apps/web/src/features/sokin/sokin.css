@@ -382,6 +382,11 @@
   flex: 1;
 }
 
+.sk-feed-window-item {
+  content-visibility: auto;
+  contain-intrinsic-size: 540px;
+}
+
 .sk-feed--loading {
   padding: 12px 14px;
   gap: 12px;
@@ -4880,6 +4885,13 @@
   .sk-skip-indicator {
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
+  }
+
+  .sk-topbar,
+  .sk-search-overlay,
+  .sk-tip-card {
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
   }
 }
 

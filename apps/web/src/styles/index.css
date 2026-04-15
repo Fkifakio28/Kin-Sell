@@ -91,6 +91,11 @@ body {
   animation: ksBubbleDrift 18s ease-in-out infinite alternate;
 }
 
+.ks-page-hidden .live-background-overlay,
+.ks-page-hidden .ks-bubble {
+  animation-play-state: paused;
+}
+
 .ks-bubble-1 {
   width: 340px;
   height: 340px;

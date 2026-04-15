@@ -8,6 +8,7 @@ import android.content.Intent;
 import android.os.Build;
 import android.os.IBinder;
 import android.os.PowerManager;
+import android.util.Log;
 import androidx.core.app.NotificationCompat;
 
 /**
@@ -26,6 +27,8 @@ public class KinSellConnectionService extends Service {
 
     public static final int NOTIFICATION_ID = 9990;
     private static final String CHANNEL_ID = "kin-sell-connection-v2";
+    private static final String TAG = "KinSellConnectionSvc";
+    private static final long WAKE_LOCK_TIMEOUT_MS = 45L * 60L * 1000L;
     private PowerManager.WakeLock wakeLock;
 
     @Override
@@ -125,22 +128,29 @@ public class KinSellConnectionService extends Service {
 
     private void acquireWakeLock() {
         try {
+            if (wakeLock != null && wakeLock.isHeld()) return;
             PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
             if (pm != null) {
-                wakeLock = pm.newWakeLock(
-                        PowerManager.PARTIAL_WAKE_LOCK,
-                        "kinsell:connection_service");
-                wakeLock.acquire(4 * 60 * 60 * 1000L); // 4h max, renouvelé au prochain onStartCommand
+                if (wakeLock == null) {
+                    wakeLock = pm.newWakeLock(
+                            PowerManager.PARTIAL_WAKE_LOCK,
+                            "kinsell:connection_service");
+                    wakeLock.setReferenceCounted(false);
+                }
+                wakeLock.acquire(WAKE_LOCK_TIMEOUT_MS);
             }
-        } catch (Exception ignored) {}
+        } catch (Exception e) {
+            Log.w(TAG, "WakeLock acquisition failed", e);
+        }
     }
 
     private void releaseWakeLock() {
         try {
             if (wakeLock != null && wakeLock.isHeld()) {
                 wakeLock.release();
-                wakeLock = null;
             }
-        } catch (Exception ignored) {}
+        } catch (Exception e) {
+            Log.w(TAG, "WakeLock release failed", e);
+        }
     }
 }

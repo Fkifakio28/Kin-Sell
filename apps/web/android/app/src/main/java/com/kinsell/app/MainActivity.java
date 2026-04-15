@@ -23,6 +23,8 @@ import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
 
+    private boolean keepScreenOnEnabled = false;
+
     /**
      * Sanitise une chaîne pour injection sûre dans evaluateJavascript().
      * Échappe les quotes, backslashes, retours à la ligne et caractères de contrôle.
@@ -93,7 +95,7 @@ public class MainActivity extends BridgeActivity {
                 | WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD
             );
         }
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        // KEEP_SCREEN_ON est activé dynamiquement uniquement en contexte d'appel.
 
         // Disable WebView force-dark (Android 13+)
         try {
@@ -214,6 +216,7 @@ public class MainActivity extends BridgeActivity {
      * et demande au KeyguardManager de retirer le keyguard.
      */
     private void ensureLockScreenFlags() {
+        enableKeepScreenOn();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
             setShowWhenLocked(true);
             setTurnScreenOn(true);
@@ -298,6 +301,8 @@ public class MainActivity extends BridgeActivity {
             // Expiration : si l'appel date de plus de 35s, il a expiré côté serveur
             if (System.currentTimeMillis() - ts > 35_000) return;
 
+            enableKeepScreenOn();
+
             String[] parts = pendingCall.split("\\|");
             if (parts.length < 3) return;
             String conversationId = parts[0];
@@ -346,6 +351,7 @@ public class MainActivity extends BridgeActivity {
      * Envoie un événement de rejet d'appel à la WebView.
      */
     private void dispatchCallRejectToWebView(String conversationId, String callerId) {
+        disableKeepScreenOn();
         try {
             WebView webView = getBridge().getWebView();
             if (webView != null) {
@@ -363,6 +369,7 @@ public class MainActivity extends BridgeActivity {
      * Envoie un événement de raccrocher à la WebView (depuis la notification ongoing).
      */
     private void dispatchCallHangupToWebView(String conversationId, String remoteUserId) {
+        disableKeepScreenOn();
         try {
             WebView webView = getBridge().getWebView();
             if (webView != null) {
@@ -386,6 +393,8 @@ public class MainActivity extends BridgeActivity {
         if (intent == null) return;
         String callAction = intent.getStringExtra("callAction");
         if (!"accept".equals(callAction)) return;
+
+        enableKeepScreenOn();
 
         // Annuler la notification d'appel entrant
         try {
@@ -489,6 +498,7 @@ public class MainActivity extends BridgeActivity {
 
     @Override
     public void onDestroy() {
+        disableKeepScreenOn();
         try {
             unregisterReceiver(callRejectReceiver);
         } catch (Exception ignored) {}
@@ -496,5 +506,20 @@ public class MainActivity extends BridgeActivity {
             unregisterReceiver(callHangupReceiver);
         } catch (Exception ignored) {}
         super.onDestroy();
+    }
+    private void enableKeepScreenOn() {
+        if (keepScreenOnEnabled) return;
+        try {
+            getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            keepScreenOnEnabled = true;
+        } catch (Exception ignored) {}
+    }
+
+    private void disableKeepScreenOn() {
+        if (!keepScreenOnEnabled) return;
+        try {
+            getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            keepScreenOnEnabled = false;
+        } catch (Exception ignored) {}
     }
 }
