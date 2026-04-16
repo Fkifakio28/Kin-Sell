@@ -79,11 +79,9 @@ export function useAudioCallState() {
   useCallSounds(call?.status ?? null, call?.direction ?? null);
 
   // ── Wake lock : maintient l'écran allumé pendant un appel actif ──
-  // En mode écouteur, le capteur de proximité natif (AudioRoutePlugin)
-  // éteint l'écran quand le téléphone est contre l'oreille.
-  // En mode haut-parleur, le wake lock Web garde l'écran allumé.
+  // Actif en mode haut-parleur ET écouteur (sur web, pas de capteur de proximité)
   const isInActiveCall = call != null && !TERMINAL_STATES.has(call.status);
-  useWakeLock(isInActiveCall && isSpeakerOn);
+  useWakeLock(isInActiveCall);
 
   // ── Notification Android "Appel en cours" ──────────────────────────────────
   useEffect(() => {
@@ -109,14 +107,17 @@ export function useAudioCallState() {
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
   }, []);
 
-  /** Start duration timer (only when connected) */
+  /** Start duration timer (only when connected) — uses Date.now() to avoid drift */
+  const timerStartRef = useRef(0);
   const startTimer = useCallback(() => {
     stopTimer();
+    timerStartRef.current = Date.now();
     durationRef.current = 0;
     setDurationSeconds(0);
     timerRef.current = setInterval(() => {
-      durationRef.current += 1;
-      setDurationSeconds(durationRef.current);
+      const elapsed = Math.floor((Date.now() - timerStartRef.current) / 1000);
+      durationRef.current = elapsed;
+      setDurationSeconds(elapsed);
     }, 1000);
   }, [stopTimer]);
 
@@ -142,19 +143,27 @@ export function useAudioCallState() {
   /** End call with a terminal status and record result */
   const finishCall = useCallback((terminalStatus: AudioCallStatus) => {
     const prev = callRef.current;
-    if (prev) {
-      const dur = prev.status === "connected" ? durationRef.current : 0;
-      setCallResult({ status: terminalStatus, direction: prev.direction, durationSeconds: dur });
-    }
+    // Guard: already in terminal state → do nothing (prevents double cleanup)
+    if (!prev || TERMINAL_STATES.has(prev.status)) return;
+    const dur = prev.status === "connected" ? durationRef.current : 0;
+    setCallResult({ status: terminalStatus, direction: prev.direction, durationSeconds: dur });
+    // Update ref synchronously so concurrent socket events see terminal state immediately
+    callRef.current = { ...prev, status: terminalStatus };
     cleanup();
-    setCall((prev) => prev ? { ...prev, status: terminalStatus } : null);
+    setCall({ ...prev, status: terminalStatus });
   }, [cleanup]);
 
   // ── WebRTC helpers ─────────────────────────────────────────────────────────
 
   /** Create RTCPeerConnection with ICE relay and reconnection */
+  const totalDisconnectedRef = useRef(0);
+  const disconnectedStartRef = useRef<number | null>(null);
+  const MAX_DISCONNECTED_MS = 120_000; // 2 min cumul max en disconnected
+
   const createPC = useCallback((remoteUserId: string): RTCPeerConnection => {
     const pc = new RTCPeerConnection(getRtcConfig());
+    totalDisconnectedRef.current = 0;
+    disconnectedStartRef.current = null;
 
     pc.onicecandidate = (e) => {
       if (e.candidate) {
@@ -181,11 +190,25 @@ export function useAudioCallState() {
       const state = pc.iceConnectionState;
       if (state === "connected" || state === "completed") {
         iceRestartAttemptRef.current = 0;
+        // Accumulate disconnected time
+        if (disconnectedStartRef.current) {
+          totalDisconnectedRef.current += Date.now() - disconnectedStartRef.current;
+          disconnectedStartRef.current = null;
+        }
+        // Abort if total disconnected time exceeded (zombie call protection)
+        if (totalDisconnectedRef.current > MAX_DISCONNECTED_MS) {
+          finishCall("ended");
+          return;
+        }
         // Transition to connected if we were in connecting
         if (callRef.current?.status === "connecting") {
           transition("connected");
           startTimer();
         }
+      }
+
+      if (state === "disconnected" || state === "failed") {
+        disconnectedStartRef.current ??= Date.now();
       }
 
       const attemptRestart = () => {
@@ -195,13 +218,16 @@ export function useAudioCallState() {
         }
         const delay = ICE_RESTART_DELAYS[Math.min(iceRestartAttemptRef.current, ICE_RESTART_DELAYS.length - 1)];
         setTimeout(() => {
+          // Guard: skip if call ended, PC closed, or already reconnected
+          if (!callRef.current || TERMINAL_STATES.has(callRef.current.status)) return;
+          if (pc.connectionState === "closed") return;
           if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") return;
           iceRestartAttemptRef.current++;
           pc.restartIce();
           pc.createOffer({ iceRestart: true }).then(async (offer) => {
             await pc.setLocalDescription(offer);
             emit("webrtc:offer", { targetUserId: remoteUserId, sdp: offer });
-          }).catch(() => {});
+          }).catch((err) => { console.warn("[Call] ICE restart offer failed", err); });
         }, delay);
       };
 
@@ -257,7 +283,10 @@ export function useAudioCallState() {
       setIsSpeakerOn(false);
 
       emit("call:initiate", { conversationId, targetUserId: remoteUserId, callType: "audio" });
-    } catch {
+    } catch (err) {
+      console.error("[Call] startCall failed", err);
+      // Provide UI feedback (e.g. mic permission denied)
+      setCallResult({ status: "ended", direction: "outgoing", durationSeconds: 0 });
       cleanup();
     }
   }, [createPC, getAudioStream, optimizeAudioSender, emit, cleanup]);
@@ -283,7 +312,8 @@ export function useAudioCallState() {
       setIsSpeakerOn(false);
 
       emit("call:accept", { conversationId: c.conversationId, callerId: c.remoteUserId });
-    } catch {
+    } catch (err) {
+      console.error("[Call] acceptCall failed", err);
       finishCall("ended");
     }
   }, [createPC, getAudioStream, optimizeAudioSender, emit, transition, finishCall]);
@@ -339,7 +369,8 @@ export function useAudioCallState() {
 
   /** Inject an incoming call externally (URL params / global notification) */
   const injectIncomingCall = useCallback((conversationId: string, remoteUserId: string) => {
-    if (callRef.current) return; // already in a call
+    // Allow injection if idle or if current call is in terminal state (about to reset)
+    if (callRef.current && !TERMINAL_STATES.has(callRef.current.status)) return;
     setCall({
       status: "incoming_ringing",
       conversationId,
@@ -418,29 +449,29 @@ export function useAudioCallState() {
 
     /** WebRTC offer received (we are the answerer) */
     const handleOffer = async (data: { callerId: string; sdp: RTCSessionDescriptionInit }) => {
-      if (!pcRef.current) return;
+      if (!pcRef.current || pcRef.current.connectionState === "closed") return;
       try {
         await pcRef.current.setRemoteDescription(new RTCSessionDescription(data.sdp));
         const answer = await pcRef.current.createAnswer();
         await pcRef.current.setLocalDescription(answer);
         emit("webrtc:answer", { targetUserId: data.callerId, sdp: answer });
-      } catch { /* negotiation error — ICE restart will handle */ }
+      } catch (err) { console.warn("[Call] handleOffer negotiation error", err); }
     };
 
     /** WebRTC answer received (we are the caller) */
     const handleAnswer = async (data: { answererId: string; sdp: RTCSessionDescriptionInit }) => {
-      if (!pcRef.current) return;
+      if (!pcRef.current || pcRef.current.connectionState === "closed") return;
       try {
         await pcRef.current.setRemoteDescription(new RTCSessionDescription(data.sdp));
-      } catch { /* ignore */ }
+      } catch (err) { console.warn("[Call] handleAnswer error", err); }
     };
 
     /** ICE candidate received */
     const handleIce = async (data: { fromUserId: string; candidate: RTCIceCandidateInit }) => {
-      if (!pcRef.current) return;
+      if (!pcRef.current || pcRef.current.connectionState === "closed") return;
       try {
         await pcRef.current.addIceCandidate(new RTCIceCandidate(data.candidate));
-      } catch { /* ignore */ }
+      } catch (err) { console.warn("[Call] addIceCandidate error", err); }
     };
 
     on("call:incoming", handleIncoming);
@@ -469,9 +500,9 @@ export function useAudioCallState() {
   useEffect(() => {
     const handler = () => {
       const c = callRef.current;
-      if (c && (c.status === "connected" || c.status === "outgoing_ringing" || c.status === "incoming_ringing" || c.status === "connecting")) {
+      if (c && !TERMINAL_STATES.has(c.status)) {
         emit("call:end", { conversationId: c.conversationId, targetUserId: c.remoteUserId });
-        cleanup();
+        finishCall("ended");
       }
     };
     window.addEventListener("beforeunload", handler);
@@ -480,7 +511,7 @@ export function useAudioCallState() {
       window.removeEventListener("beforeunload", handler);
       window.removeEventListener("pagehide", handler);
     };
-  }, [emit, cleanup]);
+  }, [emit, finishCall]);
 
   // ── Native hangup from notification button ─────────────────────────────────
   useEffect(() => {

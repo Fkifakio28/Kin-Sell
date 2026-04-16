@@ -5,6 +5,7 @@ import { CookieConsent } from "../../components/CookieConsent";
 import { Footer } from "../../components/Footer";
 import { shouldShowSplash, SplashScreen } from "../../components/SplashScreen";
 import { SuspensionGuard } from "../providers/AuthProvider";
+import { CallProvider } from "../providers/CallProvider";
 import { useIsMobile } from "../../hooks/useIsMobile";
 
 /**
@@ -64,9 +65,11 @@ export function RootLayout() {
         <span className="ks-bubble ks-bubble-5" />
       </div>
       <SuspensionGuard>
-        <Suspense fallback={<div className="ks-page-loader">Chargement…</div>}>
-          <Outlet />
-        </Suspense>
+        <CallProvider>
+          <Suspense fallback={<div className="ks-page-loader">Chargement…</div>}>
+            <Outlet />
+          </Suspense>
+        </CallProvider>
       </SuspensionGuard>
       {hideFooter ? null : <Footer />}
       <ScrollRestoration />

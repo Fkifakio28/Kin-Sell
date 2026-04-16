@@ -1617,7 +1617,7 @@ export function HomePageMobile() {
       {!tutorial.isOpen && <TutorialRelaunchBtn reset={tutorial.reset} start={tutorial.start} />}
       <OnboardingHelpFab />
 
-      {showWelcome && <WelcomeOnboarding onClose={() => setShowWelcome(false)} />}
+      {showWelcome && <WelcomeOnboarding onClose={() => setShowWelcome(false)} onStartTutorial={() => { tutorial.reset(); tutorial.start(); }} />}
     </div>
   );
 }

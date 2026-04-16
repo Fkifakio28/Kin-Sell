@@ -1,10 +1,11 @@
 /**
  * WelcomeOnboarding — Popup glassmorphism post-login (première connexion).
  *
- * 3 choix :
+ * 4 choix :
  *   1. Acheter → message explicatif, reste sur Home
  *   2. Vendre (Produit) → redirige /account?section=articles&action=publish&type=PRODUIT
  *   3. Proposer un service → redirige /account?section=articles&action=publish&type=SERVICE
+ *   4. Visiter → ferme le popup + lance le tutoriel interactif
  *
  * Ne s'affiche qu'une seule fois (localStorage).
  */
@@ -16,7 +17,7 @@ import "./welcome-onboarding.css";
 
 type Step = "choices" | "buy-info";
 
-export function WelcomeOnboarding({ onClose }: { onClose: () => void }) {
+export function WelcomeOnboarding({ onClose, onStartTutorial }: { onClose: () => void; onStartTutorial?: () => void }) {
   const { t } = useLocaleCurrency();
   const navigate = useNavigate();
   const [step, setStep] = useState<Step>("choices");
@@ -38,12 +39,18 @@ export function WelcomeOnboarding({ onClose }: { onClose: () => void }) {
     navigate("/account?section=articles&action=publish&type=SERVICE");
   };
 
+  const handleVisit = () => {
+    finish();
+    onStartTutorial?.();
+  };
+
   const handleBuyOk = () => finish();
 
   if (step === "buy-info") {
     return (
       <div className="wo-overlay" role="dialog" aria-modal="true">
         <div className="wo-card">
+          <button className="wo-close-btn" onClick={finish} aria-label="Fermer" type="button">✕</button>
           <div className="wo-icon">🛒</div>
           <h2 className="wo-title">{t("onboarding.buyInfoTitle")}</h2>
           <p className="wo-desc">{t("onboarding.buyInfoDesc")}</p>
@@ -58,6 +65,7 @@ export function WelcomeOnboarding({ onClose }: { onClose: () => void }) {
   return (
     <div className="wo-overlay" role="dialog" aria-modal="true">
       <div className="wo-card">
+        <button className="wo-close-btn" onClick={finish} aria-label="Fermer" type="button">✕</button>
         <div className="wo-icon">👋</div>
         <h2 className="wo-title">{t("onboarding.welcomeTitle")}</h2>
         <p className="wo-subtitle">{t("onboarding.welcomeSubtitle")}</p>
@@ -74,6 +82,10 @@ export function WelcomeOnboarding({ onClose }: { onClose: () => void }) {
           <button className="wo-choice" onClick={handleService}>
             <span className="wo-choice-icon">🔧</span>
             <span className="wo-choice-label">{t("onboarding.wantService")}</span>
+          </button>
+          <button className="wo-choice wo-choice--visit" onClick={handleVisit}>
+            <span className="wo-choice-icon">🎓</span>
+            <span className="wo-choice-label">{t("onboarding.wantVisit")}</span>
           </button>
         </div>
       </div>

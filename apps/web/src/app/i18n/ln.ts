@@ -1749,6 +1749,7 @@ export const ln: Record<string, string> = {
     "onboarding.wantBuy": "Nalingi kosomba",
     "onboarding.wantSell": "Nalingi koteka eloko",
     "onboarding.wantService": "Nalingi kopesa ba services na ngai",
+    "onboarding.wantVisit": "Olingi kotala application?",
     "onboarding.buyInfoTitle": "Ndenge nini ya kosomba na Kin-Sell",
     "onboarding.buyInfoDesc": "Okoki kotala ba articles mpe ba annonces So-Kin dirèktement na page ya accueil. Mpo na komona biloko nyonso oyo ezali, finá \"Voir plus\" na section mokomoko.",
     "onboarding.understood": "Nasosolí",

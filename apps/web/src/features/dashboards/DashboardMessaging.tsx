@@ -10,7 +10,7 @@ import { useSocket } from "../../hooks/useSocket";
 import { createOptimizedAudioRecorder, createUploadFile, prepareMediaUrl } from "../../utils/media-upload";
 import { resolveMediaUrl } from "../../lib/api-core";
 import { useGlobalNotification } from "../../app/providers/GlobalNotificationProvider";
-import { useAudioCallState } from "../../hooks/useAudioCallState";
+import { useCall } from "../../app/providers/CallProvider";
 import AudioCallScreen from "../messaging/AudioCallScreen";
 import "./dashboard-messaging.css";
 
@@ -184,19 +184,22 @@ export function DashboardMessaging() {
   const animFrameRef = useRef<number>(0);
   const audioContextRef = useRef<AudioContext | null>(null);
 
-  /* ── Audio call (nouveau système) ── */
+  /* ── Audio call (système global) ── */
   const {
     call: audioCall,
     callResult: audioCallResult,
     durationSeconds: audioCallDuration,
     isMuted,
     isSpeakerOn,
+    callMinimized,
     startCall: audioStartCall,
     acceptCall: audioAcceptCall,
     hangup: audioHangup,
     toggleMute,
     toggleSpeaker,
-  } = useAudioCallState();
+    minimizeCall,
+    setCallContactName,
+  } = useCall();
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -215,6 +218,13 @@ export function DashboardMessaging() {
     setLoadingCallLogs(true);
     messaging.callLogs().then((r) => setCallLogs(r.callLogs)).catch(() => {}).finally(() => setLoadingCallLogs(false));
   }, [sidebarTab, isLoggedIn]);
+
+  /* ── Sync contact name for global floating badge ── */
+  useEffect(() => {
+    if (!audioCall) return;
+    const conv = conversations.find((c) => c.id === audioCall.conversationId);
+    if (conv) setCallContactName(getConversationName(conv, myId));
+  }, [audioCall?.conversationId, conversations, myId, setCallContactName]);
 
   /* ── Load conversations ── */
   useEffect(() => {
@@ -405,11 +415,12 @@ export function DashboardMessaging() {
       className="dm-shell"
       style={{ "--ks-kb-offset": `${keyboardOffset}px` } as CSSProperties}
     >
-      {/* ══ Audio call screen (nouveau système) ══ */}
-      {audioCall && (() => {
+      {/* ══ Audio call screen (système global) ══ */}
+      {audioCall && !callMinimized && (() => {
         const conv = conversations.find((c) => c.id === audioCall.conversationId);
         const contactName = conv ? getConversationName(conv, myId) : "Utilisateur";
         const contactAvatar = conv ? getConversationAvatar(conv, myId) : null;
+
         return (
           <AudioCallScreen
             status={audioCall.status}
@@ -423,7 +434,7 @@ export function DashboardMessaging() {
             onToggleSpeaker={toggleSpeaker}
             onHangup={audioHangup}
             onAccept={audioCall.status === "incoming_ringing" ? audioAcceptCall : undefined}
-            onBack={() => {/* AudioCallScreen auto-dismisses on terminal states */}}
+            onBack={() => minimizeCall()}
           />
         );
       })()}

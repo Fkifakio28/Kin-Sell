@@ -12,19 +12,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import "./audio-call-screen.css";
 import { resolveMediaUrl } from "../../lib/api-core";
-
-// ── Call states (machine d'état stricte - étape 2 intégrera le hook complet) ──
-export type AudioCallStatus =
-  | "idle"
-  | "outgoing_ringing"
-  | "incoming_ringing"
-  | "connecting"
-  | "connected"
-  | "ended"
-  | "cancelled"
-  | "declined"
-  | "unanswered"
-  | "offline";
+import type { AudioCallStatus } from "../../hooks/useAudioCallState";
 
 // ── Status → display text mapping ──
 const STATUS_TEXT: Record<AudioCallStatus, string> = {

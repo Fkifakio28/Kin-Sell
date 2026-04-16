@@ -508,6 +508,9 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
     };
 
     const handleIncomingCall = (data: { conversationId: string; callerId: string; callType: "audio" | "video" }) => {
+      // If the user is already on the messaging page, useAudioCallState handles the call directly.
+      // Only show the overlay + push notification when NOT in messaging.
+      if (messagingActiveRef.current) return;
       presentIncomingCall(data);
       // Push a "pending" incoming call notification (will become missed if not accepted)
       pushMissed(

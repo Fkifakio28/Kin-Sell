@@ -23,6 +23,7 @@
 }
 
 .wo-card {
+  position: relative;
   width: 100%;
   max-width: 380px;
   background: var(--color-glass-bg, rgba(18, 11, 43, 0.85));
@@ -136,4 +137,41 @@
 
 .wo-btn--primary:active {
   transform: scale(0.97);
+}
+
+/* ── Close (X) button ── */
+
+.wo-close-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-glass-border, rgba(255, 255, 255, 0.15));
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--color-text-secondary, rgba(255, 255, 255, 0.6));
+  font-size: 16px;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+  z-index: 1;
+}
+
+.wo-close-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: var(--color-text, #fff);
+}
+
+/* ── Visit choice accent ── */
+
+.wo-choice--visit {
+  border-color: var(--color-primary, #6f58ff);
+  background: rgba(111, 88, 255, 0.15);
+}
+
+.wo-choice--visit:hover {
+  background: rgba(111, 88, 255, 0.28);
 }

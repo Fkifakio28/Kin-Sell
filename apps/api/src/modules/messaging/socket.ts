@@ -29,6 +29,23 @@ const activeCallLogs = new Map<string, string>();
 const activeCallTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const CALL_TIMEOUT_MS = 30_000;
 
+/** userId → last call:initiate timestamp (rate limit: 1 per 5s) */
+const callInitiateRates = new Map<string, number>();
+const CALL_INITIATE_COOLDOWN_MS = 5_000;
+
+/** Tracks calls accepted before the 30s timer fires (race condition guard) */
+const acceptedCalls = new Set<string>();
+
+// ── Periodic cleanup of stale activeCallLogs (safety net) ──
+setInterval(() => {
+  for (const [convId, logId] of activeCallLogs.entries()) {
+    if (!activeCallTimers.has(convId)) {
+      activeCallLogs.delete(convId);
+      void callLogService.updateCallLogStatus(logId, "NO_ANSWER", { endedAt: new Date() }).catch(() => {});
+    }
+  }
+}, 60_000);
+
 /** Create a SYSTEM message in the conversation to log a call event */
 async function createCallEventMessage(
   io: SocketIOServer,
@@ -305,7 +322,21 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
        WebRTC Signaling
        ═══════════════════════════════════════ */
 
-    socket.on("call:initiate", (data: { conversationId: string; targetUserId: string; callType: "audio" | "video" }) => {
+    socket.on("call:initiate", async (data: { conversationId: string; targetUserId: string; callType: "audio" | "video" }) => {
+      // Rate limit: max 1 call initiate per 5s per user
+      const now = Date.now();
+      const lastCall = callInitiateRates.get(userId);
+      if (lastCall && now - lastCall < CALL_INITIATE_COOLDOWN_MS) return;
+      callInitiateRates.set(userId, now);
+
+      // Validate caller is a participant of the conversation
+      try {
+        const membership = await prisma.conversationParticipant.findFirst({
+          where: { conversationId: data.conversationId, userId },
+        });
+        if (!membership) return;
+      } catch { return; }
+
       const targetSockets = onlineUsers.get(data.targetUserId);
       if (targetSockets) {
         for (const sid of targetSockets) {
@@ -358,6 +389,8 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
       if (activeCallTimers.has(data.conversationId)) clearTimeout(activeCallTimers.get(data.conversationId)!);
       activeCallTimers.set(data.conversationId, setTimeout(() => {
         activeCallTimers.delete(data.conversationId);
+        // Race guard: if call was accepted just before timeout fired, skip no-answer
+        if (acceptedCalls.has(data.conversationId)) { acceptedCalls.delete(data.conversationId); return; }
         // Notify both parties
         const callerSockets = onlineUsers.get(userId);
         if (callerSockets) { for (const sid of callerSockets) io.to(sid).emit("call:no-answer", { conversationId: data.conversationId }); }
@@ -374,10 +407,20 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
       }, CALL_TIMEOUT_MS));
     });
 
-    socket.on("call:accept", (data: { conversationId: string; callerId: string }) => {
+    socket.on("call:accept", async (data: { conversationId: string; callerId: string }) => {
+      // Validate participant
+      try {
+        const m = await prisma.conversationParticipant.findFirst({ where: { conversationId: data.conversationId, userId } });
+        if (!m) return;
+      } catch { return; }
+
       // Cancel no-answer timer
       const timer = activeCallTimers.get(data.conversationId);
       if (timer) { clearTimeout(timer); activeCallTimers.delete(data.conversationId); }
+      // Mark as accepted to guard against race with 30s timeout
+      acceptedCalls.add(data.conversationId);
+      // Clean up after 60s (no need to keep forever)
+      setTimeout(() => acceptedCalls.delete(data.conversationId), 60_000);
 
       const callerSockets = onlineUsers.get(data.callerId);
       if (callerSockets) {
@@ -393,7 +436,13 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
       }
     });
 
-    socket.on("call:reject", (data: { conversationId: string; callerId: string }) => {
+    socket.on("call:reject", async (data: { conversationId: string; callerId: string }) => {
+      // Validate participant
+      try {
+        const m = await prisma.conversationParticipant.findFirst({ where: { conversationId: data.conversationId, userId } });
+        if (!m) return;
+      } catch { return; }
+
       // Cancel no-answer timer
       const timer = activeCallTimers.get(data.conversationId);
       if (timer) { clearTimeout(timer); activeCallTimers.delete(data.conversationId); }
@@ -415,7 +464,13 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
       }
     });
 
-    socket.on("call:end", (data: { conversationId: string; targetUserId: string }) => {
+    socket.on("call:end", async (data: { conversationId: string; targetUserId: string }) => {
+      // Validate participant
+      try {
+        const m = await prisma.conversationParticipant.findFirst({ where: { conversationId: data.conversationId, userId } });
+        if (!m) return;
+      } catch { return; }
+
       // Cancel no-answer timer
       const noAnswerTimer = activeCallTimers.get(data.conversationId);
       if (noAnswerTimer) { clearTimeout(noAnswerTimer); activeCallTimers.delete(data.conversationId); }
@@ -534,6 +589,33 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
     /* ── Disconnect ── */
     socket.on("disconnect", () => {
       setSocketForeground(userId, socket.id, false);
+
+      // Clean up any active call timers where this user is involved
+      for (const [convId, timer] of activeCallTimers.entries()) {
+        // If the disconnecting user has an active call log for this conversation, clean up
+        const logId = activeCallLogs.get(convId);
+        if (logId) {
+          // Check asynchronously if user was part of this call
+          void prisma.callLog.findUnique({ where: { id: logId }, select: { callerUserId: true, receiverUserId: true, callType: true, answeredAt: true } }).then((log) => {
+            if (!log) return;
+            if (log.callerUserId !== userId && log.receiverUserId !== userId) return;
+            // User was in this call — check if they still have other sockets
+            const remaining = onlineUsers.get(userId);
+            if (remaining && remaining.size > 0) return; // still connected via another tab
+            clearTimeout(timer);
+            activeCallTimers.delete(convId);
+            activeCallLogs.delete(convId);
+            // Determine correct status: ANSWERED if call was connected, CANCELLED if still ringing
+            const status = log.answeredAt ? "ANSWERED" : "CANCELLED";
+            const endedAt = new Date();
+            const durationSeconds = log.answeredAt ? Math.round((endedAt.getTime() - log.answeredAt.getTime()) / 1000) : undefined;
+            void callLogService.updateCallLogStatus(logId, status, { endedAt, durationSeconds })
+              .then(() => createCallEventMessage(io, convId, log.callerUserId, log.callType, status, durationSeconds))
+              .catch((e) => console.error("[CallLog] disconnect cleanup error", e));
+          }).catch(() => {});
+        }
+      }
+
       const sockets = onlineUsers.get(userId);
       if (sockets) {
         sockets.delete(socket.id);
@@ -550,6 +632,10 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
             onlineUsers.delete(userId);
             onlineVisibility.delete(userId);
             pendingOfflineTimers.delete(userId);
+            // Clean up per-user rate limit Maps to prevent memory leaks
+            socketMessageRates.delete(userId);
+            typingRates.delete(userId);
+            callInitiateRates.delete(userId);
 
             const lastSeenAt = new Date();
             void prisma.userProfile.updateMany({

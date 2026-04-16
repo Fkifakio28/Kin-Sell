@@ -1748,6 +1748,7 @@ export const en: Record<string, string> = {
     "onboarding.wantBuy": "I want to buy",
     "onboarding.wantSell": "I want to sell a product",
     "onboarding.wantService": "I want to offer my services",
+    "onboarding.wantVisit": "Want to take a tour?",
     "onboarding.buyInfoTitle": "How to buy on Kin-Sell",
     "onboarding.buyInfoDesc": "You can browse published items and So-Kin announcements right on the home page. To see all available products and announcements, tap \"See more\" in each section.",
     "onboarding.understood": "Got it",

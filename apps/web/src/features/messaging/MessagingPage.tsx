@@ -16,7 +16,7 @@ import { createOptimizedAudioRecorder, createUploadFile, prepareMediaUrl } from 
 import { resolveMediaUrl } from "../../lib/api-core";
 import { useGlobalNotification } from "../../app/providers/GlobalNotificationProvider";
 import { getDashboardPath } from "../../utils/role-routing";
-import { useAudioCallState } from "../../hooks/useAudioCallState";
+import { useCall } from "../../app/providers/CallProvider";
 import AudioCallScreen from "./AudioCallScreen";
 import TutorialOverlay, { useTutorial, TutorialRelaunchBtn } from '../../components/TutorialOverlay';
 import { messagingSteps } from '../../components/tutorial-steps';
@@ -363,20 +363,23 @@ export function MessagingPage() {
   const [selectMode, setSelectMode] = useState(false);
   const [selectedMsgIds, setSelectedMsgIds] = useState<Set<string>>(new Set());
 
-  /* ── Audio call (nouveau système) ── */
+  /* ── Audio call (système global) ── */
   const {
     call: audioCall,
     callResult: audioCallResult,
     durationSeconds: audioCallDuration,
     isMuted,
     isSpeakerOn,
+    callMinimized,
     startCall: audioStartCall,
     acceptCall: audioAcceptCall,
     hangup: audioHangup,
     toggleMute,
     toggleSpeaker,
     injectIncomingCall,
-  } = useAudioCallState();
+    minimizeCall,
+    setCallContactName,
+  } = useCall();
 
   /* ── MessageGuard ── */
   const [guardAlert, setGuardAlert] = useState<{ type: "warn" | "block"; message: string } | null>(null);
@@ -410,6 +413,13 @@ export function MessagingPage() {
   /* ════════════════════════════════════════
      Effects
      ════════════════════════════════════════ */
+
+  // Sync contact name to global CallProvider for floating badge
+  useEffect(() => {
+    if (!audioCall) return;
+    const conv = conversations.find((c) => c.id === audioCall.conversationId);
+    if (conv) setCallContactName(getConversationName(conv, myId, t));
+  }, [audioCall?.conversationId, conversations, myId, t, setCallContactName]);
 
   // Messaging active flag
   useEffect(() => {
@@ -1056,11 +1066,12 @@ export function MessagingPage() {
   return (
     <div className="mg-shell" style={{ "--mg-kb-offset": `${keyboardOffset}px` } as CSSProperties}>
 
-      {/* ══ Audio call screen (nouveau système) ══ */}
-      {audioCall && (() => {
+      {/* ══ Audio call screen (système global) ══ */}
+      {audioCall && !callMinimized && (() => {
         const conv = conversations.find((c) => c.id === audioCall.conversationId);
         const contactName = conv ? getConversationName(conv, myId, t) : t("msg.user");
         const contactAvatar = conv ? getConversationAvatar(conv, myId) : null;
+
         return (
           <AudioCallScreen
             status={audioCall.status}
@@ -1074,7 +1085,7 @@ export function MessagingPage() {
             onToggleSpeaker={toggleSpeaker}
             onHangup={audioHangup}
             onAccept={audioCall.status === "incoming_ringing" ? audioAcceptCall : undefined}
-            onBack={() => {/* AudioCallScreen auto-dismisses on terminal states */}}
+            onBack={() => minimizeCall()}
           />
         );
       })()}
