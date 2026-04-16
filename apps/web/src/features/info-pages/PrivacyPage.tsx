@@ -1,4 +1,5 @@
 import "./privacy.css";
+import { SeoMeta } from "../../components/SeoMeta";
 
 /* ── SVG icon helpers ── */
 const IconShield = () => (
@@ -123,6 +124,11 @@ const USER_RIGHTS = [
 export function PrivacyPage() {
   return (
     <div className="privacy">
+      <SeoMeta
+        title="Politique de confidentialité | Kin-Sell"
+        description="Découvrez comment Kin-Sell protège vos données personnelles. Politique de confidentialité, collecte de données, droits des utilisateurs."
+        canonical="https://kin-sell.com/privacy"
+      />
       {/* ══════ 1. HERO ══════ */}
       <section className="privacy-hero">
         <div className="privacy-hero-glow" aria-hidden="true" />

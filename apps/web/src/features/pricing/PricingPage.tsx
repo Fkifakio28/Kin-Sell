@@ -434,7 +434,7 @@ export function PricingPage() {
       <SeoMeta
         title="Tarifs et abonnements | Kin-Sell"
         description="Choisissez le plan adapté à vos besoins: FREE, BOOST, AUTO, PRO VENDEUR pour les particuliers; STARTER, BUSINESS, SCALE pour les entreprises."
-        canonical="https://kin-sell.com/pricing"
+        canonical="https://kin-sell.com/forfaits"
       />
 
       {/* ───────────────  HERO  ─────────────── */}

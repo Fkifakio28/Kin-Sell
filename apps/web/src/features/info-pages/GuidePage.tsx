@@ -1,5 +1,6 @@
 import { useState } from "react";
 import "./guide.css";
+import { SeoMeta } from "../../components/SeoMeta";
 
 /* ── Icons ── */
 const IconPackage = () => (
@@ -111,6 +112,11 @@ export function GuidePage() {
 
   return (
     <div className="guide">
+      <SeoMeta
+        title="Guide de sécurité | Kin-Sell"
+        description="Conseils de sécurité pour acheter et vendre en toute confiance sur Kin-Sell. Livraisons, paiements et bonnes pratiques."
+        canonical="https://kin-sell.com/guide"
+      />
       {/* ══════ HERO ══════ */}
       <section className="guide-hero">
         <div className="guide-hero-glow" aria-hidden="true" />

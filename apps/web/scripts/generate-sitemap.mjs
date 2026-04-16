@@ -24,9 +24,6 @@ const staticPaths = [
   "/explorer/shops-online",
   "/explorer/public-profiles",
   "/sokin",
-  "/sokin/profiles",
-  "/sokin/market",
-  "/sokin/live",
 ];
 
 const xmlEscape = (value) =>
@@ -151,6 +148,19 @@ async function generateSitemap() {
   const robots = [
     "User-agent: *",
     "Allow: /",
+    "Disallow: /login",
+    "Disallow: /register",
+    "Disallow: /forgot-password",
+    "Disallow: /auth/",
+    "Disallow: /account",
+    "Disallow: /admin/",
+    "Disallow: /business/dashboard",
+    "Disallow: /messaging",
+    "Disallow: /cart",
+    "Disallow: /suspended",
+    "Disallow: /offline",
+    "Disallow: /plans",
+    "Disallow: /pricing",
     "",
     `Sitemap: ${SITE_URL}/sitemap.xml`,
     "",

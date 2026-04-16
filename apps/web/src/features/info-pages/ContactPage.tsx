@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useAuth } from "../../app/providers/AuthProvider";
 import "./contact.css";
+import { SeoMeta } from "../../components/SeoMeta";
 
 /* ── SVG icon helpers ── */
 const IconHeadphones = () => (
@@ -124,6 +125,11 @@ export function ContactPage() {
 
   return (
     <div className="contact">
+      <SeoMeta
+        title="Contactez-nous | Kin-Sell"
+        description="Besoin d'aide sur Kin-Sell ? Contactez notre équipe support pour toute question, signalement ou demande commerciale."
+        canonical="https://kin-sell.com/contact"
+      />
       {/* ══════ 1. HERO ══════ */}
       <section className="contact-hero">
         <div className="contact-hero-glow" aria-hidden="true" />

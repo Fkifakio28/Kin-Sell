@@ -5,6 +5,7 @@ import { explorer as explorerApi, type ExplorerShopApi } from '../../lib/api-cli
 import { useMarketPreference } from '../../app/providers/MarketPreferenceProvider';
 import { useHoverPopup, ProfileHoverPopup, type ProfileHoverData } from '../../components/HoverPopup';
 import { useScrollRestore } from '../../utils/useScrollRestore';
+import { SeoMeta } from '../../components/SeoMeta';
 
 export function ExplorerShopsPage() {
   const navigate = useNavigate();
@@ -33,6 +34,11 @@ export function ExplorerShopsPage() {
 
   return (
     <section className="explorer-directory-shell animate-fade-in">
+      <SeoMeta
+        title="Boutiques en ligne | Kin-Sell"
+        description="Découvrez toutes les boutiques en ligne actives sur Kin-Sell. Trouvez des vendeurs, produits et services à Kinshasa."
+        canonical="https://kin-sell.com/explorer/shops-online"
+      />
       <div className="explorer-directory-hero">
         <p className="explorer-hero-label">🏪 Boutiques en ligne</p>
         <h1 className="explorer-directory-title">Toutes les boutiques actives sur Kin-Sell</h1>

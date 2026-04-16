@@ -5,6 +5,7 @@ import { explorer as explorerApi, type ExplorerProfileApi } from '../../lib/api-
 import { useMarketPreference } from '../../app/providers/MarketPreferenceProvider';
 import { useHoverPopup, ProfileHoverPopup, type ProfileHoverData } from '../../components/HoverPopup';
 import { useScrollRestore } from '../../utils/useScrollRestore';
+import { SeoMeta } from '../../components/SeoMeta';
 
 export function ExplorerProfilesPage() {
   const navigate = useNavigate();
@@ -33,6 +34,11 @@ export function ExplorerProfilesPage() {
 
   return (
     <section className="explorer-directory-shell animate-fade-in">
+      <SeoMeta
+        title="Profils publics | Kin-Sell"
+        description="Consultez les vendeurs et prestataires actifs sur Kin-Sell. Trouvez le bon profil pour vos achats à Kinshasa."
+        canonical="https://kin-sell.com/explorer/public-profiles"
+      />
       <div className="explorer-directory-hero">
         <p className="explorer-hero-label">👥 Profils publics</p>
         <h1 className="explorer-directory-title">Tous les profils publics disponibles</h1>

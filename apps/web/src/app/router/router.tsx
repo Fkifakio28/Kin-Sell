@@ -1,4 +1,4 @@
-import { createBrowserRouter } from "react-router-dom";
+import { createBrowserRouter, Navigate } from "react-router-dom";
 import { lazy } from "react";
 
 /* Lazy-load all pages for code-splitting */
@@ -81,8 +81,8 @@ export const router = createBrowserRouter([
           { path: "/faq", element: <FaqPage /> },
           { path: "/contact", element: <ContactPage /> },
           { path: "/forfaits", element: <PricingPage /> },
-          { path: "/plans", element: <PricingPage /> },
-          { path: "/pricing", element: <PricingPage /> },
+          { path: "/plans", element: <Navigate to="/forfaits" replace /> },
+          { path: "/pricing", element: <Navigate to="/forfaits" replace /> },
           { path: "/cart", element: <CartPage /> },
           { path: "/account", element: <RoleGuard allowed="USER"><UserDashboard /></RoleGuard> },
           { path: "/business/dashboard", element: <RoleGuard allowed="BUSINESS"><BusinessDashboard /></RoleGuard> },

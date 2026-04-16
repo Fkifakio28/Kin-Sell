@@ -1,4 +1,5 @@
 import "./legal.css";
+import { SeoMeta } from "../../components/SeoMeta";
 
 /* ── SVG icon helpers ── */
 const IconFileText = () => (
@@ -33,6 +34,11 @@ const IconInfo = () => (
 export function LegalPage() {
   return (
     <div className="legal">
+      <SeoMeta
+        title="Mentions légales | Kin-Sell"
+        description="Mentions légales de Kin-Sell : éditeur, hébergement, propriété intellectuelle, responsabilité et contact."
+        canonical="https://kin-sell.com/legal"
+      />
       {/* ══════ HERO ══════ */}
       <section className="legal-hero">
         <div className="legal-hero-glow" aria-hidden="true" />

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import "./how-it-works.css";
+import { SeoMeta } from "../../components/SeoMeta";
 
 /* ── Icons ── */
 const IconSearch = () => (
@@ -91,6 +92,11 @@ export function HowItWorksPage() {
 
   return (
     <div className="hiw">
+      <SeoMeta
+        title="Comment ça marche | Kin-Sell"
+        description="Découvrez comment acheter et vendre sur Kin-Sell en quelques étapes simples. Guide complet pour les acheteurs et vendeurs à Kinshasa."
+        canonical="https://kin-sell.com/how-it-works"
+      />
       {/* ══════ HERO ══════ */}
       <section className="hiw-hero">
         <div className="hiw-hero-glow" aria-hidden="true" />

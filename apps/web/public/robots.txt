@@ -1,4 +1,17 @@
 User-agent: *
 Allow: /
+Disallow: /login
+Disallow: /register
+Disallow: /forgot-password
+Disallow: /auth/
+Disallow: /account
+Disallow: /admin/
+Disallow: /business/dashboard
+Disallow: /messaging
+Disallow: /cart
+Disallow: /suspended
+Disallow: /offline
+Disallow: /plans
+Disallow: /pricing
 
 Sitemap: https://kin-sell.com/sitemap.xml
