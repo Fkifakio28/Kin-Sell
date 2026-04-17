@@ -99,7 +99,6 @@ router.post(
   "/entry",
   rateLimit(RateLimits.LOGIN),
   asyncHandler(async (request, response) => {
-    // Turnstile CAPTCHA verification
     const cfToken = request.body?.cfTurnstileToken;
     if (env.TURNSTILE_SECRET_KEY && !cfToken) {
       response.status(400).json({ error: "Vérification CAPTCHA requise" });
@@ -108,7 +107,7 @@ router.post(
     if (cfToken) {
       const valid = await verifyTurnstile(cfToken, request.ip);
       if (!valid) {
-        response.status(403).json({ error: "Échec de la vérification CAPTCHA" });
+        response.status(403).json({ error: "Échec de la vérification CAPTCHA — réessayez" });
         return;
       }
     }

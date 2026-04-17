@@ -339,7 +339,7 @@ export function RegisterPage() {
 
           <TurnstileWidget onToken={handleTurnstileToken} />
 
-          <button type="submit" className="auth-submit-button" disabled={isSubmitting || isLoading || !acceptedTerms}>
+          <button type="submit" className="auth-submit-button" disabled={isSubmitting || isLoading || !acceptedTerms || !cfToken}>
             {isSubmitting ? t("auth.creating") : t("auth.createAccount")}
           </button>
 

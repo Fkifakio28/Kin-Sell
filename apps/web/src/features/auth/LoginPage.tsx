@@ -368,7 +368,7 @@ export function LoginPage() {
 
           <TurnstileWidget onToken={handleTurnstileToken} />
 
-          <button type="submit" className="auth-submit-button" disabled={isSubmitting || isLoading}>
+          <button type="submit" className="auth-submit-button" disabled={isSubmitting || isLoading || !cfToken}>
             {isSubmitting ? t("auth.loggingIn") : t("auth.loginBtn")}
           </button>
 

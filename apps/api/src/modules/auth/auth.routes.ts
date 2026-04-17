@@ -106,13 +106,16 @@ router.post("/oauth/debug", rateLimit(RateLimits.OAUTH_DEBUG), asyncHandler(asyn
 }));
 
 router.post("/register", rateLimit(RateLimits.REGISTER), asyncHandler(async (request, response) => {
-  // Turnstile CAPTCHA verification
+  // Skip Turnstile in native app (WebView — unsupported)
+  const ua = request.header("user-agent") ?? "";
+  const isNativeApp = /KinSellApp/i.test(ua);
+
   const cfToken = request.body?.cfTurnstileToken;
-  if (env.TURNSTILE_SECRET_KEY && !cfToken) {
+  if (!isNativeApp && env.TURNSTILE_SECRET_KEY && !cfToken) {
     response.status(400).json({ error: "Vérification CAPTCHA requise" });
     return;
   }
-  if (cfToken) {
+  if (!isNativeApp && cfToken && cfToken !== "native-bypass") {
     const valid = await verifyTurnstile(cfToken, request.ip);
     if (!valid) {
       response.status(403).json({ error: "Échec de la vérification CAPTCHA" });
@@ -147,13 +150,16 @@ router.post("/register", rateLimit(RateLimits.REGISTER), asyncHandler(async (req
 }));
 
 router.post("/login", rateLimit(RateLimits.LOGIN), asyncHandler(async (request, response) => {
-  // Turnstile CAPTCHA verification
+  // Skip Turnstile in native app (WebView — unsupported)
+  const ua = request.header("user-agent") ?? "";
+  const isNativeApp = /KinSellApp/i.test(ua);
+
   const cfToken = request.body?.cfTurnstileToken;
-  if (env.TURNSTILE_SECRET_KEY && !cfToken) {
+  if (!isNativeApp && env.TURNSTILE_SECRET_KEY && !cfToken) {
     response.status(400).json({ error: "Vérification CAPTCHA requise" });
     return;
   }
-  if (cfToken) {
+  if (!isNativeApp && cfToken && cfToken !== "native-bypass") {
     const valid = await verifyTurnstile(cfToken, request.ip);
     if (!valid) {
       response.status(403).json({ error: "Échec de la vérification CAPTCHA" });
