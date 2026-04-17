@@ -52,6 +52,7 @@ import {
 } from '../../lib/api-client';
 import AdminVerificationPanel from './AdminVerificationPanel';
 import AdminAnalyticsPanel from './AdminAnalyticsPanel';
+import AdminIncentivesPanel from './AdminIncentivesPanel';
 import { DashboardMessaging } from './DashboardMessaging';
 import TutorialOverlay, { useTutorial, TutorialRelaunchBtn } from '../../components/TutorialOverlay';
 import { adminDashboardSteps } from '../../components/tutorial-steps';
@@ -64,7 +65,7 @@ type AdminSection =
   | 'reports' | 'feed' | 'donations' | 'ads' | 'advertisements' | 'listings' | 'negotiation-rules'
   | 'security' | 'antifraud' | 'security-ai' | 'ai-management'
   | 'rankings' | 'admins' | 'currency' | 'audit'
-  | 'settings' | 'messaging' | 'appeals' | 'subscriptions' | 'verification'
+  | 'settings' | 'messaging' | 'appeals' | 'subscriptions' | 'verification' | 'incentives'
   | 'ia-analytique' | 'ia-marchande' | 'ia-commande' | 'ia-ads' | 'ia-message'
   | 'app-version';
 
@@ -122,6 +123,7 @@ const SECTION_DEFS: Array<{
   { key: 'messaging',     label: 'Messagerie',         icon: '💬', permission: 'MESSAGING',     group: 'Système' },
   { key: 'subscriptions',  label: 'Abonnements & IA',   icon: '💳', permission: 'SUBSCRIPTIONS', group: 'Outils' },
   { key: 'verification',   label: 'Vérifications',      icon: '✅', permission: 'VERIFICATION',  group: 'Outils' },
+  { key: 'incentives',      label: 'Coupons & Incentives', icon: '🎟️', permission: 'SUBSCRIPTIONS', group: 'Outils' },
 
   // Intelligence Artificielle
   { key: 'ia-analytique',  label: 'Kin-Sell Analytique', icon: '📈', permission: 'AI_MANAGEMENT', group: 'Intelligence Artificielle' },
@@ -3648,6 +3650,10 @@ export function AdminDashboard() {
 
   const renderVerification = () => <AdminVerificationPanel />;
 
+  // ═══════════════════════════  INCENTIVES ADMIN  ═══════════════════════════
+
+  const renderIncentives = () => <AdminIncentivesPanel />;
+
   // ═══════════════════════════════════════════════
   // IA TABS — 5 sections Intelligence Artificielle
   // ═══════════════════════════════════════════════
@@ -4251,6 +4257,7 @@ export function AdminDashboard() {
       case 'messaging': return renderMessaging();
       case 'subscriptions': return renderSubscriptions();
       case 'verification': return renderVerification();
+      case 'incentives': return renderIncentives();
       case 'ia-analytique': return renderIaAnalytique();
       case 'ia-marchande': return renderIaMarchande();
       case 'ia-commande': return renderIaCommande();

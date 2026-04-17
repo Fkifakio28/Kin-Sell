@@ -986,6 +986,41 @@
   cursor: pointer;
 }
 
+/* ── Promo Code ── */
+.pricing-promo { margin: 16px 0 20px; }
+.pricing-promo__label { display: block; font-size: 13px; color: var(--color-text-secondary, #aaa); margin-bottom: 6px; }
+.pricing-promo__row { display: flex; gap: 8px; align-items: center; }
+.pricing-promo__input {
+  flex: 1;
+  max-width: 260px;
+  padding: 10px 14px;
+  border: 1px solid rgba(111, 88, 255, 0.2);
+  border-radius: 10px;
+  background: rgba(111, 88, 255, 0.04);
+  color: var(--color-text, #fff);
+  font-family: inherit;
+  font-size: 14px;
+  letter-spacing: 1.2px;
+}
+.pricing-promo__input::placeholder { color: var(--color-text-secondary, #888); opacity: 0.6; }
+.pricing-promo__btn {
+  padding: 10px 18px;
+  border: 1px solid rgba(111, 88, 255, 0.3);
+  border-radius: 10px;
+  background: rgba(111, 88, 255, 0.08);
+  color: var(--color-accent, #6f58ff);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.pricing-promo__btn:hover:not(:disabled) { background: rgba(111, 88, 255, 0.15); }
+.pricing-promo__btn:disabled { opacity: 0.5; cursor: default; }
+.pricing-promo__msg { margin: 8px 0 0; font-size: 13px; }
+.pricing-promo__msg--ok { color: #4caf50; }
+.pricing-promo__msg--err { color: #ff5252; }
+
 /* ── Orders ── */
 .pricing-orders {
   padding: 28px;

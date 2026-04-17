@@ -121,6 +121,14 @@ export const homeMobileSteps: TutorialStep[] = [
     placement: "top",
   },
   {
+    id: "hm-longpress",
+    selector: ".hm-market-card",
+    title: "Appui long — détails rapides",
+    description:
+      "Maintenez votre doigt appuyé sur une carte pour afficher la description complète, le prix et les boutons Marchander / Ajouter au panier.",
+    placement: "auto",
+  },
+  {
     id: "hm-create",
     selector: ".hm-bnav-create",
     title: "Publier une annonce",
@@ -173,6 +181,14 @@ export const explorerMobileSteps: TutorialStep[] = [
     title: "Carte article",
     description:
       "Photo, prix et vendeur en un coup d'œil. Ajoutez au panier ou négociez directement.",
+    placement: "auto",
+  },
+  {
+    id: "exm-longpress",
+    selector: ".ex-article-card",
+    title: "Appui long — détails rapides",
+    description:
+      "Maintenez appuyé sur un article pour voir sa description complète et accéder aux boutons Marchander et Ajouter au panier.",
     placement: "auto",
   },
   {

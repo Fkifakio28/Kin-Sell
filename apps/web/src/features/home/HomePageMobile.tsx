@@ -56,6 +56,8 @@ import { Capacitor } from "@capacitor/core";
 import { WelcomeOnboarding } from "../onboarding/WelcomeOnboarding";
 import { SK_WELCOME_ONBOARDING_DONE } from "../../shared/constants/storage-keys";
 import { OnboardingHelpFab } from "../../components/OnboardingHelpFab";
+import { LongPressPopup, useLongPress, type LongPressArticle } from "../../components/LongPressPopup";
+import { useUnityAds } from "../../hooks/useUnityAds";
 import "./home-mobile.css";
 
 /* ────────────── Static data ────────────── */
@@ -270,6 +272,22 @@ function SideDrawer({
             📞 {t("home.contact")}
           </Link>
         </div>
+
+        {Capacitor.isNativePlatform() && (
+          <div className="hm-drawer-quick-links" style={{ marginTop: 0 }}>
+            <button
+              type="button"
+              className="hm-drawer-quick-link"
+              style={{ background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', font: 'inherit', color: 'inherit', padding: '10px 0' }}
+              onClick={() => {
+                onClose();
+                window.dispatchEvent(new CustomEvent('ks-show-rewarded'));
+              }}
+            >
+              🎬 Regarder une pub
+            </button>
+          </div>
+        )}
 
         <div className="hm-drawer-market-prefs">
           <p className="hm-drawer-section-title">
@@ -547,6 +565,7 @@ function SuggestionsSection({
   countryHint,
   t,
   onArticleTap,
+  onLongPress,
   cartBusyId,
 }: {
   formatMoney: (c: number) => string;
@@ -555,6 +574,7 @@ function SuggestionsSection({
   countryHint?: string;
   t: (k: string) => string;
   onArticleTap: (listing: PublicListing) => void;
+  onLongPress: (listing: PublicListing) => void;
   cartBusyId: string | null;
 }) {
   const [items, setItems] = useState<PublicListing[]>([]);
@@ -609,33 +629,70 @@ function SuggestionsSection({
               </div>
             )
           : items.map((item) => (
-              <button
+              <SuggestionCard
                 key={item.id}
-                className="hm-suggestion-card"
-                onClick={() => onArticleTap(item)}
-                disabled={cartBusyId === item.id}
-              >
-                <div className="hm-suggestion-img">
-                  {item.imageUrl ? (
-                    <img src={resolveMediaUrl(item.imageUrl)} alt={item.title} loading="lazy" />
-                  ) : (
-                    <span className="hm-suggestion-placeholder">
-                      {item.type === "SERVICE" ? "\uD83D\uDEE0\uFE0F" : "\uD83D\uDCE6"}
-                    </span>
-                  )}
-                </div>
-                <p className="hm-suggestion-title">{item.title}</p>
-                <p className="hm-suggestion-price">
-                  {item.promoActive && item.promoPriceUsdCents != null
-                    ? <><s className="ks-price-old">{formatMoney(item.priceUsdCents)}</s> {formatMoney(item.promoPriceUsdCents)}</>
-                    : item.priceUsdCents === 0
-                    ? formatLabel(0)
-                    : formatMoney(item.priceUsdCents)}
-                </p>
-              </button>
+                item={item}
+                onArticleTap={onArticleTap}
+                onLongPress={onLongPress}
+                formatMoney={formatMoney}
+                formatLabel={formatLabel}
+                busy={cartBusyId === item.id}
+              />
             ))}
       </div>
     </section>
+  );
+}
+
+/* ────────────── SuggestionCard with long-press ────────────── */
+
+function SuggestionCard({
+  item,
+  onArticleTap,
+  onLongPress,
+  formatMoney,
+  formatLabel,
+  busy,
+}: {
+  item: PublicListing;
+  onArticleTap: (l: PublicListing) => void;
+  onLongPress: (l: PublicListing) => void;
+  formatMoney: (c: number) => string;
+  formatLabel: (c: number) => string;
+  busy: boolean;
+}) {
+  const lp = useLongPress(
+    () => onLongPress(item),
+    () => onArticleTap(item),
+  );
+
+  return (
+    <div
+      className="hm-suggestion-card"
+      role="button"
+      tabIndex={0}
+      {...lp}
+      onClick={(e) => e.preventDefault()}
+      aria-disabled={busy}
+    >
+      <div className="hm-suggestion-img">
+        {item.imageUrl ? (
+          <img src={resolveMediaUrl(item.imageUrl)} alt={item.title} loading="lazy" />
+        ) : (
+          <span className="hm-suggestion-placeholder">
+            {item.type === "SERVICE" ? "\uD83D\uDEE0\uFE0F" : "\uD83D\uDCE6"}
+          </span>
+        )}
+      </div>
+      <p className="hm-suggestion-title">{item.title}</p>
+      <p className="hm-suggestion-price">
+        {item.promoActive && item.promoPriceUsdCents != null
+          ? <><s className="ks-price-old">{formatMoney(item.priceUsdCents)}</s> {formatMoney(item.promoPriceUsdCents)}</>
+          : item.priceUsdCents === 0
+          ? formatLabel(0)
+          : formatMoney(item.priceUsdCents)}
+      </p>
+    </div>
   );
 }
 
@@ -723,6 +780,7 @@ function ListingsSection({
   t,
   onNegotiate,
   onArticleTap,
+  onLongPress,
   cartBusyId,
   lockedCats,
   cityHint,
@@ -733,6 +791,7 @@ function ListingsSection({
   t: (k: string) => string;
   onNegotiate: (l: PublicListing) => void;
   onArticleTap: (listing: PublicListing) => void;
+  onLongPress: (listing: PublicListing) => void;
   cartBusyId: string | null;
   lockedCats: string[];
   cityHint?: string;
@@ -831,6 +890,7 @@ function ListingsSection({
               listing={l}
               onNegotiate={onNegotiate}
               onArticleTap={onArticleTap}
+              onLongPress={onLongPress}
               formatMoney={formatMoney}
               formatLabel={formatLabel}
               t={t}
@@ -848,6 +908,7 @@ function MarketCard({
   listing,
   onNegotiate,
   onArticleTap,
+  onLongPress,
   formatMoney,
   formatLabel,
   t,
@@ -857,18 +918,25 @@ function MarketCard({
   listing: PublicListing;
   onNegotiate: (l: PublicListing) => void;
   onArticleTap: (listing: PublicListing) => void;
+  onLongPress: (listing: PublicListing) => void;
   formatMoney: (c: number) => string;
   formatLabel: (c: number) => string;
   t: (k: string) => string;
   locked: boolean;
   busy: boolean;
 }) {
+  const longPress = useLongPress(
+    () => onLongPress(listing),
+    () => onArticleTap(listing),
+  );
+
   return (
     <article
       className="hm-market-card"
       role="button"
       tabIndex={0}
-      onClick={() => onArticleTap(listing)}
+      {...longPress}
+      onClick={(e) => e.preventDefault()}
       onKeyDown={(e) => {
         if (busy) return;
         if (e.key === "Enter" || e.key === " ") {
@@ -937,6 +1005,7 @@ function SoKinFeed({
   countryHint,
   onNegotiate,
   onArticleTap,
+  onLongPress,
   cartBusyId,
   lockedCats,
   formatMoney,
@@ -947,6 +1016,7 @@ function SoKinFeed({
   countryHint: string;
   onNegotiate: (l: PublicListing) => void;
   onArticleTap: (listing: PublicListing) => void;
+  onLongPress: (listing: PublicListing) => void;
   cartBusyId: string | null;
   lockedCats: string[];
   formatMoney: (c: number) => string;
@@ -1205,6 +1275,7 @@ function SoKinFeed({
               listing={l}
               onNegotiate={onNegotiate}
               onArticleTap={onArticleTap}
+              onLongPress={onLongPress}
               formatMoney={formatMoney}
               formatLabel={formatLabel}
               t={t}
@@ -1459,6 +1530,20 @@ export function HomePageMobile() {
   const lockedCats = useLockedCategories();
   const barsVisibleRaw = useScrollDirection();
   const tutorial = useTutorial("home-mobile");
+  const unityAds = useUnityAds();
+
+  // Écouter l'event du drawer pour afficher une rewarded
+  useEffect(() => {
+    const handler = async () => {
+      if (!unityAds.rewardedReady) return;
+      const result = await unityAds.showRewarded();
+      if (result?.completed) {
+        console.log("[UnityAds] Rewarded completed — user earned reward");
+      }
+    };
+    window.addEventListener("ks-show-rewarded", handler);
+    return () => window.removeEventListener("ks-show-rewarded", handler);
+  }, [unityAds]);
 
   const [showWelcome, setShowWelcome] = useState(() => !localStorage.getItem(SK_WELCOME_ONBOARDING_DONE));
 
@@ -1468,6 +1553,8 @@ export function HomePageMobile() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [negotiateListing, setNegotiateListing] =
+    useState<PublicListing | null>(null);
+  const [longPressListing, setLongPressListing] =
     useState<PublicListing | null>(null);
   const [buyerCart, setBuyerCart] = useState<CartSummary | null>(null);
   const [cartBusyId, setCartBusyId] = useState<string | null>(null);
@@ -1533,6 +1620,10 @@ export function HomePageMobile() {
     [cartBusyId, isAdmin, isLoggedIn, navigate, t, user?.id],
   );
 
+  const handleLongPress = useCallback((listing: PublicListing) => {
+    setLongPressListing(listing);
+  }, []);
+
   const contentCls =
     "hm-content" + (barsVisible ? "" : " hm-content--expanded");
 
@@ -1566,6 +1657,7 @@ export function HomePageMobile() {
           countryHint={effectiveCountry}
           t={t}
           onArticleTap={handleArticleTap}
+          onLongPress={handleLongPress}
           cartBusyId={cartBusyId}
         />
         <BundlesSection
@@ -1580,6 +1672,7 @@ export function HomePageMobile() {
           t={t}
           onNegotiate={setNegotiateListing}
           onArticleTap={handleArticleTap}
+          onLongPress={handleLongPress}
           cartBusyId={cartBusyId}
           lockedCats={lockedCats}
           cityHint={defaultCity}
@@ -1591,6 +1684,7 @@ export function HomePageMobile() {
           countryHint={effectiveCountry}
           onNegotiate={setNegotiateListing}
           onArticleTap={handleArticleTap}
+          onLongPress={handleLongPress}
           cartBusyId={cartBusyId}
           lockedCats={lockedCats}
           formatMoney={formatMoneyFromUsdCents}
@@ -1601,6 +1695,38 @@ export function HomePageMobile() {
       <BottomNav visible={barsVisible} isLoggedIn={isLoggedIn} cartItemsCount={cartItemsCount} t={t} />
 
       {cartFeedback && <div className="hm-cart-feedback" role="status" aria-live="polite">{cartFeedback}</div>}
+
+      {longPressListing && (
+        <LongPressPopup
+          article={{
+            id: longPressListing.id,
+            title: longPressListing.title,
+            description: longPressListing.description,
+            imageUrl: longPressListing.imageUrl,
+            priceLabel: longPressListing.promoActive && longPressListing.promoPriceUsdCents != null
+              ? formatMoneyFromUsdCents(longPressListing.promoPriceUsdCents)
+              : formatMoneyFromUsdCents(longPressListing.priceUsdCents),
+            originalPriceLabel: longPressListing.promoActive && longPressListing.promoPriceUsdCents != null
+              ? formatMoneyFromUsdCents(longPressListing.priceUsdCents)
+              : undefined,
+            sellerName: longPressListing.owner.displayName,
+            type: longPressListing.type,
+            isNegotiable: longPressListing.isNegotiable,
+          }}
+          onClose={() => setLongPressListing(null)}
+          onNegotiate={() => {
+            const listing = longPressListing;
+            setLongPressListing(null);
+            setNegotiateListing(listing);
+          }}
+          onAddToCart={() => {
+            const listing = longPressListing;
+            setLongPressListing(null);
+            void handleArticleTap(listing);
+          }}
+          t={t}
+        />
+      )}
 
       {negotiateListing && (
         <NegotiatePopup

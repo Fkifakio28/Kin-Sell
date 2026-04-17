@@ -107,6 +107,7 @@ router.get(
 const paypalCheckoutSchema = z.object({
   planCode: z.string().min(2).max(40),
   billingCycle: z.enum(["MONTHLY", "ONE_TIME"]).default("MONTHLY"),
+  promoCode: z.string().min(3).max(30).optional(),
 });
 
 router.post(

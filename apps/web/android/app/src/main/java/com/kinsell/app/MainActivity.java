@@ -78,6 +78,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(AudioRoutePlugin.class);
         registerPlugin(CallNotificationPlugin.class);
         registerPlugin(KinSellBackgroundPlugin.class);
+        registerPlugin(UnityAdsPlugin.class);
 
         // Create all notification channels (son, vibration, LED)
         NotificationChannels.createChannels(this);

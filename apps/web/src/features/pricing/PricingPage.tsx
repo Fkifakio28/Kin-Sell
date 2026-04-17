@@ -242,6 +242,9 @@ export function PricingPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const [pendingPlanCode, setPendingPlanCode] = useState<string | null>(null);
+  const [promoCode, setPromoCode] = useState("");
+  const [promoStatus, setPromoStatus] = useState<{ valid: boolean; discountPercent: number | null; reason?: string } | null>(null);
+  const [promoLoading, setPromoLoading] = useState(false);
 
   const role = user?.role === "BUSINESS" ? "BUSINESS" : user?.role === "USER" ? "USER" : "VISITOR";
 
@@ -356,9 +359,25 @@ export function PricingPage() {
       return;
     }
     setPendingPlanCode(planCode);
+    setPromoCode("");
+    setPromoStatus(null);
     setLatestCheckout(null);
     setErrorMessage(null);
     setInfoMessage(null);
+  };
+
+  const handleValidatePromo = async () => {
+    if (!promoCode.trim() || !pendingPlanCode) return;
+    setPromoLoading(true);
+    setPromoStatus(null);
+    try {
+      const result = await billing.validateCoupon({ code: promoCode.trim(), planCode: pendingPlanCode });
+      setPromoStatus({ valid: result.valid, discountPercent: result.discountPercent, reason: result.reason });
+    } catch {
+      setPromoStatus({ valid: false, discountPercent: null, reason: "Erreur de validation" });
+    } finally {
+      setPromoLoading(false);
+    }
   };
 
   const handlePay = async () => {
@@ -387,7 +406,14 @@ export function PricingPage() {
       }
 
       // Web / Android → PayPal
-      const result = await billing.createPaypalCheckout({ planCode: pendingPlanCode, billingCycle: "MONTHLY" });
+      const checkoutPayload: { planCode: string; billingCycle: "MONTHLY" | "ONE_TIME"; promoCode?: string } = {
+        planCode: pendingPlanCode,
+        billingCycle: "MONTHLY",
+      };
+      if (promoCode.trim() && promoStatus?.valid) {
+        checkoutPayload.promoCode = promoCode.trim();
+      }
+      const result = await billing.createPaypalCheckout(checkoutPayload);
       setLatestCheckout(result);
       // Redirection vers PayPal
       if (result.paymentUrl) {
@@ -556,6 +582,40 @@ export function PricingPage() {
               ? "Votre achat sera traité via l'App Store d'Apple. Votre forfait sera activé automatiquement."
               : "Vous serez redirigé vers PayPal pour effectuer le paiement. Votre forfait sera activé automatiquement après confirmation."}
           </p>
+
+          {/* ── Promo code ── */}
+          {!isIAPAvailable() && (
+            <div className="pricing-promo">
+              <label className="pricing-promo__label" htmlFor="promo-code">Code promo</label>
+              <div className="pricing-promo__row">
+                <input
+                  id="promo-code"
+                  className="pricing-promo__input"
+                  type="text"
+                  placeholder="KS-XXXXXXXX"
+                  maxLength={30}
+                  value={promoCode}
+                  onChange={(e) => { setPromoCode(e.target.value.toUpperCase()); setPromoStatus(null); }}
+                />
+                <button
+                  type="button"
+                  className="pricing-promo__btn"
+                  disabled={!promoCode.trim() || promoLoading}
+                  onClick={() => void handleValidatePromo()}
+                >
+                  {promoLoading ? "…" : "Vérifier"}
+                </button>
+              </div>
+              {promoStatus && (
+                <p className={`pricing-promo__msg ${promoStatus.valid ? "pricing-promo__msg--ok" : "pricing-promo__msg--err"}`}>
+                  {promoStatus.valid
+                    ? `✓ Coupon valide — ${promoStatus.discountPercent}% de réduction`
+                    : `✕ ${promoStatus.reason === "INVALID_CODE" ? "Code invalide" : promoStatus.reason === "EXPIRED" ? "Code expiré" : promoStatus.reason === "MONTHLY_QUOTA_REACHED" ? "Quota mensuel atteint" : promoStatus.reason ?? "Code non valide"}`}
+                </p>
+              )}
+            </div>
+          )}
+
           <button
             type="button"
             className="pricing-payment__btn"
@@ -566,7 +626,9 @@ export function PricingPage() {
               ? "Traitement…"
               : isIAPAvailable()
                 ? "🍎 Acheter via App Store"
-                : "💳 Payer avec PayPal"}
+                : promoStatus?.valid && promoStatus.discountPercent
+                  ? `💳 Payer avec PayPal (-${promoStatus.discountPercent}%)`
+                  : "💳 Payer avec PayPal"}
           </button>
           <br />
           <button type="button" className="pricing-payment__cancel" onClick={() => setPendingPlanCode(null)}>

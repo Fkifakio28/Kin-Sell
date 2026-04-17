@@ -250,6 +250,12 @@ model User {
   verificationResolved     VerificationRequest[]     @relation("VerificationResolver")
   promotions               Promotion[]               @relation("UserPromotions")
   vitrines                 Vitrine[]                 @relation("UserVitrines")
+  incentiveCoupons         IncentiveCoupon[]         @relation("IncentiveCouponsReceived")
+  incentiveCouponsIssued   IncentiveCoupon[]         @relation("IncentiveCouponsIssued")
+  incentiveRedemptions     IncentiveCouponRedemption[] @relation("IncentiveRedemptions")
+  incentiveQuotas          IncentiveQuotaCounter[]   @relation("IncentiveQuotas")
+  growthGrants             GrowthIncentiveGrant[]    @relation("GrowthGrants")
+  growthEvents             GrowthIncentiveEvent[]    @relation("GrowthEvents")
 
   @@index([role])
   @@index([accountStatus])
@@ -2747,4 +2753,176 @@ model AiFreemiumUsage {
 
   @@unique([userId, feature, listingType])
   @@index([userId, feature])
+}
+
+// ══════════════════════════════════════════════════════════
+// INCENTIVE ENGINE — Coupons, quotas, CPC/CPI/CPA grants
+// ══════════════════════════════════════════════════════════
+
+enum CouponKind {
+  PLAN_DISCOUNT
+  ADDON_DISCOUNT
+  ADDON_FREE_GAIN
+  CPC
+  CPI
+  CPA
+}
+
+enum CouponTargetScope {
+  ALL_PLANS
+  USER_PLANS
+  BUSINESS_PLANS
+  ALL_ADDONS
+  SPECIFIC
+}
+
+enum CouponStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  EXPIRED
+  REVOKED
+}
+
+enum RedemptionStatus {
+  APPLIED
+  REJECTED
+  ROLLED_BACK
+}
+
+enum GrantStatus {
+  PENDING
+  ACTIVE
+  CONSUMED
+  EXPIRED
+  REVOKED
+}
+
+enum IncentiveSegment {
+  STANDARD
+  TESTER
+}
+
+model IncentiveCoupon {
+  id               String           @id @default(cuid())
+  code             String           @unique
+  kind             CouponKind
+  discountPercent  Int?             // 10, 30, 50, 70, 100
+  targetScope      CouponTargetScope @default(ALL_PLANS)
+  targetPlanCodes  String[]         // planCodes ciblés (si SPECIFIC)
+  targetAddonCodes String[]         // addonCodes ciblés (si SPECIFIC)
+  maxUses          Int              @default(1)
+  usedCount        Int              @default(0)
+  maxUsesPerUser   Int              @default(1)
+  startsAt         DateTime         @default(now())
+  expiresAt        DateTime
+  status           CouponStatus     @default(DRAFT)
+  segment          IncentiveSegment @default(STANDARD)
+  issuedByEngine   Boolean          @default(false) // true si auto-généré par IA
+  issuedById       String?          // super-admin qui l'a créé
+  recipientUserId  String?          // null = tout le monde, set = ciblé
+  metadata         Json?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  issuedBy   User?                      @relation("IncentiveCouponsIssued", fields: [issuedById], references: [id], onDelete: SetNull)
+  recipient  User?                      @relation("IncentiveCouponsReceived", fields: [recipientUserId], references: [id], onDelete: SetNull)
+  redemptions IncentiveCouponRedemption[]
+
+  @@index([code])
+  @@index([recipientUserId, status, expiresAt])
+  @@index([kind, status, createdAt])
+  @@index([status, expiresAt])
+}
+
+model IncentiveCouponRedemption {
+  id                   String           @id @default(cuid())
+  couponId             String
+  userId               String
+  paymentOrderId       String?
+  subscriptionId       String?
+  originalAmountUsdCents Int
+  discountAmountUsdCents Int
+  finalAmountUsdCents    Int
+  status               RedemptionStatus @default(APPLIED)
+  reason               String?
+  createdAt            DateTime         @default(now())
+
+  coupon IncentiveCoupon @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  user   User            @relation("IncentiveRedemptions", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([couponId])
+  @@index([userId, createdAt])
+}
+
+model IncentiveQuotaCounter {
+  id              String @id @default(cuid())
+  userId          String
+  monthKey        String // YYYY-MM
+  couponCount     Int    @default(0) // max 7
+  coupon100Count  Int    @default(0)
+  cpcCount        Int    @default(0) // \
+  cpiCount        Int    @default(0) //  } max 15 combined
+  cpaCount        Int    @default(0) // /
+  discount80Count Int    @default(0) // max 3
+  addonGainCount  Int    @default(0) // max 1
+
+  user User @relation("IncentiveQuotas", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, monthKey])
+  @@index([userId, monthKey])
+}
+
+model GrowthIncentiveGrant {
+  id              String      @id @default(cuid())
+  userId          String
+  kind            CouponKind  // CPC, CPI, CPA
+  discountPercent Int?
+  addonCode       String?     // si ADDON_FREE_GAIN
+  status          GrantStatus @default(PENDING)
+  expiresAt       DateTime
+  metadata        Json?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  user   User                   @relation("GrowthGrants", fields: [userId], references: [id], onDelete: Cascade)
+  events GrowthIncentiveEvent[]
+
+  @@index([userId, status])
+  @@index([kind, status])
+  @@index([expiresAt])
+}
+
+model GrowthIncentiveEvent {
+  id        String   @id @default(cuid())
+  grantId   String
+  userId    String
+  eventType String   // "click", "install", "action"
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  grant GrowthIncentiveGrant @relation(fields: [grantId], references: [id], onDelete: Cascade)
+  user  User                 @relation("GrowthEvents", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([grantId])
+  @@index([userId, createdAt])
+}
+
+model IncentivePolicy {
+  id                       String           @id @default(cuid())
+  segment                  IncentiveSegment @default(STANDARD)
+  allowedDiscounts         Int[]            // [10, 30, 50, 70, 100]
+  maxCouponsPerMonth       Int              @default(7)
+  maxGrowthGrantsPerMonth  Int              @default(15)
+  maxDiscount80PerMonth    Int              @default(3)
+  maxAddonGainPerMonth     Int              @default(1)
+  couponProbability        Float            @default(0.10)   // 1/10
+  growthProbability        Float            @default(0.10)   // 1/10
+  target100Ratio           Float            @default(0.15)   // 15% min de 100%
+  coupon100MaxDays         Int              @default(14)     // max 2 semaines
+  isActive                 Boolean          @default(true)
+  createdAt                DateTime         @default(now())
+  updatedAt                DateTime         @updatedAt
+
+  @@unique([segment])
 }

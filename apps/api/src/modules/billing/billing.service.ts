@@ -624,10 +624,24 @@ export const adminActivatePlan = async (payload: {
 
 export const createPaypalCheckout = async (
   userId: string,
-  payload: { planCode: string; billingCycle: "MONTHLY" | "ONE_TIME" }
+  payload: { planCode: string; billingCycle: "MONTHLY" | "ONE_TIME"; promoCode?: string }
 ) => {
   const { scope, businessId } = await resolveContext(userId);
   const targetPlan = getPlanOrThrow(payload.planCode, scope);
+
+  let amountUsdCents = targetPlan.monthlyPriceUsdCents;
+  let couponRedemption: { redemptionId: string; discountAmountUsdCents: number; finalAmountUsdCents: number } | null = null;
+
+  // Apply promo code if provided
+  if (payload.promoCode) {
+    const { redeemCoupon } = await import("../incentives/incentive.service.js");
+    couponRedemption = await redeemCoupon(
+      userId,
+      payload.promoCode,
+      amountUsdCents,
+    );
+    amountUsdCents = couponRedemption.finalAmountUsdCents;
+  }
 
   const expiresAt = new Date(Date.now() + env.BILLING_TRANSFER_ORDER_TTL_HOURS * 60 * 60 * 1000);
 
@@ -637,7 +651,7 @@ export const createPaypalCheckout = async (
       businessId: scope === "BUSINESS" ? businessId : null,
       targetScope: scope as SubscriptionScope,
       planCode: targetPlan.code,
-      amountUsdCents: targetPlan.monthlyPriceUsdCents,
+      amountUsdCents,
       currency: "USD",
       method: PaymentMethod.PAYPAL,
       status: PaymentOrderStatus.PENDING,
@@ -648,7 +662,15 @@ export const createPaypalCheckout = async (
     }
   });
 
-  const amountUsd = targetPlan.monthlyPriceUsdCents / 100;
+  // Link redemption to order if coupon was applied
+  if (couponRedemption) {
+    await prisma.incentiveCouponRedemption.update({
+      where: { id: couponRedemption.redemptionId },
+      data: { paymentOrderId: order.id },
+    });
+  }
+
+  const amountUsd = amountUsdCents / 100;
   const returnUrl = `${env.CORS_ORIGIN}/forfaits?paid=1&orderId=${order.id}`;
   const cancelUrl = `${env.CORS_ORIGIN}/forfaits?cancelled=1`;
 

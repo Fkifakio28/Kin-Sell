@@ -27,6 +27,7 @@ import NotificationCenter from '../../components/NotificationCenter';
 import { useGlobalNotification } from '../../app/providers/GlobalNotificationProvider';
 import TutorialOverlay, { useTutorial, TutorialRelaunchBtn } from '../../components/TutorialOverlay';
 import { explorerMobileSteps } from '../../components/tutorial-steps';
+import { LongPressPopup, useLongPress, type LongPressArticle } from '../../components/LongPressPopup';
 
 const PREVIEW_PAGE_SIZE = 4;
 const MODAL_PAGE_SIZE = 8;
@@ -226,6 +227,57 @@ export function ExplorerPage() {
   return <ExplorerPageMobile />;
 }
 
+/* ─── Article card with long-press for mobile ─── */
+
+function ExArticleCardWithLongPress({
+  article, articleHover, lockedCats, exCardBusy, exCardFb,
+  onNav, onContact, onCart, onNegotiate, onLongPress,
+}: {
+  article: ExplorerArticlePreview;
+  articleHover: ReturnType<typeof useHoverPopup<ArticleHoverData>>;
+  lockedCats: string[];
+  exCardBusy: string | null;
+  exCardFb: { id: string; msg: string } | null;
+  onNav: (path: string) => void;
+  onContact: (a: ExplorerArticlePreview, e: React.MouseEvent) => void;
+  onCart: (id: string, e: React.MouseEvent) => Promise<void>;
+  onNegotiate: (a: ExplorerArticlePreview, e: React.MouseEvent) => void;
+  onLongPress: (a: ExplorerArticlePreview) => void;
+}) {
+  const lp = useLongPress(() => onLongPress(article));
+
+  return (
+    <article className="ex-article-card" id={article.id}
+      {...lp}
+      onMouseEnter={(e) => articleHover.handleMouseEnter({ title: article.title, description: `Annonce: ${article.title}`, price: article.priceLabel, sellerName: article.publisherName }, e)}
+      onMouseLeave={articleHover.handleMouseLeave}
+    >
+      <div className="ex-article-img">
+        <img src={article.coverImage} alt={article.title} loading="lazy" />
+        {article.isBoosted && <span className="ks-sponsored-badge">⚡ Sponsorisé</span>}
+        {article.promoLabel && <span className="ex-article-badge ks-promo-badge">{article.promoLabel}</span>}
+      </div>
+      <div className="ex-article-body">
+        <h4 className="ex-article-title">{article.title}</h4>
+        {article.originalPriceLabel ? (
+          <p className="ex-article-price"><s className="ks-price-old">{article.originalPriceLabel}</s> {article.priceLabel}</p>
+        ) : (
+          <p className="ex-article-price">{article.priceLabel}</p>
+        )}
+        {article.promoExpiresAt && (() => { const u = getUrgencyLabel(article.promoExpiresAt); return u ? <span className="promo-urgency-label">⏰ {u}</span> : null; })()}
+        <p className="ex-article-publisher"><a href={article.publisherLink} onClick={(e) => { e.preventDefault(); e.stopPropagation(); onNav(article.publisherLink); }} style={{ color: 'inherit', textDecoration: 'none' }}>{article.publisherName}</a></p>
+        <div className="ex-article-actions">
+          <button type="button" className="ex-article-act" onClick={() => onNav(article.targetPath)}>Voir</button>
+          <button type="button" className="ex-article-act" title="Contacter" onClick={(e) => void onContact(article, e)}>💬</button>
+          <button type="button" className="ex-article-act" title="Panier" disabled={exCardBusy === article.id} onClick={(e) => void onCart(article.id, e)}>🛒</button>
+          {article.isNegotiable !== false && !isCategoryLocked(lockedCats, article.category) && <button type="button" className="ex-article-act" title="Négocier" onClick={(e) => onNegotiate(article, e)}>🤝</button>}
+        </div>
+        {exCardFb?.id === article.id && <span className="ex-article-fb">{exCardFb.msg}</span>}
+      </div>
+    </article>
+  );
+}
+
 function ExplorerPageMobile() {
   /* Mobile + Tablette → layout actuel inchangé */
   const { t, formatPriceLabelFromUsdCents } = useLocaleCurrency();
@@ -280,6 +332,7 @@ function ExplorerPageMobile() {
   const [exCardFb, setExCardFb] = useState<{ id: string; msg: string } | null>(null);
   const [exCardQty, setExCardQty] = useState<Record<string, number>>({});
   const [isMapView, setIsMapView] = useState(false);
+  const [longPressArticle, setLongPressArticle] = useState<ExplorerArticlePreview | null>(null);
   const getExQty = (id: string) => exCardQty[id] ?? 1;
   const changeExQty = (id: string, delta: number, e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); setExCardQty((prev) => ({ ...prev, [id]: Math.max(1, (prev[id] ?? 1) + delta) })); };
   useScrollRestore();
@@ -477,33 +530,19 @@ function ExplorerPageMobile() {
             <>
               <div className="ex-articles-grid">
                 {previewArticles.map((article) => (
-                  <article key={article.id} className="ex-article-card" id={article.id}
-                    onMouseEnter={(e) => articleHover.handleMouseEnter({ title: article.title, description: `Annonce: ${article.title}`, price: article.priceLabel, sellerName: article.publisherName }, e)}
-                    onMouseLeave={articleHover.handleMouseLeave}
-                  >
-                    <div className="ex-article-img">
-                      <img src={article.coverImage} alt={article.title} loading="lazy" />
-                      {article.isBoosted && <span className="ks-sponsored-badge">⚡ Sponsorisé</span>}
-                      {article.promoLabel && <span className="ex-article-badge ks-promo-badge">{article.promoLabel}</span>}
-                    </div>
-                    <div className="ex-article-body">
-                      <h4 className="ex-article-title">{article.title}</h4>
-                      {article.originalPriceLabel ? (
-                        <p className="ex-article-price"><s className="ks-price-old">{article.originalPriceLabel}</s> {article.priceLabel}</p>
-                      ) : (
-                        <p className="ex-article-price">{article.priceLabel}</p>
-                      )}
-                      {article.promoExpiresAt && (() => { const u = getUrgencyLabel(article.promoExpiresAt); return u ? <span className="promo-urgency-label">⏰ {u}</span> : null; })()}
-                      <p className="ex-article-publisher"><a href={article.publisherLink} onClick={(e) => { e.preventDefault(); e.stopPropagation(); nav(article.publisherLink); }} style={{ color: 'inherit', textDecoration: 'none' }}>{article.publisherName}</a></p>
-                      <div className="ex-article-actions">
-                        <button type="button" className="ex-article-act" onClick={() => nav(article.targetPath)}>Voir</button>
-                        <button type="button" className="ex-article-act" title="Contacter" onClick={(e) => void handleExCardContact(article, e)}>💬</button>
-                        <button type="button" className="ex-article-act" title="Panier" disabled={exCardBusy === article.id} onClick={(e) => void handleExCardCart(article.id, e)}>🛒</button>
-                        {article.isNegotiable !== false && !isCategoryLocked(lockedCats, article.category) && <button type="button" className="ex-article-act" title="Négocier" onClick={(e) => handleExCardNegotiate(article, e)}>🤝</button>}
-                      </div>
-                      {exCardFb?.id === article.id && <span className="ex-article-fb">{exCardFb.msg}</span>}
-                    </div>
-                  </article>
+                  <ExArticleCardWithLongPress
+                    key={article.id}
+                    article={article}
+                    articleHover={articleHover}
+                    lockedCats={lockedCats}
+                    exCardBusy={exCardBusy}
+                    exCardFb={exCardFb}
+                    onNav={nav}
+                    onContact={handleExCardContact}
+                    onCart={handleExCardCart}
+                    onNegotiate={handleExCardNegotiate}
+                    onLongPress={setLongPressArticle}
+                  />
                 ))}
               </div>
               <button className="ex-show-all" onClick={() => setIsAllArticlesOpen(true)}>Tout voir</button>
@@ -640,6 +679,34 @@ function ExplorerPageMobile() {
 
       <ArticleHoverPopup popup={articleHover.popup} />
       <ProfileHoverPopup popup={profileHover.popup} />
+
+      {longPressArticle && (
+        <LongPressPopup
+          article={{
+            id: longPressArticle.id,
+            title: longPressArticle.title,
+            description: null,
+            imageUrl: longPressArticle.coverImage,
+            priceLabel: longPressArticle.priceLabel,
+            originalPriceLabel: longPressArticle.originalPriceLabel,
+            sellerName: longPressArticle.publisherName,
+            type: longPressArticle.kind === 'product' ? 'PRODUIT' : 'SERVICE',
+            isNegotiable: longPressArticle.isNegotiable !== false && !isCategoryLocked(lockedCats, longPressArticle.category),
+          }}
+          onClose={() => setLongPressArticle(null)}
+          onNegotiate={() => {
+            const a = longPressArticle;
+            setLongPressArticle(null);
+            setNegotiateArticle(a);
+          }}
+          onAddToCart={() => {
+            const a = longPressArticle;
+            setLongPressArticle(null);
+            void handleExCardCart(a.id, { preventDefault: () => {}, stopPropagation: () => {} } as React.MouseEvent);
+          }}
+          t={t}
+        />
+      )}
 
       {negotiateArticle && (
         <NegotiatePopup

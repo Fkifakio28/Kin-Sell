@@ -18,6 +18,7 @@ import {
 } from "../../utils/push-notifications";
 import { SK_PUSH_BANNER_DISMISSED } from "../../shared/constants/storage-keys";
 import { startBackgroundService, stopBackgroundService } from "../../utils/background-service";
+import { initUnityAds } from "../../lib/services/unity-ads.service";
 import "../../styles/global-notifications.css";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:4000";
@@ -145,6 +146,11 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
       void stopBackgroundService();
     }
   }, [isLoggedIn]);
+
+  /* ── Unity Ads — init une seule fois sur mobile natif ── */
+  useEffect(() => {
+    void initUnityAds(false);
+  }, []);
 
   /* ── Missed notifications (persisted) ── */
   const MISSED_KEY = "ks-missed-notifs";

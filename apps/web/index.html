@@ -64,6 +64,17 @@
 
     <!-- ── Cloudflare Turnstile ── -->
     <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
+
+    <!-- ── Google AdSense (web uniquement — interdit dans WebView Capacitor natif) ── -->
+    <script>
+      if (!/KinSellApp/i.test(navigator.userAgent)) {
+        var s = document.createElement('script');
+        s.async = true;
+        s.crossOrigin = 'anonymous';
+        s.src = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8795910357013666';
+        document.head.appendChild(s);
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
