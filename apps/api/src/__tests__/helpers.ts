@@ -35,6 +35,7 @@ export function createMockPrisma() {
             deleteMany: vi.fn(),
             count: vi.fn(),
             aggregate: vi.fn(),
+            groupBy: vi.fn(),
           };
         }
         return _target[prop as string];

@@ -11,6 +11,7 @@ import * as adsService from "../ads/ads.service.js";
 import aiAdminRoutes from "../analytics/ai-admin.routes.js";
 import * as iaAdsPlacements from "../ads/ia-ads-placements.service.js";
 import * as iaMessengerPromo from "../ads/ia-messenger-promo.service.js";
+import * as messengerScheduler from "../ads/messenger-scheduler.service.js";
 import * as marketIntelligence from "../market-intelligence/market-intelligence.service.js";
 import * as billingService from "../billing/billing.service.js";
 import * as aiTrigger from "../analytics/ai-trigger.service.js";
@@ -1594,8 +1595,11 @@ router.get("/ia/ads", asyncHandler(async (req: AuthenticatedRequest, res) => {
 // ── IA Message ──
 router.get("/ia/messages", asyncHandler(async (req: AuthenticatedRequest, res) => {
   await checkPermission(req, "AI_MANAGEMENT");
-  const stats = await iaMessengerPromo.getPromoCampaignStats();
-  res.json(stats);
+  const [stats, schedulerStats] = await Promise.all([
+    iaMessengerPromo.getPromoCampaignStats(),
+    messengerScheduler.getMessengerSchedulerStats(),
+  ]);
+  res.json({ ...stats, scheduler: schedulerStats });
 }));
 
 // ═══════════════════════════════════════════

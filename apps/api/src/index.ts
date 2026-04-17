@@ -55,6 +55,7 @@ import { runSubscriptionExpiryCheck, clearSubscriptionCache } from "./shared/bil
 import { startScoringScheduler } from "./modules/sokin/sokin-scoring.service.js";
 import { startAiAutonomyScheduler } from "./modules/analytics/ai-autonomy.service.js";
 import { expireBoosts, notifyBoostExpiringSoon } from "./modules/ads/ads-boost.service.js";
+import { startMessengerScheduler, stopMessengerScheduler } from "./modules/ads/messenger-scheduler.service.js";
 
 const app = express();
 const httpServer = createServer(app);
@@ -390,6 +391,9 @@ httpServer.listen(env.API_PORT, async () => {
   setInterval(() => { void runIncentiveRebalance(); }, 24 * 60 * 60 * 1000); // daily
   logger.info("[Incentive] Schedulers démarrés (expiration: 1h, rebalance: 24h)");
 
+  // ── Messenger Scheduler (campagnes autonomes: 2h / 24h) ──
+  startMessengerScheduler();
+
   // ── Midnight Scheduler (External Intel + KB refresh) ──
   startMidnightScheduler();
 });
@@ -398,6 +402,7 @@ httpServer.listen(env.API_PORT, async () => {
 const shutdown = async (signal: string) => {
   logger.info(`${signal} reçu — arrêt gracieux...`);
   stopMidnightScheduler();
+  stopMessengerScheduler();
   httpServer.close(async () => {
     await disconnectRedis();
     await prisma.$disconnect();

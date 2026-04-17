@@ -13,6 +13,7 @@ import { prisma } from "../../shared/db/prisma.js";
 import { sendMail } from "../../shared/email/mailer.js";
 import { sendPushToUser } from "../notifications/push.service.js";
 import { logger } from "../../shared/logger.js";
+import { isFrequencyCapped } from "./messenger-scheduler.service.js";
 
 /** Check idempotency via aiAutonomyLog — returns true if already sent */
 async function hasAlreadySent(actionType: string, targetUserId: string, identifier: string): Promise<boolean> {
@@ -454,6 +455,8 @@ export async function sendCouponIncentiveMessage(
 ): Promise<boolean> {
   // Idempotency : pas de double message pour le même coupon
   if (await hasAlreadySent("INCENTIVE_COUPON", recipientId, couponCode)) return false;
+  // Frequency capping
+  if (await isFrequencyCapped(recipientId)) return false;
 
   const htmlBody = `
     <p>Bonne nouvelle ! Vous avez reçu un code promo exclusif Kin-Sell.</p>
@@ -505,6 +508,7 @@ export async function sendGrowthGrantMessage(
   trigger: string,
 ): Promise<boolean> {
   if (await hasAlreadySent("INCENTIVE_GRANT", recipientId, grantId)) return false;
+  if (await isFrequencyCapped(recipientId)) return false;
 
   const kindLabel = grantKind === "CPC" ? "Clic" : grantKind === "CPI" ? "Installation" : "Action";
   const discountLabel = discountPercent ? `-${discountPercent}%` : "Avantage";
@@ -558,6 +562,7 @@ export async function sendGrantConvertedToCouponMessage(
   expiresAt: Date,
 ): Promise<boolean> {
   if (await hasAlreadySent("GRANT_CONVERTED", recipientId, grantId)) return false;
+  if (await isFrequencyCapped(recipientId)) return false;
 
   const htmlBody = `
     <p>Votre avantage a été converti en code promo !</p>
