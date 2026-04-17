@@ -22,6 +22,15 @@ import {
 } from "./ia-messenger-promo.service.js";
 
 // ─────────────────────────────────────────────
+// Scheduler enable guard
+// ─────────────────────────────────────────────
+
+async function isMessengerEnabled(): Promise<boolean> {
+  const agent = await prisma.aiAgent.findFirst({ where: { name: "IA_MESSENGER" } });
+  return agent?.enabled !== false;
+}
+
+// ─────────────────────────────────────────────
 // Frequency Capping
 // ─────────────────────────────────────────────
 
@@ -70,6 +79,85 @@ export async function isFrequencyCapped(userId: string): Promise<boolean> {
 }
 
 // ─────────────────────────────────────────────
+// Batch helpers — eliminate N+1 queries
+// ─────────────────────────────────────────────
+
+/**
+ * Pre-fetch frequency cap counts for a batch of userIds.
+ * Returns Set of userIds that are capped.
+ */
+async function batchFrequencyCap(userIds: string[]): Promise<Set<string>> {
+  if (userIds.length === 0) return new Set();
+  const now = new Date();
+  const dayAgo = new Date(now.getTime() - FREQ_CAP_WINDOW_MS);
+  const weekAgo = new Date(now.getTime() - FREQ_CAP_WEEK_MS);
+
+  const [dailyCounts, weeklyCounts] = await Promise.all([
+    prisma.aiAutonomyLog.groupBy({
+      by: ["targetUserId"],
+      where: {
+        agentName: "IA_MESSENGER",
+        targetUserId: { in: userIds },
+        createdAt: { gte: dayAgo },
+        success: true,
+      },
+      _count: true,
+    }),
+    prisma.aiAutonomyLog.groupBy({
+      by: ["targetUserId"],
+      where: {
+        agentName: "IA_MESSENGER",
+        targetUserId: { in: userIds },
+        createdAt: { gte: weekAgo },
+        success: true,
+      },
+      _count: true,
+    }),
+  ]);
+
+  const capped = new Set<string>();
+  const dailyMap = new Map(dailyCounts.map((d) => [d.targetUserId, d._count]));
+  const weeklyMap = new Map(weeklyCounts.map((d) => [d.targetUserId, d._count]));
+  for (const uid of userIds) {
+    if ((dailyMap.get(uid) ?? 0) >= FREQ_CAP_MAX_PER_DAY) capped.add(uid);
+    else if ((weeklyMap.get(uid) ?? 0) >= FREQ_CAP_MAX_PER_WEEK) capped.add(uid);
+  }
+  return capped;
+}
+
+/**
+ * Pre-fetch idempotency for a batch: which (actionType, userId, identifier) combos already exist.
+ * Returns Set of `userId` that already have a matching log.
+ */
+async function batchIdempotencyCheck(
+  actionType: string,
+  entries: { userId: string; identifier: string }[],
+): Promise<Set<string>> {
+  if (entries.length === 0) return new Set();
+  const userIds = entries.map((e) => e.userId);
+
+  const existingLogs = await prisma.aiAutonomyLog.findMany({
+    where: {
+      agentName: "IA_MESSENGER",
+      actionType,
+      targetUserId: { in: userIds },
+    },
+    select: { targetUserId: true, decision: true },
+  });
+
+  const alreadySent = new Set<string>();
+  for (const entry of entries) {
+    const match = existingLogs.find(
+      (l) =>
+        l.targetUserId === entry.userId &&
+        (!entry.identifier || l.decision?.includes(entry.identifier)),
+    );
+    if (match) alreadySent.add(entry.userId);
+  }
+  return alreadySent;
+}
+
+// ─────────────────────────────────────────────
 // Scheduler State
 // ─────────────────────────────────────────────
 
@@ -106,25 +194,25 @@ export async function runCouponExpiryReminders(): Promise<{ sent: number; skippe
     take: 50,
   });
 
+  const validCoupons = expiringCoupons.filter((c) => c.recipientUserId);
+  const userIds = validCoupons.map((c) => c.recipientUserId!);
+
+  // Batch pre-fetch: 2 queries instead of 3N
+  const [alreadyRemindedSet, cappedSet] = await Promise.all([
+    batchIdempotencyCheck(
+      "COUPON_EXPIRY_REMINDER",
+      validCoupons.map((c) => ({ userId: c.recipientUserId!, identifier: c.code })),
+    ),
+    batchFrequencyCap(userIds),
+  ]);
+
   let sent = 0;
   let skipped = 0;
 
-  for (const coupon of expiringCoupons) {
+  for (const coupon of validCoupons) {
     if (!coupon.recipientUserId) { skipped++; continue; }
-
-    // Idempotency: already reminded?
-    const alreadyReminded = await prisma.aiAutonomyLog.findFirst({
-      where: {
-        agentName: "IA_MESSENGER",
-        actionType: "COUPON_EXPIRY_REMINDER",
-        targetUserId: coupon.recipientUserId,
-        decision: { contains: coupon.code },
-      },
-    });
-    if (alreadyReminded) { skipped++; continue; }
-
-    // Frequency cap
-    if (await isFrequencyCapped(coupon.recipientUserId)) { skipped++; continue; }
+    if (alreadyRemindedSet.has(coupon.recipientUserId)) { skipped++; continue; }
+    if (cappedSet.has(coupon.recipientUserId)) { skipped++; continue; }
 
     const expiresLabel = coupon.expiresAt.toLocaleDateString("fr-FR");
     const htmlBody = `
@@ -183,7 +271,6 @@ export async function runCouponExpiryReminders(): Promise<{ sent: number; skippe
  */
 export async function runInactiveUserReengagement(): Promise<{ sent: number; skipped: number }> {
   const fourteenDaysAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
   const monthKey = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
 
   // Users inactifs (pas de listing/order/login récent) mais profil complété
@@ -193,9 +280,7 @@ export async function runInactiveUserReengagement(): Promise<{ sent: number; ski
       profileCompleted: true,
       email: { not: null },
       updatedAt: { lt: fourteenDaysAgo },
-      // Pas de listing récent
       listings: { none: { createdAt: { gte: fourteenDaysAgo } } },
-      // Pas de commande récente
       buyerOrders: { none: { createdAt: { gte: fourteenDaysAgo } } },
     },
     select: {
@@ -206,23 +291,23 @@ export async function runInactiveUserReengagement(): Promise<{ sent: number; ski
     take: 30,
   });
 
+  const userIds = inactiveUsers.map((u) => u.id);
+
+  // Batch pre-fetch: 2 queries instead of 3N
+  const [alreadySentSet, cappedSet] = await Promise.all([
+    batchIdempotencyCheck(
+      "REENGAGEMENT",
+      userIds.map((uid) => ({ userId: uid, identifier: monthKey })),
+    ),
+    batchFrequencyCap(userIds),
+  ]);
+
   let sent = 0;
   let skipped = 0;
 
   for (const user of inactiveUsers) {
-    // Idempotency: max 1 re-engagement par mois
-    const alreadySent = await prisma.aiAutonomyLog.findFirst({
-      where: {
-        agentName: "IA_MESSENGER",
-        actionType: "REENGAGEMENT",
-        targetUserId: user.id,
-        decision: { contains: monthKey },
-      },
-    });
-    if (alreadySent) { skipped++; continue; }
-
-    // Frequency cap
-    if (await isFrequencyCapped(user.id)) { skipped++; continue; }
+    if (alreadySentSet.has(user.id)) { skipped++; continue; }
+    if (cappedSet.has(user.id)) { skipped++; continue; }
 
     const name = user.profile?.displayName ?? "cher utilisateur";
     const htmlBody = `
@@ -290,9 +375,7 @@ export async function runWelcomeFlow(): Promise<{ sent: number; skipped: number 
       accountStatus: "ACTIVE",
       email: { not: null },
       createdAt: { gte: threeDaysAgo, lte: dayAgo },
-      // Pas encore d'annonce
       listings: { none: {} },
-      // Pas encore de commande
       buyerOrders: { none: {} },
     },
     select: {
@@ -304,21 +387,23 @@ export async function runWelcomeFlow(): Promise<{ sent: number; skipped: number 
     take: 20,
   });
 
+  const userIds = newUsers.map((u) => u.id);
+
+  // Batch pre-fetch: 2 queries instead of 3N
+  const [alreadySentSet, cappedSet] = await Promise.all([
+    batchIdempotencyCheck(
+      "WELCOME_FLOW",
+      userIds.map((uid) => ({ userId: uid, identifier: "" })),
+    ),
+    batchFrequencyCap(userIds),
+  ]);
+
   let sent = 0;
   let skipped = 0;
 
   for (const user of newUsers) {
-    // Idempotency
-    const alreadySent = await prisma.aiAutonomyLog.findFirst({
-      where: {
-        agentName: "IA_MESSENGER",
-        actionType: "WELCOME_FLOW",
-        targetUserId: user.id,
-      },
-    });
-    if (alreadySent) { skipped++; continue; }
-
-    if (await isFrequencyCapped(user.id)) { skipped++; continue; }
+    if (alreadySentSet.has(user.id)) { skipped++; continue; }
+    if (cappedSet.has(user.id)) { skipped++; continue; }
 
     const name = user.profile?.displayName ?? "cher membre";
     const isSeller = user.role === "BUSINESS";
@@ -419,22 +504,23 @@ export async function runWeeklyDigest(): Promise<{ sent: number; skipped: number
     take: 50,
   });
 
+  const sellerIds = sellers.map((s) => s.id);
+
+  // Batch pre-fetch: 2 queries instead of 3N
+  const [alreadySentSet, cappedSet] = await Promise.all([
+    batchIdempotencyCheck(
+      "WEEKLY_DIGEST",
+      sellerIds.map((uid) => ({ userId: uid, identifier: weekKey })),
+    ),
+    batchFrequencyCap(sellerIds),
+  ]);
+
   let sent = 0;
   let skipped = 0;
 
   for (const seller of sellers) {
-    // Idempotency
-    const already = await prisma.aiAutonomyLog.findFirst({
-      where: {
-        agentName: "IA_MESSENGER",
-        actionType: "WEEKLY_DIGEST",
-        targetUserId: seller.id,
-        decision: { contains: weekKey },
-      },
-    });
-    if (already) { skipped++; continue; }
-
-    if (await isFrequencyCapped(seller.id)) { skipped++; continue; }
+    if (alreadySentSet.has(seller.id)) { skipped++; continue; }
+    if (cappedSet.has(seller.id)) { skipped++; continue; }
 
     const name = seller.profile?.displayName ?? "Vendeur";
     const activeListings = seller.listings.length;
@@ -526,23 +612,25 @@ export async function runFirstSaleCongrats(): Promise<{ sent: number; skipped: n
     take: 20,
   });
 
+  // Pre-filter by order count, then batch checks
+  const eligibleSellers = firstSaleUsers.filter((s) => s._count.sellerOrders <= 2);
+  const sellerIds = eligibleSellers.map((s) => s.id);
+
+  // Batch pre-fetch: 2 queries instead of 3N
+  const [alreadySentSet, cappedSet] = await Promise.all([
+    batchIdempotencyCheck(
+      "FIRST_SALE_CONGRATS",
+      sellerIds.map((uid) => ({ userId: uid, identifier: "" })),
+    ),
+    batchFrequencyCap(sellerIds),
+  ]);
+
   let sent = 0;
-  let skipped = 0;
+  let skipped = firstSaleUsers.length - eligibleSellers.length;
 
-  for (const seller of firstSaleUsers) {
-    // Seulement si c'est la première ou deuxième vente
-    if (seller._count.sellerOrders > 2) { skipped++; continue; }
-
-    const alreadySent = await prisma.aiAutonomyLog.findFirst({
-      where: {
-        agentName: "IA_MESSENGER",
-        actionType: "FIRST_SALE_CONGRATS",
-        targetUserId: seller.id,
-      },
-    });
-    if (alreadySent) { skipped++; continue; }
-
-    if (await isFrequencyCapped(seller.id)) { skipped++; continue; }
+  for (const seller of eligibleSellers) {
+    if (alreadySentSet.has(seller.id)) { skipped++; continue; }
+    if (cappedSet.has(seller.id)) { skipped++; continue; }
 
     const name = seller.profile?.displayName ?? "Vendeur";
     const htmlBody = `
@@ -602,6 +690,7 @@ export async function runFirstSaleCongrats(): Promise<{ sent: number; skipped: n
  * Cycle fréquent (2h) : rappels + re-engagement + first sale
  */
 async function runFrequentCycle(): Promise<void> {
+  if (!(await isMessengerEnabled())) return;
   try {
     const [reminders, reengagement, firstSale] = await Promise.all([
       runCouponExpiryReminders().catch((err) => { logger.error(err, "[Messenger] Coupon reminders failed"); return { sent: 0, skipped: 0 }; }),
@@ -626,6 +715,7 @@ async function runFrequentCycle(): Promise<void> {
  * Cycle quotidien (9h) : welcome + digest
  */
 async function runDailyCycle(): Promise<void> {
+  if (!(await isMessengerEnabled())) return;
   try {
     const [welcome, digest] = await Promise.all([
       runWelcomeFlow().catch((err) => { logger.error(err, "[Messenger] Welcome flow failed"); return { sent: 0, skipped: 0 }; }),

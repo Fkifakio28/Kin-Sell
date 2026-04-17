@@ -80,10 +80,10 @@ describe("runCouponExpiryReminders", () => {
     mockPrisma.incentiveCoupon.findMany.mockResolvedValue([
       { id: fakeId(), code: couponCode, discountPercent: 50, expiresAt, recipientUserId: userId },
     ]);
-    // Not already reminded
-    mockPrisma.aiAutonomyLog.findFirst.mockResolvedValue(null);
-    // Not frequency capped
-    mockPrisma.aiAutonomyLog.count.mockResolvedValue(0);
+    // Batch idempotency: not already reminded
+    mockPrisma.aiAutonomyLog.findMany.mockResolvedValue([]);
+    // Batch frequency cap: not capped
+    mockPrisma.aiAutonomyLog.groupBy.mockResolvedValue([]);
     // User for email
     mockPrisma.user.findUnique.mockResolvedValue({
       id: userId,
@@ -108,11 +108,15 @@ describe("runCouponExpiryReminders", () => {
 
   it("skips already-reminded coupons", async () => {
     const userId = fakeId();
+    const code = "OLD-CODE";
     mockPrisma.incentiveCoupon.findMany.mockResolvedValue([
-      { id: fakeId(), code: "OLD-CODE", discountPercent: 30, expiresAt: new Date(), recipientUserId: userId },
+      { id: fakeId(), code, discountPercent: 30, expiresAt: new Date(), recipientUserId: userId },
     ]);
-    // Already reminded
-    mockPrisma.aiAutonomyLog.findFirst.mockResolvedValue({ id: "existing" });
+    // Batch idempotency: already reminded
+    mockPrisma.aiAutonomyLog.findMany.mockResolvedValue([
+      { targetUserId: userId, decision: `Rappel: ${code} expire` },
+    ]);
+    mockPrisma.aiAutonomyLog.groupBy.mockResolvedValue([]);
 
     const result = await runCouponExpiryReminders();
     expect(result.sent).toBe(0);
@@ -124,10 +128,12 @@ describe("runCouponExpiryReminders", () => {
     mockPrisma.incentiveCoupon.findMany.mockResolvedValue([
       { id: fakeId(), code: "CAP-TEST", discountPercent: 50, expiresAt: new Date(), recipientUserId: userId },
     ]);
-    // Not already reminded
-    mockPrisma.aiAutonomyLog.findFirst.mockResolvedValue(null);
-    // Frequency capped (3 daily)
-    mockPrisma.aiAutonomyLog.count.mockResolvedValueOnce(3).mockResolvedValueOnce(3);
+    // Batch idempotency: not reminded
+    mockPrisma.aiAutonomyLog.findMany.mockResolvedValue([]);
+    // Batch frequency cap: daily capped
+    mockPrisma.aiAutonomyLog.groupBy
+      .mockResolvedValueOnce([{ targetUserId: userId, _count: 3 }]) // daily
+      .mockResolvedValueOnce([{ targetUserId: userId, _count: 3 }]); // weekly
 
     const result = await runCouponExpiryReminders();
     expect(result.sent).toBe(0);
@@ -147,8 +153,9 @@ describe("runInactiveUserReengagement", () => {
     mockPrisma.user.findMany.mockResolvedValue([
       { id: userId, email: "inactive@test.com", profile: { displayName: "Inactif" } },
     ]);
-    mockPrisma.aiAutonomyLog.findFirst.mockResolvedValue(null); // not yet sent
-    mockPrisma.aiAutonomyLog.count.mockResolvedValue(0); // not capped
+    // Batch: not yet sent, not capped
+    mockPrisma.aiAutonomyLog.findMany.mockResolvedValue([]);
+    mockPrisma.aiAutonomyLog.groupBy.mockResolvedValue([]);
     mockPrisma.user.findUnique.mockResolvedValue({
       id: userId,
       email: "inactive@test.com",
@@ -167,10 +174,15 @@ describe("runInactiveUserReengagement", () => {
 
   it("skips user already re-engaged this month", async () => {
     const userId = fakeId();
+    const monthKey = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
     mockPrisma.user.findMany.mockResolvedValue([
       { id: userId, email: "re@test.com", profile: { displayName: "Re" } },
     ]);
-    mockPrisma.aiAutonomyLog.findFirst.mockResolvedValue({ id: "exists" }); // already sent
+    // Batch idempotency: already sent
+    mockPrisma.aiAutonomyLog.findMany.mockResolvedValue([
+      { targetUserId: userId, decision: `Re-engagement ${monthKey}` },
+    ]);
+    mockPrisma.aiAutonomyLog.groupBy.mockResolvedValue([]);
 
     const result = await runInactiveUserReengagement();
     expect(result.sent).toBe(0);
@@ -190,8 +202,8 @@ describe("runWelcomeFlow", () => {
     mockPrisma.user.findMany.mockResolvedValue([
       { id: userId, email: "new@test.com", profile: { displayName: "Nouveau" }, role: "USER" },
     ]);
-    mockPrisma.aiAutonomyLog.findFirst.mockResolvedValue(null);
-    mockPrisma.aiAutonomyLog.count.mockResolvedValue(0);
+    mockPrisma.aiAutonomyLog.findMany.mockResolvedValue([]);
+    mockPrisma.aiAutonomyLog.groupBy.mockResolvedValue([]);
     mockPrisma.user.findUnique.mockResolvedValue({
       id: userId,
       email: "new@test.com",
@@ -213,8 +225,8 @@ describe("runWelcomeFlow", () => {
     mockPrisma.user.findMany.mockResolvedValue([
       { id: userId, email: "seller@test.com", profile: { displayName: "Vendeur" }, role: "BUSINESS" },
     ]);
-    mockPrisma.aiAutonomyLog.findFirst.mockResolvedValue(null);
-    mockPrisma.aiAutonomyLog.count.mockResolvedValue(0);
+    mockPrisma.aiAutonomyLog.findMany.mockResolvedValue([]);
+    mockPrisma.aiAutonomyLog.groupBy.mockResolvedValue([]);
     mockPrisma.user.findUnique.mockResolvedValue({
       id: userId,
       email: "seller@test.com",
@@ -224,7 +236,6 @@ describe("runWelcomeFlow", () => {
 
     const result = await runWelcomeFlow();
     expect(result.sent).toBe(1);
-    // Verify email includes seller-specific content
     expect(mockSendMail).toHaveBeenCalledWith(
       expect.objectContaining({
         html: expect.stringContaining("Publiez votre première annonce"),
@@ -233,10 +244,15 @@ describe("runWelcomeFlow", () => {
   });
 
   it("skips users already welcomed", async () => {
+    const userId = fakeId();
     mockPrisma.user.findMany.mockResolvedValue([
-      { id: fakeId(), email: "re@test.com", profile: { displayName: "Re" }, role: "USER" },
+      { id: userId, email: "re@test.com", profile: { displayName: "Re" }, role: "USER" },
     ]);
-    mockPrisma.aiAutonomyLog.findFirst.mockResolvedValue({ id: "exists" });
+    // Batch idempotency: already welcomed (any log entry for this userId matches)
+    mockPrisma.aiAutonomyLog.findMany.mockResolvedValue([
+      { targetUserId: userId, decision: "Welcome email sent to buyer" },
+    ]);
+    mockPrisma.aiAutonomyLog.groupBy.mockResolvedValue([]);
 
     const result = await runWelcomeFlow();
     expect(result.sent).toBe(0);
@@ -256,8 +272,8 @@ describe("runFirstSaleCongrats", () => {
     mockPrisma.user.findMany.mockResolvedValue([
       { id: userId, profile: { displayName: "Vendeur" }, _count: { sellerOrders: 1 } },
     ]);
-    mockPrisma.aiAutonomyLog.findFirst.mockResolvedValue(null);
-    mockPrisma.aiAutonomyLog.count.mockResolvedValue(0);
+    mockPrisma.aiAutonomyLog.findMany.mockResolvedValue([]);
+    mockPrisma.aiAutonomyLog.groupBy.mockResolvedValue([]);
     mockPrisma.user.findUnique.mockResolvedValue({
       id: userId,
       email: "seller@test.com",
@@ -278,6 +294,8 @@ describe("runFirstSaleCongrats", () => {
     mockPrisma.user.findMany.mockResolvedValue([
       { id: fakeId(), profile: { displayName: "Veteran" }, _count: { sellerOrders: 5 } },
     ]);
+    mockPrisma.aiAutonomyLog.findMany.mockResolvedValue([]);
+    mockPrisma.aiAutonomyLog.groupBy.mockResolvedValue([]);
 
     const result = await runFirstSaleCongrats();
     expect(result.sent).toBe(0);
@@ -313,11 +331,12 @@ describe("runWeeklyDigest", () => {
         id: userId,
         profile: { displayName: "Vendeur" },
         listings: [{ id: "l1" }, { id: "l2" }],
-        sellerOrders: [{ id: "o1", totalPriceCents: 5000 }],
+        sellerOrders: [{ id: "o1", totalUsdCents: 5000 }],
       },
     ]);
-    mockPrisma.aiAutonomyLog.findFirst.mockResolvedValue(null);
-    mockPrisma.aiAutonomyLog.count.mockResolvedValue(0);
+    // Batch: not yet sent, not capped
+    mockPrisma.aiAutonomyLog.findMany.mockResolvedValue([]);
+    mockPrisma.aiAutonomyLog.groupBy.mockResolvedValue([]);
     mockPrisma.user.findUnique.mockResolvedValue({
       id: userId,
       email: "seller@test.com",
