@@ -5,11 +5,13 @@
 import { prisma } from "../../shared/db/prisma.js";
 import { randomBytes } from "crypto";
 import { logger } from "../../shared/logger.js";
+import { sendGrantConvertedToCouponMessage } from "../ads/ia-messenger-promo.service.js";
 import type {
   CouponKind,
   CouponStatus,
   CouponTargetScope,
   GrantStatus,
+  IncentivePolicy,
   IncentiveSegment,
   RedemptionStatus,
   Prisma,
@@ -26,6 +28,12 @@ function generateCode(prefix = "KS"): string {
   return `${prefix}-${randomBytes(4).toString("hex").toUpperCase()}`;
 }
 
+/** Calculate discount amount from a percentage. */
+function calcDiscount(originalAmountCents: number, discountPercent: number) {
+  const discount = Math.round(originalAmountCents * (discountPercent / 100));
+  return { discount, final: Math.max(0, originalAmountCents - discount) };
+}
+
 /* ─── Quota helpers ─── */
 
 async function getOrCreateQuota(userId: string) {
@@ -37,12 +45,26 @@ async function getOrCreateQuota(userId: string) {
   });
 }
 
+/* ─── Policy with in-memory cache (5 min TTL) ─── */
+const _policyCache = new Map<string, { data: IncentivePolicy; ts: number }>();
+const POLICY_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
 async function getPolicy(segment: IncentiveSegment = "STANDARD") {
+  const cached = _policyCache.get(segment);
+  if (cached && Date.now() - cached.ts < POLICY_CACHE_TTL) return cached.data;
+
   const policy = await prisma.incentivePolicy.findUnique({
     where: { segment },
   });
   if (!policy) throw new Error(`No IncentivePolicy for segment ${segment}`);
+  _policyCache.set(segment, { data: policy, ts: Date.now() });
   return policy;
+}
+
+/** Invalidate policy cache (call after admin updates). */
+export function invalidatePolicyCache(segment?: IncentiveSegment) {
+  if (segment) _policyCache.delete(segment);
+  else _policyCache.clear();
 }
 
 /* ─── Validate a coupon code ─── */
@@ -55,6 +77,7 @@ export interface CouponPreview {
   targetScope: CouponTargetScope;
   valid: boolean;
   reason?: string;
+  expiresAt?: Date;
 }
 
 export async function validateCoupon(
@@ -74,6 +97,7 @@ export async function validateCoupon(
     kind: coupon?.kind ?? "PLAN_DISCOUNT",
     discountPercent: coupon?.discountPercent ?? null,
     targetScope: coupon?.targetScope ?? "ALL_PLANS",
+    expiresAt: coupon?.expiresAt ?? undefined,
   };
 
   if (!coupon) return { ...base, valid: false, reason: "INVALID_CODE" };
@@ -130,21 +154,15 @@ export async function previewCoupon(
 ): Promise<CouponPreviewResult> {
   const validation = await validateCoupon(userId, code, planCode, addonCode);
   const discountPercent = validation.discountPercent ?? 0;
-  const discountAmountUsdCents = validation.valid
-    ? Math.round(originalAmountUsdCents * (discountPercent / 100))
-    : 0;
-  const finalAmountUsdCents = Math.max(0, originalAmountUsdCents - discountAmountUsdCents);
-
-  const coupon = validation.valid
-    ? await prisma.incentiveCoupon.findUnique({ where: { code: code.trim().toUpperCase() }, select: { expiresAt: true } })
-    : null;
+  const { discount: discountAmountUsdCents, final: finalAmountUsdCents } = validation.valid
+    ? calcDiscount(originalAmountUsdCents, discountPercent)
+    : { discount: 0, final: originalAmountUsdCents };
 
   return {
     ...validation,
     originalAmountUsdCents,
     discountAmountUsdCents,
     finalAmountUsdCents,
-    expiresAt: coupon?.expiresAt ?? undefined,
   };
 }
 
@@ -165,13 +183,7 @@ export async function redeemCoupon(
   if (!preview.valid) throw new Error(preview.reason ?? "INVALID_COUPON");
 
   const discountPercent = preview.discountPercent ?? 0;
-  const discountAmountUsdCents = Math.round(
-    originalAmountUsdCents * (discountPercent / 100),
-  );
-  const finalAmountUsdCents = Math.max(
-    0,
-    originalAmountUsdCents - discountAmountUsdCents,
-  );
+  const { discount: discountAmountUsdCents, final: finalAmountUsdCents } = calcDiscount(originalAmountUsdCents, discountPercent);
 
   // Transactional: create redemption + update coupon + update quota
   const result = await prisma.$transaction(async (tx) => {
@@ -258,8 +270,7 @@ export async function applyCouponToOrderTx(
   if (coupon.recipientUserId && coupon.recipientUserId !== userId) throw new Error("NOT_RECIPIENT");
 
   const discountPercent = coupon.discountPercent ?? 0;
-  const discountAmountUsdCents = Math.round(originalAmountUsdCents * (discountPercent / 100));
-  const finalAmountUsdCents = Math.max(0, originalAmountUsdCents - discountAmountUsdCents);
+  const { discount: discountAmountUsdCents, final: finalAmountUsdCents } = calcDiscount(originalAmountUsdCents, discountPercent);
 
   const redemption = await tx.incentiveCouponRedemption.create({
     data: {
@@ -695,9 +706,10 @@ export async function recordGrowthEvent(
 
       // Notify user via IA Messager
       try {
-        const { sendGrantConvertedToCouponMessage } = await import("../ads/ia-messenger-promo.service.js");
         await sendGrantConvertedToCouponMessage(userId, grantId, coupon.code, grant.discountPercent, coupon.expiresAt);
-      } catch { /* messenger unavailable */ }
+      } catch (err) {
+        logger.warn({ err, grantId, userId }, "[Incentive] Failed to notify grant conversion");
+      }
     }
   }
 
@@ -934,6 +946,7 @@ export async function updatePolicy(
   });
 
   logger.info({ segment, adminUserId, data }, "[Incentive] Policy updated by admin");
+  invalidatePolicyCache(segment);
   return updated;
 }
 
@@ -957,6 +970,7 @@ export async function setGlobalPause(adminUserId: string, paused: boolean) {
       success: true,
     },
   });
+  invalidatePolicyCache(); // Clear all segments
   return { paused };
 }
 

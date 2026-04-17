@@ -14,6 +14,33 @@ import { sendMail } from "../../shared/email/mailer.js";
 import { sendPushToUser } from "../notifications/push.service.js";
 import { logger } from "../../shared/logger.js";
 
+/** Check idempotency via aiAutonomyLog — returns true if already sent */
+async function hasAlreadySent(actionType: string, targetUserId: string, identifier: string): Promise<boolean> {
+  const existing = await prisma.aiAutonomyLog.findFirst({
+    where: {
+      agentName: "IA_MESSENGER",
+      actionType,
+      targetUserId,
+      decision: { contains: identifier },
+    },
+  });
+  return !!existing;
+}
+
+/** Log incentive messaging action */
+async function logIncentiveAction(actionType: string, targetUserId: string, decision: string, reasoning: string): Promise<void> {
+  await prisma.aiAutonomyLog.create({
+    data: {
+      agentName: "IA_MESSENGER",
+      actionType,
+      targetUserId,
+      decision,
+      reasoning,
+      success: true,
+    },
+  });
+}
+
 // ─────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────
@@ -426,15 +453,7 @@ export async function sendCouponIncentiveMessage(
   trigger: string,
 ): Promise<boolean> {
   // Idempotency : pas de double message pour le même coupon
-  const existing = await prisma.aiAutonomyLog.findFirst({
-    where: {
-      agentName: "IA_MESSENGER",
-      actionType: "INCENTIVE_COUPON",
-      targetUserId: recipientId,
-      decision: { contains: couponCode },
-    },
-  });
-  if (existing) return false;
+  if (await hasAlreadySent("INCENTIVE_COUPON", recipientId, couponCode)) return false;
 
   const htmlBody = `
     <p>Bonne nouvelle ! Vous avez reçu un code promo exclusif Kin-Sell.</p>
@@ -464,16 +483,11 @@ export async function sendCouponIncentiveMessage(
     );
   }
 
-  await prisma.aiAutonomyLog.create({
-    data: {
-      agentName: "IA_MESSENGER",
-      actionType: "INCENTIVE_COUPON",
-      targetUserId: recipientId,
-      decision: `Coupon: ${couponCode} | -${discountPercent}%`,
-      reasoning: `Trigger: ${trigger} | Expire: ${expiresAt.toISOString()}`,
-      success: true,
-    },
-  });
+  await logIncentiveAction(
+    "INCENTIVE_COUPON", recipientId,
+    `Coupon: ${couponCode} | -${discountPercent}%`,
+    `Trigger: ${trigger} | Expire: ${expiresAt.toISOString()}`,
+  );
 
   logger.info({ recipientId, couponCode, discountPercent, trigger }, "[IA Messenger] Coupon incentive message envoyé");
   return true;
@@ -490,15 +504,7 @@ export async function sendGrowthGrantMessage(
   discountPercent: number | null,
   trigger: string,
 ): Promise<boolean> {
-  const existing = await prisma.aiAutonomyLog.findFirst({
-    where: {
-      agentName: "IA_MESSENGER",
-      actionType: "INCENTIVE_GRANT",
-      targetUserId: recipientId,
-      decision: { contains: grantId },
-    },
-  });
-  if (existing) return false;
+  if (await hasAlreadySent("INCENTIVE_GRANT", recipientId, grantId)) return false;
 
   const kindLabel = grantKind === "CPC" ? "Clic" : grantKind === "CPI" ? "Installation" : "Action";
   const discountLabel = discountPercent ? `-${discountPercent}%` : "Avantage";
@@ -530,16 +536,11 @@ export async function sendGrowthGrantMessage(
     );
   }
 
-  await prisma.aiAutonomyLog.create({
-    data: {
-      agentName: "IA_MESSENGER",
-      actionType: "INCENTIVE_GRANT",
-      targetUserId: recipientId,
-      decision: `Grant: ${grantId} | ${grantKind} | ${discountLabel}`,
-      reasoning: `Trigger: ${trigger}`,
-      success: true,
-    },
-  });
+  await logIncentiveAction(
+    "INCENTIVE_GRANT", recipientId,
+    `Grant: ${grantId} | ${grantKind} | ${discountLabel}`,
+    `Trigger: ${trigger}`,
+  );
 
   logger.info({ recipientId, grantId, grantKind, discountPercent, trigger }, "[IA Messenger] Growth grant message envoyé");
   return true;
@@ -556,15 +557,7 @@ export async function sendGrantConvertedToCouponMessage(
   discountPercent: number,
   expiresAt: Date,
 ): Promise<boolean> {
-  const existing = await prisma.aiAutonomyLog.findFirst({
-    where: {
-      agentName: "IA_MESSENGER",
-      actionType: "GRANT_CONVERTED",
-      targetUserId: recipientId,
-      decision: { contains: grantId },
-    },
-  });
-  if (existing) return false;
+  if (await hasAlreadySent("GRANT_CONVERTED", recipientId, grantId)) return false;
 
   const htmlBody = `
     <p>Votre avantage a été converti en code promo !</p>
@@ -593,16 +586,11 @@ export async function sendGrantConvertedToCouponMessage(
     );
   }
 
-  await prisma.aiAutonomyLog.create({
-    data: {
-      agentName: "IA_MESSENGER",
-      actionType: "GRANT_CONVERTED",
-      targetUserId: recipientId,
-      decision: `Grant→Coupon: ${grantId} → ${couponCode} | -${discountPercent}%`,
-      reasoning: `Expire: ${expiresAt.toISOString()}`,
-      success: true,
-    },
-  });
+  await logIncentiveAction(
+    "GRANT_CONVERTED", recipientId,
+    `Grant→Coupon: ${grantId} → ${couponCode} | -${discountPercent}%`,
+    `Expire: ${expiresAt.toISOString()}`,
+  );
 
   logger.info({ recipientId, grantId, couponCode, discountPercent }, "[IA Messenger] Grant→Coupon message envoyé");
   return true;
