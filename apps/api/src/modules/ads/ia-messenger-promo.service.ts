@@ -79,10 +79,14 @@ export async function sendPromoEmail(
   });
   if (!user?.email) return false;
 
+  // Tenter d'attacher un coupon (gate 1/10)
+  const coupon = await maybeAttachCoupon(recipientId, reason);
+  const bodyWithCoupon = coupon ? htmlBody + coupon.html : htmlBody;
+
   const delivered = await sendMail({
     to: user.email,
     subject: `[Kin-Sell] ${subject}`,
-    html: wrapInKinSellTemplate(subject, htmlBody),
+    html: wrapInKinSellTemplate(subject, bodyWithCoupon),
   });
 
   // Log the promo
@@ -181,10 +185,14 @@ export async function promoteListingBoost(listingId: string): Promise<number> {
 
   let sent = 0;
   for (const buyer of potentialBuyers) {
+    // Tenter d'attacher un coupon code dans le push
+    const coupon = await maybeAttachCoupon(buyer.id, "BOOST_PROMO");
+    const couponSuffix = coupon ? ` 🎁 Code: ${coupon.code}` : "";
+
     const sent1 = await sendPromoPush(
       buyer.id,
       `Nouveau dans ${listing.category}`,
-      `"${listing.title}" est maintenant disponible${listing.city ? ` à ${listing.city}` : ""} ! Découvrez cette offre sponsorisée.`,
+      `"${listing.title}" est maintenant disponible${listing.city ? ` à ${listing.city}` : ""} ! Découvrez cette offre sponsorisée.${couponSuffix}`,
       "BOOST_PROMO",
       listingId,
     );
@@ -345,6 +353,42 @@ export async function getPromoCampaignStats(): Promise<PromoCampaignStats> {
 // Template email Kin-Sell
 // ─────────────────────────────────────────────
 
+/**
+ * Génère un coupon personnalisé pour un destinataire de promo.
+ * Gate 1/10 : seuls ~10 % des destinataires reçoivent un coupon.
+ * Retourne le code coupon + HTML à insérer, ou null.
+ */
+async function maybeAttachCoupon(
+  recipientId: string,
+  reason: PromoReason,
+): Promise<{ code: string; html: string } | null> {
+  // Gate 1/10
+  if (Math.random() > 0.10) return null;
+
+  try {
+    const { selectIncentiveForUser } = await import("../incentives/incentive.service.js");
+
+    // selectIncentiveForUser applique déjà la policy gate + quota + crée le coupon
+    const selection = await selectIncentiveForUser(recipientId);
+    if (!selection) return null;
+
+    const html = `
+      <div style="background:rgba(111,88,255,0.15);border:1px solid rgba(111,88,255,0.3);border-radius:8px;padding:16px;margin:16px 0;text-align:center;">
+        <p style="color:#6f58ff;font-size:14px;margin:0 0 8px;">🎁 Code promo exclusif</p>
+        <p style="color:#fff;font-size:22px;font-weight:bold;margin:0;letter-spacing:2px;">${selection.couponCode}</p>
+        <p style="color:rgba(255,255,255,0.6);font-size:12px;margin:8px 0 0;">
+          -${selection.discountPercent}% · Expire le ${selection.expiresAt.toLocaleDateString("fr-FR")}
+        </p>
+      </div>`;
+
+    logger.info({ recipientId, code: selection.couponCode, discountPercent: selection.discountPercent, reason }, "[IA Messenger] Coupon attaché à promo");
+    return { code: selection.couponCode, html };
+  } catch (err) {
+    logger.warn({ err, recipientId, reason }, "[IA Messenger] Erreur génération coupon promo");
+    return null;
+  }
+}
+
 function wrapInKinSellTemplate(title: string, body: string): string {
   return `
     <div style="font-family:'Segoe UI',Arial,sans-serif;max-width:560px;margin:0 auto;padding:0;background:#120b2b;border-radius:12px;overflow:hidden;">
@@ -364,4 +408,202 @@ function wrapInKinSellTemplate(title: string, body: string): string {
       </div>
     </div>
   `;
+}
+
+// ─────────────────────────────────────────────
+// Dedicated incentive notification templates
+// ─────────────────────────────────────────────
+
+/**
+ * Envoie une notification coupon incentive distribué.
+ * Idempotent : vérifie qu'aucun log identique n'existe.
+ */
+export async function sendCouponIncentiveMessage(
+  recipientId: string,
+  couponCode: string,
+  discountPercent: number,
+  expiresAt: Date,
+  trigger: string,
+): Promise<boolean> {
+  // Idempotency : pas de double message pour le même coupon
+  const existing = await prisma.aiAutonomyLog.findFirst({
+    where: {
+      agentName: "IA_MESSENGER",
+      actionType: "INCENTIVE_COUPON",
+      targetUserId: recipientId,
+      decision: { contains: couponCode },
+    },
+  });
+  if (existing) return false;
+
+  const htmlBody = `
+    <p>Bonne nouvelle ! Vous avez reçu un code promo exclusif Kin-Sell.</p>
+    <div style="background:rgba(111,88,255,0.15);border:1px solid rgba(111,88,255,0.3);border-radius:8px;padding:16px;margin:16px 0;text-align:center;">
+      <p style="color:#6f58ff;font-size:14px;margin:0 0 8px;">🎁 Votre code promo</p>
+      <p style="color:#fff;font-size:24px;font-weight:bold;margin:0;letter-spacing:2px;">${couponCode}</p>
+      <p style="color:rgba(255,255,255,0.6);font-size:13px;margin:8px 0 0;">
+        -${discountPercent}% · Expire le ${expiresAt.toLocaleDateString("fr-FR")}
+      </p>
+    </div>
+    <p>Utilisez-le sur la page <a href="https://kin-sell.com/forfaits" style="color:#6f58ff;">Forfaits</a> au moment du paiement.</p>`;
+
+  const emailSent = await sendPromoEmail(
+    recipientId,
+    `🎁 Code promo -${discountPercent}% pour vous !`,
+    htmlBody,
+    "BOOST_PROMO" as PromoReason,
+  );
+
+  // Fallback push si email échoue
+  if (!emailSent) {
+    await sendPromoPush(
+      recipientId,
+      `Code promo -${discountPercent}%`,
+      `Utilisez ${couponCode} pour obtenir -${discountPercent}% sur Kin-Sell ! Expire le ${expiresAt.toLocaleDateString("fr-FR")}`,
+      "BOOST_PROMO" as PromoReason,
+    );
+  }
+
+  await prisma.aiAutonomyLog.create({
+    data: {
+      agentName: "IA_MESSENGER",
+      actionType: "INCENTIVE_COUPON",
+      targetUserId: recipientId,
+      decision: `Coupon: ${couponCode} | -${discountPercent}%`,
+      reasoning: `Trigger: ${trigger} | Expire: ${expiresAt.toISOString()}`,
+      success: true,
+    },
+  });
+
+  logger.info({ recipientId, couponCode, discountPercent, trigger }, "[IA Messenger] Coupon incentive message envoyé");
+  return true;
+}
+
+/**
+ * Envoie une notification grant CPC/CPI/CPA émis.
+ * Idempotent par grantId.
+ */
+export async function sendGrowthGrantMessage(
+  recipientId: string,
+  grantId: string,
+  grantKind: string,
+  discountPercent: number | null,
+  trigger: string,
+): Promise<boolean> {
+  const existing = await prisma.aiAutonomyLog.findFirst({
+    where: {
+      agentName: "IA_MESSENGER",
+      actionType: "INCENTIVE_GRANT",
+      targetUserId: recipientId,
+      decision: { contains: grantId },
+    },
+  });
+  if (existing) return false;
+
+  const kindLabel = grantKind === "CPC" ? "Clic" : grantKind === "CPI" ? "Installation" : "Action";
+  const discountLabel = discountPercent ? `-${discountPercent}%` : "Avantage";
+
+  const htmlBody = `
+    <p>Félicitations ! Votre activité sur Kin-Sell vous a permis d'obtenir un avantage.</p>
+    <div style="background:rgba(111,88,255,0.15);border:1px solid rgba(111,88,255,0.3);border-radius:8px;padding:16px;margin:16px 0;text-align:center;">
+      <p style="color:#6f58ff;font-size:14px;margin:0 0 8px;">🚀 Avantage ${kindLabel}</p>
+      <p style="color:#fff;font-size:20px;font-weight:bold;margin:0;">${discountLabel}</p>
+      <p style="color:rgba(255,255,255,0.5);font-size:12px;margin:8px 0 0;">
+        Complétez les étapes pour convertir cet avantage en code promo.
+      </p>
+    </div>
+    <p>Continuez à utiliser Kin-Sell pour débloquer plus d'avantages !</p>`;
+
+  const emailSent = await sendPromoEmail(
+    recipientId,
+    `🚀 Avantage ${kindLabel} débloqué !`,
+    htmlBody,
+    "BOOST_PROMO" as PromoReason,
+  );
+
+  if (!emailSent) {
+    await sendPromoPush(
+      recipientId,
+      `Avantage ${kindLabel} débloqué`,
+      `Vous avez débloqué un avantage ${discountLabel} sur Kin-Sell ! Complétez les étapes pour le convertir.`,
+      "BOOST_PROMO" as PromoReason,
+    );
+  }
+
+  await prisma.aiAutonomyLog.create({
+    data: {
+      agentName: "IA_MESSENGER",
+      actionType: "INCENTIVE_GRANT",
+      targetUserId: recipientId,
+      decision: `Grant: ${grantId} | ${grantKind} | ${discountLabel}`,
+      reasoning: `Trigger: ${trigger}`,
+      success: true,
+    },
+  });
+
+  logger.info({ recipientId, grantId, grantKind, discountPercent, trigger }, "[IA Messenger] Growth grant message envoyé");
+  return true;
+}
+
+/**
+ * Envoie une notification quand un grant est converti en coupon.
+ * Idempotent par grantId.
+ */
+export async function sendGrantConvertedToCouponMessage(
+  recipientId: string,
+  grantId: string,
+  couponCode: string,
+  discountPercent: number,
+  expiresAt: Date,
+): Promise<boolean> {
+  const existing = await prisma.aiAutonomyLog.findFirst({
+    where: {
+      agentName: "IA_MESSENGER",
+      actionType: "GRANT_CONVERTED",
+      targetUserId: recipientId,
+      decision: { contains: grantId },
+    },
+  });
+  if (existing) return false;
+
+  const htmlBody = `
+    <p>Votre avantage a été converti en code promo !</p>
+    <div style="background:rgba(111,88,255,0.15);border:1px solid rgba(111,88,255,0.3);border-radius:8px;padding:16px;margin:16px 0;text-align:center;">
+      <p style="color:#6f58ff;font-size:14px;margin:0 0 8px;">🎉 Code promo généré</p>
+      <p style="color:#fff;font-size:24px;font-weight:bold;margin:0;letter-spacing:2px;">${couponCode}</p>
+      <p style="color:rgba(255,255,255,0.6);font-size:13px;margin:8px 0 0;">
+        -${discountPercent}% · Expire le ${expiresAt.toLocaleDateString("fr-FR")}
+      </p>
+    </div>
+    <p>Rendez-vous sur <a href="https://kin-sell.com/forfaits" style="color:#6f58ff;">Forfaits</a> pour l'utiliser.</p>`;
+
+  const emailSent = await sendPromoEmail(
+    recipientId,
+    `🎉 Votre avantage converti en code -${discountPercent}% !`,
+    htmlBody,
+    "BOOST_PROMO" as PromoReason,
+  );
+
+  if (!emailSent) {
+    await sendPromoPush(
+      recipientId,
+      `Code promo -${discountPercent}% généré`,
+      `Votre avantage est devenu le code ${couponCode} (-${discountPercent}%) ! Expire le ${expiresAt.toLocaleDateString("fr-FR")}`,
+      "BOOST_PROMO" as PromoReason,
+    );
+  }
+
+  await prisma.aiAutonomyLog.create({
+    data: {
+      agentName: "IA_MESSENGER",
+      actionType: "GRANT_CONVERTED",
+      targetUserId: recipientId,
+      decision: `Grant→Coupon: ${grantId} → ${couponCode} | -${discountPercent}%`,
+      reasoning: `Expire: ${expiresAt.toISOString()}`,
+      success: true,
+    },
+  });
+
+  logger.info({ recipientId, grantId, couponCode, discountPercent }, "[IA Messenger] Grant→Coupon message envoyé");
+  return true;
 }

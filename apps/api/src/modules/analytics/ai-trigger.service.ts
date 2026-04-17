@@ -18,6 +18,74 @@ import { prisma } from "../../shared/db/prisma.js";
 import { getMarketMedian, computePricePosition } from "../../shared/market/market-shared.js";
 import { HttpError } from "../../shared/errors/http-error.js";
 import { computeSellerProfile, generateSmartOffers, type SellerProfile, type SmartOffer } from "../ads/ai-ads-engine.service.js";
+import { logger } from "../../shared/logger.js";
+
+// ─────────────────────────────────────────────
+// Incentive branching — idempotent per event
+// ─────────────────────────────────────────────
+
+async function hasRecentIncentiveForEvent(userId: string, eventKey: string): Promise<boolean> {
+  const existing = await prisma.growthIncentiveEvent.findFirst({
+    where: {
+      userId,
+      metadata: { path: ["eventKey"], equals: eventKey },
+    },
+  });
+  return !!existing;
+}
+
+/**
+ * Tente d'attacher un coupon incentive au moment d'un trigger IA ADS.
+ * Gate 1/10, quotas, etc. sont gérés par selectIncentiveForUser.
+ * Retourne les données à enrichir dans actionData, ou null.
+ */
+async function tryAttachIncentiveCoupon(
+  userId: string,
+  eventKey: string,
+  segment?: "STANDARD" | "TESTER",
+): Promise<{ couponCode: string; discountPercent: number; expiresAt: Date } | null> {
+  if (await hasRecentIncentiveForEvent(userId, eventKey)) return null;
+  try {
+    const { selectIncentiveForUser } = await import("../incentives/incentive.service.js");
+    const result = await selectIncentiveForUser(userId, { segment });
+    if (!result) return null;
+    // Log idempotency marker
+    await prisma.growthIncentiveEvent.create({
+      data: {
+        grantId: null as any, // no grant for coupon-only
+        userId,
+        eventType: "coupon_attached",
+        metadata: { eventKey, couponCode: result.couponCode },
+      },
+    });
+    return { couponCode: result.couponCode, discountPercent: result.discountPercent, expiresAt: result.expiresAt };
+  } catch (err) {
+    logger.warn({ err, userId, eventKey }, "[AI-Trigger] Erreur incentive coupon");
+    return null;
+  }
+}
+
+/**
+ * Tente d'émettre un growth grant CPC/CPI/CPA au moment d'un trigger.
+ * Gate 1/10, quotas gérés par emitGrowthGrant.
+ */
+async function tryEmitGrowthGrant(
+  userId: string,
+  kind: "CPC" | "CPI" | "CPA",
+  eventKey: string,
+  metadata?: Record<string, unknown>,
+): Promise<{ grantId: string; grantKind: string; discountPercent: number | null; expiresAt: Date } | null> {
+  if (await hasRecentIncentiveForEvent(userId, eventKey)) return null;
+  try {
+    const { emitGrowthGrant } = await import("../incentives/incentive.service.js");
+    const result = await emitGrowthGrant(userId, kind, { metadata: { ...metadata, eventKey } });
+    if (!result) return null;
+    return { grantId: result.grantId, grantKind: result.kind, discountPercent: result.discountPercent, expiresAt: result.expiresAt };
+  } catch (err) {
+    logger.warn({ err, userId, kind, eventKey }, "[AI-Trigger] Erreur growth grant");
+    return null;
+  }
+}
 
 // ─────────────────────────────────────────────
 // Helpers
@@ -156,10 +224,21 @@ export async function onListingPublished(userId: string, listingId: string) {
       listingCategory: listing.category,
     });
 
+    // ── Incentive branching : coupon + CPI grant ──
+    const incentiveEventKey = `listing_published:${listingId}`;
+    const couponData = await tryAttachIncentiveCoupon(userId, incentiveEventKey);
+    const grantData = await tryEmitGrowthGrant(userId, "CPI", incentiveEventKey, { listingId, source: "listing_published" });
+
     const results = [];
     for (const offer of smartOffers) {
       // Anti-spam par triggerType
       if (await hasRecentRecommendation(userId, offer.triggerType, 24)) continue;
+      // Enrichir actionData avec incentive data
+      const enrichedActionData = {
+        ...offer.actionData,
+        ...(couponData ? { couponCode: couponData.couponCode, discountPercent: couponData.discountPercent, couponExpiresAt: couponData.expiresAt } : {}),
+        ...(grantData ? { grantId: grantData.grantId, grantKind: grantData.grantKind, grantDiscountPercent: grantData.discountPercent } : {}),
+      };
       const rec = await createRecommendation({
         engineKey: offer.engineKey,
         userId: ctx.user.id,
@@ -167,14 +246,23 @@ export async function onListingPublished(userId: string, listingId: string) {
         accountType: ctx.isBusiness ? "BUSINESS" : "USER",
         triggerType: offer.triggerType,
         title: offer.title,
-        message: offer.message,
+        message: couponData ? `${offer.message}\n\n🎁 Code promo : ${couponData.couponCode} (-${couponData.discountPercent}%)` : offer.message,
         actionType: offer.actionType,
         actionTarget: offer.actionTarget,
-        actionData: offer.actionData,
+        actionData: enrichedActionData,
         priority: offer.priority,
         expiresInHours: offer.expiresInHours,
       });
       results.push(rec);
+    }
+
+    // ── Notifier via IA Messager si coupon ou grant distribué ──
+    if (couponData || grantData) {
+      try {
+        const messenger = await import("../ads/ia-messenger-promo.service.js");
+        if (couponData) await messenger.sendCouponIncentiveMessage(userId, couponData.couponCode, couponData.discountPercent, couponData.expiresAt, "LISTING_PUBLISHED");
+        if (grantData) await messenger.sendGrowthGrantMessage(userId, grantData.grantId, grantData.grantKind, grantData.discountPercent, "LISTING_PUBLISHED");
+      } catch { /* messenger unavailable */ }
     }
 
     // Toujours ajouter l'info prix marché sur le premier résultat
@@ -314,12 +402,22 @@ export async function onSaleCompleted(userId: string, orderId: string) {
 
   const results: Array<Awaited<ReturnType<typeof createRecommendation>>> = [];
 
+  // ── Incentive branching : coupon + CPA grant on sale ──
+  const incentiveEventKey = `sale_completed:${orderId}`;
+  const couponData = await tryAttachIncentiveCoupon(userId, incentiveEventKey);
+  const grantData = await tryEmitGrowthGrant(userId, "CPA", incentiveEventKey, { orderId, source: "sale_completed" });
+
   // ── Moteur intelligent : profiler le vendeur et générer des offres adaptées ──
   const profile = await computeSellerProfile(userId);
   if (profile) {
     const smartOffers = await generateSmartOffers(profile, { event: "SALE_COMPLETED" });
     for (const offer of smartOffers) {
       if (await hasRecentRecommendation(userId, offer.triggerType, 168)) continue;
+      const enrichedActionData = {
+        ...offer.actionData,
+        ...(couponData ? { couponCode: couponData.couponCode, discountPercent: couponData.discountPercent, couponExpiresAt: couponData.expiresAt } : {}),
+        ...(grantData ? { grantId: grantData.grantId, grantKind: grantData.grantKind } : {}),
+      };
       const rec = await createRecommendation({
         engineKey: offer.engineKey,
         userId: ctx.user.id,
@@ -327,15 +425,25 @@ export async function onSaleCompleted(userId: string, orderId: string) {
         accountType: ctx.isBusiness ? "BUSINESS" : "USER",
         triggerType: offer.triggerType,
         title: offer.title,
-        message: offer.message,
+        message: couponData ? `${offer.message}\n\n🎁 Code promo : ${couponData.couponCode} (-${couponData.discountPercent}%)` : offer.message,
         actionType: offer.actionType,
         actionTarget: offer.actionTarget,
-        actionData: offer.actionData,
+        actionData: enrichedActionData,
         priority: offer.priority,
         expiresInHours: offer.expiresInHours,
       });
       results.push(rec);
     }
+
+    // Notifier via IA Messager
+    if (couponData || grantData) {
+      try {
+        const messenger = await import("../ads/ia-messenger-promo.service.js");
+        if (couponData) await messenger.sendCouponIncentiveMessage(userId, couponData.couponCode, couponData.discountPercent, couponData.expiresAt, "SALE_COMPLETED");
+        if (grantData) await messenger.sendGrowthGrantMessage(userId, grantData.grantId, grantData.grantKind, grantData.discountPercent, "SALE_COMPLETED");
+      } catch { /* messenger unavailable */ }
+    }
+
     if (results.length > 0) return results;
   }
 
@@ -438,10 +546,18 @@ export async function checkStagnation(userId: string) {
   // ── Moteur intelligent : profiler et proposer l'offre adaptée ──
   const profile = await computeSellerProfile(userId);
   if (profile && profile.hasStagnantListings) {
+    // ── Incentive branching : coupon pour relancer ──
+    const incentiveEventKey = `stagnation_check:${userId}:${new Date().toISOString().slice(0, 10)}`;
+    const couponData = await tryAttachIncentiveCoupon(userId, incentiveEventKey);
+
     const smartOffers = await generateSmartOffers(profile, { event: "STAGNATION_CHECK" });
     const results = [];
     for (const offer of smartOffers) {
       if (await hasRecentRecommendation(userId, offer.triggerType, 168)) continue;
+      const enrichedActionData = {
+        ...offer.actionData,
+        ...(couponData ? { couponCode: couponData.couponCode, discountPercent: couponData.discountPercent, couponExpiresAt: couponData.expiresAt } : {}),
+      };
       const rec = await createRecommendation({
         engineKey: offer.engineKey,
         userId: ctx.user.id,
@@ -449,14 +565,20 @@ export async function checkStagnation(userId: string) {
         accountType: ctx.isBusiness ? "BUSINESS" : "USER",
         triggerType: offer.triggerType,
         title: offer.title,
-        message: offer.message,
+        message: couponData ? `${offer.message}\n\n🎁 Code promo : ${couponData.couponCode} (-${couponData.discountPercent}%)` : offer.message,
         actionType: offer.actionType,
         actionTarget: offer.actionTarget,
-        actionData: offer.actionData,
+        actionData: enrichedActionData,
         priority: offer.priority,
         expiresInHours: offer.expiresInHours,
       });
       results.push(rec);
+    }
+    if (couponData) {
+      try {
+        const messenger = await import("../ads/ia-messenger-promo.service.js");
+        await messenger.sendCouponIncentiveMessage(userId, couponData.couponCode, couponData.discountPercent, couponData.expiresAt, "STAGNATION_CHECK");
+      } catch { /* */ }
     }
     if (results.length > 0) return results[0];
   }
@@ -541,8 +663,18 @@ export async function runPeriodicSmartCheck(userId: string) {
   const smartOffers = await generateSmartOffers(profile, { event: "PERIODIC" });
   const results = [];
 
+  // ── Incentive branching : coupon + CPC grant ──
+  const incentiveEventKey = `periodic_check:${userId}:${new Date().toISOString().slice(0, 10)}`;
+  const couponData = await tryAttachIncentiveCoupon(userId, incentiveEventKey);
+  const grantData = await tryEmitGrowthGrant(userId, "CPC", incentiveEventKey, { source: "periodic_smart_check" });
+
   for (const offer of smartOffers) {
     if (await hasRecentRecommendation(userId, offer.triggerType, 168)) continue;
+    const enrichedActionData = {
+      ...offer.actionData,
+      ...(couponData ? { couponCode: couponData.couponCode, discountPercent: couponData.discountPercent, couponExpiresAt: couponData.expiresAt } : {}),
+      ...(grantData ? { grantId: grantData.grantId, grantKind: grantData.grantKind } : {}),
+    };
     const rec = await createRecommendation({
       engineKey: offer.engineKey,
       userId: ctx.user.id,
@@ -550,14 +682,22 @@ export async function runPeriodicSmartCheck(userId: string) {
       accountType: ctx.isBusiness ? "BUSINESS" : "USER",
       triggerType: offer.triggerType,
       title: offer.title,
-      message: offer.message,
+      message: couponData ? `${offer.message}\n\n🎁 Code promo : ${couponData.couponCode} (-${couponData.discountPercent}%)` : offer.message,
       actionType: offer.actionType,
       actionTarget: offer.actionTarget,
-      actionData: offer.actionData,
+      actionData: enrichedActionData,
       priority: offer.priority,
       expiresInHours: offer.expiresInHours,
     });
     results.push(rec);
+  }
+
+  if (couponData || grantData) {
+    try {
+      const messenger = await import("../ads/ia-messenger-promo.service.js");
+      if (couponData) await messenger.sendCouponIncentiveMessage(userId, couponData.couponCode, couponData.discountPercent, couponData.expiresAt, "PERIODIC");
+      if (grantData) await messenger.sendGrowthGrantMessage(userId, grantData.grantId, grantData.grantKind, grantData.discountPercent, "PERIODIC");
+    } catch { /* */ }
   }
 
   return results;

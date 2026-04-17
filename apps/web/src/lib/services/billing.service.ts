@@ -87,6 +87,19 @@ export const billing = {
       valid: boolean;
       reason?: string;
     }>("/incentives/coupons/validate", { method: "POST", body }),
+  previewCoupon: (body: { code: string; planCode: string; billingCycle?: string }) =>
+    request<{
+      couponId: string;
+      code: string;
+      kind: string;
+      discountPercent: number | null;
+      targetScope: string;
+      valid: boolean;
+      reason?: string;
+      originalAmountUsdCents: number;
+      discountAmountUsdCents: number;
+      finalAmountUsdCents: number;
+    }>("/billing/coupons/preview", { method: "POST", body }),
   // activateOrder supprimé : l'activation se fait uniquement via PayPal capture ou validation admin
   // changePlan et toggleAddon supprimés : routes SUPER_ADMIN uniquement, pas d'usage frontend
 };

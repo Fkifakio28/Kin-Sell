@@ -8,6 +8,7 @@ import { z } from "zod";
 import { requireAuth, requireRoles, type AuthenticatedRequest } from "../../shared/auth/auth-middleware.js";
 import { asyncHandler } from "../../shared/utils/async-handler.js";
 import { Role } from "../../types/roles.js";
+import { rateLimit, RateLimits } from "../../shared/middleware/rate-limit.middleware.js";
 import * as incentiveService from "./incentive.service.js";
 
 const router = Router();
@@ -25,11 +26,38 @@ const validateSchema = z.object({
 router.post(
   "/coupons/validate",
   requireAuth,
+  rateLimit(RateLimits.COUPON_VALIDATE),
   asyncHandler(async (request: AuthenticatedRequest, response) => {
     const { code, planCode, addonCode } = validateSchema.parse(request.body);
     const result = await incentiveService.validateCoupon(
       request.auth!.userId,
       code,
+      planCode,
+      addonCode,
+    );
+    response.json(result);
+  }),
+);
+
+/* ── PUBLIC — preview coupon (calcul prix final) ── */
+
+const previewSchema = z.object({
+  code: z.string().min(3).max(30),
+  originalAmountUsdCents: z.number().int().min(0),
+  planCode: z.string().optional(),
+  addonCode: z.string().optional(),
+});
+
+router.post(
+  "/coupons/preview",
+  requireAuth,
+  rateLimit(RateLimits.COUPON_VALIDATE),
+  asyncHandler(async (request: AuthenticatedRequest, response) => {
+    const { code, originalAmountUsdCents, planCode, addonCode } = previewSchema.parse(request.body);
+    const result = await incentiveService.previewCoupon(
+      request.auth!.userId,
+      code,
+      originalAmountUsdCents,
       planCode,
       addonCode,
     );
@@ -185,6 +213,246 @@ router.get(
     const userId = typeof request.query.userId === "string" ? request.query.userId : undefined;
     const data = await incentiveService.getQuotaDashboard(userId);
     response.json(data);
+  }),
+);
+
+/* ════════════════════════════════════════
+   ADMIN — Delete coupon
+   ════════════════════════════════════════ */
+
+router.delete(
+  "/admin/coupons/:id",
+  requireAuth,
+  requireRoles(Role.SUPER_ADMIN),
+  asyncHandler(async (request: AuthenticatedRequest, response) => {
+    await incentiveService.deleteCoupon(request.params.id);
+    response.json({ deleted: true });
+  }),
+);
+
+/* ════════════════════════════════════════
+   ADMIN — Growth Grants
+   ════════════════════════════════════════ */
+
+const listGrantsSchema = z.object({
+  userId: z.string().optional(),
+  kind: z.enum(["CPC", "CPI", "CPA", "PLAN_DISCOUNT", "ADDON_DISCOUNT", "ADDON_FREE_GAIN"]).optional(),
+  status: z.enum(["PENDING", "ACTIVE", "CONSUMED", "EXPIRED", "REVOKED"]).optional(),
+  page: z.coerce.number().int().min(1).optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+});
+
+router.get(
+  "/admin/grants",
+  requireAuth,
+  requireRoles(Role.SUPER_ADMIN, Role.ADMIN),
+  asyncHandler(async (request: AuthenticatedRequest, response) => {
+    const opts = listGrantsSchema.parse(request.query);
+    const result = await incentiveService.listGrowthGrants(opts);
+    response.json(result);
+  }),
+);
+
+router.post(
+  "/admin/grants/:id/revoke",
+  requireAuth,
+  requireRoles(Role.SUPER_ADMIN),
+  asyncHandler(async (request: AuthenticatedRequest, response) => {
+    const grant = await incentiveService.revokeGrowthGrant(request.params.id);
+    response.json(grant);
+  }),
+);
+
+/* ════════════════════════════════════════
+   ADMIN — Manual jobs trigger
+   ════════════════════════════════════════ */
+
+router.post(
+  "/admin/jobs/expire",
+  requireAuth,
+  requireRoles(Role.SUPER_ADMIN),
+  asyncHandler(async (_request: AuthenticatedRequest, response) => {
+    const result = await incentiveService.runExpirationJob();
+    response.json(result);
+  }),
+);
+
+router.post(
+  "/admin/jobs/rebalance-100",
+  requireAuth,
+  requireRoles(Role.SUPER_ADMIN),
+  asyncHandler(async (_request: AuthenticatedRequest, response) => {
+    const result = await incentiveService.runRebalance100Job();
+    response.json(result);
+  }),
+);
+
+/* ════════════════════════════════════════
+   PUBLIC — Growth grant events (CPC/CPI/CPA pipeline)
+   ════════════════════════════════════════ */
+
+const grantEventSchema = z.object({
+  eventType: z.enum(["click", "install", "action", "conversion"]),
+  idempotencyKey: z.string().min(8).max(128),
+  metadata: z.record(z.unknown()).optional(),
+});
+
+router.post(
+  "/grants/:id/events",
+  requireAuth,
+  rateLimit(RateLimits.GRANT_EVENT),
+  asyncHandler(async (request: AuthenticatedRequest, response) => {
+    const { eventType, idempotencyKey, metadata } = grantEventSchema.parse(request.body);
+    const result = await incentiveService.recordGrowthEventIdempotent(
+      request.params.id,
+      request.auth!.userId,
+      eventType,
+      idempotencyKey,
+      metadata,
+    );
+    response.status(201).json(result);
+  }),
+);
+
+/* ════════════════════════════════════════
+   ADMIN — Policy management
+   ════════════════════════════════════════ */
+
+router.get(
+  "/admin/policies",
+  requireAuth,
+  requireRoles(Role.SUPER_ADMIN),
+  asyncHandler(async (_request: AuthenticatedRequest, response) => {
+    const policies = await incentiveService.getPolicies();
+    response.json(policies);
+  }),
+);
+
+const updatePolicySchema = z.object({
+  couponProbability: z.number().min(0).max(1).optional(),
+  growthProbability: z.number().min(0).max(1).optional(),
+  maxCouponsPerMonth: z.number().int().min(0).optional(),
+  maxGrowthGrantsPerMonth: z.number().int().min(0).optional(),
+  maxDiscount80PerMonth: z.number().int().min(0).optional(),
+  maxAddonGainPerMonth: z.number().int().min(0).optional(),
+  coupon100MaxDays: z.number().int().min(1).max(30).optional(),
+  target100Ratio: z.number().min(0).max(1).optional(),
+  allowedDiscounts: z.array(z.number().int().min(0).max(100)).optional(),
+  globalPause: z.boolean().optional(),
+});
+
+router.patch(
+  "/admin/policies/:segment",
+  requireAuth,
+  requireRoles(Role.SUPER_ADMIN),
+  asyncHandler(async (request: AuthenticatedRequest, response) => {
+    const segment = request.params.segment as "STANDARD" | "TESTER";
+    if (!["STANDARD", "TESTER"].includes(segment)) {
+      response.status(400).json({ error: "Invalid segment" });
+      return;
+    }
+    const data = updatePolicySchema.parse(request.body);
+    const policy = await incentiveService.updatePolicy(segment, request.auth!.userId, data);
+    response.json(policy);
+  }),
+);
+
+router.post(
+  "/admin/global-pause",
+  requireAuth,
+  requireRoles(Role.SUPER_ADMIN),
+  asyncHandler(async (request: AuthenticatedRequest, response) => {
+    const { paused } = z.object({ paused: z.boolean() }).parse(request.body);
+    const result = await incentiveService.setGlobalPause(request.auth!.userId, paused);
+    response.json(result);
+  }),
+);
+
+const overrideQuotaSchema = z.object({
+  userId: z.string().min(1),
+  couponCount: z.number().int().min(0).optional(),
+  cpcCount: z.number().int().min(0).optional(),
+  cpiCount: z.number().int().min(0).optional(),
+  cpaCount: z.number().int().min(0).optional(),
+  discount80Count: z.number().int().min(0).optional(),
+  addonGainCount: z.number().int().min(0).optional(),
+  coupon100Count: z.number().int().min(0).optional(),
+});
+
+router.post(
+  "/admin/quota-override",
+  requireAuth,
+  requireRoles(Role.SUPER_ADMIN),
+  asyncHandler(async (request: AuthenticatedRequest, response) => {
+    const { userId, ...overrides } = overrideQuotaSchema.parse(request.body);
+    const result = await incentiveService.overrideUserQuota(request.auth!.userId, userId, overrides);
+    response.json(result);
+  }),
+);
+
+const forceGrantSchema = z.object({
+  userId: z.string().min(1),
+  kind: z.enum(["CPC", "CPI", "CPA"]),
+  discountPercent: z.number().int().min(0).max(100),
+  expiresInDays: z.number().int().min(1).max(90).optional(),
+});
+
+router.post(
+  "/admin/force-grant",
+  requireAuth,
+  requireRoles(Role.SUPER_ADMIN),
+  asyncHandler(async (request: AuthenticatedRequest, response) => {
+    const { userId, kind, discountPercent, expiresInDays } = forceGrantSchema.parse(request.body);
+    const grant = await incentiveService.forceEmitGrant(
+      request.auth!.userId,
+      userId,
+      kind,
+      discountPercent,
+      expiresInDays,
+    );
+    response.status(201).json(grant);
+  }),
+);
+
+router.get(
+  "/admin/audit-log",
+  requireAuth,
+  requireRoles(Role.SUPER_ADMIN),
+  asyncHandler(async (request: AuthenticatedRequest, response) => {
+    const opts = z.object({
+      page: z.coerce.number().int().min(1).optional(),
+      limit: z.coerce.number().int().min(1).max(100).optional(),
+    }).parse(request.query);
+    const result = await incentiveService.getAdminAuditLog(opts);
+    response.json(result);
+  }),
+);
+
+/* ════════════════════════════════════════
+   ADMIN — Diagnostic (decision trace)
+   ════════════════════════════════════════ */
+
+router.get(
+  "/admin/diagnostic/:userId",
+  requireAuth,
+  requireRoles(Role.SUPER_ADMIN, Role.ADMIN),
+  asyncHandler(async (request: AuthenticatedRequest, response) => {
+    const result = await incentiveService.diagnosticUser(request.params.userId);
+    response.json(result);
+  }),
+);
+
+/* ════════════════════════════════════════
+   ADMIN — Stats / KPIs
+   ════════════════════════════════════════ */
+
+router.get(
+  "/admin/stats",
+  requireAuth,
+  requireRoles(Role.SUPER_ADMIN, Role.ADMIN),
+  asyncHandler(async (_request: AuthenticatedRequest, response) => {
+    const result = await incentiveService.getIncentiveStats();
+    response.json(result);
   }),
 );
 

@@ -2,6 +2,9 @@
 Date: 2026-04-17
 Usage: copier un prompt a la fois dans Claude et executer par phase.
 
+> Version recommandee (post-audit, ultra detaillee):  
+> `docs/PROMPTS-CLAUDE-IA-ADS-IA-MESSAGER-COUPONS-CPC-CPI-CPA-V2-AMELIORATION.md`
+
 ## Prompt 0 - Orchestration complete (master)
 ```text
 Tu travailles sur un monorepo TypeScript/Prisma Kin-Sell.
@@ -224,4 +227,132 @@ Ta mission:
 - ajouter test de non-regression
 - expliquer pourquoi la correction est sure.
 Donne un resume clair avec fichiers modifies.
+```
+
+## Prompt 9 - Audit complet IA ADS par combinaisons forfait/add-ons
+```text
+Tu fais un audit technique executable, base sur le code reel, de IA ADS.
+Objectif: lister exactement ce que IA ADS propose selon toutes les combinaisons utiles:
+- forfait actif/inactif/expire
+- user vs business
+- add-ons actifs/inactifs
+- cas sans activite, activite moyenne, forte activite
+
+Contraintes:
+- Ne pas deviner: derive les conclusions du code.
+- Inclure les triggers reels: LISTING_PUBLISHED, SALE_COMPLETED, STAGNATION_CHECK, PERIODIC.
+- Inclure anti-spam/frequences de recommandation.
+- Inclure l'ordre de priorite et la limite max 3 offres.
+
+Livrable:
+1) matrice des cas (X, Y, Z, etc.) avec:
+   - etat profil
+   - offre(s) proposee(s)
+   - conditions exactes de declenchement
+2) liste des anomalies possibles (ex: offre dupliquee, suggestion incoherente)
+3) recommandations de correction priorisees (P0/P1/P2)
+4) fichiers/lignes de reference utilises.
+```
+
+## Prompt 10 - Brancher IA ADS au moteur incentives existant
+```text
+Le module incentives existe deja (coupons + CPC/CPI/CPA + quotas + policies).
+Ta mission: brancher IA ADS pour qu'il l'utilise vraiment.
+
+A faire:
+- Dans les triggers IA ADS (onListingPublished, onSaleCompleted, checkStagnation, runPeriodicSmartCheck):
+  - appeler selectIncentiveForUser(userId, { segment }) pour coupons
+  - appeler emitGrowthGrant(userId, kind, { segment, metadata }) pour CPC/CPI/CPA selon event
+- Enrichir aiRecommendation.actionData avec:
+  - couponCode, discountPercent, expiresAt, grantId, grantKind
+- Ajouter garde idempotence par evenement (pas de double emission incentive pour meme event)
+- Conserver les quotas/policies source of truth dans incentive.service uniquement
+
+Regles metier a respecter:
+- couponProbability = 1/10
+- growthProbability = 1/10
+- max 7 coupons/mois/user
+- max 15 grants CPC/CPI/CPA/mois/user
+- max 3 remises 80%
+- max 1 gain add-on/mois
+- coupon 100% <= 14 jours
+
+Livrables:
+- diff code
+- liste des points de branchement
+- tests unitaires/integration ajoutes.
+```
+
+## Prompt 11 - Coupler IA Messager pour l'envoi des coupons/grants IA ADS
+```text
+Objectif: IA Messager devient canal d'envoi, IA ADS devient decideur.
+
+A faire:
+- Etendre ia-messenger-promo.service avec templates dedies:
+  - coupon distribue (code, pourcentage, expiration, cible)
+  - grant CPC/CPI/CPA emis (etapes de conversion)
+  - conversion grant -> coupon cree
+- Ajouter fonctions:
+  - sendCouponIncentiveMessage(...)
+  - sendGrowthGrantMessage(...)
+  - sendGrantConvertedToCouponMessage(...)
+- Appeler ces fonctions depuis les points de branchement IA ADS/incentives
+- Tracer dans aiAutonomyLog + metadata structurée
+
+Qualite:
+- idempotence (pas de double message sur meme coupon/grant)
+- fallback si push/email indisponible
+- ne pas casser promoteListingBoost/promoteHighlight existants.
+```
+
+## Prompt 12 - Pipeline conversion CPC/CPI/CPA de bout en bout
+```text
+Objectif: rendre CPC/CPI/CPA operationnels de bout en bout.
+
+A faire:
+- Exposer endpoint securise pour enregistrer les events grant:
+  - click/install/action/conversion
+- Mapper les events:
+  - click -> CPC
+  - install -> CPI
+  - action -> CPA
+- A conversion:
+  - consommer le grant
+  - creer coupon associe
+  - notifier utilisateur via IA Messager
+- Ajouter garde-fous anti-abus:
+  - verification ownership grant/user
+  - replays dedup (event idempotency key)
+  - rate limit
+
+Tests:
+- emission grant
+- event tracking
+- conversion unique
+- tentative double conversion -> rejet
+- coupon cree correctement apres conversion.
+```
+
+## Prompt 13 - Hardening autonomie + aleatoire pilotable super-admin
+```text
+Objectif: systeme autonome ET controlable.
+
+A faire:
+- Introduire random controlle:
+  - seed strategy par userId+monthKey pour reproductibilite debug
+  - option "true random" configurable
+- Ajouter panneau super-admin:
+  - toggles probabilites coupons/grants
+  - override quotas
+  - pause globale incentives
+  - forcer rebalance 100%
+- Journaliser tous les overrides admin (qui, quand, pourquoi)
+- Ajouter endpoint diagnostic:
+  - explique pourquoi un user a recu/refuse un coupon/grant (decision trace)
+
+Livrable final:
+1) changelog
+2) nouveaux endpoints
+3) strategy rollout
+4) checklist QA.
 ```

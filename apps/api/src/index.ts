@@ -361,6 +361,35 @@ httpServer.listen(env.API_PORT, async () => {
   setInterval(() => { void runBoostScheduler(); }, 10 * 60 * 1000);
   logger.info("[Boost] Expiration scheduler démarré (toutes les 10 min)");
 
+  // ── Incentive Scheduler: expire coupons/grants (every hour) + rebalance 100% (daily) ──
+  const runIncentiveExpiration = async () => {
+    try {
+      const { runExpirationJob } = await import("./modules/incentives/incentive.service.js");
+      const result = await runExpirationJob();
+      if (result.expiredCoupons > 0 || result.expiredGrants > 0) {
+        logger.info(`[Incentive] Expiration: ${result.expiredCoupons} coupons, ${result.expiredGrants} grants expirés`);
+      }
+    } catch (err) {
+      logger.error(err, "[Incentive] Expiration job error");
+    }
+  };
+  const runIncentiveRebalance = async () => {
+    try {
+      const { runRebalance100Job } = await import("./modules/incentives/incentive.service.js");
+      const result = await runRebalance100Job();
+      if (result.generated > 0) {
+        logger.info(`[Incentive] Rebalance: ${result.generated} coupons 100% créés`);
+      }
+    } catch (err) {
+      logger.error(err, "[Incentive] Rebalance job error");
+    }
+  };
+  setTimeout(() => { void runIncentiveExpiration(); }, 60_000);
+  setInterval(() => { void runIncentiveExpiration(); }, 60 * 60 * 1000); // every hour
+  setTimeout(() => { void runIncentiveRebalance(); }, 120_000);
+  setInterval(() => { void runIncentiveRebalance(); }, 24 * 60 * 60 * 1000); // daily
+  logger.info("[Incentive] Schedulers démarrés (expiration: 1h, rebalance: 24h)");
+
   // ── Midnight Scheduler (External Intel + KB refresh) ──
   startMidnightScheduler();
 });

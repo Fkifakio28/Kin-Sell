@@ -1,14 +1,18 @@
 /**
- * Incentive Engine — coupon validation, generation, quotas, redemption
+ * Incentive Engine — coupon validation, generation, quotas, redemption,
+ * growth grants CPC/CPI/CPA, policy enforcement
  */
 import { prisma } from "../../shared/db/prisma.js";
 import { randomBytes } from "crypto";
+import { logger } from "../../shared/logger.js";
 import type {
   CouponKind,
   CouponStatus,
   CouponTargetScope,
+  GrantStatus,
   IncentiveSegment,
   RedemptionStatus,
+  Prisma,
 } from "@prisma/client";
 
 /* ─── Helpers ─── */
@@ -108,6 +112,42 @@ export async function validateCoupon(
   return { ...base, valid: true };
 }
 
+/* ─── Preview coupon (calcul prix final sans rédemption) ─── */
+
+export interface CouponPreviewResult extends CouponPreview {
+  originalAmountUsdCents: number;
+  discountAmountUsdCents: number;
+  finalAmountUsdCents: number;
+  expiresAt?: Date;
+}
+
+export async function previewCoupon(
+  userId: string,
+  code: string,
+  originalAmountUsdCents: number,
+  planCode?: string,
+  addonCode?: string,
+): Promise<CouponPreviewResult> {
+  const validation = await validateCoupon(userId, code, planCode, addonCode);
+  const discountPercent = validation.discountPercent ?? 0;
+  const discountAmountUsdCents = validation.valid
+    ? Math.round(originalAmountUsdCents * (discountPercent / 100))
+    : 0;
+  const finalAmountUsdCents = Math.max(0, originalAmountUsdCents - discountAmountUsdCents);
+
+  const coupon = validation.valid
+    ? await prisma.incentiveCoupon.findUnique({ where: { code: code.trim().toUpperCase() }, select: { expiresAt: true } })
+    : null;
+
+  return {
+    ...validation,
+    originalAmountUsdCents,
+    discountAmountUsdCents,
+    finalAmountUsdCents,
+    expiresAt: coupon?.expiresAt ?? undefined,
+  };
+}
+
 /* ─── Redeem a coupon ─── */
 
 export async function redeemCoupon(
@@ -186,6 +226,80 @@ export async function redeemCoupon(
     redemptionId: result.id,
     discountAmountUsdCents,
     finalAmountUsdCents,
+  };
+}
+
+/* ─── Apply coupon inside an existing Prisma transaction ─── */
+
+export async function applyCouponToOrderTx(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  code: string,
+  originalAmountUsdCents: number,
+  paymentOrderId?: string,
+  subscriptionId?: string,
+): Promise<{
+  redemptionId: string;
+  discountPercent: number;
+  discountAmountUsdCents: number;
+  finalAmountUsdCents: number;
+  couponCode: string;
+}> {
+  const normalized = code.trim().toUpperCase();
+  const coupon = await tx.incentiveCoupon.findUnique({
+    where: { code: normalized },
+    include: { redemptions: { where: { userId, status: "APPLIED" } } },
+  });
+
+  if (!coupon || coupon.status !== "ACTIVE") throw new Error("COUPON_NO_LONGER_VALID");
+  if (new Date() > coupon.expiresAt) throw new Error("EXPIRED");
+  if (coupon.usedCount >= coupon.maxUses) throw new Error("MAX_USES_REACHED");
+  if (coupon.redemptions.length >= coupon.maxUsesPerUser) throw new Error("MAX_USES_PER_USER");
+  if (coupon.recipientUserId && coupon.recipientUserId !== userId) throw new Error("NOT_RECIPIENT");
+
+  const discountPercent = coupon.discountPercent ?? 0;
+  const discountAmountUsdCents = Math.round(originalAmountUsdCents * (discountPercent / 100));
+  const finalAmountUsdCents = Math.max(0, originalAmountUsdCents - discountAmountUsdCents);
+
+  const redemption = await tx.incentiveCouponRedemption.create({
+    data: {
+      couponId: coupon.id,
+      userId,
+      paymentOrderId,
+      subscriptionId,
+      originalAmountUsdCents,
+      discountAmountUsdCents,
+      finalAmountUsdCents,
+      status: "APPLIED",
+    },
+  });
+
+  await tx.incentiveCoupon.update({
+    where: { id: coupon.id },
+    data: { usedCount: { increment: 1 } },
+  });
+
+  const mk = monthKey();
+  await tx.incentiveQuotaCounter.upsert({
+    where: { userId_monthKey: { userId, monthKey: mk } },
+    update: {
+      couponCount: { increment: 1 },
+      ...(discountPercent === 100 ? { coupon100Count: { increment: 1 } } : {}),
+      ...(discountPercent === 80 ? { discount80Count: { increment: 1 } } : {}),
+    },
+    create: {
+      userId, monthKey: mk, couponCount: 1,
+      coupon100Count: discountPercent === 100 ? 1 : 0,
+      discount80Count: discountPercent === 80 ? 1 : 0,
+    },
+  });
+
+  return {
+    redemptionId: redemption.id,
+    discountPercent,
+    discountAmountUsdCents,
+    finalAmountUsdCents,
+    couponCode: normalized,
   };
 }
 
@@ -381,6 +495,9 @@ export async function selectIncentiveForUser(
   const policy = await getPolicy(segment);
   const quota = await getOrCreateQuota(userId);
 
+  // Global pause check
+  if (!policy.isActive) return null;
+
   // Check coupon eligibility (1/10 chance)
   const couponRoll = Math.random();
   if (couponRoll > policy.couponProbability) return null;
@@ -421,5 +538,690 @@ export async function selectIncentiveForUser(
     discountPercent,
     expiresAt: coupon.expiresAt,
     kind: coupon.kind,
+  };
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Growth Grants Engine — CPC / CPI / CPA
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ─── Emit a growth grant (CPC/CPI/CPA) for a user ─── */
+
+export async function emitGrowthGrant(
+  userId: string,
+  kind: "CPC" | "CPI" | "CPA",
+  context: {
+    segment?: IncentiveSegment;
+    addonCode?: string;
+    metadata?: Record<string, unknown>;
+  } = {},
+): Promise<{
+  grantId: string;
+  kind: string;
+  discountPercent: number | null;
+  addonCode: string | null;
+  expiresAt: Date;
+} | null> {
+  const segment = context.segment ?? "STANDARD";
+  const policy = await getPolicy(segment);
+  const quota = await getOrCreateQuota(userId);
+
+  // Global pause check
+  if (!policy.isActive) return null;
+
+  // Gate probabiliste 1/10
+  if (Math.random() > policy.growthProbability) return null;
+
+  // Quota globale CPC+CPI+CPA max 15/mois
+  const totalGrants = quota.cpcCount + quota.cpiCount + quota.cpaCount;
+  if (totalGrants >= policy.maxGrowthGrantsPerMonth) return null;
+
+  // Déterminer le type de gain
+  let discountPercent: number | null = null;
+  let addonCode: string | null = context.addonCode ?? null;
+  let grantKind: CouponKind = kind;
+
+  // Segment TESTER : possibilité ADDON_FREE_GAIN (max 1/mois)
+  if (segment === "TESTER" && quota.addonGainCount < policy.maxAddonGainPerMonth && Math.random() < 0.15) {
+    grantKind = "ADDON_FREE_GAIN";
+    addonCode = addonCode ?? "addon-basic";
+    discountPercent = 100;
+  } else {
+    // Sélection discount avec contrainte max 3 à 80%
+    const allowed = policy.allowedDiscounts.filter((d) => {
+      if (d === 80 && quota.discount80Count >= policy.maxDiscount80PerMonth) return false;
+      return true;
+    });
+    if (allowed.length === 0) return null;
+    discountPercent = allowed[Math.floor(Math.random() * allowed.length)];
+  }
+
+  const expiresAt = new Date();
+  expiresAt.setDate(expiresAt.getDate() + (discountPercent === 100 ? policy.coupon100MaxDays : 30));
+
+  // Créer le grant + update quota en transaction
+  const grant = await prisma.$transaction(async (tx) => {
+    const g = await tx.growthIncentiveGrant.create({
+      data: {
+        userId,
+        kind: grantKind,
+        discountPercent,
+        addonCode,
+        status: "ACTIVE",
+        expiresAt,
+        metadata: {
+          segment,
+          engine: "growth-v1",
+          ...context.metadata,
+        },
+      },
+    });
+
+    // Log l'événement de création
+    await tx.growthIncentiveEvent.create({
+      data: {
+        grantId: g.id,
+        userId,
+        eventType: "grant_created",
+        metadata: { kind: grantKind, discountPercent, addonCode },
+      },
+    });
+
+    // Update quota
+    const quotaField = kind === "CPC" ? "cpcCount" : kind === "CPI" ? "cpiCount" : "cpaCount";
+    const mk = monthKey();
+    await tx.incentiveQuotaCounter.upsert({
+      where: { userId_monthKey: { userId, monthKey: mk } },
+      update: {
+        [quotaField]: { increment: 1 },
+        ...(discountPercent === 80 ? { discount80Count: { increment: 1 } } : {}),
+        ...(grantKind === "ADDON_FREE_GAIN" ? { addonGainCount: { increment: 1 } } : {}),
+      },
+      create: {
+        userId, monthKey: mk,
+        [quotaField]: 1,
+        discount80Count: discountPercent === 80 ? 1 : 0,
+        addonGainCount: grantKind === "ADDON_FREE_GAIN" ? 1 : 0,
+      },
+    });
+
+    return g;
+  });
+
+  logger.info({ userId, grantId: grant.id, kind: grantKind, discountPercent }, "[Incentive] Growth grant emitted");
+
+  return {
+    grantId: grant.id,
+    kind: grantKind,
+    discountPercent,
+    addonCode,
+    expiresAt: grant.expiresAt,
+  };
+}
+
+/* ─── Record a growth event (click, install, action) ─── */
+
+export async function recordGrowthEvent(
+  grantId: string,
+  userId: string,
+  eventType: "click" | "install" | "action" | "conversion",
+  metadata?: Record<string, unknown>,
+) {
+  const grant = await prisma.growthIncentiveGrant.findUnique({ where: { id: grantId } });
+  if (!grant || grant.userId !== userId) throw new Error("GRANT_NOT_FOUND");
+  if (grant.status !== "ACTIVE") throw new Error("GRANT_NOT_ACTIVE");
+
+  const event = await prisma.growthIncentiveEvent.create({
+    data: { grantId, userId, eventType, metadata: (metadata ?? {}) as Prisma.InputJsonValue },
+  });
+
+  // Sur conversion → consommer le grant + générer un coupon
+  if (eventType === "conversion") {
+    await prisma.growthIncentiveGrant.update({
+      where: { id: grantId },
+      data: { status: "CONSUMED" },
+    });
+
+    // Créer un coupon de récompense associé au grant
+    if (grant.discountPercent) {
+      const coupon = await createCoupon("system", {
+        kind: grant.kind as CouponKind,
+        discountPercent: grant.discountPercent,
+        expiresAt: grant.expiresAt,
+        recipientUserId: userId,
+        metadata: { fromGrant: grantId, engine: "growth-v1" },
+      });
+      logger.info({ grantId, couponCode: coupon.code }, "[Incentive] Grant converted → coupon created");
+
+      // Notify user via IA Messager
+      try {
+        const { sendGrantConvertedToCouponMessage } = await import("../ads/ia-messenger-promo.service.js");
+        await sendGrantConvertedToCouponMessage(userId, grantId, coupon.code, grant.discountPercent, coupon.expiresAt);
+      } catch { /* messenger unavailable */ }
+    }
+  }
+
+  return event;
+}
+
+/* ─── Record a growth event with idempotency key ─── */
+
+export async function recordGrowthEventIdempotent(
+  grantId: string,
+  userId: string,
+  eventType: "click" | "install" | "action" | "conversion",
+  idempotencyKey: string,
+  metadata?: Record<string, unknown>,
+) {
+  // Check idempotency: no duplicate for same key
+  const existing = await prisma.growthIncentiveEvent.findFirst({
+    where: {
+      grantId,
+      userId,
+      metadata: { path: ["idempotencyKey"], equals: idempotencyKey },
+    },
+  });
+  if (existing) return { event: existing, duplicate: true };
+
+  const event = await recordGrowthEvent(grantId, userId, eventType, {
+    ...metadata,
+    idempotencyKey,
+  });
+  return { event, duplicate: false };
+}
+
+/* ─── List growth grants (admin) ─── */
+
+export async function listGrowthGrants(opts: {
+  userId?: string;
+  kind?: CouponKind;
+  status?: GrantStatus;
+  page?: number;
+  limit?: number;
+}) {
+  const take = Math.min(opts.limit ?? 50, 100);
+  const skip = ((opts.page ?? 1) - 1) * take;
+
+  const where: Record<string, unknown> = {};
+  if (opts.userId) where.userId = opts.userId;
+  if (opts.kind) where.kind = opts.kind;
+  if (opts.status) where.status = opts.status;
+
+  const [grants, total] = await Promise.all([
+    prisma.growthIncentiveGrant.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      take,
+      skip,
+      include: {
+        user: { select: { id: true, email: true, profile: { select: { displayName: true } } } },
+        _count: { select: { events: true } },
+      },
+    }),
+    prisma.growthIncentiveGrant.count({ where }),
+  ]);
+
+  return { grants, total, page: opts.page ?? 1, pageCount: Math.ceil(total / take) };
+}
+
+/* ─── Revoke a growth grant ─── */
+
+export async function revokeGrowthGrant(grantId: string) {
+  return prisma.growthIncentiveGrant.update({
+    where: { id: grantId },
+    data: { status: "REVOKED" },
+  });
+}
+
+/* ─── Delete coupon (hard delete) ─── */
+
+export async function deleteCoupon(couponId: string) {
+  // Vérifier qu'il n'y a pas de rédemptions actives
+  const redemptions = await prisma.incentiveCouponRedemption.count({
+    where: { couponId, status: "APPLIED" },
+  });
+  if (redemptions > 0) throw new Error("CANNOT_DELETE_COUPON_WITH_REDEMPTIONS");
+
+  await prisma.incentiveCouponRedemption.deleteMany({ where: { couponId } });
+  return prisma.incentiveCoupon.delete({ where: { id: couponId } });
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Jobs — Expiration + Rééquilibrage 15% coupons 100%
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ─── Expire stale coupons and grants ─── */
+
+export async function runExpirationJob(): Promise<{ expiredCoupons: number; expiredGrants: number }> {
+  const now = new Date();
+
+  const expiredCoupons = await prisma.incentiveCoupon.updateMany({
+    where: { status: "ACTIVE", expiresAt: { lt: now } },
+    data: { status: "EXPIRED" },
+  });
+
+  const expiredGrants = await prisma.growthIncentiveGrant.updateMany({
+    where: { status: { in: ["PENDING", "ACTIVE"] }, expiresAt: { lt: now } },
+    data: { status: "EXPIRED" },
+  });
+
+  if (expiredCoupons.count > 0 || expiredGrants.count > 0) {
+    logger.info({ expiredCoupons: expiredCoupons.count, expiredGrants: expiredGrants.count }, "[Incentive] Expiration job completed");
+  }
+
+  return { expiredCoupons: expiredCoupons.count, expiredGrants: expiredGrants.count };
+}
+
+/* ─── Rééquilibrage : garantir >= 15% de distributions sont 100% ce mois ─── */
+
+export async function runRebalance100Job(): Promise<{ generated: number }> {
+  const mk = monthKey();
+  const policy = await getPolicy("STANDARD");
+
+  // Compter total distributions et 100% ce mois
+  const totals = await prisma.incentiveQuotaCounter.aggregate({
+    where: { monthKey: mk },
+    _sum: { couponCount: true, coupon100Count: true },
+  });
+
+  const totalCoupons = totals._sum.couponCount ?? 0;
+  const total100 = totals._sum.coupon100Count ?? 0;
+
+  if (totalCoupons === 0) return { generated: 0 };
+
+  const currentRatio = total100 / totalCoupons;
+  if (currentRatio >= policy.target100Ratio) return { generated: 0 };
+
+  // Calculer combien de 100% manquent
+  const target100Count = Math.ceil(totalCoupons * policy.target100Ratio);
+  const deficit = target100Count - total100;
+  if (deficit <= 0) return { generated: 0 };
+
+  // Trouver des users éligibles (quota pas pleine, pas déjà trop de 100%)
+  const eligibleQuotas = await prisma.incentiveQuotaCounter.findMany({
+    where: {
+      monthKey: mk,
+      couponCount: { lt: policy.maxCouponsPerMonth },
+    },
+    select: { userId: true },
+    take: deficit * 2,
+  });
+
+  let generated = 0;
+  for (const q of eligibleQuotas) {
+    if (generated >= deficit) break;
+
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + policy.coupon100MaxDays);
+
+    try {
+      await createCoupon("system", {
+        kind: "PLAN_DISCOUNT",
+        discountPercent: 100,
+        expiresAt,
+        recipientUserId: q.userId,
+        metadata: { autoGenerated: true, engine: "rebalance-100-v1", monthKey: mk },
+      });
+      generated++;
+    } catch {
+      // quota/policy error — skip
+    }
+  }
+
+  if (generated > 0) {
+    logger.info({ deficit, generated, currentRatio, targetRatio: policy.target100Ratio }, "[Incentive] Rebalance 100% job completed");
+  }
+
+  return { generated };
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Super-admin policy controls
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ─── Get current policy ─── */
+
+export async function getPolicies() {
+  return prisma.incentivePolicy.findMany();
+}
+
+/* ─── Update policy ─── */
+
+export async function updatePolicy(
+  segment: IncentiveSegment,
+  adminUserId: string,
+  data: {
+    couponProbability?: number;
+    growthProbability?: number;
+    maxCouponsPerMonth?: number;
+    maxGrowthGrantsPerMonth?: number;
+    maxDiscount80PerMonth?: number;
+    maxAddonGainPerMonth?: number;
+    coupon100MaxDays?: number;
+    target100Ratio?: number;
+    allowedDiscounts?: number[];
+    globalPause?: boolean;
+  },
+) {
+  const before = await getPolicy(segment);
+
+  const updated = await prisma.incentivePolicy.update({
+    where: { segment },
+    data: {
+      ...(data.couponProbability !== undefined ? { couponProbability: data.couponProbability } : {}),
+      ...(data.growthProbability !== undefined ? { growthProbability: data.growthProbability } : {}),
+      ...(data.maxCouponsPerMonth !== undefined ? { maxCouponsPerMonth: data.maxCouponsPerMonth } : {}),
+      ...(data.maxGrowthGrantsPerMonth !== undefined ? { maxGrowthGrantsPerMonth: data.maxGrowthGrantsPerMonth } : {}),
+      ...(data.maxDiscount80PerMonth !== undefined ? { maxDiscount80PerMonth: data.maxDiscount80PerMonth } : {}),
+      ...(data.maxAddonGainPerMonth !== undefined ? { maxAddonGainPerMonth: data.maxAddonGainPerMonth } : {}),
+      ...(data.coupon100MaxDays !== undefined ? { coupon100MaxDays: data.coupon100MaxDays } : {}),
+      ...(data.target100Ratio !== undefined ? { target100Ratio: data.target100Ratio } : {}),
+      ...(data.allowedDiscounts !== undefined ? { allowedDiscounts: data.allowedDiscounts } : {}),
+      ...(data.globalPause !== undefined ? { isActive: !data.globalPause } : {}),
+    },
+  });
+
+  // Audit log
+  await prisma.aiAutonomyLog.create({
+    data: {
+      agentName: "SUPER_ADMIN",
+      actionType: "POLICY_UPDATE",
+      targetUserId: adminUserId,
+      decision: `Policy ${segment} updated`,
+      reasoning: JSON.stringify({ before: { couponProbability: before.couponProbability, growthProbability: before.growthProbability, isActive: before.isActive }, after: data }),
+      success: true,
+    },
+  });
+
+  logger.info({ segment, adminUserId, data }, "[Incentive] Policy updated by admin");
+  return updated;
+}
+
+/* ─── Global pause toggle ─── */
+
+export async function setGlobalPause(adminUserId: string, paused: boolean) {
+  const segments: IncentiveSegment[] = ["STANDARD", "TESTER"];
+  for (const segment of segments) {
+    await prisma.incentivePolicy.update({
+      where: { segment },
+      data: { isActive: !paused },
+    });
+  }
+  await prisma.aiAutonomyLog.create({
+    data: {
+      agentName: "SUPER_ADMIN",
+      actionType: "GLOBAL_PAUSE",
+      targetUserId: adminUserId,
+      decision: paused ? "Incentives globally paused" : "Incentives globally resumed",
+      reasoning: JSON.stringify({ paused }),
+      success: true,
+    },
+  });
+  return { paused };
+}
+
+/* ─── Override quota for a specific user ─── */
+
+export async function overrideUserQuota(
+  adminUserId: string,
+  userId: string,
+  overrides: {
+    couponCount?: number;
+    cpcCount?: number;
+    cpiCount?: number;
+    cpaCount?: number;
+    discount80Count?: number;
+    addonGainCount?: number;
+    coupon100Count?: number;
+  },
+) {
+  const mk = monthKey();
+  const updated = await prisma.incentiveQuotaCounter.upsert({
+    where: { userId_monthKey: { userId, monthKey: mk } },
+    update: overrides,
+    create: { userId, monthKey: mk, ...overrides },
+  });
+
+  await prisma.aiAutonomyLog.create({
+    data: {
+      agentName: "SUPER_ADMIN",
+      actionType: "QUOTA_OVERRIDE",
+      targetUserId: userId,
+      decision: `Quota override by ${adminUserId}`,
+      reasoning: JSON.stringify(overrides),
+      success: true,
+    },
+  });
+
+  logger.info({ adminUserId, userId, overrides }, "[Incentive] Quota overridden by admin");
+  return updated;
+}
+
+/* ─── Force emit grant for a user ─── */
+
+export async function forceEmitGrant(
+  adminUserId: string,
+  userId: string,
+  kind: "CPC" | "CPI" | "CPA",
+  discountPercent: number,
+  expiresInDays: number = 30,
+) {
+  const expiresAt = new Date();
+  expiresAt.setDate(expiresAt.getDate() + expiresInDays);
+
+  const grant = await prisma.$transaction(async (tx) => {
+    const g = await tx.growthIncentiveGrant.create({
+      data: {
+        userId,
+        kind,
+        discountPercent,
+        status: "ACTIVE",
+        expiresAt,
+        metadata: { forcedBy: adminUserId, engine: "admin-force" },
+      },
+    });
+    await tx.growthIncentiveEvent.create({
+      data: {
+        grantId: g.id,
+        userId,
+        eventType: "grant_created",
+        metadata: { kind, discountPercent, forcedBy: adminUserId },
+      },
+    });
+    return g;
+  });
+
+  await prisma.aiAutonomyLog.create({
+    data: {
+      agentName: "SUPER_ADMIN",
+      actionType: "FORCE_GRANT",
+      targetUserId: userId,
+      decision: `Force grant ${kind} -${discountPercent}% by ${adminUserId}`,
+      reasoning: JSON.stringify({ grantId: grant.id, kind, discountPercent, expiresInDays }),
+      success: true,
+    },
+  });
+
+  return grant;
+}
+
+/* ─── Admin audit log ─── */
+
+export async function getAdminAuditLog(opts: { page?: number; limit?: number }) {
+  const take = Math.min(opts.limit ?? 50, 100);
+  const skip = ((opts.page ?? 1) - 1) * take;
+
+  const [logs, total] = await Promise.all([
+    prisma.aiAutonomyLog.findMany({
+      where: { agentName: "SUPER_ADMIN" },
+      orderBy: { createdAt: "desc" },
+      take,
+      skip,
+    }),
+    prisma.aiAutonomyLog.count({ where: { agentName: "SUPER_ADMIN" } }),
+  ]);
+
+  return { logs, total, page: opts.page ?? 1, pageCount: Math.ceil(total / take) };
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Diagnostic — Explainability (V2-P8)
+   ═══════════════════════════════════════════════════════════════ */
+
+export async function diagnosticUser(userId: string) {
+  const mk = monthKey();
+  const quota = await getOrCreateQuota(userId);
+
+  // Get both policies
+  const standardPolicy = await getPolicy("STANDARD");
+  const testerPolicy = await getPolicy("TESTER");
+
+  // Recent coupons
+  const recentCoupons = await prisma.incentiveCoupon.findMany({
+    where: { recipientUserId: userId },
+    orderBy: { createdAt: "desc" },
+    take: 10,
+    select: { code: true, kind: true, discountPercent: true, status: true, expiresAt: true, createdAt: true },
+  });
+
+  // Recent grants
+  const recentGrants = await prisma.growthIncentiveGrant.findMany({
+    where: { userId },
+    orderBy: { createdAt: "desc" },
+    take: 10,
+    select: { id: true, kind: true, discountPercent: true, status: true, expiresAt: true, createdAt: true },
+  });
+
+  // Recent events
+  const recentEvents = await prisma.growthIncentiveEvent.findMany({
+    where: { userId },
+    orderBy: { createdAt: "desc" },
+    take: 20,
+    select: { id: true, grantId: true, eventType: true, metadata: true, createdAt: true },
+  });
+
+  // Recent redemptions
+  const recentRedemptions = await prisma.incentiveCouponRedemption.findMany({
+    where: { userId },
+    orderBy: { createdAt: "desc" },
+    take: 10,
+    include: { coupon: { select: { code: true, discountPercent: true } } },
+  });
+
+  // Decision trace
+  const totalGrants = quota.cpcCount + quota.cpiCount + quota.cpaCount;
+  const decisionTrace = {
+    coupon: {
+      eligible: quota.couponCount < standardPolicy.maxCouponsPerMonth,
+      currentCount: quota.couponCount,
+      maxAllowed: standardPolicy.maxCouponsPerMonth,
+      policyActive: standardPolicy.isActive,
+      probability: standardPolicy.couponProbability,
+      reason: !standardPolicy.isActive
+        ? "POLICY_PAUSED"
+        : quota.couponCount >= standardPolicy.maxCouponsPerMonth
+          ? "MONTHLY_QUOTA_REACHED"
+          : "ELIGIBLE_PENDING_RANDOM",
+    },
+    growth: {
+      eligible: totalGrants < standardPolicy.maxGrowthGrantsPerMonth,
+      currentTotal: totalGrants,
+      cpc: quota.cpcCount,
+      cpi: quota.cpiCount,
+      cpa: quota.cpaCount,
+      maxAllowed: standardPolicy.maxGrowthGrantsPerMonth,
+      policyActive: standardPolicy.isActive,
+      probability: standardPolicy.growthProbability,
+      discount80Remaining: standardPolicy.maxDiscount80PerMonth - quota.discount80Count,
+      addonGainRemaining: standardPolicy.maxAddonGainPerMonth - quota.addonGainCount,
+      reason: !standardPolicy.isActive
+        ? "POLICY_PAUSED"
+        : totalGrants >= standardPolicy.maxGrowthGrantsPerMonth
+          ? "MONTHLY_QUOTA_REACHED"
+          : "ELIGIBLE_PENDING_RANDOM",
+    },
+  };
+
+  return {
+    userId,
+    monthKey: mk,
+    quota,
+    policies: { standard: standardPolicy, tester: testerPolicy },
+    decisionTrace,
+    recentCoupons,
+    recentGrants,
+    recentEvents,
+    recentRedemptions,
+  };
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Stats / KPIs (V2-P11)
+   ═══════════════════════════════════════════════════════════════ */
+
+export async function getIncentiveStats() {
+  const mk = monthKey();
+  const now = new Date();
+
+  const [
+    totalCoupons,
+    activeCoupons,
+    totalRedemptions,
+    totalGrants,
+    activeGrants,
+    consumedGrants,
+    monthlyQuotas,
+  ] = await Promise.all([
+    prisma.incentiveCoupon.count(),
+    prisma.incentiveCoupon.count({ where: { status: "ACTIVE" } }),
+    prisma.incentiveCouponRedemption.count({ where: { status: "APPLIED" } }),
+    prisma.growthIncentiveGrant.count(),
+    prisma.growthIncentiveGrant.count({ where: { status: "ACTIVE" } }),
+    prisma.growthIncentiveGrant.count({ where: { status: "CONSUMED" } }),
+    prisma.incentiveQuotaCounter.aggregate({
+      where: { monthKey: mk },
+      _sum: {
+        couponCount: true,
+        coupon100Count: true,
+        cpcCount: true,
+        cpiCount: true,
+        cpaCount: true,
+        discount80Count: true,
+        addonGainCount: true,
+      },
+      _count: true,
+    }),
+  ]);
+
+  const sums = monthlyQuotas._sum;
+  const totalMonthCoupons = sums.couponCount ?? 0;
+  const total100 = sums.coupon100Count ?? 0;
+  const ratio100 = totalMonthCoupons > 0 ? total100 / totalMonthCoupons : 0;
+
+  // Conversion rate: consumed / total grants
+  const conversionRate = totalGrants > 0 ? consumedGrants / totalGrants : 0;
+
+  return {
+    overview: {
+      totalCoupons,
+      activeCoupons,
+      totalRedemptions,
+      totalGrants,
+      activeGrants,
+      consumedGrants,
+      conversionRate: Math.round(conversionRate * 10000) / 100,
+    },
+    monthly: {
+      monthKey: mk,
+      uniqueUsers: monthlyQuotas._count,
+      couponsDistributed: totalMonthCoupons,
+      coupons100Distributed: total100,
+      ratio100Percent: Math.round(ratio100 * 10000) / 100,
+      cpcGrants: sums.cpcCount ?? 0,
+      cpiGrants: sums.cpiCount ?? 0,
+      cpaGrants: sums.cpaCount ?? 0,
+      discount80Used: sums.discount80Count ?? 0,
+      addonGainsUsed: sums.addonGainCount ?? 0,
+    },
   };
 }

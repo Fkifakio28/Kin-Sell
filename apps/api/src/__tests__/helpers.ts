@@ -13,6 +13,10 @@ export function createMockPrisma() {
   const handler: ProxyHandler<Record<string, any>> = {
     get(_target, prop) {
       if (prop === "$transaction") {
+        // If a custom $transaction override was set, use it
+        if (_target._$transactionOverride) {
+          return _target._$transactionOverride;
+        }
         return vi.fn(async (fn: (tx: any) => any) => fn(new Proxy({}, handler)));
       }
       if (typeof prop === "string" && !prop.startsWith("_")) {

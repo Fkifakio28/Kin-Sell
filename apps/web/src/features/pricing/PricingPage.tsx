@@ -243,7 +243,14 @@ export function PricingPage() {
 
   const [pendingPlanCode, setPendingPlanCode] = useState<string | null>(null);
   const [promoCode, setPromoCode] = useState("");
-  const [promoStatus, setPromoStatus] = useState<{ valid: boolean; discountPercent: number | null; reason?: string } | null>(null);
+  const [promoStatus, setPromoStatus] = useState<{
+    valid: boolean;
+    discountPercent: number | null;
+    reason?: string;
+    originalAmountUsdCents?: number;
+    discountAmountUsdCents?: number;
+    finalAmountUsdCents?: number;
+  } | null>(null);
   const [promoLoading, setPromoLoading] = useState(false);
 
   const role = user?.role === "BUSINESS" ? "BUSINESS" : user?.role === "USER" ? "USER" : "VISITOR";
@@ -371,8 +378,15 @@ export function PricingPage() {
     setPromoLoading(true);
     setPromoStatus(null);
     try {
-      const result = await billing.validateCoupon({ code: promoCode.trim(), planCode: pendingPlanCode });
-      setPromoStatus({ valid: result.valid, discountPercent: result.discountPercent, reason: result.reason });
+      const result = await billing.previewCoupon({ code: promoCode.trim(), planCode: pendingPlanCode });
+      setPromoStatus({
+        valid: result.valid,
+        discountPercent: result.discountPercent,
+        reason: result.reason,
+        originalAmountUsdCents: result.originalAmountUsdCents,
+        discountAmountUsdCents: result.discountAmountUsdCents,
+        finalAmountUsdCents: result.finalAmountUsdCents,
+      });
     } catch {
       setPromoStatus({ valid: false, discountPercent: null, reason: "Erreur de validation" });
     } finally {
@@ -609,8 +623,26 @@ export function PricingPage() {
               {promoStatus && (
                 <p className={`pricing-promo__msg ${promoStatus.valid ? "pricing-promo__msg--ok" : "pricing-promo__msg--err"}`}>
                   {promoStatus.valid
-                    ? `✓ Coupon valide — ${promoStatus.discountPercent}% de réduction`
+                    ? promoStatus.finalAmountUsdCents != null
+                      ? `✓ -${promoStatus.discountPercent}% → `
+                        + `${(promoStatus.originalAmountUsdCents! / 100).toFixed(2)}$`
+                        + ` → ${(promoStatus.finalAmountUsdCents / 100).toFixed(2)}$`
+                      : `✓ Coupon valide — ${promoStatus.discountPercent}% de réduction`
                     : `✕ ${promoStatus.reason === "INVALID_CODE" ? "Code invalide" : promoStatus.reason === "EXPIRED" ? "Code expiré" : promoStatus.reason === "MONTHLY_QUOTA_REACHED" ? "Quota mensuel atteint" : promoStatus.reason ?? "Code non valide"}`}
+                </p>
+              )}
+              {promoStatus?.valid && promoStatus.finalAmountUsdCents != null && (
+                <p style={{ fontSize: 13, color: "var(--color-text-2, #c7bedf)", marginTop: 4 }}>
+                  <span style={{ textDecoration: "line-through", opacity: 0.6 }}>
+                    {(promoStatus.originalAmountUsdCents! / 100).toFixed(2)}$
+                  </span>
+                  {" → "}
+                  <span style={{ color: "#4caf50", fontWeight: 700, fontSize: 16 }}>
+                    {(promoStatus.finalAmountUsdCents / 100).toFixed(2)}$
+                  </span>
+                  <span style={{ fontSize: 11, marginLeft: 6, opacity: 0.7 }}>
+                    (économie: {(promoStatus.discountAmountUsdCents! / 100).toFixed(2)}$)
+                  </span>
                 </p>
               )}
             </div>
@@ -626,8 +658,8 @@ export function PricingPage() {
               ? "Traitement…"
               : isIAPAvailable()
                 ? "🍎 Acheter via App Store"
-                : promoStatus?.valid && promoStatus.discountPercent
-                  ? `💳 Payer avec PayPal (-${promoStatus.discountPercent}%)`
+                : promoStatus?.valid && promoStatus.finalAmountUsdCents != null
+                  ? `💳 Payer ${(promoStatus.finalAmountUsdCents / 100).toFixed(2)}$ via PayPal (-${promoStatus.discountPercent}%)`
                   : "💳 Payer avec PayPal"}
           </button>
           <br />

@@ -631,6 +631,7 @@ export const createPaypalCheckout = async (
 
   let amountUsdCents = targetPlan.monthlyPriceUsdCents;
   let couponRedemption: { redemptionId: string; discountAmountUsdCents: number; finalAmountUsdCents: number } | null = null;
+  let couponMeta: { couponCode: string; discountPercent: number; discountAmountUsdCents: number; finalAmountUsdCents: number } | null = null;
 
   // Apply promo code if provided
   if (payload.promoCode) {
@@ -640,6 +641,12 @@ export const createPaypalCheckout = async (
       payload.promoCode,
       amountUsdCents,
     );
+    couponMeta = {
+      couponCode: payload.promoCode.trim().toUpperCase(),
+      discountPercent: Math.round((couponRedemption.discountAmountUsdCents / amountUsdCents) * 100),
+      discountAmountUsdCents: couponRedemption.discountAmountUsdCents,
+      finalAmountUsdCents: couponRedemption.finalAmountUsdCents,
+    };
     amountUsdCents = couponRedemption.finalAmountUsdCents;
   }
 
@@ -744,6 +751,24 @@ export const capturePaypalPayment = async (userId: string, payload: { orderId: s
       where: { id: order.id },
       data: { status: PaymentOrderStatus.FAILED },
     });
+
+    // Rollback coupon redemption if one was applied to this order
+    const linkedRedemption = await prisma.incentiveCouponRedemption.findFirst({
+      where: { paymentOrderId: order.id, status: "APPLIED" },
+    });
+    if (linkedRedemption) {
+      await prisma.$transaction([
+        prisma.incentiveCouponRedemption.update({
+          where: { id: linkedRedemption.id },
+          data: { status: "ROLLED_BACK" },
+        }),
+        prisma.incentiveCoupon.update({
+          where: { id: linkedRedemption.couponId },
+          data: { usedCount: { decrement: 1 } },
+        }),
+      ]);
+    }
+
     throw new HttpError(400, `Paiement PayPal non finalisé. Statut: ${capture.status}`);
   }
 

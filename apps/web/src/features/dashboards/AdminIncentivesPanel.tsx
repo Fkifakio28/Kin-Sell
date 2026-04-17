@@ -50,7 +50,21 @@ type QuotaItem = {
   user: { id: string; email: string; profile?: { displayName: string } };
 };
 
-type SubTab = "coupons" | "create" | "redemptions" | "quotas";
+type GrantItem = {
+  id: string;
+  userId: string;
+  kind: string;
+  discountPercent: number | null;
+  addonCode: string | null;
+  status: string;
+  segment: string;
+  expiresAt: string;
+  createdAt: string;
+  user: { id: string; email: string; profile?: { displayName: string } };
+  _count: { events: number };
+};
+
+type SubTab = "coupons" | "create" | "redemptions" | "quotas" | "grants" | "jobs";
 
 /* ── Palette ── */
 const C = {
@@ -73,6 +87,7 @@ const badgeStyle = (bg: string, color: string): React.CSSProperties => ({
 
 const statusColor: Record<string, string> = {
   ACTIVE: C.success, DRAFT: C.text3, PAUSED: C.warn, EXPIRED: C.text3, REVOKED: C.danger,
+  PENDING: C.warn, CONSUMED: C.accent, APPLIED: C.success, ROLLED_BACK: C.danger,
 };
 
 const inputStyle: React.CSSProperties = {
@@ -109,6 +124,13 @@ export default function AdminIncentivesPanel() {
 
   // Quotas
   const [quotas, setQuotas] = useState<QuotaItem[]>([]);
+
+  // Growth Grants
+  const [grants, setGrants] = useState<GrantItem[]>([]);
+  const [grantsTotal, setGrantsTotal] = useState(0);
+  const [grantsPage, setGrantsPage] = useState(1);
+  const [grantFilterKind, setGrantFilterKind] = useState("ALL");
+  const [grantFilterStatus, setGrantFilterStatus] = useState("ALL");
 
   // Create form
   const [form, setForm] = useState({
@@ -162,11 +184,26 @@ export default function AdminIncentivesPanel() {
     if (mounted.current) setBusy(false);
   }, []);
 
+  const loadGrants = useCallback(async () => {
+    setBusy(true);
+    try {
+      const qs = new URLSearchParams();
+      qs.set("page", String(grantsPage));
+      qs.set("limit", "20");
+      if (grantFilterKind !== "ALL") qs.set("kind", grantFilterKind);
+      if (grantFilterStatus !== "ALL") qs.set("status", grantFilterStatus);
+      const res = await request<{ grants: GrantItem[]; total: number }>(`/incentives/admin/grants?${qs}`);
+      if (mounted.current) { setGrants(res.grants); setGrantsTotal(res.total); }
+    } catch { if (mounted.current) setErr("Erreur chargement grants"); }
+    if (mounted.current) setBusy(false);
+  }, [grantsPage, grantFilterKind, grantFilterStatus]);
+
   useEffect(() => {
     if (tab === "coupons") loadCoupons();
     if (tab === "redemptions") loadRedemptions();
     if (tab === "quotas") loadQuotas();
-  }, [tab, loadCoupons, loadRedemptions, loadQuotas]);
+    if (tab === "grants") loadGrants();
+  }, [tab, loadCoupons, loadRedemptions, loadQuotas, loadGrants]);
 
   /* ── Create coupon ── */
   const handleCreate = async () => {
@@ -206,6 +243,42 @@ export default function AdminIncentivesPanel() {
     setBusy(false);
   };
 
+  /* ── Delete coupon ── */
+  const handleDelete = async (id: string) => {
+    setErr(null); setMsg(null);
+    if (!confirm("Supprimer définitivement ce coupon ?")) return;
+    setBusy(true);
+    try {
+      await request(`/incentives/admin/coupons/${id}`, { method: "DELETE" });
+      setMsg("Coupon supprimé");
+      loadCoupons();
+    } catch (e: any) { setErr(e?.message ?? "Erreur suppression"); }
+    setBusy(false);
+  };
+
+  /* ── Revoke grant ── */
+  const handleRevokeGrant = async (id: string) => {
+    setErr(null); setMsg(null);
+    setBusy(true);
+    try {
+      await request(`/incentives/admin/grants/${id}/revoke`, { method: "POST" });
+      setMsg("Grant révoqué");
+      loadGrants();
+    } catch { setErr("Erreur révocation grant"); }
+    setBusy(false);
+  };
+
+  /* ── Run jobs ── */
+  const handleRunJob = async (job: "expire" | "rebalance-100") => {
+    setErr(null); setMsg(null);
+    setBusy(true);
+    try {
+      const res = await request<Record<string, number>>(`/incentives/admin/jobs/${job}`, { method: "POST" });
+      setMsg(`Job ${job} terminé : ${JSON.stringify(res)}`);
+    } catch (e: any) { setErr(e?.message ?? `Erreur job ${job}`); }
+    setBusy(false);
+  };
+
   /* ── Tabs ── */
   const TabBtn = ({ k, label }: { k: SubTab; label: string }) => (
     <button
@@ -239,6 +312,8 @@ export default function AdminIncentivesPanel() {
         <TabBtn k="create" label="➕ Créer" />
         <TabBtn k="redemptions" label="📊 Rédemptions" />
         <TabBtn k="quotas" label="📈 Quotas" />
+        <TabBtn k="grants" label="🚀 Growth Grants" />
+        <TabBtn k="jobs" label="⚙️ Jobs" />
       </div>
 
       {/* ══════ COUPONS LIST ══════ */}
@@ -293,10 +368,11 @@ export default function AdminIncentivesPanel() {
                         {c.recipient ? (c.recipient.profile?.displayName ?? c.recipient.email) : "—"}
                       </td>
                       <td style={{ padding: "8px 10px", color: C.text3, fontSize: 11 }}>{new Date(c.expiresAt).toLocaleDateString("fr-FR")}</td>
-                      <td style={{ padding: "8px 10px" }}>
+                      <td style={{ padding: "8px 10px", display: "flex", gap: 4 }}>
                         {c.status === "ACTIVE" && (
                           <button type="button" style={{ ...btnDanger, padding: "4px 10px", fontSize: 11 }} onClick={() => handleRevoke(c.id)}>Révoquer</button>
                         )}
+                        <button type="button" style={{ ...btnDanger, padding: "4px 10px", fontSize: 11, opacity: 0.7 }} onClick={() => handleDelete(c.id)}>🗑</button>
                       </td>
                     </tr>
                   ))}
@@ -479,6 +555,99 @@ export default function AdminIncentivesPanel() {
               </table>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ══════ GROWTH GRANTS ══════ */}
+      {tab === "grants" && (
+        <div>
+          <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
+            <select value={grantFilterKind} onChange={e => { setGrantFilterKind(e.target.value); setGrantsPage(1); }} style={selectStyle}>
+              <option value="ALL">Tous les types</option>
+              <option value="CPC">CPC</option>
+              <option value="CPI">CPI</option>
+              <option value="CPA">CPA</option>
+              <option value="ADDON_FREE_GAIN">Addon Free</option>
+            </select>
+            <select value={grantFilterStatus} onChange={e => { setGrantFilterStatus(e.target.value); setGrantsPage(1); }} style={selectStyle}>
+              <option value="ALL">Tous les statuts</option>
+              <option value="PENDING">Pending</option>
+              <option value="ACTIVE">Active</option>
+              <option value="CONSUMED">Consumed</option>
+              <option value="EXPIRED">Expired</option>
+              <option value="REVOKED">Revoked</option>
+            </select>
+            <span style={{ fontSize: 12, color: C.text3 }}>{grantsTotal} grant(s)</span>
+          </div>
+
+          {busy ? (
+            <p style={{ color: C.text3, fontSize: 13 }}>Chargement…</p>
+          ) : grants.length === 0 ? (
+            <p style={{ color: C.text3, fontSize: 13 }}>Aucun growth grant.</p>
+          ) : (
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                <thead>
+                  <tr style={{ borderBottom: `1px solid ${C.border}` }}>
+                    {["User", "Type", "Réduction", "Addon", "Statut", "Events", "Expire", "Actions"].map(h => (
+                      <th key={h} style={{ padding: "8px 10px", textAlign: "left", color: C.text2, fontWeight: 600, fontSize: 11, textTransform: "uppercase" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {grants.map(g => (
+                    <tr key={g.id} style={{ borderBottom: `1px solid ${C.border}30` }}>
+                      <td style={{ padding: "8px 10px", color: C.text2, fontSize: 11 }}>{g.user.profile?.displayName ?? g.user.email}</td>
+                      <td style={{ padding: "8px 10px", color: C.accent, fontWeight: 600 }}>{g.kind}</td>
+                      <td style={{ padding: "8px 10px", color: C.text }}>{g.discountPercent != null ? `${g.discountPercent}%` : "—"}</td>
+                      <td style={{ padding: "8px 10px", color: C.text3, fontSize: 11 }}>{g.addonCode ?? "—"}</td>
+                      <td style={{ padding: "8px 10px" }}>
+                        <span style={badgeStyle(statusColor[g.status] ?? C.text3, statusColor[g.status] ?? C.text3)}>{g.status}</span>
+                      </td>
+                      <td style={{ padding: "8px 10px", color: C.text3 }}>{g._count.events}</td>
+                      <td style={{ padding: "8px 10px", color: C.text3, fontSize: 11 }}>{new Date(g.expiresAt).toLocaleDateString("fr-FR")}</td>
+                      <td style={{ padding: "8px 10px" }}>
+                        {g.status === "ACTIVE" && (
+                          <button type="button" style={{ ...btnDanger, padding: "4px 10px", fontSize: 11 }} onClick={() => handleRevokeGrant(g.id)}>Révoquer</button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {Math.ceil(grantsTotal / 20) > 1 && (
+            <div style={{ display: "flex", gap: 8, justifyContent: "center", marginTop: 16 }}>
+              <button type="button" disabled={grantsPage <= 1} onClick={() => setGrantsPage(p => p - 1)} style={btnStyle}>← Préc</button>
+              <span style={{ color: C.text2, fontSize: 13, padding: "8px 0" }}>{grantsPage}/{Math.ceil(grantsTotal / 20)}</span>
+              <button type="button" disabled={grantsPage >= Math.ceil(grantsTotal / 20)} onClick={() => setGrantsPage(p => p + 1)} style={btnStyle}>Suiv →</button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ══════ JOBS ══════ */}
+      {tab === "jobs" && (
+        <div style={{ maxWidth: 520 }}>
+          <h3 style={{ fontSize: 15, fontWeight: 600, color: C.text, marginBottom: 16 }}>Jobs manuels</h3>
+          <div style={{ display: "grid", gap: 12 }}>
+            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 20 }}>
+              <h4 style={{ color: C.text, fontSize: 14, marginBottom: 6 }}>🧹 Expiration coupons & grants</h4>
+              <p style={{ color: C.text3, fontSize: 12, marginBottom: 12 }}>Expire les coupons/grants dont la date est dépassée. S'exécute aussi automatiquement toutes les heures.</p>
+              <button type="button" disabled={busy} onClick={() => handleRunJob("expire")} style={btnStyle}>
+                {busy ? "En cours…" : "Lancer l'expiration"}
+              </button>
+            </div>
+            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 20 }}>
+              <h4 style={{ color: C.text, fontSize: 14, marginBottom: 6 }}>⚖️ Rééquilibrage 100%</h4>
+              <p style={{ color: C.text3, fontSize: 12, marginBottom: 12 }}>Garantit que ≥15% des coupons du mois sont à 100%. S'exécute aussi automatiquement quotidiennement.</p>
+              <button type="button" disabled={busy} onClick={() => handleRunJob("rebalance-100")} style={btnStyle}>
+                {busy ? "En cours…" : "Lancer le rééquilibrage"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

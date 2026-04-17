@@ -871,6 +871,17 @@ export const buyerConfirmDelivery = async (userId: string, orderId: string, code
     }
   });
 
+  // Emit CPA growth grant to seller on successful delivery
+  try {
+    const { emitGrowthGrant } = await import("../incentives/incentive.service.js");
+    const sellerId = updated.seller?.id ?? updated.sellerBusiness?.ownerUserId;
+    if (sellerId) {
+      await emitGrowthGrant(sellerId, "CPA", {
+        metadata: { orderId: order.id, source: "order_delivered" },
+      });
+    }
+  } catch { /* non-blocking */ }
+
   return mapOrder(updated);
 };
 

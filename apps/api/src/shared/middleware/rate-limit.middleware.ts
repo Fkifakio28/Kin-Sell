@@ -57,6 +57,10 @@ export const RateLimits = {
   OAUTH_DEBUG: { windowMs: 60_000, max: 30, label: "OAUTH_DEBUG" },
   /** App code exchange: 10 per 15 minutes per IP (separate from LOGIN) */
   APP_EXCHANGE: { windowMs: 900_000, max: 10, label: "APP_EXCHANGE" },
+  /** Coupon validate/preview: 10 per minute per user */
+  COUPON_VALIDATE: { windowMs: 60_000, max: 10, label: "COUPON_VALIDATE" },
+  /** Grant events: 20 per minute per user */
+  GRANT_EVENT: { windowMs: 60_000, max: 20, label: "GRANT_EVENT" },
 } as const;
 
 type RateLimitConfig = { windowMs: number; max: number; label: string };

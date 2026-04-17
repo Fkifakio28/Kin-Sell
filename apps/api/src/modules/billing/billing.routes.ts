@@ -104,6 +104,40 @@ router.get(
 
 // Route confirm-deposit supprimée — plus de virement bancaire
 
+// ── Preview coupon (calcul prix final sans rédemption) ──
+const couponPreviewSchema = z.object({
+  code: z.string().min(3).max(30),
+  planCode: z.string().min(2).max(40),
+  billingCycle: z.enum(["MONTHLY", "ONE_TIME"]).default("MONTHLY"),
+});
+
+router.post(
+  "/coupons/preview",
+  requireAuth,
+  asyncHandler(async (request: AuthenticatedRequest, response) => {
+    const { code, planCode, billingCycle } = couponPreviewSchema.parse(request.body);
+    const { previewCoupon } = await import("../incentives/incentive.service.js");
+    const { getPlanOrThrow } = await import("./billing.catalog.js");
+
+    // Résoudre le scope utilisateur
+    const user = await (await import("../../shared/db/prisma.js")).prisma.user.findUnique({
+      where: { id: request.auth!.userId },
+      select: { role: true },
+    });
+    const scope = user?.role === "BUSINESS" ? "BUSINESS" : "USER";
+    const plan = getPlanOrThrow(planCode, scope as "USER" | "BUSINESS");
+    const originalAmountUsdCents = plan.monthlyPriceUsdCents;
+
+    const result = await previewCoupon(
+      request.auth!.userId,
+      code,
+      originalAmountUsdCents,
+      planCode,
+    );
+    response.json(result);
+  })
+);
+
 const paypalCheckoutSchema = z.object({
   planCode: z.string().min(2).max(40),
   billingCycle: z.enum(["MONTHLY", "ONE_TIME"]).default("MONTHLY"),
