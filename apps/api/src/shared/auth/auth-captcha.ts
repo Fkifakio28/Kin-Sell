@@ -12,14 +12,8 @@ export async function enforceAuthCaptcha(request: Request, response: Response): 
   const cfToken = request.body?.cfTurnstileToken;
   const isNativeApp = isNativeAppRequest(request);
   const isUnavailableFallback = cfToken === "captcha-unavailable";
-  const isNativeBypass = cfToken === "native-bypass";
 
-  if (isNativeBypass && !isNativeApp) {
-    response.status(400).json({ error: "Jeton CAPTCHA natif invalide" });
-    return false;
-  }
-
-  if (isNativeApp || isUnavailableFallback || isNativeBypass) {
+  if (isNativeApp || isUnavailableFallback) {
     await new Promise<void>((resolve, reject) => {
       rateLimit(RateLimits.AUTH_FALLBACK)(request, response, (err) => err ? reject(err) : resolve());
     });

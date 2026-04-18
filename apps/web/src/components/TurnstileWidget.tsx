@@ -23,11 +23,11 @@ type TurnstileWidgetProps = {
 };
 
 export function TurnstileWidget({ onToken }: TurnstileWidgetProps) {
-  // Native app (iOS/Android) → bypass Turnstile (WKWebView blocks third-party scripts)
-  // Backend already accepts "native-bypass" token when User-Agent contains KinSellApp
+  // Native app (iOS/Android): WebView peut bloquer Turnstile.
+  // On passe en mode dégradé strict (captcha-unavailable + rate-limit serveur renforcé).
   const isNative = Capacitor.isNativePlatform();
   useEffect(() => {
-    if (isNative) onToken("native-bypass");
+    if (isNative) onToken("captcha-unavailable");
   }, [isNative, onToken]);
   if (isNative) return null;
 
