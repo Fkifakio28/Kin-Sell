@@ -70,6 +70,7 @@ import {
   DashboardAnalyticsInsights,
   DashboardContactsSection,
   DashboardVerificationSection,
+  AutoShopTab,
 } from './sections';
 import { DashboardAdvancedAnalytics } from './sections/DashboardAdvancedAnalytics';
 import './dashboard.css';
@@ -89,6 +90,7 @@ type HubSection =
   | 'public-profile'
   | 'verification'
   | 'analytics'
+  | 'auto-shop'
   | 'kinsell'
   | 'settings';
 
@@ -151,6 +153,7 @@ const SECTION_DEFS: Array<{ key: HubSection; labelKey: string; icon: string }> =
   { key: 'public-profile', labelKey: 'user.publicProfile', icon: '👤' },
   { key: 'verification', labelKey: 'user.verification', icon: '✅' },
   { key: 'analytics', labelKey: 'user.analytics', icon: '📊' },
+  { key: 'auto-shop', labelKey: 'user.autoShop', icon: '🤖' },
   { key: 'kinsell', labelKey: 'Kin-Sell', icon: '🧠' },
   { key: 'settings', labelKey: 'user.settings', icon: '⚙' },
 ];
@@ -4590,6 +4593,11 @@ export function UserDashboard() {
               <AnalyticsCTAPanel />
             </section>
           </div>
+        )}
+
+        {/* ═══════════════  BOUTIQUE AUTOMATIQUE  ═══════════════ */}
+        {activeSection === 'auto-shop' && (
+          <AutoShopTab t={t} formatMoney={formatMoneyFromUsdCents} />
         )}
 
         {/* ═══════════════  ONGLET KIN-SELL  ═══════════════ */}

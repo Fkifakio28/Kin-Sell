@@ -28,7 +28,7 @@ import './dashboard.css';
 type BizSection =
   | 'dashboard' | 'boutique' | 'produits' | 'services'
   | 'commandes' | 'messages' | 'contacts'
-  | 'analytics' | 'verification'
+  | 'analytics' | 'verification' | 'auto-shop'
   | 'kinsell' | 'parametres';
 
 type AbonnementTier = 'based' | 'medium' | 'premium';
@@ -37,7 +37,7 @@ type AbonnementTier = 'based' | 'medium' | 'premium';
 import { USD_TO_CDF_RATE, DEFAULT_CURRENCY_RATES } from '../../shared/constants/currencies';
 import { SK_BIZ_AI_ADVICE, SK_BIZ_AI_AUTO_NEGO, SK_BIZ_AI_COMMANDE } from '../../shared/constants/storage-keys';
 import { useFeatureGate } from '../../shared/hooks/useFeatureGate';
-import { DashboardSecurityBlock, DashboardVerificationSection, DashboardAiSettings } from './sections';
+import { DashboardSecurityBlock, DashboardVerificationSection, DashboardAiSettings, AutoShopTab } from './sections';
 import { AdsBoostPopup } from '../../components/AdsBoostPopup';
 import { PostPublishAdvisor } from '../../components/PostPublishAdvisor';
 import { PostSaleAdvisor } from '../../components/PostSaleAdvisor';
@@ -292,6 +292,7 @@ export function BusinessDashboard() {
     { key: 'messages',     labelKey: 'biz.navMessages',    icon: '💬' },
     { key: 'contacts',     labelKey: 'biz.navContacts',    icon: '🤝' },
     { key: 'analytics',    labelKey: 'biz.navAnalytics',   icon: '📊' },
+    { key: 'auto-shop',    labelKey: 'user.autoShop',      icon: '🤖' },
     { key: 'verification', labelKey: 'biz.navVerification', icon: '✅' },
     { key: 'kinsell',      labelKey: 'Kin-Sell',            icon: '🧠' },
     { key: 'parametres',   labelKey: 'biz.navParametres',  icon: '⚙' },
@@ -3364,6 +3365,11 @@ export function BusinessDashboard() {
             </section>
 
           </div>
+        )}
+
+        {/* ═══════════════  BOUTIQUE AUTOMATIQUE (BUSINESS)  ═══════════════ */}
+        {activeSection === 'auto-shop' && (
+          <AutoShopTab t={t} formatMoney={formatMoneyFromUsdCents} />
         )}
 
         {/* ═══════════════  ONGLET KIN-SELL (BUSINESS)  ═══════════════ */}

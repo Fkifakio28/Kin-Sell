@@ -71,6 +71,41 @@ export const negotiationAi = {
     }),
 };
 
+// ── Boutique Automatique (Auto-Shop) ──
+
+export type AutoNegoRules = {
+  enabled: boolean;
+  minFloorPercent: number;
+  maxAutoDiscountPercent: number;
+  preferredCounterPercent: number;
+  firmness: "FLEXIBLE" | "BALANCED" | "FIRM";
+};
+
+export type AutoShopListing = {
+  id: string;
+  title: string;
+  category: string;
+  priceUsdCents: number;
+  imageUrl: string | null;
+  isNegotiable: boolean;
+  autoNegoRules: AutoNegoRules | null;
+};
+
+export const autoShop = {
+  getListings: () =>
+    request<AutoShopListing[]>("/negotiations/auto-shop/listings"),
+  updateRules: (listingId: string, rules: AutoNegoRules) =>
+    request<{ id: string; title: string; autoNegoRules: AutoNegoRules }>(`/negotiations/auto-shop/listings/${encodeURIComponent(listingId)}/rules`, {
+      method: "PUT",
+      body: rules,
+    }),
+  bulkUpdateRules: (rules: AutoNegoRules) =>
+    request<{ updated: number; rules: AutoNegoRules }>("/negotiations/auto-shop/bulk-rules", {
+      method: "PUT",
+      body: rules,
+    }),
+};
+
 // ── IA Commande (Order AI) ──
 
 export type CheckoutAdvice = {

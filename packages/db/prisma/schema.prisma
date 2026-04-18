@@ -566,6 +566,7 @@ model Listing {
   promoPriceUsdCents Int?
   promoExpiresAt     DateTime?
   promotionId        String? // Lien vers la Promotion groupée
+  autoNegoRules      Json?   // { enabled, minFloorPercent, maxAutoDiscountPercent, preferredCounterPercent, firmness }
   ownerUserId        String
   businessId         String?
   createdAt          DateTime           @default(now())

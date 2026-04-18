@@ -52,6 +52,88 @@ const listSchema = z.object({
 
 const router = Router();
 
+// ═══════════════════════════════════════════════════════
+// BOUTIQUE AUTOMATIQUE — Règles auto-négociation par listing
+// (Placé AVANT les routes /:negotiationId pour éviter les conflits de paramètres)
+// ═══════════════════════════════════════════════════════
+
+const autoRulesSchema = z.object({
+  enabled: z.boolean(),
+  minFloorPercent: z.coerce.number().min(30).max(99),
+  maxAutoDiscountPercent: z.coerce.number().min(1).max(50),
+  preferredCounterPercent: z.coerce.number().min(50).max(99),
+  firmness: z.enum(["FLEXIBLE", "BALANCED", "FIRM"]),
+});
+
+/** GET /negotiations/auto-shop/listings — tous les listings du user avec leurs règles auto */
+router.get(
+  "/auto-shop/listings",
+  requireAuth,
+  requireRoles(Role.USER, Role.BUSINESS),
+  asyncHandler(async (request: AuthenticatedRequest, response) => {
+    const { prisma } = await import("../../shared/db/prisma.js");
+    const listings = await prisma.listing.findMany({
+      where: { ownerUserId: request.auth!.userId, status: "ACTIVE" },
+      select: {
+        id: true,
+        title: true,
+        category: true,
+        priceUsdCents: true,
+        imageUrl: true,
+        isNegotiable: true,
+        autoNegoRules: true,
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    response.json(listings);
+  })
+);
+
+/** PUT /negotiations/auto-shop/listings/:listingId/rules — sauvegarder les règles auto */
+router.put(
+  "/auto-shop/listings/:listingId/rules",
+  requireAuth,
+  requireRoles(Role.USER, Role.BUSINESS),
+  asyncHandler(async (request: AuthenticatedRequest, response) => {
+    const rules = autoRulesSchema.parse(request.body);
+    const { prisma } = await import("../../shared/db/prisma.js");
+
+    // Vérifier ownership
+    const listing = await prisma.listing.findFirst({
+      where: { id: request.params.listingId, ownerUserId: request.auth!.userId },
+      select: { id: true },
+    });
+    if (!listing) {
+      response.status(404).json({ error: "Listing introuvable" });
+      return;
+    }
+
+    const updated = await prisma.listing.update({
+      where: { id: listing.id },
+      data: { autoNegoRules: rules },
+      select: { id: true, title: true, autoNegoRules: true },
+    });
+    response.json(updated);
+  })
+);
+
+/** PUT /negotiations/auto-shop/bulk-rules — appliquer les mêmes règles à tous les listings */
+router.put(
+  "/auto-shop/bulk-rules",
+  requireAuth,
+  requireRoles(Role.USER, Role.BUSINESS),
+  asyncHandler(async (request: AuthenticatedRequest, response) => {
+    const rules = autoRulesSchema.parse(request.body);
+    const { prisma } = await import("../../shared/db/prisma.js");
+
+    const result = await prisma.listing.updateMany({
+      where: { ownerUserId: request.auth!.userId, status: "ACTIVE", isNegotiable: true },
+      data: { autoNegoRules: rules },
+    });
+    response.json({ updated: result.count, rules });
+  })
+);
+
 // ── Créer une négociation (acheteur) ──
 router.post(
   "/",

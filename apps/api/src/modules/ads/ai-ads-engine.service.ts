@@ -18,6 +18,30 @@ import { PLAN_CATALOG, ADDON_CATALOG } from "../billing/billing.catalog.js";
 import { getMarketMedian, computePricePosition } from "../../shared/market/market-shared.js";
 import { OFFER_MAP, type OfferCode } from "./ads-knowledge-base.js";
 
+/**
+ * Map plan code → add-on codes INCLUS nativement dans le forfait.
+ * Source de vérité : billing.catalog.ts features[].
+ * Si un add-on est dans les features du plan, on ne le propose PAS en add-on séparé.
+ */
+const PLAN_INCLUDED_ADDONS: Record<string, Set<string>> = {};
+for (const plan of PLAN_CATALOG) {
+  const key = plan.code;
+  if (!PLAN_INCLUDED_ADDONS[key]) PLAN_INCLUDED_ADDONS[key] = new Set();
+  for (const feat of plan.features) {
+    // Les features qui correspondent à des codes add-on
+    if (["IA_MERCHANT", "IA_ORDER", "BOOST_VISIBILITY", "ADS_PACK", "ADS_PREMIUM"].includes(feat)) {
+      PLAN_INCLUDED_ADDONS[key].add(feat);
+    }
+    // ANALYTICS_MEDIUM / ANALYTICS_PREMIUM → pas un add-on vendable, mais à connaître
+  }
+}
+
+/** Vérifie si un add-on est déjà couvert par le plan actif de l'utilisateur */
+function isAddonCoveredByPlan(addonCode: string, planCode: string | null): boolean {
+  if (!planCode) return false;
+  return PLAN_INCLUDED_ADDONS[planCode]?.has(addonCode) ?? false;
+}
+
 /** Helper: deep-link vers /forfaits depuis la knowledge base */
 function offerCta(code: OfferCode, fallbackTab = "users"): string {
   return OFFER_MAP.get(code)?.ctaPath ?? `/forfaits?tab=${fallbackTab}`;
@@ -374,15 +398,16 @@ export async function generateSmartOffers(
   const { lifecycle, budgetTier, currentPlan, isBusiness } = profile;
 
   // ── 1. TRIAL / PREMIER ABONNEMENT ──
-  // Pour les vendeurs sans plan payant
-  if (!currentPlan || currentPlan.code === "FREE" || currentPlan.code === "STARTER") {
+  // Pour les vendeurs SANS plan payant (FREE uniquement)
+  // JAMAIS proposer un plan que l'user a déjà
+  if (!currentPlan || currentPlan.code === "FREE") {
     const trialOffer = buildSubscriptionOffer(profile);
     if (trialOffer) offers.push(trialOffer);
   }
 
   // ── 2. UPGRADE ──
-  // Pour les vendeurs qui ont déjà un plan mais qui grandissent
-  if (currentPlan && lifecycle !== "NEW") {
+  // Pour les vendeurs qui ont déjà un plan PAYANT et qui grandissent
+  if (currentPlan && currentPlan.code !== "FREE" && lifecycle !== "NEW") {
     const upgradeOffer = buildUpgradeOffer(profile);
     if (upgradeOffer) offers.push(upgradeOffer);
   }
@@ -406,9 +431,22 @@ export async function generateSmartOffers(
     if (adOffer) offers.push(adOffer);
   }
 
-  // Tri par priorité décroissante + limite
+  // Tri par priorité décroissante + déduplication + limite
+  // Déduplication : pas 2 offres pour le même plan/addon code
+  const seen = new Set<string>();
+  const currentPlanCode = currentPlan?.code ?? "";
   return offers
     .sort((a, b) => b.priority - a.priority)
+    .filter((offer) => {
+      // Ne JAMAIS proposer le plan actif
+      const suggestedPlan = (offer.actionData?.suggestedPlan as string) ?? (offer.actionData?.addonCode as string) ?? "";
+      if (suggestedPlan && suggestedPlan === currentPlanCode) return false;
+      // Déduplication par clé unique
+      const key = `${offer.type}:${suggestedPlan || offer.engineKey}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
     .slice(0, 3); // max 3 offres par cycle
 }
 
@@ -417,7 +455,7 @@ export async function generateSmartOffers(
 // ═══════════════════════════════════════════════════════
 
 function buildSubscriptionOffer(profile: SellerProfile): SmartOffer | null {
-  const { lifecycle, budgetTier, isBusiness, completedSales, totalListings } = profile;
+  const { lifecycle, budgetTier, isBusiness, completedSales, totalListings, currentPlan } = profile;
 
   // Pas de plan ou plan gratuit → proposer un abonnement adapté
   let suggestedPlanCode: string;
@@ -465,6 +503,9 @@ function buildSubscriptionOffer(profile: SellerProfile): SmartOffer | null {
       rationale = "Le forfait Pro Vendeur (20$/mois) débloque les analyses de marché et l'automatisation complète.";
     }
   }
+
+  // ── GUARD: Ne JAMAIS proposer le plan actuel de l'utilisateur ──
+  if (currentPlan && currentPlan.code === suggestedPlanCode) return null;
 
   const plan = getPlanByCode(suggestedPlanCode);
   if (!plan) return null;
@@ -538,13 +579,15 @@ function buildUpgradeOffer(profile: SellerProfile): SmartOffer | null {
 }
 
 function buildAddonOffers(profile: SellerProfile): SmartOffer[] {
-  const { activeAddons, lifecycle, budgetTier, completedSales, totalListings, hasStagnantListings, isBusiness, negotiationCount, conversionRate } = profile;
+  const { activeAddons, lifecycle, budgetTier, completedSales, totalListings, hasStagnantListings, isBusiness, negotiationCount, conversionRate, currentPlan } = profile;
   const offers: SmartOffer[] = [];
+  const planCode = currentPlan?.code ?? null;
 
   if (budgetTier === "ZERO" && lifecycle === "NEW") return []; // trop tôt
 
   // ── IA Marchand (3$/mois) — aide à la négociation ──
-  if (!activeAddons.includes("IA_MERCHANT") && negotiationCount >= 3 && conversionRate < 40) {
+  // Ne pas proposer si l'add-on est actif OU si le plan inclut déjà IA_MERCHANT
+  if (!activeAddons.includes("IA_MERCHANT") && !isAddonCoveredByPlan("IA_MERCHANT", planCode) && negotiationCount >= 3 && conversionRate < 40) {
     offers.push({
       type: "ADDON",
       priority: 6,
@@ -567,7 +610,8 @@ function buildAddonOffers(profile: SellerProfile): SmartOffer[] {
   }
 
   // ── IA Commande (7$/mois) — vente automatique ──
-  if (!activeAddons.includes("IA_ORDER") && completedSales >= 5) {
+  // Ne pas proposer si l'add-on est actif OU si le plan inclut déjà IA_ORDER
+  if (!activeAddons.includes("IA_ORDER") && !isAddonCoveredByPlan("IA_ORDER", planCode) && completedSales >= 5) {
     offers.push({
       type: "ADDON",
       priority: lifecycle === "ESTABLISHED" ? 7 : 5,
@@ -590,7 +634,8 @@ function buildAddonOffers(profile: SellerProfile): SmartOffer[] {
   }
 
   // ── Boost Visibilité — requis pour booster des articles ──
-  if (!activeAddons.includes("BOOST_VISIBILITY") && totalListings >= 3 && hasStagnantListings) {
+  // Ne pas proposer si l'add-on est actif OU si le plan inclut déjà BOOST_VISIBILITY
+  if (!activeAddons.includes("BOOST_VISIBILITY") && !isAddonCoveredByPlan("BOOST_VISIBILITY", planCode) && totalListings >= 3 && hasStagnantListings) {
     offers.push({
       type: "ADDON",
       priority: 6,
@@ -613,7 +658,8 @@ function buildAddonOffers(profile: SellerProfile): SmartOffer[] {
   }
 
   // ── Pack Pub — pour campagnes ciblées ──
-  if (!activeAddons.includes("ADS_PACK") && lifecycle !== "NEW" && budgetTier !== "ZERO") {
+  // Ne pas proposer si l'add-on est actif OU si le plan inclut déjà ADS_PACK
+  if (!activeAddons.includes("ADS_PACK") && !isAddonCoveredByPlan("ADS_PACK", planCode) && lifecycle !== "NEW" && budgetTier !== "ZERO") {
     // Ne proposer que si l'utilisateur n'a pas de campagne active récente
     offers.push({
       type: "ADDON",
