@@ -27,7 +27,7 @@
 html {
   scroll-behavior: smooth;
   color-scheme: dark only;
-  background: #120b2b;
+  background: var(--color-dark-blue);
 }
 
 body {
@@ -50,8 +50,8 @@ body {
   inset: 0;
   z-index: -3;
   background:
-    radial-gradient(circle at 18% 10%, rgba(144, 110, 255, 0.34), transparent 35%),
-    radial-gradient(circle at 78% 75%, rgba(206, 176, 255, 0.24), transparent 42%),
+    radial-gradient(circle at 18% 10%, var(--bg-glow-1), transparent 35%),
+    radial-gradient(circle at 78% 75%, var(--bg-glow-2), transparent 42%),
     linear-gradient(150deg, var(--color-dark-blue) 0%, var(--color-dark-blue-light) 50%, var(--color-dark-blue) 100%);
 }
 
@@ -68,9 +68,9 @@ body {
   z-index: -2;
   pointer-events: none;
   background:
-    linear-gradient(165deg, rgba(16, 8, 34, 0.74), rgba(22, 14, 49, 0.6)),
-    radial-gradient(circle at 15% 15%, rgba(110, 78, 228, 0.28), transparent 45%),
-    radial-gradient(circle at 85% 80%, rgba(146, 104, 255, 0.24), transparent 48%);
+    linear-gradient(165deg, var(--overlay-grad-1), var(--overlay-grad-2)),
+    radial-gradient(circle at 15% 15%, var(--overlay-glow-1), transparent 45%),
+    radial-gradient(circle at 85% 80%, var(--overlay-glow-2), transparent 48%);
   animation: liveOverlayShift 14s ease-in-out infinite alternate;
 }
 
@@ -85,7 +85,7 @@ body {
 .ks-bubble {
   position: absolute;
   border-radius: 999px;
-  background: radial-gradient(circle at 32% 30%, rgba(202, 175, 255, 0.5), rgba(111, 88, 255, 0.12));
+  background: radial-gradient(circle at 32% 30%, var(--bubble-color-1), var(--bubble-color-2));
   filter: blur(2px);
   opacity: 0.34;
   animation: ksBubbleDrift 18s ease-in-out infinite alternate;

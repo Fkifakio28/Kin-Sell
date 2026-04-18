@@ -865,38 +865,6 @@
   .ks-header-actions { display: none; }
 }
 
-/* Light theme header */
-:root[data-theme="light"] .ks-header,
-:root[data-theme="light"] .ks-mobile-nav {
-  background: rgba(237, 244, 255, 0.92);
-}
-:root[data-theme="light"] .ks-account-popup,
-:root[data-theme="light"] .ks-notif-dropdown,
-:root[data-theme="light"] .ks-info-popup {
-  background: #f0f4fa;
-  border-color: rgba(30, 136, 229, 0.15);
-}
-:root[data-theme="light"] .ks-account-popup-head strong,
-:root[data-theme="light"] .ks-notif-dropdown-head strong,
-:root[data-theme="light"] .ks-info-popup-head strong,
-:root[data-theme="light"] .ks-notif-dropdown-label { color: #0B1F3A; }
-:root[data-theme="light"] .ks-account-popup-head p,
-:root[data-theme="light"] .ks-notif-dropdown-detail,
-:root[data-theme="light"] .ks-notif-dropdown-time,
-:root[data-theme="light"] .ks-info-popup-head p { color: #4a5568; }
-:root[data-theme="light"] .ks-account-popup-link,
-:root[data-theme="light"] .ks-info-popup-link,
-:root[data-theme="light"] .ks-notif-dropdown-item { color: #1a2744; }
-:root[data-theme="light"] .ks-account-popup-select {
-  background: #e3ebf6;
-  border-color: rgba(30, 136, 229, 0.2);
-  color: #0B1F3A;
-}
-:root[data-theme="light"] .ks-account-popup-select option {
-  background: #f0f4fa;
-  color: #0B1F3A;
-}
-
 
 /* ═══════════════════════════════════════════════
    FOOTER KIN-SELL
@@ -1288,7 +1256,4 @@
   }
 }
 
-/* Light theme footer */
-:root[data-theme="light"] .ks-footer {
-  background: rgba(237, 244, 255, 0.94);
-}
+

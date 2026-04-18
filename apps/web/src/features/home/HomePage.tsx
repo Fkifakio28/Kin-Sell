@@ -651,7 +651,7 @@ export function HomePage() {
   const currentSokinPost = sokinFeed.length > 0 ? sokinFeed[safeKinIdx] : null;
 
   return (
-    <div className="h-shell h-home-light">
+    <div className="h-shell">
       <SeoMeta
         title={t('home.metaTitle')}
         description={t('home.metaDescription')}

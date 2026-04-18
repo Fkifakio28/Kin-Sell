@@ -297,18 +297,6 @@
 }
 
 /* ═══════════════════════════════════════
-   Light theme overrides
-   ═══════════════════════════════════════ */
-
-[data-theme="light"] .tuto-tooltip {
-  background: #fff;
-  color: #1a1a2e;
-}
-
-[data-theme="light"] .tuto-close:hover {
-  background: #eee;
-}
-
 /* ═══════════════════════════════════════
    Bouton Relancer le tutoriel
    ═══════════════════════════════════════ */

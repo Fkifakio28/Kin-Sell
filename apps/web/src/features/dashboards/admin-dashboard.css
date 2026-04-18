@@ -1184,30 +1184,6 @@
   }
 }
 
-/* ══════════════════════════════════════════
-   LIGHT THEME
-   ══════════════════════════════════════════ */
-:root[data-theme="light"] .ad-shell {
-  --ad-bg: #f0f2f8;
-  --ad-surface: rgba(255, 255, 255, 0.82);
-  --ad-border: rgba(120, 100, 200, 0.18);
-  --ad-text-1: #1a1536;
-  --ad-text-2: #4a4268;
-  --ad-text-3: #8a82a0;
-}
-:root[data-theme="light"] .ad-sidebar {
-  background: linear-gradient(180deg, rgba(240, 242, 248, 0.97) 0%, rgba(252, 251, 255, 0.96) 100%);
-}
-:root[data-theme="light"] .ad-search-input,
-:root[data-theme="light"] .ad-select,
-:root[data-theme="light"] .ad-input,
-:root[data-theme="light"] .ad-textarea {
-  background: rgba(255, 255, 255, 0.7);
-}
-:root[data-theme="light"] .ad-modal {
-  background: rgba(248, 246, 255, 0.97);
-}
-
 /* ── Admin mobile drawer override at ≤ 640px ── */
 @media (max-width: 640px) {
   .ad-shell {

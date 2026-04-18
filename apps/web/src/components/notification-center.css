@@ -190,21 +190,6 @@
   to { transform: translateY(0); }
 }
 
-/* ── Light mode ── */
-[data-theme="light"] .nc-panel {
-  background: rgba(255, 255, 255, 0.92);
-  border-top-color: rgba(0, 0, 0, 0.08);
-  box-shadow: 0 -4px 32px rgba(0, 0, 0, 0.12);
-}
-
-[data-theme="light"] .nc-item:hover {
-  background: rgba(111, 88, 255, 0.06);
-}
-
-[data-theme="light"] .nc-item-icon {
-  background: rgba(111, 88, 255, 0.08);
-}
-
 /* ── Desktop: centre le panel en popup ── */
 @media (min-width: 769px) {
   .nc-panel {

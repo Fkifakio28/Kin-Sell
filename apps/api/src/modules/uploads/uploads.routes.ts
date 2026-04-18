@@ -6,7 +6,7 @@ import crypto from "node:crypto";
 import { requireAuth } from "../../shared/auth/auth-middleware.js";
 import { asyncHandler } from "../../shared/utils/async-handler.js";
 import { HttpError } from "../../shared/errors/http-error.js";
-import { optimizeUploadedImageFile } from "../../shared/utils/media-storage.js";
+import { optimizeUploadedImageFile, optimizeUploadedVideoFile, optimizeUploadedAudioFile } from "../../shared/utils/media-storage.js";
 
 const UPLOADS_DIR = path.resolve(process.cwd(), "uploads");
 
@@ -105,6 +105,14 @@ router.post(
       files.map(async (file) => {
         if (ALLOWED_IMAGE_TYPES.includes(file.mimetype)) {
           const stored = await optimizeUploadedImageFile(file.path, { folder: "media" });
+          return stored.url;
+        }
+        if (ALLOWED_VIDEO_TYPES.includes(file.mimetype)) {
+          const stored = await optimizeUploadedVideoFile(file.path, { folder: "media" });
+          return stored.url;
+        }
+        if (ALLOWED_AUDIO_TYPES.includes(file.mimetype)) {
+          const stored = await optimizeUploadedAudioFile(file.path, { folder: "media" });
           return stored.url;
         }
         return `/uploads/${file.filename}`;
