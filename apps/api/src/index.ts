@@ -156,9 +156,12 @@ app.use((req, res, next) => {
     if (/^\/(explorer|listings|blog|geo)/.test(req.path)) {
       res.set("Cache-Control", "public, max-age=300, stale-while-revalidate=60");
     }
-    // Données session (account, orders) : cache privé 1 min
-    else if (/^\/(account|orders|negotiations|messaging|notifications)/.test(req.path)) {
-      res.set("Cache-Control", "private, max-age=60");
+    // Données session (account, orders, etc.) : JAMAIS cacher — empêche fuite cross-user via proxy
+    else if (/^\/(account|orders|negotiations|messaging|notifications|billing|incentive)/.test(req.path)) {
+      res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+      res.set("Pragma", "no-cache");
+      res.set("Expires", "0");
+      res.set("Vary", "Cookie, Authorization");
     }
     // Autres GET : cache court
     else {
@@ -171,15 +174,20 @@ app.use((req, res, next) => {
 });
 
 // ── ETag middleware for 304 Not Modified responses ──
+// Désactivé sur endpoints authentifiés pour éviter fuite cross-user via proxy cache
 app.use((_req, res, next) => {
   const originalJson = res.json.bind(res);
   res.json = function (data: unknown) {
     if (res.statusCode >= 200 && res.statusCode < 300) {
-      const body = JSON.stringify(data);
-      const etag = `"${crypto.createHash("sha256").update(body).digest("hex").slice(0, 16)}"`;
-      res.set("ETag", etag);
-      if (_req.get("If-None-Match") === etag) {
-        return res.status(304).end();
+      // Pas d'ETag sur les données privées (panier, compte, etc.)
+      const isPrivate = /^\/(account|orders|negotiations|messaging|notifications|billing|incentive)/.test(_req.path);
+      if (!isPrivate) {
+        const body = JSON.stringify(data);
+        const etag = `"${crypto.createHash("sha256").update(body).digest("hex").slice(0, 16)}"`;
+        res.set("ETag", etag);
+        if (_req.get("If-None-Match") === etag) {
+          return res.status(304).end();
+        }
       }
     }
     return originalJson(data);

@@ -220,21 +220,23 @@ const mapOrder = (order: {
 };
 
 const getOpenCartId = async (userId: string) => {
-  const existing = await prisma.cart.findFirst({
-    where: { buyerUserId: userId, status: CartStatus.OPEN },
-    select: { id: true },
-    orderBy: { createdAt: "desc" }
+  return prisma.$transaction(async (tx) => {
+    const existing = await tx.cart.findFirst({
+      where: { buyerUserId: userId, status: CartStatus.OPEN },
+      select: { id: true },
+      orderBy: { createdAt: "desc" }
+    });
+
+    if (existing) {
+      return existing.id;
+    }
+
+    const created = await tx.cart.create({
+      data: { buyerUserId: userId, status: CartStatus.OPEN }
+    });
+
+    return created.id;
   });
-
-  if (existing) {
-    return existing.id;
-  }
-
-  const created = await prisma.cart.create({
-    data: { buyerUserId: userId, status: CartStatus.OPEN }
-  });
-
-  return created.id;
 };
 
 const getOpenCartOrThrowItem = async (userId: string, itemId: string) => {
