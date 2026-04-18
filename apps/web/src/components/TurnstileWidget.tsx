@@ -92,7 +92,7 @@ function TurnstileWidgetWeb({ onToken }: TurnstileWidgetProps) {
       console.error("[Turnstile] render failed:", err);
       setStatus("error");
       setErrorMsg("Impossible de charger la vérification");
-      onToken("");
+      onToken("captcha-unavailable");
     }
   }, [onToken, cleanup]);
 

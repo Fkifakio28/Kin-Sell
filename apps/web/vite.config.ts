@@ -1,24 +1,6 @@
-import { defineConfig, type Plugin } from "vite";
+import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { compression } from "vite-plugin-compression2";
-import { readFileSync, writeFileSync } from "fs";
-import { resolve } from "path";
-
-/** Injecte un timestamp de build dans sw.js (remplace __BUILD_TS__) */
-function swVersionPlugin(): Plugin {
-  return {
-    name: "sw-build-version",
-    writeBundle() {
-      const swPath = resolve(__dirname, "dist/sw.js");
-      try {
-        const content = readFileSync(swPath, "utf-8");
-        writeFileSync(swPath, content.replace(/__BUILD_TS__/g, String(Date.now())));
-      } catch {
-        // sw.js absent du build — pas bloquant
-      }
-    },
-  };
-}
 
 export default defineConfig({
   plugins: [
@@ -36,9 +18,6 @@ export default defineConfig({
       threshold: 1024,
       deleteOriginalFile: false,
     }),
-
-    // Versionner sw.js avec un timestamp de build
-    swVersionPlugin(),
   ],
 
   build: {

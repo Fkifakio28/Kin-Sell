@@ -1,9 +1,6 @@
-/* Service Worker for Push Notifications */
+/* Service Worker — Push Notifications uniquement */
 const DEFAULT_ICON = "/apple-touch-icon.png";
 const DEFAULT_BADGE = "/favicon-32.png";
-// __BUILD_TS__ is replaced at build time by vite plugin; fallback keeps dev working
-const BUILD_TS = "__BUILD_TS__";
-const STATIC_CACHE_NAME = `kin-sell-static-${BUILD_TS.startsWith("__") ? "dev" : BUILD_TS}`;
 
 function resolveTarget(data) {
   if (!data || typeof data !== "object") return "/";
@@ -34,80 +31,16 @@ self.addEventListener("install", (event) => {
 });
 
 self.addEventListener("activate", (event) => {
+  // Purge tous les anciens caches pour libérer l'espace
   event.waitUntil((async () => {
     const keys = await caches.keys();
-    await Promise.all(
-      keys
-        .filter((key) => key.startsWith("kin-sell-static-") && key !== STATIC_CACHE_NAME)
-        .map((key) => caches.delete(key)),
-    );
+    await Promise.all(keys.map((key) => caches.delete(key)));
     await self.clients.claim();
   })());
 });
 
-self.addEventListener("fetch", (event) => {
-  const req = event.request;
-  if (req.method !== "GET") return;
-
-  const url = new URL(req.url);
-  if (url.origin !== self.location.origin) return;
-
-  // On laisse les endpoints dynamiques hors cache SW pour éviter les données périmées.
-  if (url.pathname.startsWith("/api")) return;
-
-  // Navigation / HTML → network-first (toujours la dernière version après déploiement)
-  const isNavigation = req.mode === "navigate"
-    || url.pathname === "/"
-    || url.pathname.endsWith(".html");
-
-  // Assets statiques hashés par Vite → stale-while-revalidate (rapide + mise à jour en fond)
-  const isStaticAsset = /\.(?:js|css|png|jpe?g|webp|avif|svg|ico|woff2?|ttf|map)$/i.test(url.pathname)
-    || url.pathname.startsWith("/assets/");
-
-  if (!isNavigation && !isStaticAsset) return;
-
-  if (isNavigation) {
-    // Network-first pour HTML : on sert toujours le plus récent
-    event.respondWith((async () => {
-      const cache = await caches.open(STATIC_CACHE_NAME);
-      try {
-        const networkResponse = await fetch(req);
-        if (networkResponse && networkResponse.ok) {
-          void cache.put(req, networkResponse.clone());
-        }
-        return networkResponse;
-      } catch {
-        const cached = await cache.match(req);
-        return cached || new Response("Offline", { status: 503, statusText: "Offline" });
-      }
-    })());
-    return;
-  }
-
-  // Stale-while-revalidate pour assets hashés
-  event.respondWith((async () => {
-    const cache = await caches.open(STATIC_CACHE_NAME);
-    const cached = await cache.match(req);
-    if (cached) {
-      void fetch(req).then((networkResponse) => {
-        if (networkResponse && networkResponse.ok) {
-          void cache.put(req, networkResponse.clone());
-        }
-      }).catch(() => undefined);
-      return cached;
-    }
-
-    try {
-      const networkResponse = await fetch(req);
-      if (networkResponse && networkResponse.ok) {
-        await cache.put(req, networkResponse.clone());
-      }
-      return networkResponse;
-    } catch {
-      return new Response("Offline", { status: 503, statusText: "Offline" });
-    }
-  })());
-});
+// PAS de fetch handler — Nginx + Vite gèrent le cache.
+// Le SW sert uniquement aux push notifications.
 
 self.addEventListener("push", (event) => {
   let payload = {};
