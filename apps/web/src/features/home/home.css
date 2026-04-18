@@ -3,6 +3,42 @@
    ══════════════════════════════════════════════ */
 
 /* ── Shell ── */
+.h-shell.h-home-light {
+  --color-primary: #7a66e7;
+  --color-primary-hover: #b5a6f2;
+  --color-secondary: #c1b5f8;
+  --color-accent: #9688d8;
+
+  --glass-bg: rgba(255, 255, 255, 0.92);
+  --glass-bg-hover: rgba(247, 243, 255, 0.98);
+  --glass-border: rgba(122, 102, 231, 0.18);
+
+  --color-glass-bg: rgba(255, 255, 255, 0.96);
+  --color-text: #2b2450;
+  --color-text-muted: #7c75a2;
+  --color-text-primary: #2b2450;
+  --color-text-secondary: #58517e;
+  --color-text-tertiary: #7c75a2;
+
+  --shadow-glass: 0 10px 30px rgba(59, 45, 122, 0.12);
+  --home-bg: #f0f2f5;
+  --home-surface: #ffffff;
+  --home-surface-soft: #f7f4ff;
+  --home-shadow-soft: 0 12px 30px rgba(59, 45, 122, 0.14);
+
+  position: relative;
+  isolation: isolate;
+}
+
+.h-shell.h-home-light::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background: var(--home-bg);
+  z-index: -1;
+  pointer-events: none;
+}
+
 .h-shell {
   display: flex;
   flex-direction: column;
@@ -1702,3 +1738,67 @@
   color: rgba(255, 255, 255, 0.7);
 }
 html[data-theme="light"] .h-bundle-feedback { color: #4a3a8a; }
+
+/* Home Light overrides (style blanc doux + violets Kin-Sell) */
+.h-shell.h-home-light .h-desktop-search-dropdown,
+.h-shell.h-home-light .h-notif-dropdown,
+.h-shell.h-home-light .h-popup {
+  background: var(--home-surface);
+  box-shadow: var(--home-shadow-soft);
+}
+
+.h-shell.h-home-light .h-popup-overlay {
+  background: rgba(240, 242, 245, 0.82);
+  backdrop-filter: blur(10px);
+}
+
+.h-shell.h-home-light .h-popup-close {
+  background: #ffffff;
+  border-color: rgba(122, 102, 231, 0.2);
+}
+
+.h-shell.h-home-light .h-popup-close:hover {
+  background: rgba(181, 166, 242, 0.24);
+}
+
+.h-shell.h-home-light .h-article-card:hover {
+  box-shadow: 0 12px 26px rgba(122, 102, 231, 0.22);
+}
+
+.h-shell.h-home-light .h-article-thumb::after {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08) 40%, rgba(122, 102, 231, 0.16) 100%);
+}
+
+.h-shell.h-home-light .h-article-cat {
+  background: rgba(255, 255, 255, 0.82);
+  color: #6e5dba;
+  border: 1px solid rgba(122, 102, 231, 0.24);
+}
+
+.h-shell.h-home-light .h-sokin-slider-dots .h-sokin-dot {
+  background: rgba(122, 102, 231, 0.2);
+}
+
+.h-shell.h-home-light .h-sokin-slider-dots .h-sokin-dot:hover:not(.active) {
+  background: rgba(122, 102, 231, 0.36);
+}
+
+.h-shell.h-home-light .h-bundle-savings {
+  background: rgba(122, 102, 231, 0.92);
+}
+
+.h-shell.h-home-light .h-bundle-thumb {
+  background: var(--home-surface-soft);
+}
+
+.h-shell.h-home-light .h-bundle-count {
+  color: #786ea1;
+}
+
+.h-shell.h-home-light .h-bundle-title {
+  color: #2b2450;
+}
+
+.h-shell.h-home-light .h-bundle-feedback {
+  color: #5f5688;
+}

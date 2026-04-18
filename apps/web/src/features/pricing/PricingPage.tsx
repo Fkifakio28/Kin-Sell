@@ -239,6 +239,7 @@ export function PricingPage() {
   const [paymentOrders, setPaymentOrders] = useState<PaymentOrder[]>([]);
   const [latestCheckout, setLatestCheckout] = useState<CheckoutResult | null>(null);
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
+  const [warnMessage, setWarnMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const [pendingPlanCode, setPendingPlanCode] = useState<string | null>(null);
@@ -339,11 +340,14 @@ export function PricingPage() {
 
     let cancelled = false;
     const capture = async () => {
-      setInfoMessage("Finalisation du paiement PayPal en cours…");
+      setWarnMessage("Finalisation du paiement PayPal en cours…");
+      setInfoMessage(null);
       try {
         const result = await billing.capturePaypalCheckout({ orderId });
         if (!cancelled) {
+          setWarnMessage(null);
           setInfoMessage(result.message || "✅ Paiement PayPal confirmé ! Votre forfait est activé.");
+          setLatestCheckout(null);
           // Reload billing data
           const [planData, ordersData] = await Promise.all([billing.myPlan(), billing.paymentOrders()]);
           if (!cancelled) {
@@ -372,6 +376,7 @@ export function PricingPage() {
     setLatestCheckout(null);
     setErrorMessage(null);
     setInfoMessage(null);
+    setWarnMessage(null);
     // Scroll vers la section paiement après le render
     setTimeout(() => {
       paymentRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -403,6 +408,7 @@ export function PricingPage() {
     if (!pendingPlanCode) return;
     setErrorMessage(null);
     setInfoMessage(null);
+    setWarnMessage(null);
     setBusyPlanCode(pendingPlanCode);
 
     try {
@@ -438,7 +444,7 @@ export function PricingPage() {
       if (result.paymentUrl) {
         window.open(result.paymentUrl, "_blank", "noopener,noreferrer");
       }
-      setInfoMessage("Redirection vers PayPal en cours\u2026 Votre forfait sera activé automatiquement après paiement.");
+      setWarnMessage("⏳ Paiement en attente — Veuillez finaliser le paiement sur PayPal. Votre forfait ne sera activé qu'après confirmation du paiement.");
 
       const orders = await billing.paymentOrders();
       setPaymentOrders(orders.orders);
@@ -499,6 +505,7 @@ export function PricingPage() {
 
       {/* ── Alerts ── */}
       {infoMessage ? <div className="pricing-alert pricing-alert--ok">{infoMessage}</div> : null}
+      {warnMessage ? <div className="pricing-alert pricing-alert--warn">{warnMessage}</div> : null}
       {errorMessage ? <div className="pricing-alert pricing-alert--error">{errorMessage}</div> : null}
 
       {/* ───────────────  TOGGLE  ─────────────── */}

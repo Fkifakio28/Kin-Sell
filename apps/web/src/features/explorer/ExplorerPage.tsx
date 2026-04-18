@@ -15,6 +15,7 @@ import { NegotiatePopup } from '../negotiations/NegotiatePopup';
 import { getUrgencyLabel } from '../../shared/promo/promo-engine';
 import { useLockedCategories, isCategoryLocked } from '../../hooks/useLockedCategories';
 import { AdBanner } from '../../components/AdBanner';
+import { GoogleAdSlot } from '../../components/GoogleAdSlot';
 import { BundlePromoCard } from '../../components/BundlePromoCard';
 import MapView from '../../components/MapView';
 import { SeoMeta } from '../../components/SeoMeta';
@@ -601,6 +602,9 @@ function ExplorerPageMobile() {
             )) : <p className="ex-empty">Aucune boutique disponible pour le moment.</p>}
           </div>
         </section>
+
+        {/* ── Google AdSense — entre boutiques et vendeurs ── */}
+        <GoogleAdSlot adSlot="3909776294" adFormat="horizontal" className="g-adsense-between-sections" />
 
         {/* ── Profiles ── */}
         <section className="ex-section">

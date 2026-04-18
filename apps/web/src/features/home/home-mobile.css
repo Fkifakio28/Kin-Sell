@@ -5,6 +5,18 @@
 
 /* ─── Root ─── */
 
+.hm-root.hm-home-light {
+  --color-bg: #f0f2f5;
+  --color-text: #2b2450;
+  --color-text-muted: #7c75a2;
+  --color-primary: #7a66e7;
+  --color-secondary: #c1b5f8;
+  --color-glass-bg: rgba(255, 255, 255, 0.94);
+  --color-glass-border: rgba(122, 102, 231, 0.18);
+  --color-warning: #d79a22;
+  --color-error: #dc4a57;
+}
+
 .hm-root {
   position: relative;
   min-height: 100dvh;
@@ -1212,6 +1224,28 @@
   background: var(--color-glass-bg, rgba(255, 255, 255, 0.12));
 }
 
+.hm-drawer-theme-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 10px;
+  border: 1px solid var(--color-primary);
+  background: var(--color-glass-bg, rgba(255, 255, 255, 0.06));
+  color: var(--color-primary);
+  font-size: 0.84rem;
+  font-weight: 600;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.hm-drawer-theme-toggle:active {
+  background: var(--color-glass-bg, rgba(255, 255, 255, 0.12));
+}
+
 .hm-drawer-logout-btn {
   width: 100%;
   padding: 10px;
@@ -1253,6 +1287,57 @@
 }
 
 /* ─── Tablet adjustments (481px - 768px) ─── */
+
+/* Home Light overrides (blanc doux + violet terne/clair) */
+.hm-root.hm-home-light .hm-topbar,
+.hm-root.hm-home-light .hm-bottomnav,
+.hm-root.hm-home-light .hm-cart-feedback,
+.hm-root.hm-home-light .hm-fab-menu,
+.hm-root.hm-home-light .hm-search-overlay,
+.hm-root.hm-home-light .hm-drawer {
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 8px 26px rgba(59, 45, 122, 0.12);
+}
+
+.hm-root.hm-home-light .hm-market-card,
+.hm-root.hm-home-light .hm-letter,
+.hm-root.hm-home-light .hm-suggestion-card {
+  background: rgba(255, 255, 255, 0.94);
+}
+
+.hm-root.hm-home-light .hm-market-card-neg {
+  border-color: rgba(122, 102, 231, 0.55);
+  color: #6e5dba;
+}
+
+.hm-root.hm-home-light .hm-market-card-neg:active {
+  background: rgba(122, 102, 231, 0.14);
+  color: #4f4099;
+}
+
+.hm-root.hm-home-light .hm-drawer-overlay,
+.hm-root.hm-home-light .hm-fab-overlay {
+  background: rgba(115, 96, 193, 0.22);
+}
+
+.hm-root.hm-home-light .hm-letter-video-paused {
+  background: rgba(59, 45, 122, 0.55);
+}
+
+.hm-root.hm-home-light .hm-drawer-quick-link:active,
+.hm-root.hm-home-light .hm-drawer-link:active {
+  background: rgba(122, 102, 231, 0.14);
+}
+
+.hm-root.hm-home-light .hm-drawer-theme-toggle {
+  border-color: rgba(122, 102, 231, 0.45);
+  background: rgba(122, 102, 231, 0.08);
+  color: #5f50ac;
+}
+
+.hm-root.hm-home-light .hm-drawer-theme-toggle:active {
+  background: rgba(122, 102, 231, 0.16);
+}
 
 @media (min-width: 481px) and (max-width: 768px) {
   .hm-market-card {
@@ -1325,4 +1410,5 @@
     padding-top: env(safe-area-inset-top);
   }
 }
+
 

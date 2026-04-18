@@ -111,6 +111,40 @@ app.use((req, res, next) => {
   next();
 });
 
+// ── Serve uploaded files statically (AVANT scrapeGuard pour éviter les 429 sur images) ──
+const uploadAllowedOrigins = String(env.CORS_ORIGIN || "")
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+app.use("/uploads", (req, res, next) => {
+  if (env.NODE_ENV !== "production") { next(); return; }
+  const ref = req.get("referer") || req.get("origin") || "";
+  const ua = req.get("user-agent") || "";
+  // Autoriser les requêtes depuis l'app native (WebView Capacitor) même sans referer valide
+  const isNativeApp = /KinSellApp/i.test(ua);
+  if (isNativeApp) {
+    res.set("Cache-Control", "public, max-age=31536000, immutable");
+    next();
+    return;
+  }
+  if (!ref) {
+    res.status(403).end();
+    return;
+  }
+  const host = req.get("host");
+  const selfOrigins = host ? [`https://${host}`, `http://${host}`] : [];
+  const allowed = [...uploadAllowedOrigins, ...selfOrigins];
+  const isAllowed = allowed.some((origin) => ref.startsWith(origin));
+  if (!isAllowed) {
+    res.status(403).end();
+    return;
+  }
+  // Cache long sur les fichiers statiques (images/vidéos)
+  res.set("Cache-Control", "public, max-age=31536000, immutable");
+  next();
+});
+app.use("/uploads", express.static(path.resolve(process.cwd(), "uploads")));
+
 // ── Global scrape guard (block bots/scrapers on all routes) ──
 import { scrapeGuard } from "./shared/middleware/scrape-guard.middleware.js";
 app.use(scrapeGuard());
@@ -152,30 +186,6 @@ app.use((_req, res, next) => {
   };
   next();
 });
-
-// Serve uploaded files statically
-const uploadAllowedOrigins = String(env.CORS_ORIGIN || "")
-  .split(",")
-  .map((o) => o.trim())
-  .filter(Boolean);
-app.use("/uploads", (req, res, next) => {
-  if (env.NODE_ENV !== "production") { next(); return; }
-  const ref = req.get("referer") || req.get("origin") || "";
-  if (!ref) {
-    res.status(403).end();
-    return;
-  }
-  const host = req.get("host");
-  const selfOrigins = host ? [`https://${host}`, `http://${host}`] : [];
-  const allowedOrigins = [...uploadAllowedOrigins, ...selfOrigins];
-  const isAllowed = allowedOrigins.some((origin) => ref.startsWith(origin));
-  if (!isAllowed) {
-    res.status(403).end();
-    return;
-  }
-  next();
-});
-app.use("/uploads", express.static(path.resolve(process.cwd(), "uploads")));
 
 let _healthCache: { data: unknown; expiresAt: number } | null = null;
 

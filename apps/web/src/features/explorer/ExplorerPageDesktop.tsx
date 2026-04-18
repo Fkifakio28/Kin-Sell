@@ -18,6 +18,7 @@ import { useMarketPreference } from '../../app/providers/MarketPreferenceProvide
 import { NegotiatePopup } from '../negotiations/NegotiatePopup';
 import { useLockedCategories, isCategoryLocked } from '../../hooks/useLockedCategories';
 import { AdBanner } from '../../components/AdBanner';
+import { GoogleAdSlot } from '../../components/GoogleAdSlot';
 import { BundlePromoCard } from '../../components/BundlePromoCard';
 import MapView from '../../components/MapView';
 import { SeoMeta } from '../../components/SeoMeta';
@@ -706,7 +707,8 @@ export function ExplorerPageDesktop() {
             )}
           </div>
         </div>
-
+        {/* ── Google AdSense — entre boutiques et vendeurs (desktop) ── */}
+        <GoogleAdSlot adSlot="3909776294" adFormat="horizontal" className="g-adsense-between-sections" />
         {/* ═══════════════════════════════════════════════
 
             PUBLIC PROFILES SECTION (Creative addition)
