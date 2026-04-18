@@ -366,7 +366,7 @@ router.post(
   "/:negotiationId/ai-auto-respond",
   requireAuth,
   requireRoles(Role.USER, Role.BUSINESS),
-  asyncHandler(async (req: AuthenticatedRequest, res, next) => { await requireIa("IA_MERCHANT")(req, res, next); }),
+  asyncHandler(async (req: AuthenticatedRequest, res, next) => { await requireIa("IA_MERCHANT_AUTO")(req, res, next); }),
   asyncHandler(async (request: AuthenticatedRequest, response) => {
     const rulesSchema = z.object({
       enabled: z.boolean().default(true),

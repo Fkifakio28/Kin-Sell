@@ -1,4 +1,5 @@
 import { useEffect, useRef, useCallback, useState } from "react";
+import { Capacitor } from "@capacitor/core";
 
 declare global {
   interface Window {
@@ -21,6 +22,18 @@ type TurnstileWidgetProps = {
 };
 
 export function TurnstileWidget({ onToken }: TurnstileWidgetProps) {
+  // Native app (iOS/Android) → bypass Turnstile (WKWebView blocks third-party scripts)
+  // Backend already accepts "native-bypass" token when User-Agent contains KinSellApp
+  const isNative = Capacitor.isNativePlatform();
+  useEffect(() => {
+    if (isNative) onToken("native-bypass");
+  }, [isNative, onToken]);
+  if (isNative) return null;
+
+  return <TurnstileWidgetWeb onToken={onToken} />;
+}
+
+function TurnstileWidgetWeb({ onToken }: TurnstileWidgetProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const widgetIdRef = useRef<string | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error" | "expired">("loading");

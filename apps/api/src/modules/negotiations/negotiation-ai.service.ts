@@ -961,8 +961,8 @@ export async function runBatchAutoNegotiation(): Promise<BatchAutoResult> {
   for (const nego of pendingNegos) {
     if (!nego.listing.isNegotiable) continue;
 
-    // ── Vérifier que le vendeur a accès IA_MERCHANT (plan ou addon) ──
-    if (!(await checkIaAccessOrLog(nego.sellerUserId, "IA_MERCHANT", "runBatchAutoNegotiation"))) continue;
+    // ── Vérifier que le vendeur a accès IA_MERCHANT_AUTO (plan payant ou addon) ──
+    if (!(await checkIaAccessOrLog(nego.sellerUserId, "IA_MERCHANT_AUTO", "runBatchAutoNegotiation"))) continue;
 
     try {
       // Ajustement dynamique des règles selon le contexte
