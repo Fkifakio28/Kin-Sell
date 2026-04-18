@@ -67,6 +67,13 @@
     <link rel="dns-prefetch" href="//challenges.cloudflare.com" />
 
     <!-- ── Google AdSense — chargé 100% lazy par GoogleAdSlot.tsx (aucun preconnect pour épargner connexions lentes) ── -->
+
+    <!-- ── CSS critique inline — éviter écran blanc sur 2G/3G ── -->
+    <style>
+      html, body { margin: 0; padding: 0; background: #120B2B; color: #f0eef6; font-family: system-ui, -apple-system, sans-serif; }
+      #root { min-height: 100vh; min-height: 100dvh; }
+      .ks-page-loader { display: flex; align-items: center; justify-content: center; min-height: 80vh; color: rgba(255,255,255,0.6); font-size: 0.9rem; }
+    </style>
   </head>
   <body>
     <div id="root"></div>

@@ -44,14 +44,22 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     }
 
     // httpOnly cookies are sent automatically with the WebSocket handshake
+    // Adapter le WebSocket au type de connexion (économie de data en Afrique)
+    const conn = (navigator as any).connection;
+    const isSlow = conn?.saveData || conn?.effectiveType === '2g' || conn?.effectiveType === 'slow-2g';
+
     const socket = io(API_BASE, {
       path: "/ws",
       reconnection: true,
-      reconnectionAttempts: Infinity,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 15000,
+      reconnectionAttempts: isSlow ? 10 : 50,
+      reconnectionDelay: isSlow ? 3000 : 1000,
+      reconnectionDelayMax: isSlow ? 60000 : 30000,
       randomizationFactor: 0.3,
-      // Send cookies for httpOnly auth (withCredentials is runtime-supported)
+      timeout: 30000,
+      reconnectionDelay: isSlow ? 3000 : 1000,
+      reconnectionDelayMax: isSlow ? 60000 : 30000,
+      randomizationFactor: 0.3,
+      timeout: 30000,
       ...(({ withCredentials: true }) as any),
     });
 

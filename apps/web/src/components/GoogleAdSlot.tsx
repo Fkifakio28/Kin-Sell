@@ -25,7 +25,7 @@ function isSlowConnection(): boolean {
   const conn = (navigator as unknown as { connection?: { effectiveType?: string; saveData?: boolean } }).connection;
   if (!conn) return false;
   if (conn.saveData) return true;
-  return conn.effectiveType === 'slow-2g' || conn.effectiveType === '2g';
+  return conn.effectiveType === 'slow-2g' || conn.effectiveType === '2g' || conn.effectiveType === '3g' || conn.effectiveType === '3g';
 }
 
 /** Charge le script AdSense une seule fois, à la demande */

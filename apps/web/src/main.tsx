@@ -19,8 +19,11 @@ import { initializeIAP } from "./utils/iap";
 import "./styles/index.css";
 
 // ── Register Service Worker for push notifications (web only) ──
+// Déféré après le chargement initial pour ne pas saturer la bande passante sur 2G/3G
 if ("serviceWorker" in navigator) {
-  registerServiceWorker().catch(() => {});
+  window.addEventListener("load", () => {
+    setTimeout(() => registerServiceWorker().catch(() => {}), 3000);
+  }, { once: true });
 }
 
 // ── Native platform setup ──

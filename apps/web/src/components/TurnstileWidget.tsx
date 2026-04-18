@@ -12,7 +12,7 @@ declare global {
 }
 
 const SITE_KEY = "0x4AAAAAACy1uMSKZD3USTWV";
-const SCRIPT_LOAD_TIMEOUT_MS = 10_000; // 10s — réduit pour réseau lent Afrique (fail-open rapide)
+const SCRIPT_LOAD_TIMEOUT_MS = 20_000; // 20s — tolérant pour réseau lent Afrique (2G/3G)
 const TOKEN_EXPIRY_MS = 280_000; // ~4m40 (tokens expirent après 5 min)
 const POLL_INTERVAL_MS = 500;
 const MAX_RETRIES = 2;
