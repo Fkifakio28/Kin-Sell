@@ -358,6 +358,12 @@ export async function seedDefaultAgents(): Promise<void> {
       description: "Modération des posts SoKin — spam, abus, contacts",
       config: {},
     },
+    {
+      name: "IA_MESSENGER",
+      domain: "advertising",
+      description: "Scheduler autonome — campagnes proactives, welcome flow, digest, re-engagement",
+      config: {},
+    },
   ];
 
   for (const agent of defaults) {

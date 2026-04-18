@@ -263,6 +263,7 @@ export function PricingPage() {
 
   const [activeTab, setActiveTab] = useState<PricingTab>(defaultTab);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
+  const paymentRef = useRef<HTMLElement>(null);
 
   // ── Deep-link : parse URL et appliquer tab + highlight ──
   const deepLinkApplied = useRef(false);
@@ -371,6 +372,10 @@ export function PricingPage() {
     setLatestCheckout(null);
     setErrorMessage(null);
     setInfoMessage(null);
+    // Scroll vers la section paiement après le render
+    setTimeout(() => {
+      paymentRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 100);
   };
 
   const handleValidatePromo = async () => {
@@ -587,7 +592,7 @@ export function PricingPage() {
       {/* ───────────────  PAYMENT FLOW  ─────────────── */}
 
       {pendingPlanCode ? (
-        <section className="pricing-payment">
+        <section className="pricing-payment" ref={paymentRef}>
           <h2 className="pricing-payment__title">
             {isIAPAvailable() ? "Achat via App Store" : "Paiement PayPal"} — {pendingPlanCode}
           </h2>
