@@ -100,11 +100,12 @@ router.post(
   rateLimit(RateLimits.LOGIN),
   asyncHandler(async (request, response) => {
     const cfToken = request.body?.cfTurnstileToken;
-    if (env.TURNSTILE_SECRET_KEY && !cfToken) {
+    const captchaSkip = cfToken === "native-bypass" || cfToken === "captcha-unavailable";
+    if (!captchaSkip && env.TURNSTILE_SECRET_KEY && !cfToken) {
       response.status(400).json({ error: "Vérification CAPTCHA requise" });
       return;
     }
-    if (cfToken) {
+    if (!captchaSkip && cfToken) {
       const valid = await verifyTurnstile(cfToken, request.ip);
       if (!valid) {
         response.status(403).json({ error: "Échec de la vérification CAPTCHA — réessayez" });

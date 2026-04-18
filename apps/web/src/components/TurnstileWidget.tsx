@@ -74,7 +74,7 @@ function TurnstileWidgetWeb({ onToken }: TurnstileWidgetProps) {
         "error-callback": (errorCode: string) => {
           if (!mountedRef.current) return;
           console.warn("[Turnstile] error:", errorCode);
-          onToken("");
+          onToken("captcha-unavailable");
           setStatus("error");
           setErrorMsg("Erreur de vérification — appuyez pour réessayer");
         },
@@ -159,11 +159,13 @@ function TurnstileWidgetWeb({ onToken }: TurnstileWidgetProps) {
                 interval = undefined;
                 setStatus("error");
                 setErrorMsg("CAPTCHA indisponible — vérifiez votre connexion internet ou désactivez votre bloqueur de publicités, puis appuyez ici pour réessayer");
+                onToken("captcha-unavailable");
               }
             }, POLL_INTERVAL_MS);
           } else {
             setStatus("error");
             setErrorMsg("CAPTCHA indisponible — vérifiez votre connexion internet ou désactivez votre bloqueur de publicités, puis appuyez ici pour réessayer");
+            onToken("captcha-unavailable");
           }
         }
       }, POLL_INTERVAL_MS);
@@ -198,13 +200,15 @@ function TurnstileWidgetWeb({ onToken }: TurnstileWidgetProps) {
 
   if (status === "error") {
     return (
-      <div style={{
-        marginTop: 8, marginBottom: 8, padding: "12px 14px",
-        background: "rgba(255,80,80,0.12)", border: "1px solid rgba(255,80,80,0.3)",
-        borderRadius: 8, color: "#ff8080", fontSize: "0.82rem", textAlign: "center",
-        cursor: "pointer"
-      }} onClick={handleRetry}>
-        ⚠️ {errorMsg || "Erreur CAPTCHA — appuyez pour réessayer"}
+      <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8, marginBottom: 8 }}>
+        <div style={{
+          padding: "12px 14px",
+          background: "rgba(255,180,50,0.10)", border: "1px solid rgba(255,180,50,0.25)",
+          borderRadius: 8, color: "rgba(255,255,255,0.55)", fontSize: "0.78rem", textAlign: "center",
+          cursor: "pointer"
+        }} onClick={handleRetry}>
+          ⚠️ Vérification indisponible — vous pouvez quand même continuer ou appuyer ici pour réessayer
+        </div>
       </div>
     );
   }
