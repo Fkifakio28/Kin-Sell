@@ -39,10 +39,10 @@ export const RateLimits = {
   SOKIN_POST: { windowMs: 3600_000, max: 10, label: "SOKIN_POST" },
   /** Negotiation offers: 10 per hour */
   NEGOTIATION: { windowMs: 3600_000, max: 10, label: "NEGOTIATION" },
-  /** Login attempts: 5 per 15 minutes (per IP) */
-  LOGIN: { windowMs: 900_000, max: 5, label: "LOGIN" },
-  /** Register: 3 per hour (per IP) */
-  REGISTER: { windowMs: 3600_000, max: 3, label: "REGISTER" },
+  /** Login attempts: 20 per 15 minutes (per IP — relaxed for CGNAT/shared IPs in Africa) */
+  LOGIN: { windowMs: 900_000, max: 20, label: "LOGIN" },
+  /** Register: 10 per hour (per IP — relaxed for CGNAT/shared IPs in Africa) */
+  REGISTER: { windowMs: 3600_000, max: 10, label: "REGISTER" },
   /** Ad tracking (impression/click): 60 per minute per IP */
   AD_TRACKING: { windowMs: 60_000, max: 60, label: "AD_TRACKING" },
   /** Public search endpoints: 60 per minute per IP */

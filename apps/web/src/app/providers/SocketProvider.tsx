@@ -47,10 +47,10 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     const socket = io(API_BASE, {
       path: "/ws",
       reconnection: true,
-      reconnectionAttempts: 20,
+      reconnectionAttempts: Infinity,
       reconnectionDelay: 1000,
-      reconnectionDelayMax: 10000,
-      randomizationFactor: 0.15,
+      reconnectionDelayMax: 15000,
+      randomizationFactor: 0.3,
       // Send cookies for httpOnly auth (withCredentials is runtime-supported)
       ...(({ withCredentials: true }) as any),
     });

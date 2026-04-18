@@ -18,11 +18,18 @@ export async function verifyTurnstile(token: string, ip?: string): Promise<boole
   });
   if (ip) body.append("remoteip", ip);
 
-  const res = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
-    method: "POST",
-    body,
-  });
+  try {
+    const res = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+      method: "POST",
+      body,
+      signal: AbortSignal.timeout(5_000),
+    });
 
-  const data = (await res.json()) as TurnstileResponse;
-  return data.success === true;
+    const data = (await res.json()) as TurnstileResponse;
+    return data.success === true;
+  } catch {
+    // Fail-open: if Cloudflare is unreachable, let the user through (rate-limit protects against abuse)
+    console.warn("[Turnstile] verification timed out or failed — fail-open");
+    return true;
+  }
 }

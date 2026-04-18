@@ -270,7 +270,7 @@ export async function request<T>(path: string, opts: RequestOptions = {}, allowR
         body: body ? JSON.stringify(body) : undefined,
         // GET publics → cache navigateur par défaut (304 + ETag), mutantes/privées → no-store via headers serveur
         cache: method === "GET" ? "default" : "no-store",
-        signal,
+        signal: signal ?? AbortSignal.timeout(20_000),
       });
     } catch (err) {
       throw err;

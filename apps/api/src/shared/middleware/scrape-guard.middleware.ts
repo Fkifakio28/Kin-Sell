@@ -3,14 +3,14 @@ import { HttpError } from "../errors/http-error.js";
 import { logSecurityEvent } from "../../modules/security/security.service.js";
 
 const SUSPICIOUS_UA = [
-  /curl/i,
-  /wget/i,
-  /python/i,
-  /scrapy/i,
-  /httpclient/i,
-  /bot/i,
-  /spider/i,
-  /crawler/i,
+  /\bcurl\b/i,
+  /\bwget\b/i,
+  /\bpython\b/i,
+  /\bscrapy\b/i,
+  /\bhttpclient\b/i,
+  /\bbot\b/i,
+  /\bspider\b/i,
+  /\bcrawler\b/i,
 ];
 
 // Bots SEO légitimes — ne pas bloquer
