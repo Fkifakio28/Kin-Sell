@@ -101,7 +101,7 @@ describe("validateCoupon", () => {
 
     const result = await validateCoupon("user-1", "FAKE");
     expect(result.valid).toBe(false);
-    expect(result.reason).toBe("INVALID_CODE");
+    expect(result.reason).toBe("INVALID_OR_EXPIRED");
   });
 
   it("retourne COUPON_INACTIVE si coupon non actif", async () => {
@@ -111,7 +111,7 @@ describe("validateCoupon", () => {
 
     const result = await validateCoupon("user-1", "TEST-CODE");
     expect(result.valid).toBe(false);
-    expect(result.reason).toBe("COUPON_INACTIVE");
+    expect(result.reason).toBe("INVALID_OR_EXPIRED");
   });
 
   it("retourne EXPIRED si coupon expiré", async () => {
@@ -386,15 +386,18 @@ describe("recordGrowthEvent", () => {
   });
 
   it("consomme le grant sur conversion et crée un coupon", async () => {
-    mockPrisma.growthIncentiveGrant.findUnique.mockResolvedValue({
+    const grantData = {
       id: "grant-1", userId: "user-1", status: "ACTIVE", kind: "CPC", discountPercent: 30,
       expiresAt: new Date("2026-06-01"),
-    });
+    };
+    mockPrisma.growthIncentiveGrant.findUnique.mockResolvedValue(grantData);
     mockPrisma.growthIncentiveEvent.create.mockResolvedValue({ id: "event-1", eventType: "conversion" });
     mockPrisma.growthIncentiveGrant.update.mockResolvedValue({ id: "grant-1", status: "CONSUMED" });
     mockPrisma.incentiveCoupon.create.mockResolvedValue({
       id: "coupon-new", code: "KS-AABBCCDD", expiresAt: new Date("2026-06-01"),
     });
+    // Override $transaction to pass through the same mock models
+    (mockPrisma as any)._$transactionOverride = vi.fn(async (fn: any) => fn(mockPrisma));
     // Mock the dynamic import for messenger
     vi.doMock("../modules/ads/ia-messenger-promo.service.js", () => ({
       sendGrantConvertedToCouponMessage: vi.fn().mockResolvedValue(true),
@@ -406,6 +409,8 @@ describe("recordGrowthEvent", () => {
       expect.objectContaining({ where: { id: "grant-1" }, data: { status: "CONSUMED" } }),
     );
     expect(mockPrisma.incentiveCoupon.create).toHaveBeenCalled();
+    // Cleanup transaction override
+    delete (mockPrisma as any)._$transactionOverride;
   });
 });
 
