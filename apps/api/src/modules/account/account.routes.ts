@@ -5,8 +5,7 @@ import { requireAuth, type AuthenticatedRequest } from "../../shared/auth/auth-m
 import { HttpError } from "../../shared/errors/http-error.js";
 import { asyncHandler } from "../../shared/utils/async-handler.js";
 import { isAcceptedImageInput } from "../../shared/utils/media-storage.js";
-import { verifyTurnstile } from "../../shared/utils/turnstile.js";
-import { env } from "../../config/env.js";
+import { enforceAuthCaptcha } from "../../shared/auth/auth-captcha.js";
 import { rateLimit, RateLimits } from "../../shared/middleware/rate-limit.middleware.js";
 import { setAuthCookies, clearAuthCookies } from "../../shared/auth/session.js";
 import * as accountService from "./account.service.js";
@@ -99,19 +98,7 @@ router.post(
   "/entry",
   rateLimit(RateLimits.LOGIN),
   asyncHandler(async (request, response) => {
-    const cfToken = request.body?.cfTurnstileToken;
-    const captchaSkip = cfToken === "native-bypass" || cfToken === "captcha-unavailable";
-    if (!captchaSkip && env.TURNSTILE_SECRET_KEY && !cfToken) {
-      response.status(400).json({ error: "Vérification CAPTCHA requise" });
-      return;
-    }
-    if (!captchaSkip && cfToken) {
-      const valid = await verifyTurnstile(cfToken, request.ip);
-      if (!valid) {
-        response.status(403).json({ error: "Échec de la vérification CAPTCHA — réessayez" });
-        return;
-      }
-    }
+    if (!(await enforceAuthCaptcha(request, response))) return;
 
     const payload = entrySchema.parse(request.body);
 

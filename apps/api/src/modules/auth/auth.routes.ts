@@ -7,10 +7,10 @@ import { asyncHandler } from "../../shared/utils/async-handler.js";
 import { rateLimit, RateLimits } from "../../shared/middleware/rate-limit.middleware.js";
 import { logSecurityEvent, checkMultiAccount, createFraudSignal } from "../security/security.service.js";
 import { setAuthCookies } from "../../shared/auth/session.js";
+import { enforceAuthCaptcha } from "../../shared/auth/auth-captcha.js";
 import * as authService from "./auth.service.js";
 import { getGoogleAuthUrl, handleGoogleCallback } from "./google-oauth.service.js";
 import { getAppleAuthUrl, handleAppleCallback } from "./apple-oauth.service.js";
-import { verifyTurnstile } from "../../shared/utils/turnstile.js";
 import { env } from "../../config/env.js";
 import { logger } from "../../shared/logger.js";
 
@@ -106,33 +106,7 @@ router.post("/oauth/debug", rateLimit(RateLimits.OAUTH_DEBUG), asyncHandler(asyn
 }));
 
 router.post("/register", rateLimit(RateLimits.REGISTER), asyncHandler(async (request, response) => {
-  // Skip Turnstile in native app (WebView — unsupported)
-  const ua = request.header("user-agent") ?? "";
-  const isNativeApp = /KinSellApp/i.test(ua);
-
-  const cfToken = request.body?.cfTurnstileToken;
-  const isFallbackToken = cfToken === "captcha-unavailable" || cfToken === "native-bypass";
-
-  if (isNativeApp || isFallbackToken) {
-    // Native app ou captcha indisponible → appliquer un rate-limit strict (3/15min/IP)
-    // pour compenser l'absence de vérification Turnstile
-    await new Promise<void>((resolve, reject) => {
-      rateLimit(RateLimits.AUTH_FALLBACK)(request, response, (err) => err ? reject(err) : resolve());
-    });
-    if (response.headersSent) return;
-  } else {
-    if (env.TURNSTILE_SECRET_KEY && !cfToken) {
-      response.status(400).json({ error: "Vérification CAPTCHA requise" });
-      return;
-    }
-    if (cfToken) {
-      const valid = await verifyTurnstile(cfToken, request.ip);
-      if (!valid) {
-        response.status(403).json({ error: "Échec de la vérification CAPTCHA" });
-        return;
-      }
-    }
-  }
+  if (!(await enforceAuthCaptcha(request, response))) return;
 
   const payload = registerSchema.parse(request.body);
   const result = await authService.register(payload);
@@ -161,33 +135,7 @@ router.post("/register", rateLimit(RateLimits.REGISTER), asyncHandler(async (req
 }));
 
 router.post("/login", rateLimit(RateLimits.LOGIN), asyncHandler(async (request, response) => {
-  // Skip Turnstile in native app (WebView — unsupported)
-  const ua = request.header("user-agent") ?? "";
-  const isNativeApp = /KinSellApp/i.test(ua);
-
-  const cfToken = request.body?.cfTurnstileToken;
-  const isFallbackToken = cfToken === "captcha-unavailable" || cfToken === "native-bypass";
-
-  if (isNativeApp || isFallbackToken) {
-    // Native app ou captcha indisponible → appliquer un rate-limit strict (3/15min/IP)
-    // pour compenser l'absence de vérification Turnstile
-    await new Promise<void>((resolve, reject) => {
-      rateLimit(RateLimits.AUTH_FALLBACK)(request, response, (err) => err ? reject(err) : resolve());
-    });
-    if (response.headersSent) return;
-  } else {
-    if (env.TURNSTILE_SECRET_KEY && !cfToken) {
-      response.status(400).json({ error: "Vérification CAPTCHA requise" });
-      return;
-    }
-    if (cfToken) {
-      const valid = await verifyTurnstile(cfToken, request.ip);
-      if (!valid) {
-        response.status(403).json({ error: "Échec de la vérification CAPTCHA" });
-        return;
-      }
-    }
-  }
+  if (!(await enforceAuthCaptcha(request, response))) return;
 
   const payload = loginSchema.parse(request.body);
   const result = await authService.login(payload);
