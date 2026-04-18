@@ -56,10 +56,6 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       reconnectionDelayMax: isSlow ? 60000 : 30000,
       randomizationFactor: 0.3,
       timeout: 30000,
-      reconnectionDelay: isSlow ? 3000 : 1000,
-      reconnectionDelayMax: isSlow ? 60000 : 30000,
-      randomizationFactor: 0.3,
-      timeout: 30000,
       ...(({ withCredentials: true }) as any),
     });
 

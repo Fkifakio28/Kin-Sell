@@ -61,6 +61,8 @@ export const RateLimits = {
   COUPON_VALIDATE: { windowMs: 60_000, max: 10, label: "COUPON_VALIDATE" },
   /** Grant events: 20 per minute per user */
   GRANT_EVENT: { windowMs: 60_000, max: 20, label: "GRANT_EVENT" },
+  /** Auth fallback: used when captcha is unavailable (strict — 3 per 15 min per IP) */
+  AUTH_FALLBACK: { windowMs: 900_000, max: 3, label: "AUTH_FALLBACK" },
 } as const;
 
 type RateLimitConfig = { windowMs: number; max: number; label: string };

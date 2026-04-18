@@ -111,16 +111,26 @@ router.post("/register", rateLimit(RateLimits.REGISTER), asyncHandler(async (req
   const isNativeApp = /KinSellApp/i.test(ua);
 
   const cfToken = request.body?.cfTurnstileToken;
-  const captchaSkip = isNativeApp || cfToken === "native-bypass" || cfToken === "captcha-unavailable";
-  if (!captchaSkip && env.TURNSTILE_SECRET_KEY && !cfToken) {
-    response.status(400).json({ error: "Vérification CAPTCHA requise" });
-    return;
-  }
-  if (!captchaSkip && cfToken) {
-    const valid = await verifyTurnstile(cfToken, request.ip);
-    if (!valid) {
-      response.status(403).json({ error: "Échec de la vérification CAPTCHA" });
+  const isFallbackToken = cfToken === "captcha-unavailable" || cfToken === "native-bypass";
+
+  if (isNativeApp || isFallbackToken) {
+    // Native app ou captcha indisponible → appliquer un rate-limit strict (3/15min/IP)
+    // pour compenser l'absence de vérification Turnstile
+    await new Promise<void>((resolve, reject) => {
+      rateLimit(RateLimits.AUTH_FALLBACK)(request, response, (err) => err ? reject(err) : resolve());
+    });
+    if (response.headersSent) return;
+  } else {
+    if (env.TURNSTILE_SECRET_KEY && !cfToken) {
+      response.status(400).json({ error: "Vérification CAPTCHA requise" });
       return;
+    }
+    if (cfToken) {
+      const valid = await verifyTurnstile(cfToken, request.ip);
+      if (!valid) {
+        response.status(403).json({ error: "Échec de la vérification CAPTCHA" });
+        return;
+      }
     }
   }
 
@@ -156,16 +166,26 @@ router.post("/login", rateLimit(RateLimits.LOGIN), asyncHandler(async (request, 
   const isNativeApp = /KinSellApp/i.test(ua);
 
   const cfToken = request.body?.cfTurnstileToken;
-  const captchaSkip = isNativeApp || cfToken === "native-bypass" || cfToken === "captcha-unavailable";
-  if (!captchaSkip && env.TURNSTILE_SECRET_KEY && !cfToken) {
-    response.status(400).json({ error: "Vérification CAPTCHA requise" });
-    return;
-  }
-  if (!captchaSkip && cfToken) {
-    const valid = await verifyTurnstile(cfToken, request.ip);
-    if (!valid) {
-      response.status(403).json({ error: "Échec de la vérification CAPTCHA" });
+  const isFallbackToken = cfToken === "captcha-unavailable" || cfToken === "native-bypass";
+
+  if (isNativeApp || isFallbackToken) {
+    // Native app ou captcha indisponible → appliquer un rate-limit strict (3/15min/IP)
+    // pour compenser l'absence de vérification Turnstile
+    await new Promise<void>((resolve, reject) => {
+      rateLimit(RateLimits.AUTH_FALLBACK)(request, response, (err) => err ? reject(err) : resolve());
+    });
+    if (response.headersSent) return;
+  } else {
+    if (env.TURNSTILE_SECRET_KEY && !cfToken) {
+      response.status(400).json({ error: "Vérification CAPTCHA requise" });
       return;
+    }
+    if (cfToken) {
+      const valid = await verifyTurnstile(cfToken, request.ip);
+      if (!valid) {
+        response.status(403).json({ error: "Échec de la vérification CAPTCHA" });
+        return;
+      }
     }
   }
 

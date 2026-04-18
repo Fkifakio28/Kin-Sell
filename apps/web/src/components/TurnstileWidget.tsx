@@ -16,6 +16,7 @@ const SCRIPT_LOAD_TIMEOUT_MS = 20_000; // 20s — tolérant pour réseau lent Af
 const TOKEN_EXPIRY_MS = 280_000; // ~4m40 (tokens expirent après 5 min)
 const POLL_INTERVAL_MS = 500;
 const MAX_RETRIES = 2;
+const BACKGROUND_RETRY_DELAY_MS = 8_000;
 
 type TurnstileWidgetProps = {
   onToken: (token: string) => void;
@@ -40,10 +41,12 @@ function TurnstileWidgetWeb({ onToken }: TurnstileWidgetProps) {
   const [errorMsg, setErrorMsg] = useState("");
   const [retryCount, setRetryCount] = useState(0);
   const expiryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const backgroundRetryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(true);
 
   const cleanup = useCallback(() => {
     if (expiryTimer.current) { clearTimeout(expiryTimer.current); expiryTimer.current = null; }
+    if (backgroundRetryTimer.current) { clearTimeout(backgroundRetryTimer.current); backgroundRetryTimer.current = null; }
     if (widgetIdRef.current && window.turnstile) {
       try { window.turnstile.remove(widgetIdRef.current); } catch { /* noop */ }
       widgetIdRef.current = null;
@@ -110,6 +113,16 @@ function TurnstileWidgetWeb({ onToken }: TurnstileWidgetProps) {
     document.head.appendChild(script);
   }, []);
 
+  const scheduleBackgroundRetry = useCallback(() => {
+    if (backgroundRetryTimer.current || !mountedRef.current) return;
+    backgroundRetryTimer.current = setTimeout(() => {
+      backgroundRetryTimer.current = null;
+      if (!mountedRef.current || window.turnstile) return;
+      reloadScript();
+      setRetryCount((count) => count + 1);
+    }, BACKGROUND_RETRY_DELAY_MS);
+  }, [reloadScript]);
+
   const handleRetry = useCallback(() => {
     setRetryCount((c) => c + 1);
     setStatus("loading");
@@ -160,12 +173,14 @@ function TurnstileWidgetWeb({ onToken }: TurnstileWidgetProps) {
                 setStatus("error");
                 setErrorMsg("CAPTCHA indisponible — vérifiez votre connexion internet ou désactivez votre bloqueur de publicités, puis appuyez ici pour réessayer");
                 onToken("captcha-unavailable");
+                scheduleBackgroundRetry();
               }
             }, POLL_INTERVAL_MS);
           } else {
             setStatus("error");
             setErrorMsg("CAPTCHA indisponible — vérifiez votre connexion internet ou désactivez votre bloqueur de publicités, puis appuyez ici pour réessayer");
             onToken("captcha-unavailable");
+            scheduleBackgroundRetry();
           }
         }
       }, POLL_INTERVAL_MS);
@@ -177,7 +192,7 @@ function TurnstileWidgetWeb({ onToken }: TurnstileWidgetProps) {
       cleanup();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [retryCount]);
+  }, [retryCount, renderWidget, reloadScript, cleanup, onToken, scheduleBackgroundRetry]);
 
   if (status === "loading") {
     return (
