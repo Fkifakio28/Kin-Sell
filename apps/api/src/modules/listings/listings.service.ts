@@ -533,15 +533,19 @@ export const activateScheduledPromos = async () => {
     include: { items: { select: { listingId: true, promoPriceUsdCents: true } } },
   });
 
+  if (scheduled.length === 0) return { activated: 0 };
+
   let activated = 0;
-  for (const promo of scheduled) {
-    await prisma.$transaction(async (tx) => {
+  // Batch : une seule transaction pour toutes les promos
+  await prisma.$transaction(async (tx) => {
+    for (const promo of scheduled) {
       await tx.promotion.update({
         where: { id: promo.id },
         data: { status: PromotionStatus.ACTIVE },
       });
 
-      if (promo.promoType === "ITEM") {
+      if (promo.promoType === "ITEM" && promo.items.length > 0) {
+        // Batch update par promo
         for (const item of promo.items) {
           if (item.promoPriceUsdCents != null) {
             await tx.listing.update({
@@ -556,9 +560,9 @@ export const activateScheduledPromos = async () => {
           }
         }
       }
-    });
-    activated++;
-  }
+      activated++;
+    }
+  });
   return { activated };
 };
 
@@ -573,29 +577,35 @@ export const expireEndedPromos = async () => {
     include: { items: { select: { listingId: true } } },
   });
 
-  let expiredCount = 0;
-  for (const promo of expired) {
-    await prisma.$transaction(async (tx) => {
-      await tx.promotion.update({
-        where: { id: promo.id },
-        data: { status: PromotionStatus.EXPIRED },
-      });
+  if (expired.length === 0) return { expired: 0 };
 
+  let expiredCount = 0;
+  // Batch : une seule transaction pour toutes les expirations
+  await prisma.$transaction(async (tx) => {
+    const allPromoIds = expired.map((p) => p.id);
+    await tx.promotion.updateMany({
+      where: { id: { in: allPromoIds } },
+      data: { status: PromotionStatus.EXPIRED },
+    });
+
+    for (const promo of expired) {
       if (promo.promoType === "ITEM") {
         const listingIds = promo.items.map((i) => i.listingId);
-        await tx.listing.updateMany({
-          where: { id: { in: listingIds }, promotionId: promo.id },
-          data: {
-            promoActive: false,
-            promoPriceUsdCents: null,
-            promoExpiresAt: null,
-            promotionId: null,
-          },
-        });
+        if (listingIds.length > 0) {
+          await tx.listing.updateMany({
+            where: { id: { in: listingIds }, promotionId: promo.id },
+            data: {
+              promoActive: false,
+              promoPriceUsdCents: null,
+              promoExpiresAt: null,
+              promotionId: null,
+            },
+          });
+        }
       }
-    });
-    expiredCount++;
-  }
+      expiredCount++;
+    }
+  });
   return { expired: expiredCount };
 };
 

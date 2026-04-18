@@ -593,6 +593,7 @@ model Listing {
   @@index([createdAt])
   @@index([countryCode, isPublished, createdAt])
   @@index([city, isPublished, createdAt])
+  @@index([category, isPublished, createdAt])
 }
 
 model Cart {
@@ -1407,6 +1408,7 @@ model SoKinPost {
   @@index([status])
   @@index([createdAt])
   @@index([status, createdAt])
+  @@index([authorId, status, createdAt])
   @@index([postType])
   @@index([repostOfId])
 }

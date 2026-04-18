@@ -1,7 +1,9 @@
 /* Service Worker for Push Notifications */
 const DEFAULT_ICON = "/apple-touch-icon.png";
 const DEFAULT_BADGE = "/favicon-32.png";
-const STATIC_CACHE_NAME = "kin-sell-static-v2";
+// __BUILD_TS__ is replaced at build time by vite plugin; fallback keeps dev working
+const BUILD_TS = "__BUILD_TS__";
+const STATIC_CACHE_NAME = `kin-sell-static-${BUILD_TS.startsWith("__") ? "dev" : BUILD_TS}`;
 
 function resolveTarget(data) {
   if (!data || typeof data !== "object") return "/";
@@ -53,13 +55,36 @@ self.addEventListener("fetch", (event) => {
   // On laisse les endpoints dynamiques hors cache SW pour éviter les données périmées.
   if (url.pathname.startsWith("/api")) return;
 
-  const isStaticAsset = /\.(?:js|css|png|jpe?g|webp|avif|svg|ico|woff2?|ttf|map)$/i.test(url.pathname)
-    || url.pathname.startsWith("/assets/")
+  // Navigation / HTML → network-first (toujours la dernière version après déploiement)
+  const isNavigation = req.mode === "navigate"
     || url.pathname === "/"
     || url.pathname.endsWith(".html");
 
-  if (!isStaticAsset) return;
+  // Assets statiques hashés par Vite → stale-while-revalidate (rapide + mise à jour en fond)
+  const isStaticAsset = /\.(?:js|css|png|jpe?g|webp|avif|svg|ico|woff2?|ttf|map)$/i.test(url.pathname)
+    || url.pathname.startsWith("/assets/");
 
+  if (!isNavigation && !isStaticAsset) return;
+
+  if (isNavigation) {
+    // Network-first pour HTML : on sert toujours le plus récent
+    event.respondWith((async () => {
+      const cache = await caches.open(STATIC_CACHE_NAME);
+      try {
+        const networkResponse = await fetch(req);
+        if (networkResponse && networkResponse.ok) {
+          void cache.put(req, networkResponse.clone());
+        }
+        return networkResponse;
+      } catch {
+        const cached = await cache.match(req);
+        return cached || new Response("Offline", { status: 503, statusText: "Offline" });
+      }
+    })());
+    return;
+  }
+
+  // Stale-while-revalidate pour assets hashés
   event.respondWith((async () => {
     const cache = await caches.open(STATIC_CACHE_NAME);
     const cached = await cache.match(req);

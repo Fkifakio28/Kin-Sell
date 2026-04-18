@@ -13,10 +13,19 @@ const SUSPICIOUS_UA = [
   /crawler/i,
 ];
 
+// Bots SEO légitimes — ne pas bloquer
+const ALLOWED_BOTS = /Googlebot|Bingbot|Applebot|DuckDuckBot|YandexBot|Baiduspider|Slurp|facebookexternalhit|Twitterbot|LinkedInBot|WhatsApp|TelegramBot|Discordbot/i;
+
 export function scrapeGuard() {
   return async (req: Request, _res: Response, next: NextFunction): Promise<void> => {
     const userAgent = String(req.headers["user-agent"] ?? "").trim();
     const isEmpty = userAgent.length === 0;
+
+    // Laisser passer les crawlers SEO légitimes
+    if (!isEmpty && ALLOWED_BOTS.test(userAgent)) {
+      return next();
+    }
+
     const isSuspicious = SUSPICIOUS_UA.some((rx) => rx.test(userAgent));
 
     if (isEmpty || isSuspicious) {

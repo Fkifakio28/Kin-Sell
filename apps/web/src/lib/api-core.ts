@@ -118,6 +118,8 @@ type RequestOptions = {
   body?: unknown;
   headers?: Record<string, string>;
   params?: Record<string, string | number | undefined>;
+  /** AbortSignal pour annuler la requête (ex: cleanup useEffect) */
+  signal?: AbortSignal;
 };
 
 export class ApiError extends Error {
@@ -242,7 +244,7 @@ export function clearScheduledRefresh(): void {
 
 // ── Core Request ─────────────────────────────────────────────────────────────
 export async function request<T>(path: string, opts: RequestOptions = {}, allowRefresh = true): Promise<T> {
-  const { method = "GET", body, headers = {}, params } = opts;
+  const { method = "GET", body, headers = {}, params, signal } = opts;
 
   let url = `${API_BASE}${path}`;
   if (params) {
@@ -266,7 +268,9 @@ export async function request<T>(path: string, opts: RequestOptions = {}, allowR
         headers: reqHeaders,
         credentials: "include",
         body: body ? JSON.stringify(body) : undefined,
-        cache: "no-store",
+        // GET publics → cache navigateur par défaut (304 + ETag), mutantes/privées → no-store via headers serveur
+        cache: method === "GET" ? "default" : "no-store",
+        signal,
       });
     } catch (err) {
       throw err;

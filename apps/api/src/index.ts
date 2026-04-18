@@ -173,27 +173,19 @@ app.use((req, res, next) => {
   next();
 });
 
-// ── ETag middleware for 304 Not Modified responses ──
-// Désactivé sur endpoints authentifiés pour éviter fuite cross-user via proxy cache
+// ── ETag middleware — utilise l'ETag natif Express (CRC32, rapide) ──
+// Désactivé sur endpoints privés pour éviter fuite cross-user via proxy
 app.use((_req, res, next) => {
-  const originalJson = res.json.bind(res);
-  res.json = function (data: unknown) {
-    if (res.statusCode >= 200 && res.statusCode < 300) {
-      // Pas d'ETag sur les données privées (panier, compte, etc.)
-      const isPrivate = /^\/(account|orders|negotiations|messaging|notifications|billing|incentive)/.test(_req.path);
-      if (!isPrivate) {
-        const body = JSON.stringify(data);
-        const etag = `"${crypto.createHash("sha256").update(body).digest("hex").slice(0, 16)}"`;
-        res.set("ETag", etag);
-        if (_req.get("If-None-Match") === etag) {
-          return res.status(304).end();
-        }
-      }
-    }
-    return originalJson(data);
-  };
+  const isPrivate = /^\/(account|orders|negotiations|messaging|notifications|billing|incentive)/.test(_req.path);
+  if (isPrivate) {
+    // Désactiver ETag sur données privées
+    res.set("ETag", "");
+    res.removeHeader("ETag");
+  }
   next();
 });
+// Activer l'ETag natif Express (weak, CRC32 — pas de double sérialisation)
+app.set("etag", "weak");
 
 let _healthCache: { data: unknown; expiresAt: number } | null = null;
 

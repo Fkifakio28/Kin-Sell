@@ -62,26 +62,11 @@
     <link rel="preconnect" href="https://api.kin-sell.com" crossorigin />
     <link rel="dns-prefetch" href="//api.kin-sell.com" />
 
-    <!-- ── Cloudflare Turnstile — préconnexion + chargement ── -->
+    <!-- ── Cloudflare Turnstile — chargé dynamiquement par TurnstileWidget.tsx ── -->
     <link rel="preconnect" href="https://challenges.cloudflare.com" crossorigin />
     <link rel="dns-prefetch" href="//challenges.cloudflare.com" />
-    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
 
-    <!-- ── Google AdSense (tag statique pour validation crawler) ── -->
-    <script
-      id="adsense-script"
-      async
-      src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8795910357013666"
-      crossorigin="anonymous"
-    ></script>
-    <script>
-      // Bloquer AdSense dans l'app native (WebView Capacitor)
-      if (/KinSellApp/i.test(navigator.userAgent)) {
-        var el = document.getElementById('adsense-script');
-        if (el) el.parentNode.removeChild(el);
-        window.adsbygoogle = { push: function(){} };
-      }
-    </script>
+    <!-- ── Google AdSense — chargé 100% lazy par GoogleAdSlot.tsx (aucun preconnect pour épargner connexions lentes) ── -->
   </head>
   <body>
     <div id="root"></div>

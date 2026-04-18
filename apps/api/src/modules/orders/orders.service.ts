@@ -315,27 +315,9 @@ export const getBuyerCart = async (userId: string) => {
 
   if (itemIdsToDelete.length > 0) {
     await prisma.cartItem.deleteMany({ where: { id: { in: itemIdsToDelete } } });
-    // Re-fetch sans les items expirés
-    const cleaned = await prisma.cart.findUnique({
-      where: { id: cartId },
-      include: {
-        items: {
-          include: {
-            listing: {
-              include: {
-                ownerUser: { select: { id: true, profile: { select: { displayName: true, avatarUrl: true, username: true, city: true } } } },
-                business: { select: { id: true, publicName: true, slug: true } }
-              }
-            },
-            negotiation: {
-              select: { id: true, status: true, originalPriceUsdCents: true, finalPriceUsdCents: true, resolvedAt: true }
-            }
-          },
-          orderBy: { createdAt: "desc" }
-        }
-      }
-    });
-    return mapCart(cleaned!);
+    // Filtrer en mémoire au lieu de re-requêter la DB
+    cart.items = cart.items.filter((item) => !itemIdsToDelete.includes(item.id));
+    return mapCart(cart);
   }
 
   return mapCart(cart);

@@ -15,8 +15,9 @@ export function RootLayout() {
   const location = useLocation();
   const isMobile = useIsMobile();
   const isNative = Capacitor.isNativePlatform();
-  // Désactiver la vidéo de fond sur mobile/natif pour économiser batterie et CPU
-  const disableBgVideo = isMobile || isNative;
+  // Désactiver la vidéo de fond sur mobile/natif et pages privées pour économiser batterie/CPU/GPU
+  const isPublicPage = /^\/(explorer|sokin|blog|login|register|forfaits)?(\/|$|\?)/.test(location.pathname) || location.pathname === "/";
+  const disableBgVideo = isMobile || isNative || !isPublicPage;
   const hideFooter = isMobile
     || location.pathname === "/login"
     || location.pathname === "/register"
