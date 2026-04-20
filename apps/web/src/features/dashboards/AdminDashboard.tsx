@@ -3683,6 +3683,13 @@ export function AdminDashboard() {
   const [iaMsgSending, setIaMsgSending] = useState(false);
   const [iaMsgResult, setIaMsgResult] = useState<string | null>(null);
 
+  // IA Message — création de coupon intégrée
+  const [iaMsgWithCoupon, setIaMsgWithCoupon] = useState(false);
+  const [iaMsgCouponPercent, setIaMsgCouponPercent] = useState(20);
+  const [iaMsgCouponMaxUses, setIaMsgCouponMaxUses] = useState(100);
+  const [iaMsgCouponExpiresAt, setIaMsgCouponExpiresAt] = useState('');
+  const [iaMsgCreatedCoupon, setIaMsgCreatedCoupon] = useState<string | null>(null);
+
   // IA Message — filters & sorting
   const [iaMsgFilterChannel, setIaMsgFilterChannel] = useState<'all' | 'EMAIL' | 'PUSH' | 'INTERNAL'>('all');
   const [iaMsgFilterReason, setIaMsgFilterReason] = useState<'all' | string>('all');
@@ -4157,6 +4164,41 @@ export function AdminDashboard() {
                   {/* Corps */}
                   <textarea placeholder="Contenu du message *" value={iaMsgForm.body} onChange={e => setIaMsgForm(f => ({ ...f, body: e.target.value }))} rows={4} style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--ad-border)', fontSize: 12, color: 'var(--ad-text-1)', background: 'var(--ad-surface)', resize: 'vertical', marginBottom: 12 }} />
 
+                  {/* ═══ Code promo intégré ═══ */}
+                  <div style={{ marginBottom: 14, padding: '12px 14px', borderRadius: 10, border: `1px solid ${iaMsgWithCoupon ? 'rgba(111,88,255,0.4)' : 'var(--ad-border)'}`, background: iaMsgWithCoupon ? 'rgba(111,88,255,0.06)' : 'transparent' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none' }}>
+                      <input type="checkbox" checked={iaMsgWithCoupon} onChange={e => { setIaMsgWithCoupon(e.target.checked); setIaMsgCreatedCoupon(null); }} style={{ accentColor: '#6f58ff', width: 15, height: 15 }} />
+                      <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--ad-text-1)' }}>🎟️ Créer et joindre un code promo</span>
+                    </label>
+                    {iaMsgWithCoupon && (
+                      <div style={{ marginTop: 12 }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 10 }}>
+                          <label style={{ fontSize: 11, color: 'var(--ad-text-3)' }}>
+                            Réduction (%)
+                            <input type="number" min={1} max={100} value={iaMsgCouponPercent} onChange={e => setIaMsgCouponPercent(Math.min(100, Math.max(1, Number(e.target.value))))} style={{ display: 'block', width: '100%', marginTop: 4, padding: '7px 10px', borderRadius: 8, border: '1px solid var(--ad-border)', fontSize: 13, fontWeight: 700, color: '#6f58ff', background: 'var(--ad-surface)' }} />
+                          </label>
+                          <label style={{ fontSize: 11, color: 'var(--ad-text-3)' }}>
+                            Max utilisations
+                            <input type="number" min={1} max={100000} value={iaMsgCouponMaxUses} onChange={e => setIaMsgCouponMaxUses(Math.max(1, Number(e.target.value)))} style={{ display: 'block', width: '100%', marginTop: 4, padding: '7px 10px', borderRadius: 8, border: '1px solid var(--ad-border)', fontSize: 13, color: 'var(--ad-text-1)', background: 'var(--ad-surface)' }} />
+                          </label>
+                          <label style={{ fontSize: 11, color: 'var(--ad-text-3)' }}>
+                            Expire le *
+                            <input type="datetime-local" value={iaMsgCouponExpiresAt} onChange={e => setIaMsgCouponExpiresAt(e.target.value)} style={{ display: 'block', width: '100%', marginTop: 4, padding: '7px 10px', borderRadius: 8, border: '1px solid var(--ad-border)', fontSize: 12, color: 'var(--ad-text-1)', background: 'var(--ad-surface)' }} />
+                          </label>
+                        </div>
+                        <p style={{ fontSize: 11, color: 'var(--ad-text-3)', margin: 0 }}>
+                          💡 Le code promo sera créé automatiquement et inséré dans le message. Les destinataires pourront l&apos;utiliser lors du paiement.
+                        </p>
+                        {iaMsgCreatedCoupon && (
+                          <div style={{ marginTop: 8, padding: '8px 12px', borderRadius: 8, background: 'rgba(76,175,80,0.1)', border: '1px solid rgba(76,175,80,0.3)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ fontSize: 12, color: '#4caf50', fontWeight: 600 }}>✓ Code créé :</span>
+                            <code style={{ fontSize: 14, fontWeight: 700, color: '#6f58ff', letterSpacing: 1 }}>{iaMsgCreatedCoupon}</code>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
                   {/* Sélection des destinataires */}
                   <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ad-text-1)', marginBottom: 8 }}>🎯 Destinataires ({iaMsgSelected.length} sélectionnés)</div>
                   <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
@@ -4189,21 +4231,45 @@ export function AdminDashboard() {
 
                   {/* Actions */}
                   <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                    <button disabled={isMsgSendDisabled()} onClick={async () => {
+                    <button disabled={isMsgSendDisabled() || (iaMsgWithCoupon && !iaMsgCouponExpiresAt)} onClick={async () => {
                       setIaMsgSending(true);
                       setIaMsgResult(null);
+                      setIaMsgCreatedCoupon(null);
                       try {
-                        await admin.iaMessageSend({ recipientIds: iaMsgSelected, channel: iaMsgForm.channel, subject: iaMsgForm.subject, body: iaMsgForm.body, reason: iaMsgForm.reason });
-                        setIaMsgResult(`✅ Message envoyé à ${iaMsgSelected.length} destinataire(s)`);
+                        let finalBody = iaMsgForm.body;
+                        // Créer le coupon en premier si activé
+                        if (iaMsgWithCoupon) {
+                          const coupon = await request<{ code: string }>('/incentives/admin/coupons', {
+                            method: 'POST',
+                            body: {
+                              kind: 'PLAN_DISCOUNT',
+                              discountPercent: iaMsgCouponPercent,
+                              targetScope: 'ALL_PLANS',
+                              maxUses: iaMsgCouponMaxUses,
+                              maxUsesPerUser: 1,
+                              expiresAt: new Date(iaMsgCouponExpiresAt).toISOString(),
+                              status: 'ACTIVE',
+                              segment: 'STANDARD',
+                            },
+                          });
+                          setIaMsgCreatedCoupon(coupon.code);
+                          finalBody = `${finalBody}\n\n🎟️ Code promo : ${coupon.code} (-${iaMsgCouponPercent}%)\nValable jusqu'au ${new Date(iaMsgCouponExpiresAt).toLocaleDateString('fr-FR')}`;
+                        }
+                        await admin.iaMessageSend({ recipientIds: iaMsgSelected, channel: iaMsgForm.channel, subject: iaMsgForm.subject, body: finalBody, reason: iaMsgForm.reason });
+                        setIaMsgResult(`✅ Message envoyé à ${iaMsgSelected.length} destinataire(s)${iaMsgWithCoupon ? ` avec le code promo ${iaMsgCreatedCoupon ?? ''}` : ''}`);
                         setIaMsgForm({ channel: 'EMAIL', subject: '', body: '', reason: 'PROMO_MANUAL' });
                         setIaMsgSelected([]);
                         setIaMsgTargetUsers([]);
                         setIaMsgTargetSearch('');
+                        setIaMsgWithCoupon(false);
+                        setIaMsgCouponPercent(20);
+                        setIaMsgCouponMaxUses(100);
+                        setIaMsgCouponExpiresAt('');
                         await loadIaData('messages');
-                      } catch { setIaMsgResult('❌ Erreur lors de l\'envoi'); }
+                      } catch (e: any) { setIaMsgResult(`❌ ${e?.message ?? 'Erreur lors de l\'envoi'}`); }
                       setIaMsgSending(false);
-                    }} className="ad-btn ad-btn--accent" style={{ fontSize: 12, padding: '8px 18px', opacity: isMsgSendDisabled() ? 0.4 : 1 }}>
-                      {iaMsgSending ? '⏳ Envoi…' : '🚀 Envoyer'}
+                    }} className="ad-btn ad-btn--accent" style={{ fontSize: 12, padding: '8px 18px', opacity: (isMsgSendDisabled() || (iaMsgWithCoupon && !iaMsgCouponExpiresAt)) ? 0.4 : 1 }}>
+                      {iaMsgSending ? '⏳ Envoi…' : `🚀 Envoyer${iaMsgWithCoupon ? ' + créer coupon' : ''}`}
                     </button>
                     {iaMsgResult && <span style={{ fontSize: 12, color: iaMsgResult.startsWith('✅') ? 'var(--ad-green)' : 'var(--ad-red)' }}>{iaMsgResult}</span>}
                   </div>
