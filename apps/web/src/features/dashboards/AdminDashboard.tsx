@@ -3689,6 +3689,19 @@ export function AdminDashboard() {
   const [iaMsgCouponMaxUses, setIaMsgCouponMaxUses] = useState(100);
   const [iaMsgCouponExpiresAt, setIaMsgCouponExpiresAt] = useState('');
   const [iaMsgCreatedCoupon, setIaMsgCreatedCoupon] = useState<string | null>(null);
+  const [iaMsgCouponScope, setIaMsgCouponScope] = useState<'ALL_PLANS' | 'USER_PLANS' | 'BUSINESS_PLANS' | 'ALL_ADDONS' | 'SPECIFIC'>('ALL_PLANS');
+  const [iaMsgCouponPlans, setIaMsgCouponPlans] = useState<string[]>([]);
+  const [iaMsgCouponAddons, setIaMsgCouponAddons] = useState<string[]>([]);
+  const IA_MSG_ALL_PLANS = [
+    { code: 'FREE', label: 'FREE (Utilisateur)', scope: 'USER' },
+    { code: 'BOOST', label: 'BOOST (Utilisateur)', scope: 'USER' },
+    { code: 'AUTO', label: 'AUTO (Utilisateur)', scope: 'USER' },
+    { code: 'PRO_VENDOR', label: 'PRO VENDEUR (Utilisateur)', scope: 'USER' },
+    { code: 'STARTER', label: 'STARTER (Business)', scope: 'BUSINESS' },
+    { code: 'BUSINESS', label: 'BUSINESS (Business)', scope: 'BUSINESS' },
+    { code: 'SCALE', label: 'SCALE (Business)', scope: 'BUSINESS' },
+  ];
+  const IA_MSG_ALL_ADDONS = ['IA_MERCHANT', 'IA_ORDER', 'BOOST_VISIBILITY', 'ADS_PACK', 'ADS_PREMIUM'];
 
   // IA Message — filters & sorting
   const [iaMsgFilterChannel, setIaMsgFilterChannel] = useState<'all' | 'EMAIL' | 'PUSH' | 'INTERNAL'>('all');
@@ -4167,11 +4180,12 @@ export function AdminDashboard() {
                   {/* ═══ Code promo intégré ═══ */}
                   <div style={{ marginBottom: 14, padding: '12px 14px', borderRadius: 10, border: `1px solid ${iaMsgWithCoupon ? 'rgba(111,88,255,0.4)' : 'var(--ad-border)'}`, background: iaMsgWithCoupon ? 'rgba(111,88,255,0.06)' : 'transparent' }}>
                     <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none' }}>
-                      <input type="checkbox" checked={iaMsgWithCoupon} onChange={e => { setIaMsgWithCoupon(e.target.checked); setIaMsgCreatedCoupon(null); }} style={{ accentColor: '#6f58ff', width: 15, height: 15 }} />
+                      <input type="checkbox" checked={iaMsgWithCoupon} onChange={e => { setIaMsgWithCoupon(e.target.checked); setIaMsgCreatedCoupon(null); setIaMsgCouponScope('ALL_PLANS'); setIaMsgCouponPlans([]); setIaMsgCouponAddons([]); }} style={{ accentColor: '#6f58ff', width: 15, height: 15 }} />
                       <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--ad-text-1)' }}>🎟️ Créer et joindre un code promo</span>
                     </label>
                     {iaMsgWithCoupon && (
                       <div style={{ marginTop: 12 }}>
+                        {/* Ligne 1 : % + Max uses + Expire */}
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 10 }}>
                           <label style={{ fontSize: 11, color: 'var(--ad-text-3)' }}>
                             Réduction (%)
@@ -4186,7 +4200,47 @@ export function AdminDashboard() {
                             <input type="datetime-local" value={iaMsgCouponExpiresAt} onChange={e => setIaMsgCouponExpiresAt(e.target.value)} style={{ display: 'block', width: '100%', marginTop: 4, padding: '7px 10px', borderRadius: 8, border: '1px solid var(--ad-border)', fontSize: 12, color: 'var(--ad-text-1)', background: 'var(--ad-surface)' }} />
                           </label>
                         </div>
-                        <p style={{ fontSize: 11, color: 'var(--ad-text-3)', margin: 0 }}>
+                        {/* Scope cible */}
+                        <label style={{ fontSize: 11, color: 'var(--ad-text-3)', display: 'block', marginBottom: 6 }}>
+                          Applicable sur
+                          <select value={iaMsgCouponScope} onChange={e => { setIaMsgCouponScope(e.target.value as typeof iaMsgCouponScope); setIaMsgCouponPlans([]); setIaMsgCouponAddons([]); }} style={{ display: 'block', width: '100%', marginTop: 4, padding: '7px 10px', borderRadius: 8, border: '1px solid var(--ad-border)', fontSize: 12, color: 'var(--ad-text-1)', background: 'var(--ad-surface)' }}>
+                            <option value="ALL_PLANS">🌐 Tous les forfaits</option>
+                            <option value="USER_PLANS">👤 Forfaits Utilisateur uniquement</option>
+                            <option value="BUSINESS_PLANS">🏢 Forfaits Business uniquement</option>
+                            <option value="ALL_ADDONS">🔌 Tous les add-ons</option>
+                            <option value="SPECIFIC">🎯 Forfaits / Add-ons spécifiques</option>
+                          </select>
+                        </label>
+                        {/* Sélection spécifique forfaits */}
+                        {iaMsgCouponScope === 'SPECIFIC' && (
+                          <div style={{ marginBottom: 8 }}>
+                            <div style={{ fontSize: 11, color: 'var(--ad-text-3)', marginBottom: 4 }}>Forfaits concernés :</div>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                              {IA_MSG_ALL_PLANS.map(p => {
+                                const sel = iaMsgCouponPlans.includes(p.code);
+                                return (
+                                  <label key={p.code + p.scope} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--ad-text-1)', cursor: 'pointer', padding: '4px 8px', borderRadius: 6, background: sel ? 'rgba(111,88,255,0.18)' : 'rgba(255,255,255,0.04)', border: `1px solid ${sel ? '#6f58ff' : 'var(--ad-border)'}` }}>
+                                    <input type="checkbox" checked={sel} onChange={() => setIaMsgCouponPlans(prev => sel ? prev.filter(x => x !== p.code) : [...prev, p.code])} style={{ accentColor: '#6f58ff' }} />
+                                    {p.label}
+                                  </label>
+                                );
+                              })}
+                            </div>
+                            <div style={{ fontSize: 11, color: 'var(--ad-text-3)', marginBottom: 4 }}>Add-ons concernés :</div>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                              {IA_MSG_ALL_ADDONS.map(a => {
+                                const sel = iaMsgCouponAddons.includes(a);
+                                return (
+                                  <label key={a} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--ad-text-1)', cursor: 'pointer', padding: '4px 8px', borderRadius: 6, background: sel ? 'rgba(78,205,196,0.15)' : 'rgba(255,255,255,0.04)', border: `1px solid ${sel ? '#4ecdc4' : 'var(--ad-border)'}` }}>
+                                    <input type="checkbox" checked={sel} onChange={() => setIaMsgCouponAddons(prev => sel ? prev.filter(x => x !== a) : [...prev, a])} style={{ accentColor: '#4ecdc4' }} />
+                                    {a.replace(/_/g, ' ')}
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                        <p style={{ fontSize: 11, color: 'var(--ad-text-3)', margin: '8px 0 0' }}>
                           💡 Le code promo sera créé automatiquement et inséré dans le message. Les destinataires pourront l&apos;utiliser lors du paiement.
                         </p>
                         {iaMsgCreatedCoupon && (
@@ -4239,12 +4293,15 @@ export function AdminDashboard() {
                         let finalBody = iaMsgForm.body;
                         // Créer le coupon en premier si activé
                         if (iaMsgWithCoupon) {
+                          const isAddonScope = iaMsgCouponScope === 'ALL_ADDONS' || (iaMsgCouponScope === 'SPECIFIC' && iaMsgCouponAddons.length > 0 && iaMsgCouponPlans.length === 0);
                           const coupon = await request<{ code: string }>('/incentives/admin/coupons', {
                             method: 'POST',
                             body: {
-                              kind: 'PLAN_DISCOUNT',
+                              kind: isAddonScope ? 'ADDON_DISCOUNT' : 'PLAN_DISCOUNT',
                               discountPercent: iaMsgCouponPercent,
-                              targetScope: 'ALL_PLANS',
+                              targetScope: iaMsgCouponScope,
+                              targetPlanCodes: iaMsgCouponScope === 'SPECIFIC' ? iaMsgCouponPlans : [],
+                              targetAddonCodes: iaMsgCouponScope === 'SPECIFIC' ? iaMsgCouponAddons : [],
                               maxUses: iaMsgCouponMaxUses,
                               maxUsesPerUser: 1,
                               expiresAt: new Date(iaMsgCouponExpiresAt).toISOString(),
@@ -4253,7 +4310,12 @@ export function AdminDashboard() {
                             },
                           });
                           setIaMsgCreatedCoupon(coupon.code);
-                          finalBody = `${finalBody}\n\n🎟️ Code promo : ${coupon.code} (-${iaMsgCouponPercent}%)\nValable jusqu'au ${new Date(iaMsgCouponExpiresAt).toLocaleDateString('fr-FR')}`;
+                          const scopeLabel = iaMsgCouponScope === 'ALL_PLANS' ? 'tous les forfaits'
+                            : iaMsgCouponScope === 'USER_PLANS' ? 'forfaits Utilisateur'
+                            : iaMsgCouponScope === 'BUSINESS_PLANS' ? 'forfaits Business'
+                            : iaMsgCouponScope === 'ALL_ADDONS' ? 'tous les add-ons'
+                            : [...iaMsgCouponPlans, ...iaMsgCouponAddons].join(', ');
+                          finalBody = `${finalBody}\n\n🎟️ Code promo : ${coupon.code} (-${iaMsgCouponPercent}% sur ${scopeLabel})\nValable jusqu'au ${new Date(iaMsgCouponExpiresAt).toLocaleDateString('fr-FR')}`;
                         }
                         await admin.iaMessageSend({ recipientIds: iaMsgSelected, channel: iaMsgForm.channel, subject: iaMsgForm.subject, body: finalBody, reason: iaMsgForm.reason });
                         setIaMsgResult(`✅ Message envoyé à ${iaMsgSelected.length} destinataire(s)${iaMsgWithCoupon ? ` avec le code promo ${iaMsgCreatedCoupon ?? ''}` : ''}`);
@@ -4265,6 +4327,9 @@ export function AdminDashboard() {
                         setIaMsgCouponPercent(20);
                         setIaMsgCouponMaxUses(100);
                         setIaMsgCouponExpiresAt('');
+                        setIaMsgCouponScope('ALL_PLANS');
+                        setIaMsgCouponPlans([]);
+                        setIaMsgCouponAddons([]);
                         await loadIaData('messages');
                       } catch (e: any) { setIaMsgResult(`❌ ${e?.message ?? 'Erreur lors de l\'envoi'}`); }
                       setIaMsgSending(false);

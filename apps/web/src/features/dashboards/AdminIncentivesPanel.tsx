@@ -144,6 +144,19 @@ export default function AdminIncentivesPanel() {
     segment: "STANDARD",
     recipientUserId: "",
   });
+  const [formPlans, setFormPlans] = useState<string[]>([]);
+  const [formAddons, setFormAddons] = useState<string[]>([]);
+
+  const ALL_PLANS_LIST = [
+    { code: "FREE", label: "FREE (Utilisateur)" },
+    { code: "BOOST", label: "BOOST (Utilisateur)" },
+    { code: "AUTO", label: "AUTO (Utilisateur)" },
+    { code: "PRO_VENDOR", label: "PRO VENDEUR (Utilisateur)" },
+    { code: "STARTER", label: "STARTER (Business)" },
+    { code: "BUSINESS", label: "BUSINESS (Business)" },
+    { code: "SCALE", label: "SCALE (Business)" },
+  ];
+  const ALL_ADDONS_LIST = ["IA_MERCHANT", "IA_ORDER", "BOOST_VISIBILITY", "ADS_PACK", "ADS_PREMIUM"];
 
   const mounted = useRef(true);
   useEffect(() => () => { mounted.current = false; }, []);
@@ -215,6 +228,8 @@ export default function AdminIncentivesPanel() {
         kind: form.kind,
         discountPercent: form.discountPercent,
         targetScope: form.targetScope,
+        targetPlanCodes: form.targetScope === "SPECIFIC" ? formPlans : [],
+        targetAddonCodes: form.targetScope === "SPECIFIC" ? formAddons : [],
         maxUses: form.maxUses,
         maxUsesPerUser: form.maxUsesPerUser,
         expiresAt: new Date(form.expiresAt).toISOString(),
@@ -403,10 +418,6 @@ export default function AdminIncentivesPanel() {
               <select value={form.kind} onChange={e => setForm(f => ({ ...f, kind: e.target.value }))} style={{ ...selectStyle, display: "block", width: "100%", marginTop: 4 }}>
                 <option value="PLAN_DISCOUNT">Plan Discount</option>
                 <option value="ADDON_DISCOUNT">Addon Discount</option>
-                <option value="ADDON_FREE_GAIN">Addon Free Gain</option>
-                <option value="CPC">CPC</option>
-                <option value="CPI">CPI</option>
-                <option value="CPA">CPA</option>
               </select>
             </label>
 
@@ -417,14 +428,43 @@ export default function AdminIncentivesPanel() {
 
             <label style={{ color: C.text2, fontSize: 12 }}>
               Scope cible
-              <select value={form.targetScope} onChange={e => setForm(f => ({ ...f, targetScope: e.target.value }))} style={{ ...selectStyle, display: "block", width: "100%", marginTop: 4 }}>
-                <option value="ALL_PLANS">Tous les plans</option>
-                <option value="USER_PLANS">Plans utilisateur</option>
-                <option value="BUSINESS_PLANS">Plans business</option>
-                <option value="ALL_ADDONS">Tous add-ons</option>
-                <option value="SPECIFIC">Spécifique</option>
+              <select value={form.targetScope} onChange={e => { setForm(f => ({ ...f, targetScope: e.target.value })); setFormPlans([]); setFormAddons([]); }} style={{ ...selectStyle, display: "block", width: "100%", marginTop: 4 }}>
+                <option value="ALL_PLANS">🌐 Tous les forfaits</option>
+                <option value="USER_PLANS">👤 Forfaits Utilisateur uniquement</option>
+                <option value="BUSINESS_PLANS">🏢 Forfaits Business uniquement</option>
+                <option value="ALL_ADDONS">🔌 Tous les add-ons</option>
+                <option value="SPECIFIC">🎯 Forfaits / Add-ons spécifiques</option>
               </select>
             </label>
+
+            {form.targetScope === "SPECIFIC" && (
+              <div style={{ padding: "12px 14px", borderRadius: 10, border: `1px solid ${C.accent}30`, background: `${C.accent}08` }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: C.text2, marginBottom: 8 }}>Forfaits concernés :</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
+                  {ALL_PLANS_LIST.map(p => {
+                    const sel = formPlans.includes(p.code);
+                    return (
+                      <label key={p.code} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: C.text, cursor: "pointer", padding: "4px 8px", borderRadius: 6, background: sel ? `${C.accent}20` : "rgba(255,255,255,0.04)", border: `1px solid ${sel ? C.accent : C.border}` }}>
+                        <input type="checkbox" checked={sel} onChange={() => setFormPlans(prev => sel ? prev.filter(x => x !== p.code) : [...prev, p.code])} style={{ accentColor: C.accent }} />
+                        {p.label}
+                      </label>
+                    );
+                  })}
+                </div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: C.text2, marginBottom: 8 }}>Add-ons concernés :</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {ALL_ADDONS_LIST.map(a => {
+                    const sel = formAddons.includes(a);
+                    return (
+                      <label key={a} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: C.text, cursor: "pointer", padding: "4px 8px", borderRadius: 6, background: sel ? "rgba(78,205,196,0.15)" : "rgba(255,255,255,0.04)", border: `1px solid ${sel ? "#4ecdc4" : C.border}` }}>
+                        <input type="checkbox" checked={sel} onChange={() => setFormAddons(prev => sel ? prev.filter(x => x !== a) : [...prev, a])} style={{ accentColor: "#4ecdc4" }} />
+                        {a.replace(/_/g, " ")}
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             <div style={{ display: "flex", gap: 12 }}>
               <label style={{ color: C.text2, fontSize: 12, flex: 1 }}>
