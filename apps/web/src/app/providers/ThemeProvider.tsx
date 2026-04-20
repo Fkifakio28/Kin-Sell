@@ -1,5 +1,6 @@
-import { createContext, useContext, useEffect, useMemo } from "react";
+import { createContext, useContext, useLayoutEffect, useMemo } from "react";
 import type { ReactNode } from "react";
+import { SK_THEME } from "../../shared/constants/storage-keys";
 
 type Theme = "dark";
 
@@ -12,8 +13,16 @@ type ThemeContextValue = {
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  useEffect(() => {
+  useLayoutEffect(() => {
+    // Dark-only lock: force the DOM theme and remove stale persisted "light" values.
     document.documentElement.dataset.theme = "dark";
+    document.documentElement.style.colorScheme = "dark";
+    try {
+      localStorage.setItem(SK_THEME, "dark");
+      localStorage.removeItem("theme");
+    } catch {
+      // Ignore storage failures (private mode, quota, disabled storage).
+    }
   }, []);
 
   const value = useMemo(

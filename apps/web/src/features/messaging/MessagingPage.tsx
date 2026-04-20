@@ -165,13 +165,27 @@ function callEventPreview(msg: ChatMessage, t: (k: string) => string): string | 
   return `${icon} ${label}`;
 }
 
+type ConnectionLike = {
+  effectiveType?: string;
+  saveData?: boolean;
+  addEventListener?: (type: "change", listener: () => void) => void;
+  removeEventListener?: (type: "change", listener: () => void) => void;
+};
+
+function isLowBandwidthConnection(conn?: ConnectionLike): boolean {
+  if (!conn) return false;
+  if (conn.saveData) return true;
+  return conn.effectiveType === "slow-2g" || conn.effectiveType === "2g" || conn.effectiveType === "3g";
+}
+
 /* ═══ Audio Player ═══ */
-function AudioPlayer({ src }: { src: string }) {
+function AudioPlayer({ src, lowBandwidth }: { src: string; lowBandwidth: boolean }) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -179,17 +193,43 @@ function AudioPlayer({ src }: { src: string }) {
     const onTime = () => { setCurrentTime(audio.currentTime); setProgress(audio.duration ? (audio.currentTime / audio.duration) * 100 : 0); };
     const onMeta = () => setDuration(audio.duration);
     const onEnd = () => { setPlaying(false); setProgress(0); setCurrentTime(0); };
+    const onError = () => { setLoadError(true); setPlaying(false); };
+    const onCanPlay = () => { setLoadError(false); };
     audio.addEventListener("timeupdate", onTime);
     audio.addEventListener("loadedmetadata", onMeta);
     audio.addEventListener("ended", onEnd);
-    return () => { audio.removeEventListener("timeupdate", onTime); audio.removeEventListener("loadedmetadata", onMeta); audio.removeEventListener("ended", onEnd); };
-  }, []);
+    audio.addEventListener("error", onError);
+    audio.addEventListener("canplay", onCanPlay);
+    return () => {
+      audio.removeEventListener("timeupdate", onTime);
+      audio.removeEventListener("loadedmetadata", onMeta);
+      audio.removeEventListener("ended", onEnd);
+      audio.removeEventListener("error", onError);
+      audio.removeEventListener("canplay", onCanPlay);
+    };
+  }, [src]);
 
   const toggle = () => {
     const audio = audioRef.current;
     if (!audio) return;
-    if (playing) audio.pause(); else void audio.play();
-    setPlaying(!playing);
+    if (playing) {
+      audio.pause();
+      setPlaying(false);
+      return;
+    }
+    if (audio.preload === "none") {
+      audio.preload = "metadata";
+      audio.load();
+    }
+    void audio.play()
+      .then(() => {
+        setLoadError(false);
+        setPlaying(true);
+      })
+      .catch(() => {
+        setLoadError(true);
+        setPlaying(false);
+      });
   };
 
   const seek = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -201,7 +241,7 @@ function AudioPlayer({ src }: { src: string }) {
 
   return (
     <div className={`mg-audio-player${playing ? " mg-audio-player--playing" : ""}`}>
-      <audio ref={audioRef} src={src} preload="metadata" />
+      <audio ref={audioRef} src={src} preload={lowBandwidth ? "none" : "metadata"} />
       <button className="mg-audio-play-btn" onClick={toggle} type="button">
         {playing ? (
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
@@ -213,7 +253,9 @@ function AudioPlayer({ src }: { src: string }) {
         <div className="mg-audio-progress-bg" onClick={seek}>
           <div className="mg-audio-progress-fill" style={{ width: `${progress}%` }} />
         </div>
-        <span className="mg-audio-time">{formatAudioTime(currentTime)} / {formatAudioTime(duration || 0)}</span>
+        <span className="mg-audio-time">
+          {loadError ? "Chargement audio lent, touchez pour réessayer" : `${formatAudioTime(currentTime)} / ${formatAudioTime(duration || 0)}`}
+        </span>
       </div>
     </div>
   );
@@ -388,6 +430,11 @@ export function MessagingPage() {
   /* ── Keyboard offset ── */
   const [keyboardOffset, setKeyboardOffset] = useState(0);
   const lastKeyboardOffsetRef = useRef(0);
+  const [lowBandwidthMode, setLowBandwidthMode] = useState<boolean>(() => {
+    if (typeof navigator === "undefined") return false;
+    const conn = (navigator as unknown as { connection?: ConnectionLike }).connection;
+    return isLowBandwidthConnection(conn);
+  });
 
   /* ── Refs ── */
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -400,6 +447,15 @@ export function MessagingPage() {
 
   const myId = user?.id ?? "";
   const myRole = user?.role ?? "";
+
+  useEffect(() => {
+    const conn = (navigator as unknown as { connection?: ConnectionLike }).connection;
+    if (!conn) return;
+    const update = () => setLowBandwidthMode(isLowBandwidthConnection(conn));
+    update();
+    conn.addEventListener?.("change", update);
+    return () => conn.removeEventListener?.("change", update);
+  }, []);
 
   // In a DM with admin, non-admin users cannot reply
   const isAdminDM = useMemo(() => {
@@ -1454,11 +1510,24 @@ export function MessagingPage() {
                       {msg.isDeleted ? (
                         <p className="mg-deleted-text">🚫 {t("msg.deletedMessage")}</p>
                       ) : msg.type === "IMAGE" && msg.mediaUrl ? (
-                        <img src={resolveMediaUrl(msg.mediaUrl)} alt="Image" className="mg-media-img" onClick={() => window.open(resolveMediaUrl(msg.mediaUrl), "_blank")} />
+                        <img
+                          src={resolveMediaUrl(msg.mediaUrl)}
+                          alt="Image"
+                          className="mg-media-img"
+                          loading="lazy"
+                          decoding="async"
+                          onClick={() => window.open(resolveMediaUrl(msg.mediaUrl), "_blank")}
+                        />
                       ) : msg.type === "AUDIO" && msg.mediaUrl ? (
-                        <AudioPlayer src={resolveMediaUrl(msg.mediaUrl)} />
+                        <AudioPlayer src={resolveMediaUrl(msg.mediaUrl)} lowBandwidth={lowBandwidthMode} />
                       ) : msg.type === "VIDEO" && msg.mediaUrl ? (
-                        <video controls src={resolveMediaUrl(msg.mediaUrl)} className="mg-media-video" />
+                        <video
+                          controls
+                          preload={lowBandwidthMode ? "none" : "metadata"}
+                          playsInline
+                          src={resolveMediaUrl(msg.mediaUrl)}
+                          className="mg-media-video"
+                        />
                       ) : msg.type === "FILE" && msg.mediaUrl ? (
                         <a href={resolveMediaUrl(msg.mediaUrl)} download={msg.fileName ?? "file"} className="mg-file-link">📎 {msg.fileName ?? t("msg.file")}</a>
                       ) : pinnedFromMsg ? (

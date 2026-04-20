@@ -62,7 +62,8 @@ const httpServer = createServer(app);
 
 // ── Production-ready middleware ──
 if (env.NODE_ENV === "production") {
-  app.set("trust proxy", 1);
+  // Cloudflare -> Nginx -> API (2 hops) to preserve the real client IP.
+  app.set("trust proxy", 2);
 }
 app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" },
@@ -116,31 +117,48 @@ const uploadAllowedOrigins = String(env.CORS_ORIGIN || "")
   .split(",")
   .map((o) => o.trim())
   .filter(Boolean);
+const isAllowedUploadSource = (source: string, allowedOrigins: string[]): boolean => {
+  try {
+    const parsed = new URL(source);
+    return allowedOrigins.includes(parsed.origin);
+  } catch {
+    return allowedOrigins.some((origin) => source.startsWith(origin));
+  }
+};
 app.use("/uploads", (req, res, next) => {
+  // Protect only public media reads; upload POST/PATCH/DELETE keep auth flow unchanged.
+  if (!["GET", "HEAD", "OPTIONS"].includes(req.method)) { next(); return; }
   if (env.NODE_ENV !== "production") { next(); return; }
-  const ref = req.get("referer") || req.get("origin") || "";
+
+  const ref = req.get("origin") || req.get("referer") || "";
   const ua = req.get("user-agent") || "";
-  // Autoriser les requêtes depuis l'app native (WebView Capacitor) même sans referer valide
-  const isNativeApp = /KinSellApp/i.test(ua);
-  if (isNativeApp) {
-    res.set("Cache-Control", "public, max-age=31536000, immutable");
-    next();
-    return;
-  }
-  if (!ref) {
-    res.status(403).end();
-    return;
-  }
-  const host = req.get("host");
+  const host = req.get("x-forwarded-host") || req.get("host");
   const selfOrigins = host ? [`https://${host}`, `http://${host}`] : [];
   const allowed = [...uploadAllowedOrigins, ...selfOrigins];
-  const isAllowed = allowed.some((origin) => ref.startsWith(origin));
+
+  // Allow native app and no-referrer fetches (common with privacy browsers/Cloudflare fetches).
+  const isNativeApp = /KinSellApp/i.test(ua);
+  const hasExplicitSource = ref.trim().length > 0;
+  const isAllowed = isNativeApp || !hasExplicitSource || isAllowedUploadSource(ref, allowed);
   if (!isAllowed) {
+    logger.warn({
+      path: req.path,
+      method: req.method,
+      source: ref,
+      host,
+      cfRay: req.get("cf-ray"),
+      cfConnectingIp: req.get("cf-connecting-ip"),
+    }, "Uploads blocked by origin guard");
     res.status(403).end();
     return;
   }
-  // Cache long sur les fichiers statiques (images/vidéos)
+
+  // Long cache + streaming-friendly headers for images/video/audio delivery.
   res.set("Cache-Control", "public, max-age=31536000, immutable");
+  res.set("Cross-Origin-Resource-Policy", "cross-origin");
+  res.set("Access-Control-Allow-Origin", "*");
+  res.set("Accept-Ranges", "bytes");
+  res.set("Vary", "Origin");
   next();
 });
 app.use("/uploads", express.static(path.resolve(process.cwd(), "uploads")));

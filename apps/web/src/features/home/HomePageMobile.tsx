@@ -35,7 +35,6 @@ import {
 } from "../../lib/api-client";
 import { NegotiatePopup } from "../negotiations/NegotiatePopup";
 import { AdBanner } from "../../components/AdBanner";
-import { GoogleAdSlot } from "../../components/GoogleAdSlot";
 import { RegionLanguageCurrencySelector } from "../../components/RegionLanguageCurrencySelector";
 import {
   useLockedCategories,
@@ -58,7 +57,6 @@ import { WelcomeOnboarding } from "../onboarding/WelcomeOnboarding";
 import { SK_WELCOME_ONBOARDING_DONE } from "../../shared/constants/storage-keys";
 import { OnboardingHelpFab } from "../../components/OnboardingHelpFab";
 import { LongPressPopup, useLongPress, type LongPressArticle } from "../../components/LongPressPopup";
-import { useUnityAds } from "../../hooks/useUnityAds";
 import "./home-mobile.css";
 
 /* ────────────── Static data ────────────── */
@@ -273,22 +271,6 @@ function SideDrawer({
             📞 {t("home.contact")}
           </Link>
         </div>
-
-        {Capacitor.isNativePlatform() && (
-          <div className="hm-drawer-quick-links" style={{ marginTop: 0 }}>
-            <button
-              type="button"
-              className="hm-drawer-quick-link"
-              style={{ background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', font: 'inherit', color: 'inherit', padding: '10px 0' }}
-              onClick={() => {
-                onClose();
-                window.dispatchEvent(new CustomEvent('ks-show-rewarded'));
-              }}
-            >
-              🎬 Regarder une pub
-            </button>
-          </div>
-        )}
 
         <div className="hm-drawer-market-prefs">
           <p className="hm-drawer-section-title">
@@ -1531,20 +1513,6 @@ export function HomePageMobile() {
   const lockedCats = useLockedCategories();
   const barsVisibleRaw = useScrollDirection();
   const tutorial = useTutorial("home-mobile");
-  const unityAds = useUnityAds();
-
-  // Écouter l'event du drawer pour afficher une rewarded
-  useEffect(() => {
-    const handler = async () => {
-      if (!unityAds.rewardedReady) return;
-      const result = await unityAds.showRewarded();
-      if (result?.completed) {
-        console.log("[UnityAds] Rewarded completed — user earned reward");
-      }
-    };
-    window.addEventListener("ks-show-rewarded", handler);
-    return () => window.removeEventListener("ks-show-rewarded", handler);
-  }, [unityAds]);
 
   const [showWelcome, setShowWelcome] = useState(() => !localStorage.getItem(SK_WELCOME_ONBOARDING_DONE));
 
@@ -1679,9 +1647,6 @@ export function HomePageMobile() {
           cityHint={defaultCity}
           countryHint={effectiveCountry}
         />
-
-        {/* ── Google AdSense — entre articles et feed social ── */}
-        <GoogleAdSlot adSlot="3909776294" adFormat="horizontal" className="g-adsense-between-sections" />
 
         <SoKinFeed
           t={t}

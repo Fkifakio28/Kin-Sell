@@ -17,11 +17,6 @@
 -keep class com.google.firebase.** { *; }
 -dontwarn com.google.firebase.**
 
-# ── Unity Ads ──
--keep class com.unity3d.ads.** { *; }
--dontwarn com.unity3d.ads.**
--keepattributes Signature
-
 # ── WebView JS interface ──
 -keepclassmembers class * {
     @android.webkit.JavascriptInterface <methods>;

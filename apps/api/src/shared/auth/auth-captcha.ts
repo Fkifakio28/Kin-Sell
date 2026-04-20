@@ -11,11 +11,10 @@ function isNativeAppRequest(request: Request): boolean {
 export async function enforceAuthCaptcha(request: Request, response: Response): Promise<boolean> {
   const cfToken = request.body?.cfTurnstileToken;
   const isNativeApp = isNativeAppRequest(request);
-  const isUnavailableFallback = cfToken === "captcha-unavailable";
 
-  if (isNativeApp || isUnavailableFallback) {
+  if (isNativeApp && env.ALLOW_NATIVE_AUTH_CAPTCHA_FALLBACK) {
     await new Promise<void>((resolve, reject) => {
-      rateLimit(RateLimits.AUTH_FALLBACK)(request, response, (err) => err ? reject(err) : resolve());
+      rateLimit(RateLimits.LOGIN)(request, response, (err) => err ? reject(err) : resolve());
     });
     return !response.headersSent;
   }

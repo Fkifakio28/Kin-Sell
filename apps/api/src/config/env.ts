@@ -83,6 +83,8 @@ const schema = z.object({
 
   // ── Cloudflare Turnstile ──
   TURNSTILE_SECRET_KEY: z.string().optional(),
+  TURNSTILE_FAIL_OPEN: z.enum(["true", "false"]).default("false").transform((v) => v === "true"),
+  ALLOW_NATIVE_AUTH_CAPTCHA_FALLBACK: z.enum(["true", "false"]).default("false").transform((v) => v === "true"),
 
   // ── AI Services ──
   OPENAI_API_KEY: z.string().optional(),

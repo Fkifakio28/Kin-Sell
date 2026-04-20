@@ -1,4 +1,4 @@
-import { env } from "../../config/env.js";
+﻿import { env } from "../../config/env.js";
 
 type TurnstileResponse = {
   success: boolean;
@@ -11,6 +11,9 @@ type TurnstileResponse = {
  */
 export async function verifyTurnstile(token: string, ip?: string): Promise<boolean> {
   if (!env.TURNSTILE_SECRET_KEY) return true; // skip in dev
+
+  // Strict mode: explicit fallback tokens are not valid for web verification.
+  if (!token || token === "captcha-unavailable") return false;
 
   const body = new URLSearchParams({
     secret: env.TURNSTILE_SECRET_KEY,
@@ -28,8 +31,11 @@ export async function verifyTurnstile(token: string, ip?: string): Promise<boole
     const data = (await res.json()) as TurnstileResponse;
     return data.success === true;
   } catch {
-    // Fail-open: if Cloudflare is unreachable, let the user through (rate-limit protects against abuse)
-    console.warn("[Turnstile] verification timed out or failed — fail-open");
-    return true;
+    if (env.TURNSTILE_FAIL_OPEN) {
+      console.warn("[Turnstile] verification failed - fail-open enabled");
+      return true;
+    }
+    console.warn("[Turnstile] verification failed - fail-closed");
+    return false;
   }
 }

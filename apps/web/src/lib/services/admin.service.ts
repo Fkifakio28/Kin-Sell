@@ -735,7 +735,7 @@ export const admin = {
     request<unknown>("/admin/ia/ads/create", { method: "POST", body }),
 
   // ── IA Message: send promo ──
-  iaMessageSend: (body: { recipientIds: string[]; channel: "EMAIL" | "PUSH"; subject: string; body: string; reason?: string }) =>
+  iaMessageSend: (body: { recipientIds: string[]; channel: "EMAIL" | "PUSH" | "INTERNAL"; subject: string; body: string; reason?: string }) =>
     request<{ ok: boolean; sent: number; total: number }>("/admin/ia/messages/send", { method: "POST", body }),
   iaMessageTargetUsers: (params?: { search?: string; role?: string; limit?: number }) =>
     request<{ users: IaTargetUser[] }>("/admin/ia/messages/target-users", { params: params as Record<string, string | number | undefined> }),

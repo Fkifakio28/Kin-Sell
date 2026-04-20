@@ -11,10 +11,25 @@ export const API_BASE = import.meta.env.VITE_API_URL ?? "/api";
  * Résout une URL média relative (/uploads/...) en URL absolue pointant vers l'API.
  * Les URLs déjà absolues (http/https/data:) sont retournées telles quelles.
  */
+function joinWithApiBase(path: string): string {
+  const base = API_BASE.replace(/\/+$/, "");
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+
+  if (base.startsWith("http://") || base.startsWith("https://")) {
+    if (base.endsWith("/api") && normalizedPath.startsWith("/api/")) {
+      return `${base}${normalizedPath.slice(4)}`;
+    }
+    return `${base}${normalizedPath}`;
+  }
+
+  if (base === "/api" && normalizedPath.startsWith("/api/")) return normalizedPath;
+  return `${base}${normalizedPath}`;
+}
+
 export function resolveMediaUrl(url: string | null | undefined): string {
   if (!url) return "";
   if (url.startsWith("http") || url.startsWith("data:") || url.startsWith("blob:")) return url;
-  if (url.startsWith("/uploads/")) return `${API_BASE}${url}`;
+  if (url.startsWith("/uploads/") || url.startsWith("/api/uploads/")) return joinWithApiBase(url);
   return url;
 }
 

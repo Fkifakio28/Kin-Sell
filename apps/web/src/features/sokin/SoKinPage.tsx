@@ -41,7 +41,6 @@ import { ApiError } from '../../lib/api-core';
 import { SoKinToastProvider, useSoKinToast } from '../../components/feedback/SoKinToast';
 import { InlineSearchResults } from '../../components/InlineSearchResults';
 import { AdBanner } from '../../components/AdBanner';
-import { GoogleAdSlot } from '../../components/GoogleAdSlot';
 import { SeoMeta } from '../../components/SeoMeta';
 import { BoostFlowModal } from '../../components/BoostFlowModal';
 import { buildSoKinFeedItems } from './ad-cadence';
@@ -3302,9 +3301,6 @@ function SoKinPageInner() {
               </div>
             )}
 
-            {/* ── Google AdSense — avant le feed social ── */}
-            <GoogleAdSlot adSlot="9788788931" adFormat="fluid" layoutKey="-ef+6k-30-ac+ty" className="g-adsense-between-sections" />
-
             {/* ── Feed social pleine largeur ── */}
             <AnnouncesFeed
               posts={posts}
@@ -3839,9 +3835,6 @@ function SoKinPageInner() {
                 <p className="sk-desktop-commercial-line">📦 Boostez votre visibilité sur So-Kin</p>
                 <button type="button" className="sk-desktop-outline" onClick={handleOpenCreate}>Créer un post</button>
               </section>
-
-              {/* ── Google AdSense — sidebar desktop ── */}
-              <GoogleAdSlot adSlot="1648468674" adFormat="rectangle" className="g-adsense-sidebar" />
 
               {/* ── Mon contenu (inline management) ── */}
               {isLoggedIn && (myPublishedPosts.length > 0 || myBookmarks.length > 0) && (

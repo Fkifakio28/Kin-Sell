@@ -75,6 +75,7 @@ export interface PromoLog {
   bodyPreview: string;
   targetItemId: string | null;
   targetItemTitle: string | null;
+  promoCode: string | null;
   delivered: boolean;
   sentAt: Date;
 }
@@ -124,7 +125,7 @@ export async function sendPromoEmail(
       actionType: "PROMO_EMAIL",
       targetUserId: recipientId,
       decision: `Email: ${subject}`,
-      reasoning: `Raison: ${reason}${targetItemId ? ` | Cible: ${targetItemId}` : ""}`,
+      reasoning: `Raison: ${reason}${targetItemId ? ` | Cible: ${targetItemId}` : ""}${coupon ? ` | Code: ${coupon.code}` : ""}`,
       success: delivered,
     },
   });
@@ -165,6 +166,79 @@ export async function sendPromoPush(
     return true;
   } catch (err) {
     logger.error({ err, recipientId }, "[IA Messenger] Erreur push promo");
+    return false;
+  }
+}
+
+/**
+ * Envoie un message promotionnel interne (via messagerie système)
+ */
+export async function sendPromoInternal(
+  recipientId: string,
+  subject: string,
+  body: string,
+  reason: PromoReason,
+  targetItemId?: string,
+): Promise<boolean> {
+  try {
+    // Chercher ou créer une conversation "système" avec l'utilisateur
+    const SYSTEM_USER_ID = "kin-sell-system";
+    
+    let systemConv = await prisma.conversation.findFirst({
+      where: {
+        isGroup: false,
+        participants: {
+          every: {
+            userId: { in: [recipientId, SYSTEM_USER_ID] },
+          },
+        },
+      },
+    });
+
+    if (!systemConv) {
+      systemConv = await prisma.conversation.create({
+        data: {
+          isGroup: false,
+          participants: {
+            create: [
+              { userId: recipientId },
+              { userId: SYSTEM_USER_ID },
+            ],
+          },
+        },
+      });
+    }
+
+    // Créer le coupon optionnel
+    const coupon = await maybeAttachCoupon(recipientId, reason);
+    const bodyWithCoupon = coupon ? `${body}\n\n🎁 **Code Promo**: \`${coupon.code}\`` : body;
+
+    // Créer le message interne
+    const message = await prisma.message.create({
+      data: {
+        conversationId: systemConv.id,
+        senderId: SYSTEM_USER_ID,
+        type: "TEXT",
+        content: `📢 **${subject}**\n\n${bodyWithCoupon}`,
+      },
+    });
+
+    // Log the promo
+    await prisma.aiAutonomyLog.create({
+      data: {
+        agentName: "IA_MESSENGER",
+        actionType: "PROMO_INTERNAL",
+        targetUserId: recipientId,
+        decision: `Internal: ${subject}`,
+        reasoning: `Raison: ${reason}${targetItemId ? ` | Cible: ${targetItemId}` : ""}${coupon ? ` | Code: ${coupon.code}` : ""}`,
+        success: true,
+      },
+    });
+
+    logger.info({ recipientId, subject, reason, messageId: message.id }, "[IA Messenger] Message interne envoyé");
+    return true;
+  } catch (err) {
+    logger.error({ err, recipientId }, "[IA Messenger] Erreur message interne");
     return false;
   }
 }
@@ -345,6 +419,7 @@ export async function getPromoCampaignStats(): Promise<PromoCampaignStats> {
     const user = l.targetUserId ? userMap.get(l.targetUserId) : null;
     const reasonMatch = l.reasoning?.match(/Raison: (\w+)/);
     const targetMatch = l.reasoning?.match(/Cible: (\S+)/);
+    const codeMatch = l.reasoning?.match(/Code: ([\w-]+)/);
     return {
       id: l.id,
       channel: (l.actionType === "PROMO_EMAIL" ? "EMAIL" : l.actionType === "PROMO_PUSH" ? "PUSH" : "INTERNAL") as PromoChannel,
@@ -356,6 +431,7 @@ export async function getPromoCampaignStats(): Promise<PromoCampaignStats> {
       bodyPreview: l.reasoning ?? "",
       targetItemId: targetMatch?.[1] ?? null,
       targetItemTitle: null,
+      promoCode: codeMatch?.[1] ?? null,
       delivered: l.success,
       sentAt: l.createdAt,
     };
@@ -519,10 +595,20 @@ export async function sendGrowthGrantMessage(
       <p style="color:#6f58ff;font-size:14px;margin:0 0 8px;">🚀 Avantage ${kindLabel}</p>
       <p style="color:#fff;font-size:20px;font-weight:bold;margin:0;">${discountLabel}</p>
       <p style="color:rgba(255,255,255,0.5);font-size:12px;margin:8px 0 0;">
-        Complétez les étapes pour convertir cet avantage en code promo.
+        Conversion en code promo: ouvrez Kin-Sell → Mon compte → Mes avantages IA → cliquez "Convertir".
       </p>
     </div>
-    <p>Continuez à utiliser Kin-Sell pour débloquer plus d'avantages !</p>`;
+    <div style="background:rgba(255,255,255,0.04);border:1px dashed rgba(255,255,255,0.2);border-radius:8px;padding:12px 14px;margin:12px 0;">
+      <p style="margin:0 0 8px;color:#fff;font-size:13px;"><strong>Étapes claires :</strong></p>
+      <p style="margin:0;color:rgba(255,255,255,0.8);font-size:12px;line-height:1.6;">
+        1) Ouvrez l'app Kin-Sell<br/>
+        2) Allez dans Mon compte → Mes avantages IA<br/>
+        3) Sélectionnez cet avantage puis cliquez "Convertir"<br/>
+        4) Copiez votre code promo généré<br/>
+        5) Utilisez-le sur la page Forfaits au paiement
+      </p>
+    </div>
+    <p style="margin-top:10px;">Continuez à utiliser Kin-Sell pour débloquer plus d'avantages !</p>`;
 
   const emailSent = await sendPromoEmail(
     recipientId,
@@ -535,7 +621,7 @@ export async function sendGrowthGrantMessage(
     await sendPromoPush(
       recipientId,
       `Avantage ${kindLabel} débloqué`,
-      `Vous avez débloqué un avantage ${discountLabel} sur Kin-Sell ! Complétez les étapes pour le convertir.`,
+      `Avantage ${discountLabel} débloqué. Ouvrez Mon compte > Mes avantages IA > Convertir pour générer votre code promo, puis utilisez-le sur Forfaits.`,
       "BOOST_PROMO" as PromoReason,
     );
   }

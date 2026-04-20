@@ -1,62 +1,87 @@
-import { useEffect, useRef, useCallback, useState } from "react";
-import { Capacitor } from "@capacitor/core";
+﻿import { useCallback, useEffect, useRef, useState } from "react";
 
 declare global {
   interface Window {
     turnstile?: {
       render: (container: HTMLElement, options: Record<string, unknown>) => string;
-      reset: (widgetId: string) => void;
       remove: (widgetId: string) => void;
     };
   }
 }
 
-const SITE_KEY = "0x4AAAAAACy1uMSKZD3USTWV";
-const SCRIPT_LOAD_TIMEOUT_MS = 20_000; // 20s — tolérant pour réseau lent Afrique (2G/3G)
-const TOKEN_EXPIRY_MS = 280_000; // ~4m40 (tokens expirent après 5 min)
-const POLL_INTERVAL_MS = 500;
-const MAX_RETRIES = 2;
+const SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || "0x4AAAAAACy1uMSKZD3USTWV";
+const SCRIPT_LOAD_TIMEOUT_MS = 45_000;
+const TOKEN_EXPIRY_MS = 280_000;
+const MAX_RETRIES = 4;
 const BACKGROUND_RETRY_DELAY_MS = 8_000;
+const TURNSTILE_SCRIPT_SRC = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+const TURNSTILE_SCRIPT_ID = "cf-turnstile-api-script";
 
 type TurnstileWidgetProps = {
   onToken: (token: string) => void;
 };
 
 export function TurnstileWidget({ onToken }: TurnstileWidgetProps) {
-  // Native app (iOS/Android): WebView peut bloquer Turnstile.
-  // On passe en mode dégradé strict (captcha-unavailable + rate-limit serveur renforcé).
-  const isNative = Capacitor.isNativePlatform();
-  useEffect(() => {
-    if (isNative) onToken("captcha-unavailable");
-  }, [isNative, onToken]);
-  if (isNative) return null;
-
   return <TurnstileWidgetWeb onToken={onToken} />;
 }
 
 function TurnstileWidgetWeb({ onToken }: TurnstileWidgetProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const widgetIdRef = useRef<string | null>(null);
+  const scriptPromiseRef = useRef<Promise<void> | null>(null);
+  const mountedRef = useRef(true);
+  const expiryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const backgroundRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const [status, setStatus] = useState<"loading" | "ready" | "error" | "expired">("loading");
   const [errorMsg, setErrorMsg] = useState("");
   const [retryCount, setRetryCount] = useState(0);
-  const expiryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const backgroundRetryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const mountedRef = useRef(true);
 
-  const cleanup = useCallback(() => {
-    if (expiryTimer.current) { clearTimeout(expiryTimer.current); expiryTimer.current = null; }
-    if (backgroundRetryTimer.current) { clearTimeout(backgroundRetryTimer.current); backgroundRetryTimer.current = null; }
+  const clearTimers = useCallback(() => {
+    if (expiryTimerRef.current) {
+      clearTimeout(expiryTimerRef.current);
+      expiryTimerRef.current = null;
+    }
+    if (backgroundRetryTimerRef.current) {
+      clearTimeout(backgroundRetryTimerRef.current);
+      backgroundRetryTimerRef.current = null;
+    }
+  }, []);
+
+  const cleanupWidget = useCallback(() => {
     if (widgetIdRef.current && window.turnstile) {
-      try { window.turnstile.remove(widgetIdRef.current); } catch { /* noop */ }
+      try {
+        window.turnstile.remove(widgetIdRef.current);
+      } catch {
+        // noop
+      }
       widgetIdRef.current = null;
     }
+  }, []);
+
+  const cleanupAll = useCallback(() => {
+    clearTimers();
+    cleanupWidget();
+  }, [clearTimers, cleanupWidget]);
+
+  const mapErrorMessage = useCallback((errorCode?: string) => {
+    if (!errorCode) return "CAPTCHA indisponible, appuyez pour reessayer";
+    if (errorCode.startsWith("300") || errorCode.startsWith("600")) {
+      return "Echec du controle anti-bot: desactivez VPN/proxy/extensions puis reessayez";
+    }
+    if (errorCode.startsWith("200")) {
+      return "Probleme reseau ou horloge appareil, corrigez puis reessayez";
+    }
+    if (errorCode.startsWith("110") || errorCode.startsWith("400")) {
+      return "Configuration Turnstile invalide, contactez le support";
+    }
+    return `Erreur Turnstile (${errorCode}), appuyez pour reessayer`;
   }, []);
 
   const renderWidget = useCallback(() => {
     if (!containerRef.current || !window.turnstile || !mountedRef.current) return;
 
-    cleanup();
+    cleanupWidget();
     setStatus("ready");
     setErrorMsg("");
 
@@ -67,19 +92,21 @@ function TurnstileWidgetWeb({ onToken }: TurnstileWidgetProps) {
           if (!mountedRef.current) return;
           onToken(token);
           setStatus("ready");
-          if (expiryTimer.current) clearTimeout(expiryTimer.current);
-          expiryTimer.current = setTimeout(() => {
+
+          if (expiryTimerRef.current) clearTimeout(expiryTimerRef.current);
+          expiryTimerRef.current = setTimeout(() => {
             if (!mountedRef.current) return;
             onToken("");
             setStatus("expired");
           }, TOKEN_EXPIRY_MS);
         },
         "error-callback": (errorCode: string) => {
-          if (!mountedRef.current) return;
+          if (!mountedRef.current) return true;
           console.warn("[Turnstile] error:", errorCode);
-          onToken("captcha-unavailable");
+          onToken("");
           setStatus("error");
-          setErrorMsg("Erreur de vérification — appuyez pour réessayer");
+          setErrorMsg(mapErrorMessage(errorCode));
+          return true;
         },
         "expired-callback": () => {
           if (!mountedRef.current) return;
@@ -94,152 +121,170 @@ function TurnstileWidgetWeb({ onToken }: TurnstileWidgetProps) {
     } catch (err) {
       console.error("[Turnstile] render failed:", err);
       setStatus("error");
-      setErrorMsg("Impossible de charger la vérification");
-      onToken("captcha-unavailable");
+      setErrorMsg("Impossible de charger la verification");
+      onToken("");
     }
-  }, [onToken, cleanup]);
+  }, [cleanupWidget, mapErrorMessage, onToken]);
 
-  /** Recharge le script Turnstile depuis le CDN si absent */
-  const reloadScript = useCallback(() => {
-    // Supprimer l'ancien script s'il existe
-    const old = document.querySelector('script[src*="challenges.cloudflare.com/turnstile"]');
-    if (old) old.remove();
-    // Réinitialiser l'objet global
-    (window as unknown as Record<string, unknown>).turnstile = undefined;
+  const ensureScriptLoaded = useCallback(async () => {
+    if (window.turnstile) return;
 
-    const script = document.createElement("script");
-    script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
-    script.async = true;
-    document.head.appendChild(script);
+    if (!scriptPromiseRef.current) {
+      scriptPromiseRef.current = new Promise<void>((resolve, reject) => {
+        const existing = document.getElementById(TURNSTILE_SCRIPT_ID) as HTMLScriptElement | null;
+        if (existing && window.turnstile) {
+          resolve();
+          return;
+        }
+
+        const script = existing ?? document.createElement("script");
+        script.id = TURNSTILE_SCRIPT_ID;
+        script.src = TURNSTILE_SCRIPT_SRC;
+        script.async = true;
+        script.defer = true;
+        script.crossOrigin = "anonymous";
+
+        script.onload = () => resolve();
+        script.onerror = () => reject(new Error("TURNSTILE_SCRIPT_LOAD_FAILED"));
+
+        if (!existing) document.head.appendChild(script);
+      });
+    }
+
+    await Promise.race([
+      scriptPromiseRef.current,
+      new Promise<void>((_, reject) => {
+        setTimeout(() => reject(new Error("TURNSTILE_SCRIPT_TIMEOUT")), SCRIPT_LOAD_TIMEOUT_MS);
+      }),
+    ]);
   }, []);
 
   const scheduleBackgroundRetry = useCallback(() => {
-    if (backgroundRetryTimer.current || !mountedRef.current) return;
-    backgroundRetryTimer.current = setTimeout(() => {
-      backgroundRetryTimer.current = null;
-      if (!mountedRef.current || window.turnstile) return;
-      reloadScript();
-      setRetryCount((count) => count + 1);
+    if (backgroundRetryTimerRef.current || !mountedRef.current || retryCount >= MAX_RETRIES) return;
+
+    backgroundRetryTimerRef.current = setTimeout(() => {
+      backgroundRetryTimerRef.current = null;
+      if (!mountedRef.current) return;
+      scriptPromiseRef.current = null;
+      setRetryCount((prev) => prev + 1);
     }, BACKGROUND_RETRY_DELAY_MS);
-  }, [reloadScript]);
+  }, [retryCount]);
 
   const handleRetry = useCallback(() => {
-    setRetryCount((c) => c + 1);
+    scriptPromiseRef.current = null;
+    setRetryCount((prev) => prev + 1);
     setStatus("loading");
     setErrorMsg("");
     onToken("");
+  }, [onToken]);
 
-    if (window.turnstile) {
-      renderWidget();
-    } else {
-      reloadScript();
-    }
-  }, [renderWidget, reloadScript, onToken]);
-
-  // Polling pour attendre le chargement du script Turnstile
   useEffect(() => {
     mountedRef.current = true;
-    let interval: ReturnType<typeof setInterval> | undefined;
 
-    if (window.turnstile) {
-      renderWidget();
-    } else {
-      setStatus("loading");
-      const start = Date.now();
-      interval = setInterval(() => {
-        if (!mountedRef.current) { clearInterval(interval); return; }
-        if (window.turnstile) {
-          clearInterval(interval);
-          interval = undefined;
-          renderWidget();
-        } else if (Date.now() - start > SCRIPT_LOAD_TIMEOUT_MS) {
-          clearInterval(interval);
-          interval = undefined;
-          if (retryCount < MAX_RETRIES) {
-            // Auto-retry : recharge le script
-            setRetryCount((c) => c + 1);
-            reloadScript();
-            // Relancer le polling
-            const start2 = Date.now();
-            interval = setInterval(() => {
-              if (!mountedRef.current) { clearInterval(interval); return; }
-              if (window.turnstile) {
-                clearInterval(interval);
-                interval = undefined;
-                renderWidget();
-              } else if (Date.now() - start2 > SCRIPT_LOAD_TIMEOUT_MS) {
-                clearInterval(interval);
-                interval = undefined;
-                setStatus("error");
-                setErrorMsg("CAPTCHA indisponible — vérifiez votre connexion internet ou désactivez votre bloqueur de publicités, puis appuyez ici pour réessayer");
-                onToken("captcha-unavailable");
-                scheduleBackgroundRetry();
-              }
-            }, POLL_INTERVAL_MS);
-          } else {
-            setStatus("error");
-            setErrorMsg("CAPTCHA indisponible — vérifiez votre connexion internet ou désactivez votre bloqueur de publicités, puis appuyez ici pour réessayer");
-            onToken("captcha-unavailable");
-            scheduleBackgroundRetry();
-          }
-        }
-      }, POLL_INTERVAL_MS);
-    }
+    (async () => {
+      try {
+        setStatus("loading");
+        setErrorMsg("");
+
+        await ensureScriptLoaded();
+        if (!mountedRef.current) return;
+
+        renderWidget();
+      } catch (err) {
+        if (!mountedRef.current) return;
+        console.warn("[Turnstile] script/bootstrap error:", err);
+        setStatus("error");
+        setErrorMsg("CAPTCHA indisponible: verifiez connexion, VPN/proxy et bloqueur de pubs");
+        onToken("");
+        scheduleBackgroundRetry();
+      }
+    })();
 
     return () => {
       mountedRef.current = false;
-      if (interval) clearInterval(interval);
-      cleanup();
+      cleanupAll();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [retryCount, renderWidget, reloadScript, cleanup, onToken, scheduleBackgroundRetry]);
+  }, [retryCount, ensureScriptLoaded, renderWidget, scheduleBackgroundRetry, onToken, cleanupAll]);
 
-  if (status === "loading") {
-    return (
-      <div style={{
-        marginTop: 8, marginBottom: 8, padding: "12px 14px",
-        background: "rgba(111,88,255,0.08)", border: "1px solid rgba(111,88,255,0.2)",
-        borderRadius: 8, color: "rgba(255,255,255,0.6)", fontSize: "0.82rem", textAlign: "center",
-        display: "flex", alignItems: "center", justifyContent: "center", gap: 8
-      }}>
-        <span style={{
-          display: "inline-block", width: 14, height: 14,
-          border: "2px solid rgba(111,88,255,0.3)", borderTopColor: "#6f58ff",
-          borderRadius: "50%", animation: "spin 0.8s linear infinite"
-        }} />
-        Chargement de la vérification…
-        <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
-      </div>
-    );
-  }
+  return (
+    <div>
+      <div ref={containerRef} style={{ marginTop: 8, marginBottom: 8, minHeight: 64 }} />
 
-  if (status === "error") {
-    return (
-      <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8, marginBottom: 8 }}>
-        <div style={{
-          padding: "12px 14px",
-          background: "rgba(255,180,50,0.10)", border: "1px solid rgba(255,180,50,0.25)",
-          borderRadius: 8, color: "rgba(255,255,255,0.55)", fontSize: "0.78rem", textAlign: "center",
-          cursor: "pointer"
-        }} onClick={handleRetry}>
-          ⚠️ Vérification indisponible — vous pouvez quand même continuer ou appuyer ici pour réessayer
+      {status === "loading" && (
+        <div
+          style={{
+            marginTop: 8,
+            marginBottom: 8,
+            padding: "12px 14px",
+            background: "rgba(111,88,255,0.08)",
+            border: "1px solid rgba(111,88,255,0.2)",
+            borderRadius: 8,
+            color: "rgba(255,255,255,0.6)",
+            fontSize: "0.82rem",
+            textAlign: "center",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 8,
+          }}
+        >
+          <span
+            style={{
+              display: "inline-block",
+              width: 14,
+              height: 14,
+              border: "2px solid rgba(111,88,255,0.3)",
+              borderTopColor: "#6f58ff",
+              borderRadius: "50%",
+              animation: "spin 0.8s linear infinite",
+            }}
+          />
+          Chargement de la verification...
+          <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
         </div>
-      </div>
-    );
-  }
+      )}
 
-  if (status === "expired") {
-    return (
-      <div style={{
-        marginTop: 8, marginBottom: 8, padding: "12px 14px",
-        background: "rgba(255,180,50,0.12)", border: "1px solid rgba(255,180,50,0.3)",
-        borderRadius: 8, color: "#ffb432", fontSize: "0.82rem", textAlign: "center",
-        cursor: "pointer"
-      }} onClick={handleRetry}>
-        ⏳ Vérification expirée — appuyez pour relancer
-      </div>
-    );
-  }
+      {status === "error" && (
+        <div
+          style={{
+            marginTop: 8,
+            marginBottom: 8,
+            padding: "12px 14px",
+            background: "rgba(255,180,50,0.10)",
+            border: "1px solid rgba(255,180,50,0.25)",
+            borderRadius: 8,
+            color: "rgba(255,255,255,0.75)",
+            fontSize: "0.8rem",
+            textAlign: "center",
+            cursor: "pointer",
+          }}
+          onClick={handleRetry}
+        >
+          CAPTCHA obligatoire indisponible - appuyez ici pour reessayer
+          {errorMsg ? ` (${errorMsg})` : ""}
+        </div>
+      )}
 
-  return <div ref={containerRef} style={{ marginTop: 8, marginBottom: 8 }} />;
+      {status === "expired" && (
+        <div
+          style={{
+            marginTop: 8,
+            marginBottom: 8,
+            padding: "12px 14px",
+            background: "rgba(255,180,50,0.12)",
+            border: "1px solid rgba(255,180,50,0.3)",
+            borderRadius: 8,
+            color: "#ffb432",
+            fontSize: "0.82rem",
+            textAlign: "center",
+            cursor: "pointer",
+          }}
+          onClick={handleRetry}
+        >
+          Verification expiree - appuyez pour relancer
+        </div>
+      )}
+    </div>
+  );
 }

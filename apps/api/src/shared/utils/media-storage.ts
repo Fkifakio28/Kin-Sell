@@ -17,6 +17,11 @@ const DEFAULT_QUALITY = 82;
 const THUMB_WIDTH = 480;
 const THUMB_HEIGHT = 480;
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
+const VIDEO_MAX_WIDTH = 960;
+const VIDEO_MAX_HEIGHT = 540;
+const VIDEO_CRF = 30;
+const VIDEO_AUDIO_BITRATE = "64k";
+const AUDIO_BITRATE = "48k";
 
 type NormalizeImageOptions = {
   folder?: string;
@@ -185,7 +190,7 @@ export const optimizeUploadedImageFile = async (
 
 /* ════════════════════════════════════════════════════════════
    VIDEO COMPRESSION (WhatsApp-like)
-   H.264 720p, CRF 28, AAC 128k — requiert ffmpeg sur le serveur
+   H.264 540p, CRF 30, AAC 64k — requiert ffmpeg sur le serveur
    ════════════════════════════════════════════════════════════ */
 
 let _ffmpegAvailable: boolean | null = null;
@@ -220,15 +225,15 @@ export const optimizeUploadedVideoFile = async (
   const outputPath = path.join(targetDir, `${baseName}.mp4`);
   const thumbPath = path.join(targetDir, `${baseName}-thumb.webp`);
 
-  // Compression: 720p max, H.264 CRF 28, AAC 128k, fast start for streaming
+  // Low-bandwidth profile: 540p max, CRF 30 + AAC 64k + faststart
   await execFileAsync("ffmpeg", [
     "-i", filePath,
-    "-vf", "scale='min(1280,iw)':'min(720,ih)':force_original_aspect_ratio=decrease,pad=ceil(iw/2)*2:ceil(ih/2)*2",
+    "-vf", `scale='min(${VIDEO_MAX_WIDTH},iw)':'min(${VIDEO_MAX_HEIGHT},ih)':force_original_aspect_ratio=decrease,pad=ceil(iw/2)*2:ceil(ih/2)*2`,
     "-c:v", "libx264",
-    "-crf", "28",
+    "-crf", String(VIDEO_CRF),
     "-preset", "fast",
     "-c:a", "aac",
-    "-b:a", "128k",
+    "-b:a", VIDEO_AUDIO_BITRATE,
     "-movflags", "+faststart",
     "-y",
     outputPath,
@@ -257,7 +262,7 @@ export const optimizeUploadedVideoFile = async (
 
 /* ════════════════════════════════════════════════════════════
    AUDIO COMPRESSION (WhatsApp-like)
-   AAC 128k mono — requiert ffmpeg
+   AAC 48k mono — requiert ffmpeg
    ════════════════════════════════════════════════════════════ */
 
 export const optimizeUploadedAudioFile = async (
@@ -279,7 +284,7 @@ export const optimizeUploadedAudioFile = async (
   await execFileAsync("ffmpeg", [
     "-i", filePath,
     "-c:a", "aac",
-    "-b:a", "128k",
+    "-b:a", AUDIO_BITRATE,
     "-ac", "1",           // mono — suffisant pour messages vocaux
     "-movflags", "+faststart",
     "-y",

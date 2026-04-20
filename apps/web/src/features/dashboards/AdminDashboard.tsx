@@ -3676,12 +3676,18 @@ export function AdminDashboard() {
 
   // IA Message — send promo form
   const [iaMsgFormOpen, setIaMsgFormOpen] = useState(false);
-  const [iaMsgForm, setIaMsgForm] = useState({ channel: 'EMAIL' as 'EMAIL' | 'PUSH', subject: '', body: '', reason: 'PROMO_MANUAL' });
+  const [iaMsgForm, setIaMsgForm] = useState({ channel: 'EMAIL' as 'EMAIL' | 'PUSH' | 'INTERNAL', subject: '', body: '', reason: 'PROMO_MANUAL' });
   const [iaMsgTargetSearch, setIaMsgTargetSearch] = useState('');
   const [iaMsgTargetUsers, setIaMsgTargetUsers] = useState<IaTargetUser[]>([]);
   const [iaMsgSelected, setIaMsgSelected] = useState<string[]>([]);
   const [iaMsgSending, setIaMsgSending] = useState(false);
   const [iaMsgResult, setIaMsgResult] = useState<string | null>(null);
+
+  // IA Message — filters & sorting
+  const [iaMsgFilterChannel, setIaMsgFilterChannel] = useState<'all' | 'EMAIL' | 'PUSH' | 'INTERNAL'>('all');
+  const [iaMsgFilterReason, setIaMsgFilterReason] = useState<'all' | string>('all');
+  const [iaMsgFilterStatus, setIaMsgFilterStatus] = useState<'all' | 'delivered' | 'failed'>('all');
+  const [iaMsgSortBy, setIaMsgSortBy] = useState<'date-desc' | 'date-asc' | 'channel' | 'reason'>('date-desc');
 
   const isMsgSelected = (id: string) => iaMsgSelected.includes(id);
   const isMsgSendDisabled = () => iaMsgSending || !iaMsgForm.subject || !iaMsgForm.body || iaMsgSelected.length === 0;
@@ -4132,9 +4138,10 @@ export function AdminDashboard() {
 
                   {/* Canal + Raison */}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
-                    <select value={iaMsgForm.channel} onChange={e => setIaMsgForm(f => ({ ...f, channel: e.target.value as 'EMAIL' | 'PUSH' }))} style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid var(--ad-border)', fontSize: 12, color: 'var(--ad-text-1)', background: 'var(--ad-surface)' }}>
+                    <select value={iaMsgForm.channel} onChange={e => setIaMsgForm(f => ({ ...f, channel: e.target.value as 'EMAIL' | 'PUSH' | 'INTERNAL' }))} style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid var(--ad-border)', fontSize: 12, color: 'var(--ad-text-1)', background: 'var(--ad-surface)' }}>
                       <option value="EMAIL">📧 Email</option>
                       <option value="PUSH">🔔 Notification Push</option>
+                      <option value="INTERNAL">💬 Message Interne</option>
                     </select>
                     <select value={iaMsgForm.reason} onChange={e => setIaMsgForm(f => ({ ...f, reason: e.target.value }))} style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid var(--ad-border)', fontSize: 12, color: 'var(--ad-text-1)', background: 'var(--ad-surface)' }}>
                       <option value="PROMO_MANUAL">📣 Promo manuelle</option>
@@ -4205,22 +4212,101 @@ export function AdminDashboard() {
             </div>
 
             {/* Messages récents */}
-            <h3 style={{ fontSize: 15, marginBottom: 8 }}>📋 Messages récents</h3>
+            <h3 style={{ fontSize: 15, marginBottom: 12 }}>📋 Messages récents</h3>
+            
+            {/* Filtres & Tri */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10, marginBottom: 16 }}>
+              <div>
+                <label style={{ fontSize: 11, color: 'var(--ad-text-3)', display: 'block', marginBottom: 4 }}>Canal</label>
+                <select value={iaMsgFilterChannel} onChange={e => setIaMsgFilterChannel(e.target.value as any)} style={{ width: '100%', padding: '6px 10px', borderRadius: 6, border: '1px solid var(--ad-border)', fontSize: 12, color: 'var(--ad-text-1)', background: 'var(--ad-surface)' }}>
+                  <option value="all">📌 Tous les canaux</option>
+                  <option value="EMAIL">📧 Email</option>
+                  <option value="PUSH">🔔 Push</option>
+                  <option value="INTERNAL">💬 Interne</option>
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: 11, color: 'var(--ad-text-3)', display: 'block', marginBottom: 4 }}>Raison d&apos;envoi</label>
+                <select value={iaMsgFilterReason} onChange={e => setIaMsgFilterReason(e.target.value)} style={{ width: '100%', padding: '6px 10px', borderRadius: 6, border: '1px solid var(--ad-border)', fontSize: 12, color: 'var(--ad-text-1)', background: 'var(--ad-surface)' }}>
+                  <option value="all">🎯 Toutes les raisons</option>
+                  {(() => {
+                    const reasons = new Set<string>();
+                    (d.recentMessages ?? []).forEach((m: any) => {
+                      if (typeof m.reason === 'string') reasons.add(m.reason);
+                    });
+                    return Array.from(reasons).map((r: string) => (
+                      <option key={r} value={r}>{r.replace(/_/g, ' ')}</option>
+                    ));
+                  })()}
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: 11, color: 'var(--ad-text-3)', display: 'block', marginBottom: 4 }}>Statut</label>
+                <select value={iaMsgFilterStatus} onChange={e => setIaMsgFilterStatus(e.target.value as any)} style={{ width: '100%', padding: '6px 10px', borderRadius: 6, border: '1px solid var(--ad-border)', fontSize: 12, color: 'var(--ad-text-1)', background: 'var(--ad-surface)' }}>
+                  <option value="all">✓ Tous les statuts</option>
+                  <option value="delivered">✓ Délivrés</option>
+                  <option value="failed">✗ Échoués</option>
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: 11, color: 'var(--ad-text-3)', display: 'block', marginBottom: 4 }}>Tri</label>
+                <select value={iaMsgSortBy} onChange={e => setIaMsgSortBy(e.target.value as any)} style={{ width: '100%', padding: '6px 10px', borderRadius: 6, border: '1px solid var(--ad-border)', fontSize: 12, color: 'var(--ad-text-1)', background: 'var(--ad-surface)' }}>
+                  <option value="date-desc">📅 Plus récent en premier</option>
+                  <option value="date-asc">📅 Plus ancien en premier</option>
+                  <option value="channel">📊 Par canal</option>
+                  <option value="reason">🎯 Par raison</option>
+                </select>
+              </div>
+            </div>
+
             <div className="ad-table-wrap">
               <table className="ad-table">
-                <thead><tr><th>Canal</th><th>Destinataire</th><th>Sujet</th><th>Raison</th><th>Statut</th><th>Date</th></tr></thead>
+                <thead><tr><th>Canal</th><th>Destinataire</th><th>Sujet</th><th>Raison</th><th>Code Promo</th><th>Statut</th><th>Date</th></tr></thead>
                 <tbody>
-                  {(d.recentMessages ?? []).map((m: any) => (
-                    <tr key={m.id}>
-                      <td><span className={`ad-badge ${m.channel === 'EMAIL' ? 'ad-badge--pending' : 'ad-badge--active'}`}>{m.channel}</span></td>
-                      <td>{m.recipientName}</td>
-                      <td style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.subject}</td>
-                      <td style={{ fontSize: 11 }}>{m.reason.replace(/_/g, ' ')}</td>
-                      <td><span className={`ad-badge ${m.delivered ? 'ad-badge--active' : 'ad-badge--danger'}`}>{m.delivered ? '✓ Délivré' : '✗ Échoué'}</span></td>
-                      <td style={{ fontSize: 11 }}>{new Date(m.sentAt).toLocaleDateString('fr-FR')} {new Date(m.sentAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</td>
-                    </tr>
-                  ))}
-                  {(d.recentMessages ?? []).length === 0 && <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--ad-text-3)' }}>Aucun message promotionnel envoyé</td></tr>}
+                  {(() => {
+                    let filtered = (d.recentMessages ?? []) as any[];
+                    
+                    // Apply filters
+                    if (iaMsgFilterChannel !== 'all') {
+                      filtered = filtered.filter(m => m.channel === iaMsgFilterChannel);
+                    }
+                    if (iaMsgFilterReason !== 'all') {
+                      filtered = filtered.filter(m => m.reason === iaMsgFilterReason);
+                    }
+                    if (iaMsgFilterStatus !== 'all') {
+                      filtered = filtered.filter(m => m.delivered === (iaMsgFilterStatus === 'delivered'));
+                    }
+                    
+                    // Apply sorting
+                    if (iaMsgSortBy === 'date-asc') {
+                      filtered = [...filtered].sort((a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime());
+                    } else if (iaMsgSortBy === 'channel') {
+                      filtered = [...filtered].sort((a, b) => a.channel.localeCompare(b.channel));
+                    } else if (iaMsgSortBy === 'reason') {
+                      filtered = [...filtered].sort((a, b) => a.reason.localeCompare(b.reason));
+                    } else {
+                      filtered = [...filtered].sort((a, b) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime());
+                    }
+                    
+                    return filtered.map((m: any) => (
+                      <tr key={m.id}>
+                        <td><span className={`ad-badge ${m.channel === 'EMAIL' ? 'ad-badge--pending' : m.channel === 'PUSH' ? 'ad-badge--active' : 'ad-badge--info'}`}>{m.channel}</span></td>
+                        <td><div style={{ fontSize: 12 }}>{m.recipientName}</div><div style={{ fontSize: 11, color: 'var(--ad-text-3)' }}>{m.recipientEmail}</div></td>
+                        <td style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.subject}</td>
+                        <td style={{ fontSize: 11 }}>{m.reason.replace(/_/g, ' ')}</td>
+                        <td><code style={{ fontSize: 11, background: 'rgba(111,88,255,0.1)', padding: '2px 6px', borderRadius: 4, color: '#6f58ff' }}>{m.promoCode ? m.promoCode : '—'}</code></td>
+                        <td><span className={`ad-badge ${m.delivered ? 'ad-badge--active' : 'ad-badge--danger'}`}>{m.delivered ? '✓ Délivré' : '✗ Échoué'}</span></td>
+                        <td style={{ fontSize: 11 }}>{new Date(m.sentAt).toLocaleDateString('fr-FR')} {new Date(m.sentAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</td>
+                      </tr>
+                    ));
+                  })()}
+                  {(() => {
+                    let filtered = (d.recentMessages ?? []) as any[];
+                    if (iaMsgFilterChannel !== 'all') filtered = filtered.filter(m => m.channel === iaMsgFilterChannel);
+                    if (iaMsgFilterReason !== 'all') filtered = filtered.filter(m => m.reason === iaMsgFilterReason);
+                    if (iaMsgFilterStatus !== 'all') filtered = filtered.filter(m => m.delivered === (iaMsgFilterStatus === 'delivered'));
+                    return filtered.length === 0 ? <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--ad-text-3)' }}>Aucun message ne correspond aux filtres</td></tr> : null;
+                  })()}
                 </tbody>
               </table>
             </div>

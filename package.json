@@ -17,9 +17,27 @@
     "db:seed": "npm run seed -w packages/db"
   },
   "devDependencies": {
+    "exceljs": "^4.4.0",
     "sharp": "^0.34.5"
   },
   "dependencies": {
     "hls.js": "^1.6.15"
-  }
+  },
+  "description": "Plateforme de marchandage, commande et echange reconstruite sur une base neuve.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Fkifakio28/Kin-Sell.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Fkifakio28/Kin-Sell/issues"
+  },
+  "homepage": "https://github.com/Fkifakio28/Kin-Sell#readme"
 }

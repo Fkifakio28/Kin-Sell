@@ -17,7 +17,6 @@ import { NegotiatePopup } from '../negotiations/NegotiatePopup';
 import { useLockedCategories, isCategoryLocked } from '../../hooks/useLockedCategories';
 import { useSocket } from '../../hooks/useSocket';
 import { SeoMeta } from '../../components/SeoMeta';
-import { showInterstitial, isUnityAdsAvailable } from '../../lib/services/unity-ads.service';
 import './public-profile.css';
 
 /* ═══════════════════════════════════════════════════
@@ -142,17 +141,6 @@ export function PublicProfilePage({ username }: { username: string }) {
   const navigate = useNavigate();
   const { on, off } = useSocket();
   useScrollRestore();
-
-  /* ── Unity Ads — interstitiel au démontage après 30s de visite ── */
-  useEffect(() => {
-    if (!isUnityAdsAvailable) return;
-    const mountTime = Date.now();
-    return () => {
-      if (Date.now() - mountTime > 30_000) {
-        void showInterstitial();
-      }
-    };
-  }, []);
 
   /* ── Profile state ── */
   const [profile, setProfile] = useState<ProfileData | null>(null);

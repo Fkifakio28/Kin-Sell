@@ -1728,7 +1728,7 @@ router.post("/ia/messages/send", asyncHandler(async (req: AuthenticatedRequest, 
   await checkPermission(req, "AI_MANAGEMENT");
   const body = z.object({
     recipientIds: z.array(z.string().min(1)).min(1),
-    channel: z.enum(["EMAIL", "PUSH"]),
+    channel: z.enum(["EMAIL", "PUSH", "INTERNAL"]),
     subject: z.string().min(1),
     body: z.string().min(1),
     reason: z.string().default("NEW_FEATURE"),
@@ -1739,8 +1739,11 @@ router.post("/ia/messages/send", asyncHandler(async (req: AuthenticatedRequest, 
     if (body.channel === "EMAIL") {
       const ok = await iaMessengerPromo.sendPromoEmail(uid, body.subject, body.body, body.reason as any);
       if (ok) sent++;
-    } else {
+    } else if (body.channel === "PUSH") {
       const ok = await iaMessengerPromo.sendPromoPush(uid, body.subject, body.body, body.reason as any);
+      if (ok) sent++;
+    } else if (body.channel === "INTERNAL") {
+      const ok = await iaMessengerPromo.sendPromoInternal(uid, body.subject, body.body, body.reason as any);
       if (ok) sent++;
     }
   }
