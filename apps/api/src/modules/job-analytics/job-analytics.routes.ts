@@ -7,7 +7,8 @@
 
 import { Router } from "express";
 import { z } from "zod";
-import { requireAuth, type AuthenticatedRequest } from "../../shared/auth/auth-middleware.js";
+import { requireAuth, requireRoles, type AuthenticatedRequest } from "../../shared/auth/auth-middleware.js";
+import { Role } from "../../types/roles.js";
 import { asyncHandler } from "../../shared/utils/async-handler.js";
 import { HttpError } from "../../shared/errors/http-error.js";
 import {
@@ -18,6 +19,12 @@ import {
   getPostingInsights,
 } from "./job-analytics.service.js";
 import { getJobDirectAnswers } from "./job-advisor.service.js";
+import {
+  getRegionalJobContext,
+  getMultiCategoryJobContext,
+  getRegionalJobContextMetrics,
+  resetRegionalJobContextMetrics,
+} from "./regional-job-context.service.js";
 import { CountryCode } from "@prisma/client";
 
 const router = Router();
@@ -98,6 +105,74 @@ router.get(
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     const result = await getJobDirectAnswers(req.auth!.userId);
     res.json({ answers: result });
+  }),
+);
+
+// ── Chantier J1 — Regional Job Context (Gemini + Google Search) ──
+
+const RegionalContextQuerySchema = z.object({
+  category: z.string().trim().min(1).max(80),
+  city: z.string().trim().min(1).max(80),
+  country: z.string().trim().min(1).max(80),
+});
+
+router.get(
+  "/regional-context",
+  requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const parsed = RegionalContextQuerySchema.safeParse(req.query);
+    if (!parsed.success) throw new HttpError(400, "category, city, country requis.");
+    const result = await getRegionalJobContext(
+      parsed.data.category,
+      parsed.data.city,
+      parsed.data.country,
+    );
+    res.json(result);
+  }),
+);
+
+const MultiRegionalContextSchema = z.object({
+  categories: z
+    .string()
+    .min(1)
+    .max(400)
+    .transform((s) => s.split(",").map((c) => c.trim()).filter(Boolean))
+    .pipe(z.array(z.string().min(1).max(80)).min(1).max(10)),
+  city: z.string().trim().min(1).max(80),
+  country: z.string().trim().min(1).max(80),
+});
+
+router.get(
+  "/regional-context/multi",
+  requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const parsed = MultiRegionalContextSchema.safeParse(req.query);
+    if (!parsed.success) throw new HttpError(400, "categories (csv), city, country requis.");
+    const result = await getMultiCategoryJobContext(
+      parsed.data.categories,
+      parsed.data.city,
+      parsed.data.country,
+    );
+    res.json(result);
+  }),
+);
+
+router.get(
+  "/regional-context/metrics",
+  requireAuth,
+  requireRoles(Role.ADMIN, Role.SUPER_ADMIN),
+  asyncHandler(async (_req: AuthenticatedRequest, res) => {
+    res.json(getRegionalJobContextMetrics());
+  }),
+);
+
+router.post(
+  "/regional-context/metrics/reset",
+  requireAuth,
+  requireRoles(Role.ADMIN, Role.SUPER_ADMIN),
+  asyncHandler(async (_req: AuthenticatedRequest, res) => {
+    resetRegionalJobContextMetrics();
+    res.json({ ok: true });
   }),
 );
 
