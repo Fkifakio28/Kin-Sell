@@ -15,6 +15,7 @@ import { getPostPublishAdvice, type PublishContext } from "../ads/post-publish-a
 import { resolveFreemiumState, consumeFreeCredit, applyFreemiumGating } from "../ads/post-publish-freemium.service.js";
 import { getPostSaleAdvice } from "../ads/post-sale-advisor.service.js";
 import { evaluateAnalyticsCTAs } from "./analytics-cta.service.js";
+import { getDirectAnswers } from "./direct-answer.engine.js";
 import { getEnrichedAnalytics, getCategoryDemandAnalysis } from "./analytics-external-intelligence.service.js";
 import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
@@ -380,6 +381,20 @@ router.get(
   asyncHandler(async (req: AuthenticatedRequest, res, next) => { await requireIa("IA_MERCHANT")(req, res, next); }),
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     const report = await evaluateAnalyticsCTAs(req.auth!.userId);
+    res.json(report);
+  })
+);
+
+/**
+ * GET /analytics/direct-answers
+ * 🎯 Réponses droit au but unifiées SELL + JOB + HYBRID (Phase 5)
+ * Accessible à tous les tiers (cap appliqué : FREE=1, MEDIUM=3, PREMIUM=10)
+ */
+router.get(
+  "/direct-answers",
+  requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const report = await getDirectAnswers(req.auth!.userId);
     res.json(report);
   })
 );
