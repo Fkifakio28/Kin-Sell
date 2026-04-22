@@ -30,6 +30,7 @@ import { fetchOpenMeteoSignals } from "./openmeteo.provider.js";
 import { fetchEcbFxSignals } from "./ecbfx.provider.js";
 import { fetchJoobleSignals } from "./jobs-jooble.provider.js";
 import { fetchAdzunaSignals } from "./jobs-adzuna.provider.js";
+import { fetchAfricaJobsSignals } from "./jobs-africa.provider.js";
 import { fetchSeasonalCalendarSignals } from "./seasonal-calendar.provider.js";
 
 // ── Types ──
@@ -301,6 +302,7 @@ export async function runFullExternalIngestion(date?: Date): Promise<FullIngesti
   results.push(await runProvider("ILOSTAT", "JOB", "https://www.ilo.org/sdmx", fetchIlostatSignals, persistJobSignals, dayDate));
   results.push(await runProvider("JOOBLE", "JOB", "https://jooble.org/api", fetchJoobleSignals, persistJobSignals, dayDate));
   results.push(await runProvider("ADZUNA", "JOB", "https://api.adzuna.com", fetchAdzunaSignals, persistJobSignals, dayDate));
+  results.push(await runProvider("AFRICA_JOBS", "JOB", "gemini://africa-jobs", fetchAfricaJobsSignals, persistJobSignals, dayDate));
 
   const durationMs = Date.now() - startTime;
   const successSources = results.filter((r) => r.status === "SUCCESS").length;
