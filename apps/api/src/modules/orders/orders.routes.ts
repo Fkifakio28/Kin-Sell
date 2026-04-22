@@ -10,6 +10,21 @@ import { sendPushToUser } from "../notifications/push.service.js";
 import { emitToUsers, emitToUser, isUserOnline } from "../messaging/socket.js";
 import * as momoService from "../mobile-money/mobile-money.service.js";
 import { requireIa } from "../../shared/billing/subscription-guard.js";
+import { logger } from "../../shared/logger.js";
+
+/**
+ * Défense anti-cache pour les endpoints panier/checkout :
+ * - `Cache-Control: private, no-store` empêche tout proxy/CDN de cacher la réponse
+ * - `Vary: Authorization, Cookie` garantit que même si un intermédiaire ignore no-store,
+ *   il différenciera les réponses par session utilisateur
+ * - `Pragma: no-cache` pour les proxies HTTP/1.0 legacy
+ */
+const noCacheHeaders = (_req: AuthenticatedRequest, res: import("express").Response, next: import("express").NextFunction) => {
+  res.setHeader("Cache-Control", "private, no-store, no-cache, must-revalidate, max-age=0");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Vary", "Authorization, Cookie");
+  next();
+};
 
 const pagingSchema = z.object({
   page: z.coerce.number().min(1).default(1),
@@ -57,15 +72,31 @@ const router = Router();
 
 router.get(
   "/buyer/cart",
+  noCacheHeaders,
   requireAuth,
   asyncHandler(async (request: AuthenticatedRequest, response) => {
-    const data = await ordersService.getBuyerCart(request.auth!.userId);
+    const userId = request.auth!.userId;
+    const data = await ordersService.getBuyerCart(userId);
+    // Audit télémétrie : log userId + cartId + items pour détecter si 2 userIds différents
+    // voient le même cartId (preuve d'une fuite serveur ou proxy cache)
+    logger.info(
+      {
+        userId,
+        cartId: (data as any)?.id,
+        itemsCount: (data as any)?.items?.length ?? 0,
+        listingIds: Array.isArray((data as any)?.items)
+          ? (data as any).items.map((it: any) => it?.listingId).filter(Boolean)
+          : []
+      },
+      "[CART_AUDIT] GET /buyer/cart"
+    );
     response.json(data);
   })
 );
 
 router.post(
   "/buyer/cart/items",
+  noCacheHeaders,
   requireAuth,
   requireRoles(Role.USER, Role.BUSINESS),
   asyncHandler(async (request: AuthenticatedRequest, response) => {
@@ -78,6 +109,7 @@ router.post(
 
 router.patch(
   "/buyer/cart/items/:itemId",
+  noCacheHeaders,
   requireAuth,
   requireRoles(Role.USER, Role.BUSINESS),
   asyncHandler(async (request: AuthenticatedRequest, response) => {
@@ -90,6 +122,7 @@ router.patch(
 
 router.delete(
   "/buyer/cart/items/:itemId",
+  noCacheHeaders,
   requireAuth,
   asyncHandler(async (request: AuthenticatedRequest, response) => {
     const data = await ordersService.removeCartItem(request.auth!.userId, request.params.itemId);
