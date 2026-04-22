@@ -194,17 +194,12 @@ async function computeEnrichedRules(
 
   if (!userCategory || !userCountryCode) return out;
 
-  // Snapshot le plus récent (≤ 7j) pour cette zone
-  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-  const snapshot = await prisma.jobMarketSnapshot.findFirst({
-    where: {
-      category: userCategory,
-      countryCode: userCountryCode,
-      city: userCity ?? undefined,
-      snapshotDate: { gte: sevenDaysAgo },
-    },
-    orderBy: { snapshotDate: "desc" },
-  });
+  // K1 — Résolution snapshot avec fallback géographique progressif
+  const { snapshot, scope: snapshotScope } = await resolveEffectiveSnapshot(
+    userCategory,
+    userCountryCode,
+    userCity,
+  );
 
   const userSkills = new Set<string>(
     experiences.flatMap((e) => e.skills.map((s) => s.toLowerCase())),
@@ -253,7 +248,14 @@ async function computeEnrichedRules(
   }
 
   // ── R3 LOW_CITY_DEMAND ──
-  if (userCity && snapshot && snapshot.openJobs < LOW_CITY_DEMAND_THRESHOLD) {
+  // Déclenche uniquement si on a bien un snapshot EXACT (pas un fallback agrégé)
+  if (
+    userCity &&
+    snapshot &&
+    snapshotScope === "EXACT" &&
+    snapshot.openJobs < LOW_CITY_DEMAND_THRESHOLD
+  ) {
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
     const nearby = await prisma.jobMarketSnapshot.findMany({
       where: {
         category: userCategory,
@@ -326,6 +328,7 @@ async function computeEnrichedRules(
 
   // ── R6 CROSS_BORDER_OPPORTUNITY ──
   if (snapshot && snapshot.saturationIndex >= SATURATION_HIGH_THRESHOLD) {
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
     const crossBorder = await prisma.jobMarketSnapshot.findMany({
       where: {
         category: userCategory,
@@ -381,4 +384,174 @@ async function computeEnrichedRules(
   }
 
   return out;
+}
+
+// ═════════════════════════════════════════════════════
+// K1 — Fallback géographique progressif
+// ═════════════════════════════════════════════════════
+
+type SnapshotScope = "EXACT" | "COUNTRY_AGGREGATE" | "AFRICA_AGGREGATE";
+
+/** Snapshot virtuel compatible avec les règles J4 (sous-ensemble de JobMarketSnapshot). */
+type EffectiveSnapshot = {
+  category: string;
+  countryCode: string | null;
+  city: string | null;
+  openJobs: number;
+  applicants: number;
+  saturationIndex: number;
+  avgSalaryUsdCents: number | null;
+  topSkills: string[];
+  trend7dPercent: number | null;
+};
+
+const AFRICAN_COUNTRY_CODES = ["CD", "GA", "CG", "AO", "CI", "GN", "SN", "MA"] as const;
+
+/**
+ * Tente de résoudre un snapshot pertinent pour (cat, pays, ville) :
+ *   1. EXACT             — snapshotDate≤7j, cat+pays+ville (ou cat+pays si ville null)
+ *   2. COUNTRY_AGGREGATE — agrège toutes les villes du pays pour la catégorie
+ *   3. AFRICA_AGGREGATE  — agrège les 8 pays AFR pour la catégorie
+ * Retourne null si rien n'existe du tout.
+ */
+async function resolveEffectiveSnapshot(
+  category: string,
+  countryCode: string,
+  city: string | null,
+): Promise<{ snapshot: EffectiveSnapshot | null; scope: SnapshotScope | null }> {
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+  // Niveau 1 — EXACT
+  const exact = await prisma.jobMarketSnapshot.findFirst({
+    where: {
+      category,
+      countryCode: countryCode as CountryCode,
+      city: city ?? undefined,
+      snapshotDate: { gte: sevenDaysAgo },
+    },
+    orderBy: { snapshotDate: "desc" },
+  });
+  if (exact) {
+    return {
+      snapshot: {
+        category: exact.category,
+        countryCode: exact.countryCode ?? null,
+        city: exact.city ?? null,
+        openJobs: exact.openJobs,
+        applicants: exact.applicants,
+        saturationIndex: exact.saturationIndex,
+        avgSalaryUsdCents: exact.avgSalaryUsdCents ?? null,
+        topSkills: exact.topSkills,
+        trend7dPercent: exact.trend7dPercent ?? null,
+      },
+      scope: "EXACT",
+    };
+  }
+
+  // Niveau 2 — COUNTRY_AGGREGATE (toutes villes du pays)
+  const countryRows = await prisma.jobMarketSnapshot.findMany({
+    where: {
+      category,
+      countryCode: countryCode as CountryCode,
+      snapshotDate: { gte: sevenDaysAgo },
+    },
+    select: {
+      openJobs: true,
+      applicants: true,
+      saturationIndex: true,
+      avgSalaryUsdCents: true,
+      topSkills: true,
+      trend7dPercent: true,
+    },
+  });
+  if (countryRows.length > 0) {
+    return {
+      snapshot: aggregateSnapshots(category, countryCode, null, countryRows),
+      scope: "COUNTRY_AGGREGATE",
+    };
+  }
+
+  // Niveau 3 — AFRICA_AGGREGATE (8 pays cibles)
+  const afrRows = await prisma.jobMarketSnapshot.findMany({
+    where: {
+      category,
+      countryCode: { in: AFRICAN_COUNTRY_CODES as unknown as CountryCode[] },
+      snapshotDate: { gte: sevenDaysAgo },
+    },
+    select: {
+      openJobs: true,
+      applicants: true,
+      saturationIndex: true,
+      avgSalaryUsdCents: true,
+      topSkills: true,
+      trend7dPercent: true,
+    },
+  });
+  if (afrRows.length > 0) {
+    return {
+      snapshot: aggregateSnapshots(category, null, null, afrRows),
+      scope: "AFRICA_AGGREGATE",
+    };
+  }
+
+  return { snapshot: null, scope: null };
+}
+
+type SnapshotAggRow = {
+  openJobs: number;
+  applicants: number;
+  saturationIndex: number;
+  avgSalaryUsdCents: number | null;
+  topSkills: string[];
+  trend7dPercent: number | null;
+};
+
+/** Agrège plusieurs snapshots : somme offres/applicants, moyenne pondérée salaire/trend, union skills (top 8). */
+function aggregateSnapshots(
+  category: string,
+  countryCode: string | null,
+  city: string | null,
+  rows: SnapshotAggRow[],
+): EffectiveSnapshot {
+  const totalOpen = rows.reduce((a, r) => a + r.openJobs, 0);
+  const totalApps = rows.reduce((a, r) => a + r.applicants, 0);
+  const saturation = totalOpen > 0 ? totalApps / totalOpen : 0;
+
+  const salaryRows = rows.filter((r) => r.avgSalaryUsdCents != null && r.openJobs > 0);
+  const avgSalary = salaryRows.length
+    ? Math.round(
+        salaryRows.reduce((a, r) => a + (r.avgSalaryUsdCents ?? 0) * r.openJobs, 0) /
+          Math.max(1, salaryRows.reduce((a, r) => a + r.openJobs, 0)),
+      )
+    : null;
+
+  const trendRows = rows.filter((r) => r.trend7dPercent != null && r.openJobs > 0);
+  const avgTrend = trendRows.length
+    ? trendRows.reduce((a, r) => a + (r.trend7dPercent ?? 0) * r.openJobs, 0) /
+      Math.max(1, trendRows.reduce((a, r) => a + r.openJobs, 0))
+    : null;
+
+  // Top skills : fréquence pondérée par openJobs
+  const skillCount = new Map<string, number>();
+  for (const r of rows) {
+    for (const s of r.topSkills) {
+      skillCount.set(s, (skillCount.get(s) ?? 0) + r.openJobs);
+    }
+  }
+  const topSkills = [...skillCount.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8)
+    .map(([s]) => s);
+
+  return {
+    category,
+    countryCode,
+    city,
+    openJobs: totalOpen,
+    applicants: totalApps,
+    saturationIndex: saturation,
+    avgSalaryUsdCents: avgSalary,
+    topSkills,
+    trend7dPercent: avgTrend,
+  };
 }
