@@ -8,6 +8,8 @@ import { rateLimit, RateLimits } from "../../shared/middleware/rate-limit.middle
 import { logSecurityEvent, checkMultiAccount, createFraudSignal } from "../security/security.service.js";
 import { setAuthCookies } from "../../shared/auth/session.js";
 import { enforceAuthCaptcha } from "../../shared/auth/auth-captcha.js";
+import { extractRequestContext } from "../../shared/http/request-context.js";
+import { spamGuard } from "../../shared/middleware/spam-guard.middleware.js";
 import * as authService from "./auth.service.js";
 import { getGoogleAuthUrl, handleGoogleCallback } from "./google-oauth.service.js";
 import { getAppleAuthUrl, handleAppleCallback } from "./apple-oauth.service.js";
@@ -105,19 +107,20 @@ router.post("/oauth/debug", rateLimit(RateLimits.OAUTH_DEBUG), asyncHandler(asyn
   res.json({ ok: true });
 }));
 
-router.post("/register", rateLimit(RateLimits.REGISTER), asyncHandler(async (request, response) => {
+router.post("/register", rateLimit(RateLimits.REGISTER), spamGuard("AUTH"), asyncHandler(async (request, response) => {
   if (!(await enforceAuthCaptcha(request, response))) return;
 
   const payload = registerSchema.parse(request.body);
-  const result = await authService.register(payload);
+  const ctx = extractRequestContext(request);
+  const result = await authService.register(payload, ctx);
 
   // Security: log + multi-account check
-  const ip = request.ip ?? "unknown";
+  const ip = ctx.ipAddress ?? "unknown";
   void logSecurityEvent({
     userId: result.user.id,
     eventType: "AUTH_REGISTER",
     ipAddress: ip,
-    userAgent: request.headers["user-agent"],
+    userAgent: ctx.userAgent,
     riskLevel: 0,
   });
   void checkMultiAccount(ip).then(r => {
@@ -134,18 +137,19 @@ router.post("/register", rateLimit(RateLimits.REGISTER), asyncHandler(async (req
   response.status(201).json(result);
 }));
 
-router.post("/login", rateLimit(RateLimits.LOGIN), asyncHandler(async (request, response) => {
+router.post("/login", rateLimit(RateLimits.LOGIN), spamGuard("AUTH"), asyncHandler(async (request, response) => {
   if (!(await enforceAuthCaptcha(request, response))) return;
 
   const payload = loginSchema.parse(request.body);
-  const result = await authService.login(payload);
+  const ctx = extractRequestContext(request);
+  const result = await authService.login(payload, ctx);
 
   // Security: log login
   void logSecurityEvent({
     userId: result.user.id,
     eventType: "AUTH_LOGIN",
-    ipAddress: request.ip ?? undefined,
-    userAgent: request.headers["user-agent"],
+    ipAddress: ctx.ipAddress,
+    userAgent: ctx.userAgent,
     riskLevel: 0,
   });
 
@@ -154,7 +158,7 @@ router.post("/login", rateLimit(RateLimits.LOGIN), asyncHandler(async (request, 
 
 router.post("/refresh", rateLimit(RateLimits.LOGIN), asyncHandler(async (request, response) => {
   const payload = refreshSchema.parse(request.body);
-  const result = await authService.refresh(payload.refreshToken);
+  const result = await authService.refresh(payload.refreshToken, extractRequestContext(request));
   response.json(result);
 }));
 

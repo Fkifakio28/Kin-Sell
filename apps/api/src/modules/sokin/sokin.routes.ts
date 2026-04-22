@@ -40,6 +40,7 @@ import {
 import { emitToAll } from "../messaging/socket.js";
 import { sendPushToUsers } from "../notifications/push.service.js";
 import { rateLimit, RateLimits } from "../../shared/middleware/rate-limit.middleware.js";
+import { spamGuard } from "../../shared/middleware/spam-guard.middleware.js";
 import { trackEvents, VALID_EVENTS, getAuthorTrackingStats, getBoostStatsForPosts, type SoKinEventType } from "./sokin-tracking.service.js";
 import { scorePost, scoreAndPersist, batchRecalculate, getTopBoostCandidates, getTopSocialPosts, getTopBusinessPosts } from "./sokin-scoring.service.js";
 import { analyzePost, getAuthorTips, getAdminOpportunities, dismissTip, acceptTip, batchAnalyze } from "../ads/sokin-ads-advisor.service.js";
@@ -231,6 +232,7 @@ router.post(
   "/posts",
   requireAuth,
   rateLimit(RateLimits.SOKIN_POST),
+  spamGuard("PUBLISH"),
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     const { postType, subject, text, mediaUrls = [], location, scheduledAt, tags = [], hashtags = [], backgroundStyle } = createPostSchema.parse(req.body);
 

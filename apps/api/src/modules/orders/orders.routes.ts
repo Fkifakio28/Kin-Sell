@@ -10,6 +10,7 @@ import { sendPushToUser } from "../notifications/push.service.js";
 import { emitToUsers, emitToUser, isUserOnline } from "../messaging/socket.js";
 import * as momoService from "../mobile-money/mobile-money.service.js";
 import { requireIa } from "../../shared/billing/subscription-guard.js";
+import { spamGuard } from "../../shared/middleware/spam-guard.middleware.js";
 import { logger } from "../../shared/logger.js";
 
 /**
@@ -99,6 +100,7 @@ router.post(
   noCacheHeaders,
   requireAuth,
   requireRoles(Role.USER, Role.BUSINESS),
+  spamGuard("TRADE"),
   asyncHandler(async (request: AuthenticatedRequest, response) => {
     const payload = addCartItemSchema.parse(request.body);
     const data = await ordersService.addCartItem(request.auth!.userId, payload);
@@ -135,6 +137,7 @@ router.post(
   "/buyer/checkout",
   requireAuth,
   requireRoles(Role.USER, Role.BUSINESS),
+  spamGuard("TRADE"),
   asyncHandler(async (request: AuthenticatedRequest, response) => {
     const payload = checkoutSchema.parse(request.body ?? {});
     const data = await ordersService.checkoutBuyerCart(request.auth!.userId, payload.notes, {

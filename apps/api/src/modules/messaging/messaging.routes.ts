@@ -4,6 +4,7 @@ import { requireAuth, type AuthenticatedRequest } from "../../shared/auth/auth-m
 import { asyncHandler } from "../../shared/utils/async-handler.js";
 import { rateLimit, RateLimits } from "../../shared/middleware/rate-limit.middleware.js";
 import { requireNoRestriction } from "../../shared/middleware/trust-guard.middleware.js";
+import { spamGuard } from "../../shared/middleware/spam-guard.middleware.js";
 import * as messagingService from "./messaging.service.js";
 import * as callLogService from "./call-log.service.js";
 
@@ -80,6 +81,7 @@ router.post(
   requireAuth,
   requireNoRestriction("MESSAGE_LIMIT"),
   rateLimit(RateLimits.MESSAGE),
+  spamGuard("MESSAGE"),
   asyncHandler(async (req, res) => {
     const { userId } = (req as AuthenticatedRequest).auth!;
     const conversationId = req.params.id;

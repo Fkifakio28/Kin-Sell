@@ -6,6 +6,7 @@ import { asyncHandler } from "../../shared/utils/async-handler.js";
 import { rateLimit, RateLimits } from "../../shared/middleware/rate-limit.middleware.js";
 import { scrapeGuard } from "../../shared/middleware/scrape-guard.middleware.js";
 import { requireNoRestriction } from "../../shared/middleware/trust-guard.middleware.js";
+import { spamGuard } from "../../shared/middleware/spam-guard.middleware.js";
 import * as listingsService from "./listings.service.js";
 import * as bulkImportService from "./bulk-import.service.js";
 import { getOrCreateDMConversation, sendMessage } from "../messaging/messaging.service.js";
@@ -175,6 +176,7 @@ router.post(
   requireRoles(Role.USER, Role.BUSINESS),
   requireNoRestriction("LISTING_LIMIT"),
   rateLimit(RateLimits.LISTING_CREATE),
+  spamGuard("PUBLISH"),
   asyncHandler(async (request: AuthenticatedRequest, response) => {
     const payload = createSchema.parse(request.body);
 

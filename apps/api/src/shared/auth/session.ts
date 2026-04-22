@@ -96,7 +96,10 @@ export const createSessionTokens = async (input: {
   };
 };
 
-export const rotateSessionTokens = async (refreshToken: string) => {
+export const rotateSessionTokens = async (
+  refreshToken: string,
+  ctx: { ipAddress?: string; userAgent?: string; deviceId?: string } = {}
+) => {
   const payload = verifyRefreshToken(refreshToken);
   const currentHash = hashValue(refreshToken);
 
@@ -127,11 +130,16 @@ export const rotateSessionTokens = async (refreshToken: string) => {
   }
 
   const newRefreshToken = signRefreshToken(session.id);
+  // À la rotation on rafraîchit lastSeenAt + on met à jour IP/UA si fournis
+  // (permet de détecter un takeover si l'IP change brusquement)
   await prisma.userSession.update({
     where: { id: session.id },
     data: {
       refreshTokenHash: hashValue(newRefreshToken),
-      lastSeenAt: new Date()
+      lastSeenAt: new Date(),
+      ...(ctx.ipAddress ? { ipAddress: ctx.ipAddress } : {}),
+      ...(ctx.userAgent ? { userAgent: ctx.userAgent } : {}),
+      ...(ctx.deviceId ? { deviceId: ctx.deviceId } : {})
     }
   });
 

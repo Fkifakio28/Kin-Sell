@@ -81,7 +81,13 @@ const createUniqueUsername = async (seed: string): Promise<string> => {
   }
 };
 
-export const register = async (input: RegisterInput) => {
+export type SessionContext = {
+  ipAddress?: string;
+  userAgent?: string;
+  deviceId?: string;
+};
+
+export const register = async (input: RegisterInput, ctx: SessionContext = {}) => {
   const normalizedEmail = normalizeEmail(input.email);
   const existing = await prisma.userIdentity.findUnique({
     where: {
@@ -151,7 +157,9 @@ export const register = async (input: RegisterInput) => {
   const session = await createSessionTokens({
     userId: user.id,
     role: user.role as Role,
-    deviceId: "legacy-auth"
+    deviceId: ctx.deviceId ?? "legacy-auth",
+    userAgent: ctx.userAgent,
+    ipAddress: ctx.ipAddress
   });
 
   return {
@@ -168,7 +176,7 @@ export const register = async (input: RegisterInput) => {
   };
 };
 
-export const login = async (input: LoginInput) => {
+export const login = async (input: LoginInput, ctx: SessionContext = {}) => {
   const normalizedEmail = normalizeEmail(input.email);
 
   // Check lockout before any DB query
@@ -240,7 +248,9 @@ export const login = async (input: LoginInput) => {
   const session = await createSessionTokens({
     userId: user.id,
     role: user.role as Role,
-    deviceId: "legacy-auth"
+    deviceId: ctx.deviceId ?? "legacy-auth",
+    userAgent: ctx.userAgent,
+    ipAddress: ctx.ipAddress
   });
 
   return {
@@ -282,9 +292,9 @@ export const me = async (userId: string) => {
   };
 };
 
-export const refresh = async (refreshToken: string) => {
+export const refresh = async (refreshToken: string, ctx: SessionContext = {}) => {
   try {
-    const rotated = await rotateSessionTokens(refreshToken);
+    const rotated = await rotateSessionTokens(refreshToken, ctx);
     return {
       accessToken: rotated.accessToken,
       refreshToken: rotated.refreshToken,

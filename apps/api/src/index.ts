@@ -13,6 +13,7 @@ import { logger, genRequestId } from "./shared/logger.js";
 import { prisma } from "./shared/db/prisma.js";
 import { canTrade, Role } from "./types/roles.js";
 import authRoutes from "./modules/auth/auth.routes.js";
+import sessionsRoutes from "./modules/auth/sessions.routes.js";
 import usersRoutes from "./modules/users/users.routes.js";
 import businessAccountsRoutes from "./modules/businesses/business-accounts.routes.js";
 import listingsRoutes from "./modules/listings/listings.routes.js";
@@ -239,6 +240,7 @@ app.get("/roles", (_req, res) => {
 });
 
 app.use("/auth", authRoutes);
+app.use("/auth", sessionsRoutes);
 app.use("/account", accountRoutes);
 app.use("/users", usersRoutes);
 app.use("/business-accounts", businessAccountsRoutes);

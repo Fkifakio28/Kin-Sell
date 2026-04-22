@@ -130,6 +130,28 @@ async function executeMidnightRun(date?: Date): Promise<MidnightRunReport> {
     logger.error(err, "[MidnightScheduler] Phase 3 FAILED");
   }
 
+  // Phase 4: Session hygiene — auto-revoke ACTIVE sessions inactives > 30 jours.
+  // Évite l'accumulation de sessions orphelines qui augmentent la surface d'attaque.
+  try {
+    logger.info("[MidnightScheduler] Phase 4: Session hygiene...");
+    const staleThreshold = new Date(Date.now() - 30 * DAY_MS);
+    const revoked = await prisma.userSession.updateMany({
+      where: {
+        status: "ACTIVE",
+        OR: [
+          { lastSeenAt: { lt: staleThreshold } },
+          { lastSeenAt: null, createdAt: { lt: staleThreshold } } as any
+        ]
+      },
+      data: { status: "EXPIRED", revokedAt: new Date() }
+    });
+    logger.info({ revokedCount: revoked.count }, "[MidnightScheduler] Phase 4 complete (stale sessions revoked)");
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    errors.push(`Session hygiene: ${msg}`);
+    logger.error(err, "[MidnightScheduler] Phase 4 FAILED");
+  }
+
   const durationMs = Date.now() - startTime;
   const status = errors.length === 0 ? "SUCCESS" : errors.length < 2 ? "PARTIAL" : "FAILED";
 
