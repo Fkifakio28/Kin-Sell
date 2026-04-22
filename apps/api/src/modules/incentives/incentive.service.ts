@@ -28,6 +28,64 @@ function generateCode(prefix = "KS"): string {
   return `${prefix}-${randomBytes(4).toString("hex").toUpperCase()}`;
 }
 
+/* ─── Distribution pondérée des discounts (Chantier D2) ───
+ * Défaut : privilégie les petites remises (grande base) et rend rares les grosses.
+ * Somme des poids : 148.5 → probabilités approchées :
+ *   5%:26.9% · 10%:20.2% · 20%:16.8% · 30%:13.5% · 40%:8.1%
+ *   50%:5.4% · 60%:3.7% · 70%:3.4% · 80%:1.3% · 100%:0.7%
+ */
+export const DEFAULT_DISCOUNT_WEIGHTS: Record<number, number> = {
+  100: 1,
+  80: 2,
+  70: 5,
+  60: 5.5,
+  50: 8,
+  40: 12,
+  30: 20,
+  20: 25,
+  10: 30,
+  5: 40,
+};
+
+function parseDiscountWeights(raw: unknown): Record<number, number> | null {
+  if (!raw || typeof raw !== "object") return null;
+  const entries = Object.entries(raw as Record<string, unknown>)
+    .map(([k, v]) => [Number(k), Number(v)] as const)
+    .filter(([k, v]) => Number.isFinite(k) && Number.isFinite(v) && v > 0);
+  if (entries.length === 0) return null;
+  return Object.fromEntries(entries);
+}
+
+/**
+ * Tire un discount percent dans `allowed` selon pondération (si fournie),
+ * sinon tirage uniforme. Exposé pour tests.
+ */
+export function weightedPickDiscount(
+  allowed: number[],
+  weights: Record<number, number> | null = null,
+): number {
+  if (allowed.length === 0) throw new Error("weightedPickDiscount: empty allowed");
+  if (allowed.length === 1) return allowed[0];
+
+  const activeWeights = weights ?? DEFAULT_DISCOUNT_WEIGHTS;
+  const candidates = allowed
+    .map((d) => ({ d, w: activeWeights[d] ?? 0 }))
+    .filter((x) => x.w > 0);
+
+  // Aucun poids défini pour ces valeurs → fallback uniforme
+  if (candidates.length === 0) {
+    return allowed[Math.floor(Math.random() * allowed.length)];
+  }
+
+  const total = candidates.reduce((s, x) => s + x.w, 0);
+  let r = Math.random() * total;
+  for (const { d, w } of candidates) {
+    r -= w;
+    if (r <= 0) return d;
+  }
+  return candidates[candidates.length - 1].d;
+}
+
 /** Calculate discount amount from a percentage. */
 function calcDiscount(originalAmountCents: number, discountPercent: number) {
   const discount = Math.round(originalAmountCents * (discountPercent / 100));
@@ -526,7 +584,7 @@ export async function selectIncentiveForUser(
   // Check monthly quota
   if (quota.couponCount >= policy.maxCouponsPerMonth) return null;
 
-  // Select discount percent
+  // Select discount percent (pondération Chantier D2)
   const allowed = policy.allowedDiscounts.filter((d) => {
     if (d === 100 && quota.coupon100Count > 0) return false; // limit 100% frequency
     if (d === 80 && quota.discount80Count >= policy.maxDiscount80PerMonth) return false;
@@ -534,7 +592,8 @@ export async function selectIncentiveForUser(
   });
   if (allowed.length === 0) return null;
 
-  const discountPercent = allowed[Math.floor(Math.random() * allowed.length)];
+  const weights = parseDiscountWeights(policy.discountWeights);
+  const discountPercent = weightedPickDiscount(allowed, weights);
 
   // Generate a targeted coupon for this user
   const expiresAt = new Date();
@@ -613,13 +672,14 @@ export async function emitGrowthGrant(
     addonCode = addonCode ?? "IA_MERCHANT";
     discountPercent = 100;
   } else {
-    // Sélection discount avec contrainte max 3 à 80%
+    // Sélection discount avec contrainte max 3 à 80% — pondération Chantier D2
     const allowed = policy.allowedDiscounts.filter((d) => {
       if (d === 80 && quota.discount80Count >= policy.maxDiscount80PerMonth) return false;
       return true;
     });
     if (allowed.length === 0) return null;
-    discountPercent = allowed[Math.floor(Math.random() * allowed.length)];
+    const weights = parseDiscountWeights(policy.discountWeights);
+    discountPercent = weightedPickDiscount(allowed, weights);
   }
 
   const expiresAt = new Date();

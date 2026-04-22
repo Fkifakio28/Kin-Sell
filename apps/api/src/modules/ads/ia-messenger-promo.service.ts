@@ -94,6 +94,12 @@ export interface PromoCampaignStats {
 
 /**
  * Envoie un email promotionnel via ADS@Kin-sell.com
+ *
+ * Note (Chantier D2) : ne rattache plus de coupon "à la volée".
+ * L'attribution de coupons passe désormais uniquement par le moteur
+ * d'incitations (selectIncentiveForUser) avec sa propre gate probabiliste,
+ * évitant ainsi le double-gate et les doubles coupons dans les emails
+ * déjà porteurs d'un code (sendCouponIncentiveMessage, sendGrantConvertedToCouponMessage).
  */
 export async function sendPromoEmail(
   recipientId: string,
@@ -108,14 +114,10 @@ export async function sendPromoEmail(
   });
   if (!user?.email) return false;
 
-  // Tenter d'attacher un coupon (gate 1/10)
-  const coupon = await maybeAttachCoupon(recipientId, reason);
-  const bodyWithCoupon = coupon ? htmlBody + coupon.html : htmlBody;
-
   const delivered = await sendMail({
     to: user.email,
     subject: `[Kin-Sell] ${subject}`,
-    html: wrapInKinSellTemplate(subject, bodyWithCoupon),
+    html: wrapInKinSellTemplate(subject, htmlBody),
   });
 
   // Log the promo
@@ -125,7 +127,7 @@ export async function sendPromoEmail(
       actionType: "PROMO_EMAIL",
       targetUserId: recipientId,
       decision: `Email: ${subject}`,
-      reasoning: `Raison: ${reason}${targetItemId ? ` | Cible: ${targetItemId}` : ""}${coupon ? ` | Code: ${coupon.code}` : ""}`,
+      reasoning: `Raison: ${reason}${targetItemId ? ` | Cible: ${targetItemId}` : ""}`,
       success: delivered,
     },
   });
@@ -209,17 +211,13 @@ export async function sendPromoInternal(
       });
     }
 
-    // Créer le coupon optionnel
-    const coupon = await maybeAttachCoupon(recipientId, reason);
-    const bodyWithCoupon = coupon ? `${body}\n\n🎁 **Code Promo**: \`${coupon.code}\`` : body;
-
-    // Créer le message interne
+    // Créer le message interne (pas de coupon auto-attaché — Chantier D2)
     const message = await prisma.message.create({
       data: {
         conversationId: systemConv.id,
         senderId: SYSTEM_USER_ID,
         type: "TEXT",
-        content: `📢 **${subject}**\n\n${bodyWithCoupon}`,
+        content: `📢 **${subject}**\n\n${body}`,
       },
     });
 
@@ -230,7 +228,7 @@ export async function sendPromoInternal(
         actionType: "PROMO_INTERNAL",
         targetUserId: recipientId,
         decision: `Internal: ${subject}`,
-        reasoning: `Raison: ${reason}${targetItemId ? ` | Cible: ${targetItemId}` : ""}${coupon ? ` | Code: ${coupon.code}` : ""}`,
+        reasoning: `Raison: ${reason}${targetItemId ? ` | Cible: ${targetItemId}` : ""}`,
         success: true,
       },
     });
@@ -287,14 +285,11 @@ export async function promoteListingBoost(listingId: string): Promise<number> {
 
   let sent = 0;
   for (const buyer of potentialBuyers) {
-    // Tenter d'attacher un coupon code dans le push
-    const coupon = await maybeAttachCoupon(buyer.id, "BOOST_PROMO");
-    const couponSuffix = coupon ? ` 🎁 Code: ${coupon.code}` : "";
-
+    // Pas de coupon auto-attaché (Chantier D2 — gate unique via selectIncentiveForUser)
     const sent1 = await sendPromoPush(
       buyer.id,
       `Nouveau dans ${listing.category}`,
-      `"${listing.title}" est maintenant disponible${listing.city ? ` à ${listing.city}` : ""} ! Découvrez cette offre sponsorisée.${couponSuffix}`,
+      `"${listing.title}" est maintenant disponible${listing.city ? ` à ${listing.city}` : ""} ! Découvrez cette offre sponsorisée.`,
       "BOOST_PROMO",
       listingId,
     );
@@ -457,41 +452,9 @@ export async function getPromoCampaignStats(): Promise<PromoCampaignStats> {
 // Template email Kin-Sell
 // ─────────────────────────────────────────────
 
-/**
- * Génère un coupon personnalisé pour un destinataire de promo.
- * Gate 1/10 : seuls ~10 % des destinataires reçoivent un coupon.
- * Retourne le code coupon + HTML à insérer, ou null.
- */
-async function maybeAttachCoupon(
-  recipientId: string,
-  reason: PromoReason,
-): Promise<{ code: string; html: string } | null> {
-  // Gate 1/10
-  if (Math.random() > 0.10) return null;
-
-  try {
-    const { selectIncentiveForUser } = await import("../incentives/incentive.service.js");
-
-    // selectIncentiveForUser applique déjà la policy gate + quota + crée le coupon
-    const selection = await selectIncentiveForUser(recipientId);
-    if (!selection) return null;
-
-    const html = `
-      <div style="background:rgba(111,88,255,0.15);border:1px solid rgba(111,88,255,0.3);border-radius:8px;padding:16px;margin:16px 0;text-align:center;">
-        <p style="color:#6f58ff;font-size:14px;margin:0 0 8px;">🎁 Code promo exclusif</p>
-        <p style="color:#fff;font-size:22px;font-weight:bold;margin:0;letter-spacing:2px;">${selection.couponCode}</p>
-        <p style="color:rgba(255,255,255,0.6);font-size:12px;margin:8px 0 0;">
-          -${selection.discountPercent}% · Expire le ${selection.expiresAt.toLocaleDateString("fr-FR")}
-        </p>
-      </div>`;
-
-    logger.info({ recipientId, code: selection.couponCode, discountPercent: selection.discountPercent, reason }, "[IA Messenger] Coupon attaché à promo");
-    return { code: selection.couponCode, html };
-  } catch (err) {
-    logger.warn({ err, recipientId, reason }, "[IA Messenger] Erreur génération coupon promo");
-    return null;
-  }
-}
+// Note (Chantier D2) : la fonction maybeAttachCoupon a été supprimée.
+// Les coupons sont attribués via selectIncentiveForUser (gate unique)
+// et notifiés via sendCouponIncentiveMessage. sendPromoEmail est neutre.
 
 function wrapInKinSellTemplate(title: string, body: string): string {
   return `

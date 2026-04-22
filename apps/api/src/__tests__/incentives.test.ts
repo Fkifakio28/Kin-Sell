@@ -31,6 +31,9 @@ const getIncentiveStats = mod.getIncentiveStats;
 const listMyGrants = mod.listMyGrants;
 const listMyCoupons = mod.listMyCoupons;
 const convertGrantToCoupon = mod.convertGrantToCoupon;
+const weightedPickDiscount = mod.weightedPickDiscount;
+const DEFAULT_DISCOUNT_WEIGHTS = mod.DEFAULT_DISCOUNT_WEIGHTS;
+const invalidatePolicyCache = mod.invalidatePolicyCache;
 
 // ── Helpers ──
 const NOW = new Date("2026-04-15T12:00:00Z");
@@ -64,7 +67,8 @@ function makePolicy(overrides: Record<string, unknown> = {}) {
     maxCouponsPerMonth: 7,
     maxDiscount80PerMonth: 3,
     coupon100MaxDays: 14,
-    allowedDiscounts: [10, 15, 20, 30, 50, 80, 100],
+    allowedDiscounts: [5, 10, 20, 30, 40, 50, 60, 70, 80, 100],
+    discountWeights: { "5": 40, "10": 30, "20": 25, "30": 20, "40": 12, "50": 8, "60": 5.5, "70": 5, "80": 2, "100": 1 },
     growthProbability: 0.1,
     maxGrowthGrantsPerMonth: 15,
     maxAddonGainPerMonth: 1,
@@ -92,6 +96,7 @@ function makeQuota(overrides: Record<string, unknown> = {}) {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.setSystemTime(NOW);
+  invalidatePolicyCache();
 });
 
 // ══════════════════════════════════════════════
@@ -628,5 +633,73 @@ describe("convertGrantToCoupon", () => {
     await expect(convertGrantToCoupon("user-1", "g1")).rejects.toThrow("GRANT_ALREADY_CONSUMED");
 
     delete (mockPrisma as any)._$transactionOverride;
+  });
+});
+
+// ══════════════════════════════════════════════
+// weightedPickDiscount (Chantier D2)
+// ══════════════════════════════════════════════
+
+describe("weightedPickDiscount", () => {
+  it("retourne la valeur unique si allowed n'a qu'un élément", () => {
+    expect(weightedPickDiscount([42])).toBe(42);
+  });
+
+  it("throw si allowed est vide", () => {
+    expect(() => weightedPickDiscount([])).toThrow();
+  });
+
+  it("respecte la distribution pondérée sur gros échantillon", () => {
+    vi.useRealTimers(); // Math.random() ne dépend pas du fake timer, mais on reset
+    const allowed = [5, 10, 20, 30, 40, 50, 60, 70, 80, 100];
+    const weights = DEFAULT_DISCOUNT_WEIGHTS;
+    const counts: Record<number, number> = {};
+    const N = 20000;
+    for (let i = 0; i < N; i++) {
+      const d = weightedPickDiscount(allowed, weights);
+      counts[d] = (counts[d] ?? 0) + 1;
+    }
+    const totalWeight = Object.values(weights).reduce((s, w) => s + w, 0);
+    // Vérifier que chaque discount est dans ±30% de sa probabilité attendue
+    for (const d of allowed) {
+      const expected = (weights[d] / totalWeight) * N;
+      const actual = counts[d] ?? 0;
+      const tolerance = Math.max(expected * 0.3, 30); // ±30% ou ±30 minimum pour petites probas
+      expect(Math.abs(actual - expected)).toBeLessThan(tolerance);
+    }
+    // 5% doit être le plus fréquent, 100% le moins
+    expect(counts[5]).toBeGreaterThan(counts[100]);
+    expect(counts[5]).toBeGreaterThan(counts[80]);
+    expect(counts[10]).toBeGreaterThan(counts[70]);
+    vi.setSystemTime(NOW);
+  });
+
+  it("fallback uniforme si aucun poids ne matche", () => {
+    const allowed = [7, 13, 19]; // pas dans DEFAULT_DISCOUNT_WEIGHTS
+    const counts: Record<number, number> = {};
+    for (let i = 0; i < 3000; i++) {
+      const d = weightedPickDiscount(allowed, DEFAULT_DISCOUNT_WEIGHTS);
+      counts[d] = (counts[d] ?? 0) + 1;
+    }
+    // Distribution ~uniforme → chaque valeur ≈ 1000 (±30%)
+    for (const d of allowed) {
+      expect(counts[d]).toBeGreaterThan(700);
+      expect(counts[d]).toBeLessThan(1300);
+    }
+  });
+
+  it("ignore les discounts non listés dans allowed même s'ils ont un poids", () => {
+    // 100% absent de allowed → ne doit jamais sortir
+    const allowed = [5, 10];
+    const counts: Record<number, number> = {};
+    for (let i = 0; i < 500; i++) {
+      const d = weightedPickDiscount(allowed, DEFAULT_DISCOUNT_WEIGHTS);
+      counts[d] = (counts[d] ?? 0) + 1;
+    }
+    expect(counts[100]).toBeUndefined();
+    expect(counts[80]).toBeUndefined();
+    expect((counts[5] ?? 0) + (counts[10] ?? 0)).toBe(500);
+    // 5% plus fréquent que 10% (40 vs 30)
+    expect(counts[5]).toBeGreaterThan(counts[10]);
   });
 });
