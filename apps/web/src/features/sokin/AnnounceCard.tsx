@@ -1005,12 +1005,20 @@ export const AnnounceCard = React.memo(function AnnounceCard({
         </div>
       )}
 
-      {/* ═══ REPOST ATTRIBUTION — affiche l'auteur original ═══ */}
+      {/* ═══ REPOST ATTRIBUTION — insigne haut-gauche ═══ */}
       {(post as any).repostOf && (
         <div className="sk-repost-attr">
-          <span className="sk-repost-attr-icon">🔄</span>
+          <span className="sk-repost-attr-badge">
+            <span className="sk-repost-attr-icon" aria-hidden>🔁</span>
+            <span>Republié</span>
+          </span>
           <span className="sk-repost-attr-text">
-            Reposté de <strong>{(post as any).repostOf.author?.profile?.displayName ?? 'Utilisateur'}</strong>
+            de{' '}
+            <strong>
+              @{(post as any).repostOf.author?.profile?.username?.replace(/^@/, '')
+                ?? (post as any).repostOf.author?.profile?.displayName
+                ?? 'Utilisateur'}
+            </strong>
           </span>
         </div>
       )}
@@ -1073,31 +1081,62 @@ export const AnnounceCard = React.memo(function AnnounceCard({
         const origName = origProfile?.displayName ?? 'Utilisateur';
         const origHandle = origProfile?.username?.replace(/^@/, '') ?? orig.author?.id?.slice(0, 8) ?? '';
         const origMediaItems = categorizeMedia(orig.mediaUrls ?? []);
+        const origFirstVideoIndex = origMediaItems.findIndex((it) => it.type === 'video');
+        const goToAuthor = (e: React.MouseEvent) => {
+          e.stopPropagation();
+          if (origProfile?.username) handleMentionClick(origProfile.username.replace(/^@/, ''));
+        };
 
         return (
           <div className="sk-repost-embed">
             <div className="sk-repost-embed-header">
               {origProfile?.avatarUrl ? (
-                <img src={resolveMediaUrl(origProfile.avatarUrl)} alt={origName} className="sk-repost-embed-avatar" />
+                <img
+                  src={resolveMediaUrl(origProfile.avatarUrl)}
+                  alt={origName}
+                  className="sk-repost-embed-avatar"
+                  onClick={goToAuthor}
+                  style={{ cursor: 'pointer' }}
+                />
               ) : (
-                <span className="sk-repost-embed-avatar-empty">{origName.charAt(0).toUpperCase()}</span>
+                <span
+                  className="sk-repost-embed-avatar-empty"
+                  onClick={goToAuthor}
+                  style={{ cursor: 'pointer' }}
+                >
+                  {origName.charAt(0).toUpperCase()}
+                </span>
               )}
-              <div>
-                <strong>{origName}</strong>
-                <span className="sk-repost-embed-handle"> @{origHandle}</span>
+              <div style={{ minWidth: 0 }}>
+                <button
+                  type="button"
+                  className="sk-repost-embed-authorbtn"
+                  onClick={goToAuthor}
+                >
+                  <strong>{origName}</strong>
+                  {origHandle && <span className="sk-repost-embed-handle"> @{origHandle}</span>}
+                </button>
                 <span className="sk-repost-embed-time"> · {relTime(orig.createdAt, t)}</span>
               </div>
             </div>
-            {orig.text && <p className="sk-repost-embed-text">{renderPostText(orig.text.length > 200 ? orig.text.slice(0, 200) + '…' : orig.text, handleMentionClick, handleHashtagClick)}</p>}
+
+            {orig.text && (
+              <p className="sk-repost-embed-text">
+                {renderPostText(
+                  orig.text.length > 280 ? orig.text.slice(0, 280) + '…' : orig.text,
+                  handleMentionClick,
+                  handleHashtagClick,
+                )}
+              </p>
+            )}
+
             {origMediaItems.length > 0 && (
               <div className="sk-repost-embed-media">
-                {origMediaItems[0].type === 'image' ? (
-                  <img src={resolveMediaUrl(origMediaItems[0].url)} alt="" className="sk-repost-embed-img" loading="lazy" />
-                ) : origMediaItems[0].type === 'audio' ? (
-                  <audio src={resolveMediaUrl(origMediaItems[0].url)} controls className="sk-repost-embed-img" />
-                ) : (
-                  <video src={resolveMediaUrl(origMediaItems[0].url)} className="sk-repost-embed-img" muted playsInline />
-                )}
+                <MediaCollage
+                  items={origMediaItems}
+                  onItemClick={onMediaClick}
+                  autoPlayVideoIndex={origFirstVideoIndex >= 0 ? origFirstVideoIndex : undefined}
+                />
               </div>
             )}
           </div>

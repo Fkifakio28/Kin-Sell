@@ -556,29 +556,49 @@ export const updateSoKinPost = async (
  * Reposte une publication existante.
  * Crée un nouveau post lié à l'original via repostOfId
  * et incrémente le compteur shares de l'original.
+ *
+ * ⚠️ Aplatit la chaîne : si on reposte un repost, le nouveau post
+ * pointe directement sur la publication d'origine (pas sur le repost
+ * intermédiaire). De ce fait l'auteur mentionné est toujours l'auteur
+ * original, quelle que soit la profondeur de la chaîne.
  */
 export const repostSoKinPost = async (
   userId: string,
   originalPostId: string,
   comment?: string
 ) => {
-  const original = await prisma.soKinPost.findUnique({
+  const target = await prisma.soKinPost.findUnique({
     where: { id: originalPostId },
-    select: { id: true, status: true, authorId: true },
+    select: { id: true, status: true, authorId: true, repostOfId: true },
   });
 
-  if (!original || original.status !== "ACTIVE") {
+  if (!target || target.status !== "ACTIVE") {
     throw new HttpError(404, "Publication introuvable");
   }
 
-  // Empêcher de reposter son propre post
-  if (original.authorId === userId) {
+  // Aplatir la chaîne : si la cible est un repost, remonter à la source
+  let rootId = target.id;
+  let rootAuthorId = target.authorId;
+  if (target.repostOfId) {
+    const root = await prisma.soKinPost.findUnique({
+      where: { id: target.repostOfId },
+      select: { id: true, status: true, authorId: true },
+    });
+    if (!root || root.status !== "ACTIVE") {
+      throw new HttpError(404, "Publication d'origine introuvable");
+    }
+    rootId = root.id;
+    rootAuthorId = root.authorId;
+  }
+
+  // Empêcher de reposter son propre post (même via un intermédiaire)
+  if (rootAuthorId === userId) {
     throw new HttpError(400, "Vous ne pouvez pas reposter votre propre publication");
   }
 
-  // Empêcher de reposter deux fois le même post
+  // Empêcher de reposter deux fois la même source
   const existing = await prisma.soKinPost.findFirst({
-    where: { authorId: userId, repostOfId: originalPostId, status: { not: "DELETED" } },
+    where: { authorId: userId, repostOfId: rootId, status: { not: "DELETED" } },
   });
   if (existing) {
     throw new HttpError(409, "Vous avez déjà reposté cette publication");
@@ -595,7 +615,7 @@ export const repostSoKinPost = async (
         hashtags: [],
         status: "ACTIVE",
         visibility: "PUBLIC",
-        repostOfId: originalPostId,
+        repostOfId: rootId,
       },
       include: {
         author: { include: { profile: true } },
@@ -605,8 +625,9 @@ export const repostSoKinPost = async (
       },
     });
 
+    // Incrémenter le compteur shares sur la publication d'origine
     await tx.soKinPost.update({
-      where: { id: originalPostId },
+      where: { id: rootId },
       data: { shares: { increment: 1 } },
     });
 
