@@ -250,6 +250,17 @@ export async function initNativePush(
           if (data?.type === "message") targetUrl = "/messaging";
           else if (data?.type === "order" || data?.type === "negotiation") targetUrl = "/account?tab=commandes";
           else if (data?.type === "sokin" || data?.type === "publication") targetUrl = "/sokin";
+          else if (data?.type === "PROMO" || data?.type === "promo" || data?.type === "COUPON" || data?.type === "coupon") {
+            if (data?.couponCode) {
+              const params = new URLSearchParams();
+              params.set("coupon", data.couponCode);
+              if (data?.planCode) params.set("plan", data.planCode);
+              targetUrl = `/forfaits?${params.toString()}`;
+            } else {
+              targetUrl = "/account?section=incentives";
+            }
+          }
+          else if (data?.type === "GRANT" || data?.type === "grant") targetUrl = "/account?section=incentives";
         }
         if (targetUrl) {
           const current = `${window.location.pathname}${window.location.search}`;

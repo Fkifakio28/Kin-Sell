@@ -105,7 +105,7 @@ export default function AiSmartPopup() {
         if (planCode) params.set("plan", planCode);
         if (couponCode) params.set("coupon", couponCode);
         const qs = params.toString();
-        navigate(qs ? `/pricing?${qs}` : "/pricing");
+        navigate(qs ? `/forfaits?${qs}` : "/forfaits");
       };
 
       if (current.actionType === "BOOST_ARTICLE" || current.actionType === "BOOST_SHOP" ||

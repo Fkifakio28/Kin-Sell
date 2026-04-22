@@ -145,13 +145,14 @@ export async function sendPromoPush(
   body: string,
   reason: PromoReason,
   targetItemId?: string,
+  extraData?: Record<string, unknown>,
 ): Promise<boolean> {
   try {
     await sendPushToUser(recipientId, {
       title: `🎯 ${title}`,
       body,
       tag: `promo-${reason.toLowerCase()}`,
-      data: { type: "PROMO", reason, targetItemId },
+      data: { type: "PROMO", reason, targetItemId, ...(extraData ?? {}) },
     });
 
     await prisma.aiAutonomyLog.create({
@@ -506,7 +507,7 @@ export async function sendCouponIncentiveMessage(
         -${discountPercent}% · Expire le ${expiresAt.toLocaleDateString("fr-FR")}
       </p>
     </div>
-    <p>Utilisez-le sur la page <a href="https://kin-sell.com/forfaits" style="color:#6f58ff;">Forfaits</a> au moment du paiement.</p>`;
+    <p>Utilisez-le sur la page <a href="https://kin-sell.com/forfaits?coupon=${encodeURIComponent(couponCode)}" style="color:#6f58ff;">Forfaits</a> au moment du paiement (le code sera pré-rempli automatiquement).</p>`;
 
   const emailSent = await sendPromoEmail(
     recipientId,
@@ -522,6 +523,8 @@ export async function sendCouponIncentiveMessage(
       `Code promo -${discountPercent}%`,
       `Utilisez ${couponCode} pour obtenir -${discountPercent}% sur Kin-Sell ! Expire le ${expiresAt.toLocaleDateString("fr-FR")}`,
       "BOOST_PROMO" as PromoReason,
+      undefined,
+      { promoType: "COUPON", couponCode, discountPercent },
     );
   }
 
@@ -571,7 +574,7 @@ export async function sendGrowthGrantMessage(
         5) Utilisez-le sur la page Forfaits au paiement
       </p>
     </div>
-    <p style="margin-top:10px;">Continuez à utiliser Kin-Sell pour débloquer plus d'avantages !</p>`;
+    <p>Récapitulatif rapide : <a href="https://kin-sell.com/account?section=incentives" style="color:#6f58ff;">ouvrir Mes avantages IA</a></p>`;
 
   const emailSent = await sendPromoEmail(
     recipientId,
@@ -586,6 +589,8 @@ export async function sendGrowthGrantMessage(
       `Avantage ${kindLabel} débloqué`,
       `Avantage ${discountLabel} débloqué. Ouvrez Mon compte > Mes avantages IA > Convertir pour générer votre code promo, puis utilisez-le sur Forfaits.`,
       "BOOST_PROMO" as PromoReason,
+      undefined,
+      { promoType: "GRANT", grantId, grantKind, discountPercent },
     );
   }
 
@@ -622,7 +627,7 @@ export async function sendGrantConvertedToCouponMessage(
         -${discountPercent}% · Expire le ${expiresAt.toLocaleDateString("fr-FR")}
       </p>
     </div>
-    <p>Rendez-vous sur <a href="https://kin-sell.com/forfaits" style="color:#6f58ff;">Forfaits</a> pour l'utiliser.</p>`;
+    <p>Rendez-vous sur <a href="https://kin-sell.com/forfaits?coupon=${encodeURIComponent(couponCode)}" style="color:#6f58ff;">Forfaits</a> pour l'utiliser (le code sera pré-rempli).</p>`;
 
   const emailSent = await sendPromoEmail(
     recipientId,
@@ -637,6 +642,8 @@ export async function sendGrantConvertedToCouponMessage(
       `Code promo -${discountPercent}% généré`,
       `Votre avantage est devenu le code ${couponCode} (-${discountPercent}%) ! Expire le ${expiresAt.toLocaleDateString("fr-FR")}`,
       "BOOST_PROMO" as PromoReason,
+      undefined,
+      { promoType: "COUPON", couponCode, discountPercent, grantId },
     );
   }
 

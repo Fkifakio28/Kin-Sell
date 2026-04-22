@@ -21,6 +21,25 @@ function resolveTarget(data) {
     case "publication":
     case "sokin":
       return "/sokin";
+    case "PROMO":
+    case "promo":
+    case "COUPON":
+    case "coupon": {
+      // Coupon prêt à l'emploi : deep-link direct /forfaits avec pré-remplissage
+      if (typeof data.couponCode === "string" && data.couponCode.length > 0) {
+        const params = new URLSearchParams();
+        params.set("coupon", data.couponCode);
+        if (typeof data.planCode === "string" && data.planCode.length > 0) {
+          params.set("plan", data.planCode);
+        }
+        return `/forfaits?${params.toString()}`;
+      }
+      // Grant à convertir → panneau "Mes avantages IA"
+      return "/account?section=incentives";
+    }
+    case "GRANT":
+    case "grant":
+      return "/account?section=incentives";
     default:
       return "/";
   }
