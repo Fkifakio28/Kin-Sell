@@ -721,6 +721,16 @@ export const AnnounceCard = React.memo(function AnnounceCard({
 
   const mediaItems = categorizeMedia(post.mediaUrls ?? []);
   const firstVideoIndex = mediaItems.findIndex((item) => item.type === 'video');
+
+  // ═ Repost : médias du post d'origine (pour autoplay/observer aussi) ═
+  const repostOf = (post as any).repostOf as SoKinApiFeedPost | null | undefined;
+  const origMediaItems = useMemo(
+    () => (repostOf ? categorizeMedia(repostOf.mediaUrls ?? []) : []),
+    [repostOf]
+  );
+  const origFirstVideoIndex = origMediaItems.findIndex((item) => item.type === 'video');
+  /** Vrai si la carte (ou son embed repost) contient une vidéo à observer */
+  const hasAnyVideo = firstVideoIndex >= 0 || origFirstVideoIndex >= 0;
   const fallbackAudioTitle = useMemo(() => {
     if (post.text?.trim()) return '';
     const audioItem = mediaItems.find((item) => item.type === 'audio');
@@ -740,7 +750,7 @@ export const AnnounceCard = React.memo(function AnnounceCard({
   }, [mediaItems, post.text]);
 
   useEffect(() => {
-    if (firstVideoIndex < 0) {
+    if (!hasAnyVideo) {
       if (mainVideoEl && activeVideoEl === mainVideoEl) {
         pauseVideo(mainVideoEl);
         activeVideoEl = null;
@@ -792,7 +802,7 @@ export const AnnounceCard = React.memo(function AnnounceCard({
         activeVideoEl = null;
       }
     };
-  }, [post.id, firstVideoIndex, mainVideoEl]);
+  }, [post.id, hasAnyVideo, mainVideoEl]);
   const replyCount = post.comments ?? 0;
   const postType = ((post as any).postType ?? 'SHOWCASE') as SoKinPostType;
   const ptMeta = POST_TYPE_META[postType] ?? POST_TYPE_META.SHOWCASE;
@@ -1102,8 +1112,6 @@ export const AnnounceCard = React.memo(function AnnounceCard({
         const origProfile = orig.author?.profile;
         const origName = origProfile?.displayName ?? 'Utilisateur';
         const origHandle = origProfile?.username?.replace(/^@/, '') ?? orig.author?.id?.slice(0, 8) ?? '';
-        const origMediaItems = categorizeMedia(orig.mediaUrls ?? []);
-        const origFirstVideoIndex = origMediaItems.findIndex((it) => it.type === 'video');
         const goToAuthor = (e: React.MouseEvent) => {
           e.stopPropagation();
           if (origProfile?.username) handleMentionClick(origProfile.username.replace(/^@/, ''));
@@ -1157,6 +1165,17 @@ export const AnnounceCard = React.memo(function AnnounceCard({
                 <MediaCollage
                   items={origMediaItems}
                   onItemClick={onMediaClick}
+                  onVideoToggle={handleVideoToggle}
+                  onVideoRef={(el, _item, index) => {
+                    // Si le reposter n'a pas de média propre, la vidéo de
+                    // l'embed devient la vidéo principale (tracking autoplay)
+                    if (mediaItems.length > 0) return;
+                    if (index !== origFirstVideoIndex) return;
+                    if (mainVideoRef.current !== el) {
+                      mainVideoRef.current = el;
+                      setMainVideoEl(el);
+                    }
+                  }}
                   autoPlayVideoIndex={origFirstVideoIndex >= 0 ? origFirstVideoIndex : undefined}
                 />
               </div>
