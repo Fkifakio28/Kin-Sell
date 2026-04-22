@@ -10,6 +10,7 @@
 import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
 import { sendPushToUser } from "../notifications/push.service.js";
+import { applyBoostRanking, hydrateBoostCampaigns } from "../boost/ranking.service.js";
 
 const isVideoMediaUrl = (value: string) => /\.(mp4|webm|mov|ogg)(\?.*)?$/i.test(value);
 const isAudioMediaUrl = (value: string) => /\.(mp3)(\?.*)?$/i.test(value);
@@ -305,7 +306,33 @@ export const getPublicFeed = async (
         skip: Math.max(offset, 0),
       });
 
-  return posts;
+  // ── Ranking boost-aware (Phase 4) ─────────────────────────────────────
+  // Respecte: visibility scope (LOCAL/NATIONAL/CROSS_BORDER), cap densité 25%, fairness
+  const campaignMap = await hydrateBoostCampaigns(
+    posts
+      .filter((p) => (p as any).isBoosted && (!p.boostExpiresAt || p.boostExpiresAt > new Date()))
+      .map((p) => ({ id: p.id, isBoosted: true })),
+    "POST",
+  );
+  const rankable = posts.map((p) => ({
+    id: p.id,
+    sellerId: p.authorId,
+    isBoosted: Boolean((p as any).isBoosted) && (!p.boostExpiresAt || p.boostExpiresAt > new Date()),
+    boostCampaignId: (p as any).boostCampaignId ?? null,
+    boostScope: campaignMap.get(p.id)?.scope ?? null,
+    boostTargetCountries: campaignMap.get(p.id)?.targetCountries ?? [],
+    boostBudgetSpent: campaignMap.get(p.id)?.budgetSpentUsdCents ?? 0,
+    boostBudgetTotal: campaignMap.get(p.id)?.budgetUsdCents ?? 0,
+    itemCity: (p as any).author?.profile?.city ?? null,
+    itemCountry: (p as any).author?.profile?.country ?? null,
+    createdAt: p.createdAt,
+    _original: p,
+  }));
+  const ranked = applyBoostRanking(rankable, {
+    viewerCity: city,
+    viewerCountry: country,
+  });
+  return ranked.map((r: any) => r._original);
 };
 
 /**

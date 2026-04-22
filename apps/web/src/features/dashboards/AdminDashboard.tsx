@@ -53,6 +53,7 @@ import {
 import AdminVerificationPanel from './AdminVerificationPanel';
 import AdminAnalyticsPanel from './AdminAnalyticsPanel';
 import AdminIncentivesPanel from './AdminIncentivesPanel';
+import AdminBoostKpiPanel from './AdminBoostKpiPanel';
 import { DashboardMessaging } from './DashboardMessaging';
 import TutorialOverlay, { useTutorial, TutorialRelaunchBtn } from '../../components/TutorialOverlay';
 import { adminDashboardSteps } from '../../components/tutorial-steps';
@@ -67,6 +68,7 @@ type AdminSection =
   | 'rankings' | 'admins' | 'currency' | 'audit'
   | 'settings' | 'messaging' | 'appeals' | 'subscriptions' | 'verification' | 'incentives'
   | 'ia-analytique' | 'ia-marchande' | 'ia-commande' | 'ia-ads' | 'ia-message'
+  | 'boost-kpi'
   | 'app-version';
 
 type ModalType =
@@ -130,6 +132,7 @@ const SECTION_DEFS: Array<{
   { key: 'ia-marchande',   label: 'IA Marchande',       icon: '🏷️', permission: 'AI_MANAGEMENT', group: 'Intelligence Artificielle' },
   { key: 'ia-commande',    label: 'IA de Commande',     icon: '🤖', permission: 'AI_MANAGEMENT', group: 'Intelligence Artificielle' },
   { key: 'ia-ads',         label: 'IA ADS',             icon: '📣', permission: 'ADS',           group: 'Intelligence Artificielle' },
+  { key: 'boost-kpi',      label: 'Boost KPI',          icon: '🚀', permission: 'ADS',           group: 'Intelligence Artificielle' },
   { key: 'ia-message',     label: 'IA Message',         icon: '📨', permission: 'AI_MANAGEMENT', group: 'Intelligence Artificielle' },
 ];
 
@@ -4098,6 +4101,8 @@ export function AdminDashboard() {
     );
   };
 
+  const renderBoostKpi = () => <AdminBoostKpiPanel />;
+
   const renderIaMessage = () => {
     const d = iaData as any;
     return (
@@ -4480,6 +4485,7 @@ export function AdminDashboard() {
       case 'ia-commande': return renderIaCommande();
       case 'ia-ads': return renderIaAds();
       case 'ia-message': return renderIaMessage();
+      case 'boost-kpi': return renderBoostKpi();
       default: return null;
     }
   };

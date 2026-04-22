@@ -4010,8 +4010,9 @@ function SoKinPageInner() {
       {/* ═══ MODAL BOOST FLOW ═══ */}
       {boostModalPostId && (
         <BoostFlowModal
-          postId={boostModalPostId}
-          postTitle={boostModalTitle}
+          target="POST"
+          targetId={boostModalPostId}
+          targetTitle={boostModalTitle}
           onClose={() => { setBoostModalPostId(null); setBoostModalTitle(undefined); }}
           onBoosted={() => {}}
         />
