@@ -9,8 +9,10 @@ const QA_SHOP_OWNER = "cmo44xx4y0002h1dvlgid60xj";
 console.log("=== Qui est l'owner de QA Shop ? ===");
 const qaOwner = await p.user.findUnique({
   where: { id: QA_SHOP_OWNER },
-  select: { id: true, email: true, role: true, createdAt: true, profile: { select: { displayName: true } }, business: { select: { id: true, publicName: true, slug: true } } }
+  select: { id: true, email: true, role: true, createdAt: true, profile: { select: { displayName: true } } }
 });
+const qaBiz = await p.business.findFirst({ where: { ownerUserId: QA_SHOP_OWNER }, select: { id: true, publicName: true, slug: true } }).catch(() => null);
+console.log("Business:", JSON.stringify(qaBiz));
 console.log(JSON.stringify(qaOwner, null, 2));
 
 console.log("\n=== Listings de QA Shop ===");
