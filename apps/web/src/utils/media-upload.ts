@@ -26,11 +26,9 @@ export async function prepareMediaUrl(file: File): Promise<string> {
 }
 
 export async function prepareMediaUrls(files: File[]): Promise<string[]> {
-  const results: string[] = [];
-  for (const file of files) {
-    results.push(await prepareMediaUrl(file));
-  }
-  return results;
+  // B17 audit : upload parallèle pour éviter timeout sur connexions lentes
+  // (5 photos séquentielles en 2G ≈ 100 s, en parallèle ≈ 20 s).
+  return Promise.all(files.map((file) => prepareMediaUrl(file)));
 }
 
 export function createUploadFile(blob: Blob, fileName: string, fallbackType: string): File {

@@ -97,10 +97,16 @@ public class KinSellMessagingService extends FirebaseMessagingService {
         // Réveiller l'écran
         wakeScreen();
 
-        String conversationId = msg.getData().get("conversationId");
-        String callerId = msg.getData().get("callerId");
-        String callType = msg.getData().get("callType");
-        String callerName = msg.getData().get("callerName");
+        // B6 audit : msg.getData() ne peut pas retourner null (contrat Firebase),
+        // mais on sécurise quand même au cas où un payload corrompu passe
+        // au travers.
+        java.util.Map<String, String> data = msg.getData();
+        if (data == null) data = new java.util.HashMap<>();
+
+        String conversationId = data.get("conversationId");
+        String callerId = data.get("callerId");
+        String callType = data.get("callType");
+        String callerName = data.get("callerName");
         if (conversationId == null) conversationId = "";
         if (callerId == null) callerId = "";
         if (callType == null) callType = "audio";

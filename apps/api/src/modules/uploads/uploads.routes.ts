@@ -117,7 +117,14 @@ router.post(
         }
         return `/uploads/${file.filename}`;
       })
-    );
+    ).catch((err) => {
+      // B11 audit : si UN fichier échoue, nettoyer TOUS les fichiers temp
+      // uploadés pour éviter une fuite disque progressive.
+      for (const f of files) {
+        try { fs.unlinkSync(f.path); } catch {}
+      }
+      throw err;
+    });
 
     response.status(201).json({ urls });
   })

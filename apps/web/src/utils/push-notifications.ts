@@ -56,12 +56,21 @@ async function sendSubscriptionToServer(subscription: PushSubscription): Promise
     subscription: subscription.toJSON(),
     userAgent: isBrowser() ? navigator.userAgent : undefined,
   };
-  await fetch(`${API_BASE}/notifications/push/subscribe`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify(payload),
-  }).catch(() => {});
+  // B5 audit : log l'erreur plutôt que silence complet pour diagnostiquer
+  // les échecs d'enregistrement push en production.
+  try {
+    const res = await fetch(`${API_BASE}/notifications/push/subscribe`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      console.warn("[Push] Subscribe failed:", res.status, res.statusText);
+    }
+  } catch (e) {
+    console.warn("[Push] Subscribe network error:", e);
+  }
 }
 
 async function sendUnsubscribeToServer(endpoint: string | null): Promise<void> {

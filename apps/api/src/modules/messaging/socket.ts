@@ -714,6 +714,10 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
             }
           }, OFFLINE_GRACE_MS);
 
+          // B9 audit : purge défensive d'un éventuel timer précédent
+          // (reconnects successifs rapides) avant d'enregistrer le nouveau.
+          const existing = pendingOfflineTimers.get(userId);
+          if (existing) clearTimeout(existing);
           pendingOfflineTimers.set(userId, timer);
         }
       }

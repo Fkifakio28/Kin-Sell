@@ -132,7 +132,7 @@ public class KinSellConnectionService extends Service {
         }
     }
 
-    private void acquireWakeLock() {
+    private synchronized void acquireWakeLock() {
         try {
             if (wakeLock != null && wakeLock.isHeld()) return;
             PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
@@ -154,7 +154,7 @@ public class KinSellConnectionService extends Service {
         }
     }
 
-    private void scheduleWakeLockRefresh() {
+    private synchronized void scheduleWakeLockRefresh() {
         try {
             if (refreshHandler == null) refreshHandler = new Handler(Looper.getMainLooper());
             if (refreshRunnable != null) refreshHandler.removeCallbacks(refreshRunnable);
@@ -172,7 +172,7 @@ public class KinSellConnectionService extends Service {
         } catch (Exception ignored) {}
     }
 
-    private void releaseWakeLock() {
+    private synchronized void releaseWakeLock() {
         try {
             if (refreshHandler != null && refreshRunnable != null) {
                 refreshHandler.removeCallbacks(refreshRunnable);
