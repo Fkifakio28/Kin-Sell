@@ -155,7 +155,7 @@ type SettingsForm = {
   confirmPassword: string;
 };
 
-const SECTION_DEFS: Array<{ key: HubSection; labelKey: string; icon: string }> = [
+const SECTION_DEFS: Array<{ key: HubSection; labelKey: string; icon: string; requires?: 'analytics' | 'auto-shop' | 'boosts' }> = [
   { key: 'overview', labelKey: 'user.overview', icon: '⊞' },
   { key: 'articles', labelKey: 'user.articles', icon: '🧩' },
   { key: 'sales', labelKey: 'user.sellSpace', icon: '📦' },
@@ -163,10 +163,10 @@ const SECTION_DEFS: Array<{ key: HubSection; labelKey: string; icon: string }> =
   { key: 'contacts', labelKey: 'user.myContacts', icon: '🤝' },
   { key: 'public-profile', labelKey: 'user.publicProfile', icon: '👤' },
   { key: 'verification', labelKey: 'user.verification', icon: '✅' },
-  { key: 'analytics', labelKey: 'user.analytics', icon: '📊' },
+  { key: 'analytics', labelKey: 'user.analytics', icon: '📊', requires: 'analytics' },
   { key: 'jobs', labelKey: 'user.jobs', icon: '💼' },
-  { key: 'auto-shop', labelKey: 'user.autoShop', icon: '🤖' },
-  { key: 'boosts', labelKey: 'user.boosts', icon: '🚀' },
+  { key: 'auto-shop', labelKey: 'user.autoShop', icon: '🤖', requires: 'auto-shop' },
+  { key: 'boosts', labelKey: 'user.boosts', icon: '🚀', requires: 'boosts' },
   { key: 'incentives', labelKey: 'user.incentives', icon: '🎁' },
   { key: 'kinsell', labelKey: 'Kin-Sell', icon: '🧠' },
   { key: 'settings', labelKey: 'user.settings', icon: '⚙' },
@@ -2094,7 +2094,12 @@ export function UserDashboard() {
         </div>
 
         <nav className="ud-nav" aria-label="Menu utilisateur privé">
-          {SECTION_DEFS.map((section) => (
+          {SECTION_DEFS.map((section) => {
+            const isLocked =
+              (section.requires === 'analytics' && !hasAnalytics) ||
+              (section.requires === 'auto-shop' && !hasIaOrderPlan) ||
+              (section.requires === 'boosts' && !hasBoostAccess);
+            return (
             section.key === 'my-profile-page' ? (
               <Link
                 key={section.key}
@@ -2109,7 +2114,7 @@ export function UserDashboard() {
               <button
                 key={section.key}
                 type="button"
-                className={`ud-nav-item${activeSection === section.key ? ' ud-nav-item--active' : ''}`}
+                className={`ud-nav-item${activeSection === section.key ? ' ud-nav-item--active' : ''}${isLocked ? ' ud-nav-item--locked' : ''}`}
                 onClick={() => {
                   if (section.key === 'messages') {
                     navigate('/messaging');
@@ -2118,12 +2123,15 @@ export function UserDashboard() {
                   setActiveSection(section.key);
                   setMobileSidebarOpen(false);
                 }}
+                title={isLocked ? 'Forfait requis' : undefined}
               >
                 <span className="ud-nav-icon">{section.icon}</span>
                 {!sidebarCollapsed && <span className="ud-nav-label">{t(section.labelKey)}</span>}
+                {isLocked && <span className="ud-nav-lock" aria-label="Forfait requis">🔒</span>}
               </button>
             )
-          ))}
+            );
+          })}
         </nav>
 
         {!sidebarCollapsed && (

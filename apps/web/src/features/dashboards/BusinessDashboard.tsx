@@ -288,7 +288,7 @@ export function BusinessDashboard() {
     }
   };
 
-  const navItems: { key: BizSection; labelKey: string; icon: string }[] = [
+  const navItems: { key: BizSection; labelKey: string; icon: string; requires?: 'analytics' | 'auto-shop' | 'boosts' }[] = [
     { key: 'dashboard',    labelKey: 'biz.navDashboard',   icon: '⊞' },
     { key: 'boutique',     labelKey: 'biz.navBoutique',    icon: '🏪' },
     { key: 'produits',     labelKey: 'biz.navProduits',    icon: '📦' },
@@ -296,10 +296,10 @@ export function BusinessDashboard() {
     { key: 'commandes',    labelKey: 'biz.navCommandes',   icon: '🛒' },
     { key: 'messages',     labelKey: 'biz.navMessages',    icon: '💬' },
     { key: 'contacts',     labelKey: 'biz.navContacts',    icon: '🤝' },
-    { key: 'analytics',    labelKey: 'biz.navAnalytics',   icon: '📊' },
+    { key: 'analytics',    labelKey: 'biz.navAnalytics',   icon: '📊', requires: 'analytics' },
     { key: 'jobs',         labelKey: 'user.jobs',          icon: '💼' },
-    { key: 'auto-shop',    labelKey: 'user.autoShop',      icon: '🤖' },
-    { key: 'boosts',       labelKey: 'user.boosts',         icon: '🚀' },
+    { key: 'auto-shop',    labelKey: 'user.autoShop',      icon: '🤖', requires: 'auto-shop' },
+    { key: 'boosts',       labelKey: 'user.boosts',         icon: '🚀', requires: 'boosts' },
     { key: 'incentives',   labelKey: 'user.incentives',     icon: '🎁' },
     { key: 'verification', labelKey: 'biz.navVerification', icon: '✅' },
     { key: 'kinsell',      labelKey: 'Kin-Sell',            icon: '🧠' },
@@ -1386,11 +1386,16 @@ export function BusinessDashboard() {
 
         {/* Navigation */}
         <nav className="ud-nav" aria-label={t('biz.navMenu')}>
-          {navItems.map(item => (
+          {navItems.map(item => {
+            const isLocked =
+              (item.requires === 'analytics' && !bizHasAnalytics) ||
+              (item.requires === 'auto-shop' && !bizHasIaOrderPlan) ||
+              (item.requires === 'boosts' && !bizHasBoostAccess);
+            return (
             <button
               key={item.key}
               type="button"
-              className={`ud-nav-item${activeSection === item.key ? ' ud-nav-item--active' : ''}`}
+              className={`ud-nav-item${activeSection === item.key ? ' ud-nav-item--active' : ''}${isLocked ? ' ud-nav-item--locked' : ''}`}
               onClick={() => {
                 if (item.key === 'messages') {
                   navigate('/messaging');
@@ -1399,11 +1404,14 @@ export function BusinessDashboard() {
                 setActiveSection(item.key);
                 setMobileSidebarOpen(false);
               }}
+              title={isLocked ? 'Forfait requis' : undefined}
             >
               <span className="ud-nav-icon">{item.icon}</span>
               {!sidebarCollapsed && <span className="ud-nav-label">{t(item.labelKey)}</span>}
+              {isLocked && <span className="ud-nav-lock" aria-label="Forfait requis">🔒</span>}
             </button>
-          ))}
+            );
+          })}
         </nav>
 
         {/* CTA Upgrade */}
