@@ -48,6 +48,7 @@ import TutorialOverlay, { useTutorial, TutorialRelaunchBtn } from '../../compone
 import { userDashboardSteps, userSalesSteps } from '../../components/tutorial-steps';
 import { AnalyticsCTAPanel } from '../../components/AnalyticsCTAPanel';
 import { FrustrationPanel } from '../../components/FrustrationPanel';
+import { DashboardJobAnalytics } from './DashboardJobAnalytics';
 import { SmartUpsellBanner, SmartUpsellCard, PostActionTip } from '../../components/SmartUpsell';
 import { PromoCreator } from '../../components/PromoCreator';
 import { OrderValidationQrModal } from '../../components/OrderValidationQrModal';
@@ -93,6 +94,7 @@ type HubSection =
   | 'public-profile'
   | 'verification'
   | 'analytics'
+  | 'jobs'
   | 'auto-shop'
   | 'boosts'
   | 'kinsell'
@@ -157,6 +159,7 @@ const SECTION_DEFS: Array<{ key: HubSection; labelKey: string; icon: string }> =
   { key: 'public-profile', labelKey: 'user.publicProfile', icon: '👤' },
   { key: 'verification', labelKey: 'user.verification', icon: '✅' },
   { key: 'analytics', labelKey: 'user.analytics', icon: '📊' },
+  { key: 'jobs', labelKey: 'user.jobs', icon: '💼' },
   { key: 'auto-shop', labelKey: 'user.autoShop', icon: '🤖' },
   { key: 'boosts', labelKey: 'user.boosts', icon: '🚀' },
   { key: 'kinsell', labelKey: 'Kin-Sell', icon: '🧠' },
@@ -4610,6 +4613,13 @@ export function UserDashboard() {
         {activeSection === 'boosts' && (
           <div className="ud-section animate-fade-in">
             <MyBoostsPanel />
+          </div>
+        )}
+
+        {/* ═══════════════  ONGLET EMPLOI  ═══════════════ */}
+        {activeSection === 'jobs' && (
+          <div className="ud-section animate-fade-in">
+            <DashboardJobAnalytics accountType="user" />
           </div>
         )}
 

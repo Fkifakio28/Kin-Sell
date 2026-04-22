@@ -1,0 +1,334 @@
+/* ════════════════════════════════════════
+   DashboardJobAnalytics — Chantier C Phase 7
+   Design system LOCK (variables CSS uniquement)
+   ════════════════════════════════════════ */
+
+.dja-root {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 8px 4px 24px;
+}
+
+.dja-header {
+  margin-bottom: 4px;
+}
+
+.dja-title {
+  margin: 0 0 4px;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--color-text, #111827);
+}
+
+.dja-subtitle {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--color-text-muted, #6b7280);
+  line-height: 1.4;
+}
+
+.dja-loading,
+.dja-error,
+.dja-empty {
+  padding: 20px;
+  text-align: center;
+  font-size: 0.88rem;
+  color: var(--color-text-muted, #6b7280);
+  border-radius: var(--radius-md, 12px);
+  background: var(--glass-bg, rgba(255, 255, 255, 0.06));
+  border: 1px dashed rgba(111, 88, 255, 0.2);
+}
+
+.dja-error { color: var(--color-danger, #ef4444); border-color: rgba(239, 68, 68, 0.25); }
+
+/* ── Cards ── */
+
+.dja-card {
+  padding: 16px 18px;
+  border-radius: var(--radius-md, 12px);
+  background: var(--glass-bg, rgba(255, 255, 255, 0.06));
+  border: 1px solid rgba(111, 88, 255, 0.15);
+  backdrop-filter: blur(10px);
+}
+
+.dja-card-title {
+  margin: 0 0 12px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--color-text, #111827);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.dja-scope-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(111, 88, 255, 0.12);
+  color: var(--color-primary, #6f58ff);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ── KPIs ── */
+
+.dja-kpi-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.dja-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(111, 88, 255, 0.06);
+  border: 1px solid rgba(111, 88, 255, 0.12);
+}
+
+.dja-kpi-value {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--color-primary, #6f58ff);
+  font-variant-numeric: tabular-nums;
+}
+
+.dja-kpi-label {
+  font-size: 0.72rem;
+  color: var(--color-text-muted, #6b7280);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+/* ── Chips catégories ── */
+
+.dja-chips-block { margin-bottom: 10px; }
+
+.dja-chips-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.72rem;
+  color: var(--color-text-muted, #6b7280);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.dja-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.dja-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(6, 182, 212, 0.08);
+  border: 1px solid rgba(6, 182, 212, 0.2);
+  font-size: 0.78rem;
+  color: var(--color-text, #111827);
+}
+
+.dja-chip em {
+  font-style: normal;
+  font-weight: 700;
+  color: #0891b2;
+  font-size: 0.72rem;
+}
+
+.dja-saturation {
+  margin-top: 10px;
+  font-size: 0.8rem;
+  color: var(--color-text-muted, #6b7280);
+}
+
+.dja-sat { text-transform: uppercase; letter-spacing: 0.04em; font-size: 0.75rem; }
+.dja-sat--low { color: var(--color-success, #22c55e); }
+.dja-sat--medium { color: #ca8a04; }
+.dja-sat--high { color: var(--color-danger, #ef4444); }
+
+/* ── Applications statuses ── */
+
+.dja-statuses {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.dja-status {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.03);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.dja-status-label {
+  font-size: 0.78rem;
+  color: var(--color-text-muted, #6b7280);
+}
+
+.dja-status-value {
+  font-weight: 700;
+  color: var(--color-text, #111827);
+  font-variant-numeric: tabular-nums;
+}
+
+.dja-frustration-signal {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  margin-top: 4px;
+  border-radius: 999px;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  font-size: 0.78rem;
+  color: var(--color-danger, #ef4444);
+  font-weight: 600;
+}
+
+.dja-frustration-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-danger, #ef4444);
+  animation: djaPulse 1.6s ease-in-out infinite;
+}
+
+@keyframes djaPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(1.3); }
+}
+
+.dja-best-cat {
+  margin: 10px 0 0;
+  font-size: 0.82rem;
+  color: var(--color-text-muted, #6b7280);
+}
+
+.dja-best-cat strong { color: var(--color-text, #111827); }
+
+/* ── Demand zones ── */
+
+.dja-zones {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.dja-zone {
+  padding: 12px;
+  border-radius: 10px;
+  background: rgba(111, 88, 255, 0.04);
+  border: 1px solid rgba(111, 88, 255, 0.12);
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.dja-zone:hover {
+  border-color: rgba(111, 88, 255, 0.32);
+  transform: translateY(-1px);
+}
+
+.dja-zone--locked {
+  background: repeating-linear-gradient(45deg,
+    rgba(111, 88, 255, 0.03),
+    rgba(111, 88, 255, 0.03) 6px,
+    rgba(111, 88, 255, 0.06) 6px,
+    rgba(111, 88, 255, 0.06) 12px);
+}
+
+.dja-zone-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+
+.dja-zone-city {
+  font-size: 0.9rem;
+  color: var(--color-text, #111827);
+}
+
+.dja-zone-country {
+  font-size: 0.72rem;
+  color: var(--color-text-muted, #6b7280);
+}
+
+.dja-zone-cat {
+  display: inline-block;
+  font-size: 0.75rem;
+  color: var(--color-primary, #6f58ff);
+  margin-bottom: 8px;
+}
+
+.dja-zone-metrics {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.dja-zone-metrics span {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 52px;
+}
+
+.dja-zone-metrics em {
+  font-style: normal;
+  font-size: 0.65rem;
+  color: var(--color-text-muted, #6b7280);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.dja-zone-metrics b {
+  font-size: 0.88rem;
+  color: var(--color-text, #111827);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.dja-zone-skills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.dja-skill {
+  font-size: 0.7rem;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(6, 182, 212, 0.1);
+  color: #0891b2;
+  border: 1px solid rgba(6, 182, 212, 0.2);
+}
+
+.dja-hidden-note {
+  margin: 12px 0 0;
+  font-size: 0.78rem;
+  text-align: center;
+  color: var(--color-text-muted, #6b7280);
+  font-style: italic;
+}
+
+/* ── Responsive ── */
+
+@media (max-width: 480px) {
+  .dja-card { padding: 14px; }
+  .dja-kpi { padding: 8px 10px; }
+  .dja-kpi-value { font-size: 1rem; }
+}

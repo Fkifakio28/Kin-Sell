@@ -28,7 +28,7 @@ import './dashboard.css';
 type BizSection =
   | 'dashboard' | 'boutique' | 'produits' | 'services'
   | 'commandes' | 'messages' | 'contacts'
-  | 'analytics' | 'verification' | 'auto-shop'
+  | 'analytics' | 'jobs' | 'verification' | 'auto-shop'
   | 'boosts' | 'kinsell' | 'parametres';
 
 type AbonnementTier = 'based' | 'medium' | 'premium';
@@ -42,6 +42,7 @@ import { AdsBoostPopup } from '../../components/AdsBoostPopup';
 import { PostPublishAdvisor } from '../../components/PostPublishAdvisor';
 import { PostSaleAdvisor } from '../../components/PostSaleAdvisor';
 import { AnalyticsCTAPanel } from '../../components/AnalyticsCTAPanel';
+import { DashboardJobAnalytics } from './DashboardJobAnalytics';
 import { DashboardAdvancedAnalytics } from './sections/DashboardAdvancedAnalytics';
 import MyBoostsPanel from '../../components/MyBoostsPanel';
 import { SmartUpsellBanner, SmartUpsellCard, PostActionTip } from '../../components/SmartUpsell';
@@ -293,6 +294,7 @@ export function BusinessDashboard() {
     { key: 'messages',     labelKey: 'biz.navMessages',    icon: '💬' },
     { key: 'contacts',     labelKey: 'biz.navContacts',    icon: '🤝' },
     { key: 'analytics',    labelKey: 'biz.navAnalytics',   icon: '📊' },
+    { key: 'jobs',         labelKey: 'user.jobs',          icon: '💼' },
     { key: 'auto-shop',    labelKey: 'user.autoShop',      icon: '🤖' },
     { key: 'boosts',       labelKey: 'user.boosts',         icon: '🚀' },
     { key: 'verification', labelKey: 'biz.navVerification', icon: '✅' },
@@ -3378,6 +3380,13 @@ export function BusinessDashboard() {
         {activeSection === 'boosts' && (
           <div className="ud-section animate-fade-in">
             <MyBoostsPanel />
+          </div>
+        )}
+
+        {/* ═══════════════  ONGLET EMPLOI (BUSINESS)  ═══════════════ */}
+        {activeSection === 'jobs' && (
+          <div className="ud-section animate-fade-in">
+            <DashboardJobAnalytics accountType="business" />
           </div>
         )}
 

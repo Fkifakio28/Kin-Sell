@@ -491,3 +491,106 @@ export interface DirectAnswerReport {
 export const directAnswers = {
   fetch: () => request<DirectAnswerReport>("/analytics/direct-answers"),
 };
+
+// ════════════════════════════════════════
+// Job Analytics — Chantier C Phase 3/7
+// ════════════════════════════════════════
+
+export type JobTier = "FREE" | "MEDIUM" | "PREMIUM";
+
+export interface JobDemandZone {
+  country: string;
+  countryCode: string | null;
+  city: string;
+  category: string;
+  openJobs: number;
+  applicants: number;
+  saturationIndex: number;
+  avgSalaryUsd: number | null;
+  topSkills: string[];
+  trend7d: string | null;
+  locked?: boolean;
+}
+
+export interface JobDemandMap {
+  updatedAt: string;
+  scope: "NATIONAL" | "CROSS_BORDER";
+  tier: JobTier;
+  zones: JobDemandZone[];
+  hiddenCount: number;
+}
+
+export interface JobMarketSnapshot {
+  tier: JobTier;
+  asCandidate: {
+    openJobsForMe: number;
+    avgAlignmentScore: number | null;
+    hotCategories: { category: string; jobs: number; alignment: number | null }[];
+  };
+  asRecruiter: {
+    activeJobs: number;
+    candidatePool: number;
+    avgApplicationsPerJob: number;
+    poolSaturation: "LOW" | "MEDIUM" | "HIGH";
+  } | null;
+}
+
+export interface JobApplicationsInsights {
+  totalApplications: number;
+  byStatus: Record<string, number>;
+  responseRate: number;
+  avgResponseDelayHours: number | null;
+  bestAlignmentCategory: string | null;
+  frustrationSignal: "NONE" | "LOW_RESPONSE_RATE" | "STALE" | "LOW_ALIGNMENT";
+  tier: JobTier;
+}
+
+export interface JobAlignmentResult {
+  jobId: string;
+  candidateUserId: string;
+  scoreGlobal: number;
+  breakdown?: {
+    qualifications: number;
+    experience: number;
+    skills: number;
+    geo: number;
+    salary: number;
+  };
+  strengths: string[];
+  gaps: string[];
+  verdict: string;
+  cta: { label: string; action: string; meta?: Record<string, unknown> };
+  tier: JobTier;
+}
+
+export interface JobPostingInsights {
+  jobId: string;
+  title: string;
+  views: number;
+  applications: number;
+  applicationRate: number;
+  qualityDistribution: { weak: number; fair: number; strong: number };
+  avgAlignment: number | null;
+  recommendations: string[];
+  tier: JobTier;
+}
+
+export const jobAnalytics = {
+  demandMap: (params?: { category?: string; countries?: string; limit?: number }) => {
+    const qs = new URLSearchParams();
+    if (params?.category) qs.set("category", params.category);
+    if (params?.countries) qs.set("countries", params.countries);
+    if (params?.limit != null) qs.set("limit", String(params.limit));
+    const q = qs.toString();
+    return request<JobDemandMap>(`/analytics/jobs/demand-map${q ? `?${q}` : ""}`);
+  },
+  marketSnapshot: () => request<JobMarketSnapshot>("/analytics/jobs/market-snapshot"),
+  myApplicationsInsights: () => request<JobApplicationsInsights>("/analytics/jobs/my-applications-insights"),
+  alignmentScore: (jobId: string, candidateUserId?: string) => {
+    const qs = new URLSearchParams({ jobId });
+    if (candidateUserId) qs.set("candidateUserId", candidateUserId);
+    return request<JobAlignmentResult>(`/analytics/jobs/alignment-score?${qs.toString()}`);
+  },
+  postingInsights: (jobId: string) =>
+    request<JobPostingInsights>(`/analytics/jobs/posting-insights?jobId=${encodeURIComponent(jobId)}`),
+};
