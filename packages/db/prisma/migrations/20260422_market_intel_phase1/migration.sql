@@ -1,4 +1,4 @@
-﻿-- CreateTable: MarketProduct
+-- CreateTable: MarketProduct
 CREATE TABLE "MarketProduct" (
     "id" TEXT NOT NULL,
     "slug" TEXT NOT NULL,
