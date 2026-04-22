@@ -39,37 +39,37 @@ for (const it of cephoraItems) {
   }
 }
 
-console.log("\n=== Historique login de CEPHORA (dernières 10) ===");
-const cephSessions = await p.userSession.findMany({
-  where: { userId: CEPHORA },
-  orderBy: { createdAt: "desc" },
-  take: 10,
-  select: { id: true, status: true, createdAt: true, lastActiveAt: true, ipAddress: true, userAgent: true }
-});
-for (const s of cephSessions) {
-  console.log(`  ${s.id} | ${s.status} | created=${s.createdAt.toISOString()} | lastActive=${s.lastActiveAt?.toISOString() ?? '-'} | ip=${s.ipAddress ?? '?'} | UA=${(s.userAgent ?? '').slice(0, 60)}`);
+console.log("\n=== Historique login de CEPHORA + QA + FILI (IP check) ===");
+const allIds = [CEPHORA, FILI, QA_SHOP_OWNER];
+for (const uid of allIds) {
+  const sessions = await p.userSession.findMany({
+    where: { userId: uid },
+    orderBy: { createdAt: "desc" },
+    take: 10,
+    select: { id: true, status: true, createdAt: true, lastSeenAt: true, ipAddress: true, userAgent: true, deviceId: true }
+  }).catch((e) => { console.log("ERR:", e.message); return []; });
+  console.log(`\n--- user ${uid} (${sessions.length} sessions) ---`);
+  for (const s of sessions) {
+    console.log(`  ${s.id.slice(0,10)} | ${s.status} | created=${s.createdAt.toISOString()} | seen=${s.lastSeenAt?.toISOString() ?? '-'} | ip=${s.ipAddress ?? '?'} | UA=${(s.userAgent ?? '').slice(0, 70)}`);
+  }
 }
 
-console.log("\n=== Historique login de FILI (dernières 10) ===");
-const filiSessions = await p.userSession.findMany({
-  where: { userId: FILI },
-  orderBy: { createdAt: "desc" },
-  take: 10,
-  select: { id: true, status: true, createdAt: true, lastActiveAt: true, ipAddress: true, userAgent: true }
-});
-for (const s of filiSessions) {
-  console.log(`  ${s.id} | ${s.status} | created=${s.createdAt.toISOString()} | lastActive=${s.lastActiveAt?.toISOString() ?? '-'} | ip=${s.ipAddress ?? '?'} | UA=${(s.userAgent ?? '').slice(0, 60)}`);
-}
-
-console.log("\n=== SecurityEvents récents pour CEPHORA & FILI ===");
-const events = await p.securityEvent.findMany({
-  where: { userId: { in: [CEPHORA, FILI] } },
-  orderBy: { createdAt: "desc" },
-  take: 20,
-  select: { id: true, userId: true, type: true, severity: true, ipAddress: true, createdAt: true, metadata: true }
-}).catch((e) => { console.log("(pas de table SecurityEvent accessible :", e.message, ")"); return []; });
-for (const e of events) {
-  console.log(`  ${e.createdAt.toISOString()} | user=${e.userId} | ${e.type} (${e.severity}) | ip=${e.ipAddress ?? '?'}`);
+console.log("\n=== IPs partagées entre plusieurs users ? ===");
+const ipShare = await p.$queryRaw`
+  SELECT "ipAddress", COUNT(DISTINCT "userId")::int AS "userCount", array_agg(DISTINCT "userId") AS "userIds"
+  FROM "UserSession"
+  WHERE "ipAddress" IS NOT NULL AND "createdAt" > NOW() - INTERVAL '7 days'
+  GROUP BY "ipAddress"
+  HAVING COUNT(DISTINCT "userId") > 1
+  ORDER BY "userCount" DESC
+  LIMIT 20
+`;
+for (const r of ipShare) {
+  const hasCeph = r.userIds.includes(CEPHORA);
+  const hasFili = r.userIds.includes(FILI);
+  const hasQa = r.userIds.includes(QA_SHOP_OWNER);
+  const tag = (hasCeph || hasFili || hasQa) ? " ← MATCH" : "";
+  console.log(`  IP ${r.ipAddress} | ${r.userCount} users distincts${tag} ${hasCeph?'[CEPHORA]':''}${hasFili?'[FILI]':''}${hasQa?'[QA]':''}`);
 }
 
 await p.$disconnect();
