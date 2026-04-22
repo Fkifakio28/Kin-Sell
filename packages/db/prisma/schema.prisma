@@ -257,6 +257,9 @@ model User {
   growthGrants             GrowthIncentiveGrant[]      @relation("GrowthGrants")
   growthEvents             GrowthIncentiveEvent[]      @relation("GrowthEvents")
   knowledgeIntent          UserKnowledgeIntent?        @relation("UserKnowledgeIntent")
+  boostCampaigns           BoostCampaign[]             @relation("UserBoostCampaigns")
+  wallet                   Wallet?                     @relation("UserWallet")
+  walletTransactions       WalletTransaction[]         @relation("UserWalletTransactions")
 
   @@index([role])
   @@index([accountStatus])
@@ -1388,6 +1391,9 @@ model SoKinPost {
   boostScore      Int             @default(0) // 0-100 potentiel boost
   scoredAt        DateTime? // dernier recalcul
   sponsored       Boolean         @default(false)
+  isBoosted       Boolean         @default(false)
+  boostExpiresAt  DateTime?
+  boostCampaignId String?
   status          SoKinPostStatus @default(ACTIVE)
   moderatedBy     String?
   moderatedAt     DateTime?
@@ -1413,6 +1419,8 @@ model SoKinPost {
   @@index([authorId, status, createdAt])
   @@index([postType])
   @@index([repostOfId])
+  @@index([isBoosted])
+  @@index([boostCampaignId])
 }
 
 model SoKinComment {
@@ -2958,4 +2966,137 @@ model UserKnowledgeIntent {
   user User @relation("UserKnowledgeIntent", fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+// ══════════════════════════════════════════════
+// BOOST UNIFIÉ (Chantier B — 2026-04-22)
+// Campagnes polymorphes (Listing / Post / Profile / Shop)
+// + Wallet réel (débit, refund prorata)
+// + KPI quotidien BoostMetric
+// ══════════════════════════════════════════════
+
+enum BoostTarget {
+  LISTING
+  POST
+  PROFILE
+  SHOP
+}
+
+enum BoostStatus {
+  ACTIVE
+  PAUSED
+  EXPIRED
+  CANCELED
+  EXHAUSTED
+}
+
+model BoostCampaign {
+  id                   String         @id @default(cuid())
+  userId               String
+  target               BoostTarget
+  targetId             String
+  scope                PromotionScope @default(LOCAL)
+  targetCountries      String[]       @default([])
+  budgetUsdCents       Int
+  budgetSpentUsdCents  Int            @default(0)
+  dailyCapUsdCents     Int?
+  durationDays         Int
+  pricingMultiplier    Float          @default(1.0)
+  status               BoostStatus    @default(ACTIVE)
+  startsAt             DateTime       @default(now())
+  expiresAt            DateTime
+  pausedAt             DateTime?
+  canceledAt           DateTime?
+  lastPacingAt         DateTime?
+  estReachMin          Int            @default(0)
+  estReachMax          Int            @default(0)
+  estClicksMin         Int            @default(0)
+  estClicksMax         Int            @default(0)
+  totalImpressions     Int            @default(0)
+  totalClicks          Int            @default(0)
+  totalContacts        Int            @default(0)
+  totalDmOpens         Int            @default(0)
+  totalSalesAttributed Int            @default(0)
+  notes                String?
+  metadata             Json?
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+
+  user         User                @relation("UserBoostCampaigns", fields: [userId], references: [id], onDelete: Cascade)
+  metrics      BoostMetric[]
+  transactions WalletTransaction[] @relation("CampaignTransactions")
+
+  @@index([userId, status])
+  @@index([target, targetId])
+  @@index([status, expiresAt])
+  @@index([scope])
+  @@index([createdAt])
+  @@index([expiresAt])
+}
+
+model BoostMetric {
+  id              String   @id @default(cuid())
+  campaignId      String
+  date            DateTime
+  impressions     Int      @default(0)
+  clicks          Int      @default(0)
+  contacts        Int      @default(0)
+  dmOpens         Int      @default(0)
+  salesAttributed Int      @default(0)
+  spendUsdCents   Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  campaign BoostCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, date])
+  @@index([date])
+  @@index([campaignId, date])
+}
+
+model Wallet {
+  id               String   @id @default(cuid())
+  userId           String   @unique
+  balanceUsdCents  Int      @default(0)
+  totalCreditCents Int      @default(0)
+  totalDebitCents  Int      @default(0)
+  currency         String   @default("USD")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user         User                @relation("UserWallet", fields: [userId], references: [id], onDelete: Cascade)
+  transactions WalletTransaction[] @relation("WalletTransactions")
+
+  @@index([userId])
+}
+
+enum WalletTransactionType {
+  CREDIT
+  DEBIT
+  REFUND
+  ADJUSTMENT
+}
+
+model WalletTransaction {
+  id             String                @id @default(cuid())
+  walletId       String
+  userId         String
+  type           WalletTransactionType
+  amountUsdCents Int
+  balanceAfter   Int
+  reference      String?
+  campaignId     String?
+  description    String?
+  createdBy      String?
+  metadata       Json?
+  createdAt      DateTime              @default(now())
+
+  wallet   Wallet         @relation("WalletTransactions", fields: [walletId], references: [id], onDelete: Cascade)
+  user     User           @relation("UserWalletTransactions", fields: [userId], references: [id], onDelete: Cascade)
+  campaign BoostCampaign? @relation("CampaignTransactions", fields: [campaignId], references: [id], onDelete: SetNull)
+
+  @@index([walletId, createdAt])
+  @@index([userId, createdAt])
+  @@index([campaignId])
+  @@index([type])
 }
