@@ -280,7 +280,7 @@ export const BoostFlowModal: FC<BoostFlowModalProps> = ({
                   <button
                     type="button"
                     className="bf-btn bf-btn--addon"
-                    onClick={() => { navigate('/account?section=wallet'); onClose(); }}
+                    onClick={() => { navigate('/account?section=boosts'); onClose(); }}
                   >
                     💳 Recharger mon portefeuille
                   </button>

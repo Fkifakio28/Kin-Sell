@@ -29,7 +29,7 @@ type BizSection =
   | 'dashboard' | 'boutique' | 'produits' | 'services'
   | 'commandes' | 'messages' | 'contacts'
   | 'analytics' | 'verification' | 'auto-shop'
-  | 'kinsell' | 'parametres';
+  | 'boosts' | 'kinsell' | 'parametres';
 
 type AbonnementTier = 'based' | 'medium' | 'premium';
 
@@ -43,6 +43,7 @@ import { PostPublishAdvisor } from '../../components/PostPublishAdvisor';
 import { PostSaleAdvisor } from '../../components/PostSaleAdvisor';
 import { AnalyticsCTAPanel } from '../../components/AnalyticsCTAPanel';
 import { DashboardAdvancedAnalytics } from './sections/DashboardAdvancedAnalytics';
+import MyBoostsPanel from '../../components/MyBoostsPanel';
 import { SmartUpsellBanner, SmartUpsellCard, PostActionTip } from '../../components/SmartUpsell';
 import { PromoCreator } from '../../components/PromoCreator';
 import { PromoBulkBar } from '../../components/PromoBulkBar';
@@ -293,6 +294,7 @@ export function BusinessDashboard() {
     { key: 'contacts',     labelKey: 'biz.navContacts',    icon: '🤝' },
     { key: 'analytics',    labelKey: 'biz.navAnalytics',   icon: '📊' },
     { key: 'auto-shop',    labelKey: 'user.autoShop',      icon: '🤖' },
+    { key: 'boosts',       labelKey: 'user.boosts',         icon: '🚀' },
     { key: 'verification', labelKey: 'biz.navVerification', icon: '✅' },
     { key: 'kinsell',      labelKey: 'Kin-Sell',            icon: '🧠' },
     { key: 'parametres',   labelKey: 'biz.navParametres',  icon: '⚙' },
@@ -3370,6 +3372,13 @@ export function BusinessDashboard() {
         {/* ═══════════════  BOUTIQUE AUTOMATIQUE (BUSINESS)  ═══════════════ */}
         {activeSection === 'auto-shop' && (
           <AutoShopTab t={t} formatMoney={formatMoneyFromUsdCents} />
+        )}
+
+        {/* ═══════════════  MES BOOSTS (BUSINESS)  ═══════════════ */}
+        {activeSection === 'boosts' && (
+          <div className="ud-section animate-fade-in">
+            <MyBoostsPanel />
+          </div>
         )}
 
         {/* ═══════════════  ONGLET KIN-SELL (BUSINESS)  ═══════════════ */}

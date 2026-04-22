@@ -74,6 +74,7 @@ import {
   KnowledgeIaPanel,
 } from './sections';
 import { DashboardAdvancedAnalytics } from './sections/DashboardAdvancedAnalytics';
+import MyBoostsPanel from '../../components/MyBoostsPanel';
 import './dashboard.css';
 
 const PRODUCT_CATEGORIES = LISTING_PRODUCT_CATEGORIES;
@@ -92,6 +93,7 @@ type HubSection =
   | 'verification'
   | 'analytics'
   | 'auto-shop'
+  | 'boosts'
   | 'kinsell'
   | 'settings';
 
@@ -155,6 +157,7 @@ const SECTION_DEFS: Array<{ key: HubSection; labelKey: string; icon: string }> =
   { key: 'verification', labelKey: 'user.verification', icon: '✅' },
   { key: 'analytics', labelKey: 'user.analytics', icon: '📊' },
   { key: 'auto-shop', labelKey: 'user.autoShop', icon: '🤖' },
+  { key: 'boosts', labelKey: 'user.boosts', icon: '🚀' },
   { key: 'kinsell', labelKey: 'Kin-Sell', icon: '🧠' },
   { key: 'settings', labelKey: 'user.settings', icon: '⚙' },
 ];
@@ -4599,6 +4602,13 @@ export function UserDashboard() {
         {/* ═══════════════  BOUTIQUE AUTOMATIQUE  ═══════════════ */}
         {activeSection === 'auto-shop' && (
           <AutoShopTab t={t} formatMoney={formatMoneyFromUsdCents} />
+        )}
+
+        {/* ═══════════════  MES BOOSTS  ═══════════════ */}
+        {activeSection === 'boosts' && (
+          <div className="ud-section animate-fade-in">
+            <MyBoostsPanel />
+          </div>
         )}
 
         {/* ═══════════════  ONGLET KIN-SELL  ═══════════════ */}
