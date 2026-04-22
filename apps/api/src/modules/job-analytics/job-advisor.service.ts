@@ -17,6 +17,8 @@
 import { prisma } from "../../shared/db/prisma.js";
 import { getUserTier, tierLimit } from "../../shared/billing/freemium-tier.js";
 import { getMyApplicationsInsights } from "./job-analytics.service.js";
+import { getRegionalJobContext } from "./regional-job-context.service.js";
+import { AFRICAN_COUNTRIES } from "../external-intel/types.js";
 import { QualificationLevel, type CountryCode } from "@prisma/client";
 
 export interface DirectAnswer {
@@ -390,7 +392,7 @@ async function computeEnrichedRules(
 // K1 — Fallback géographique progressif
 // ═════════════════════════════════════════════════════
 
-type SnapshotScope = "EXACT" | "COUNTRY_AGGREGATE" | "AFRICA_AGGREGATE";
+type SnapshotScope = "EXACT" | "COUNTRY_AGGREGATE" | "AFRICA_AGGREGATE" | "GEMINI_LIVE";
 
 /** Snapshot virtuel compatible avec les règles J4 (sous-ensemble de JobMarketSnapshot). */
 type EffectiveSnapshot = {
@@ -492,6 +494,56 @@ async function resolveEffectiveSnapshot(
       snapshot: aggregateSnapshots(category, null, null, afrRows),
       scope: "AFRICA_AGGREGATE",
     };
+  }
+
+  // Niveau 4 — GEMINI_LIVE (appel IA à la volée, cache Redis 6h côté service)
+  try {
+    const countryMeta = AFRICAN_COUNTRIES[countryCode];
+    const countryName = countryMeta?.name ?? countryCode;
+    const fallbackCity = city ?? countryMeta?.capital ?? "Kinshasa";
+    const ctx = await getRegionalJobContext(category, fallbackCity, countryName);
+    const primary = ctx.signals?.[0]?.data;
+    if (primary) {
+      return {
+        snapshot: {
+          category,
+          countryCode,
+          city: city ?? null,
+          // Pas de compteurs réels → approximation via demandLevel
+          openJobs:
+            primary.demandLevel === "HIGH"
+              ? 20
+              : primary.demandLevel === "MEDIUM"
+                ? 10
+                : primary.demandLevel === "LOW"
+                  ? 3
+                  : 0,
+          applicants: 0,
+          saturationIndex:
+            primary.saturation === "HIGH"
+              ? SATURATION_HIGH_THRESHOLD + 0.5
+              : primary.saturation === "MEDIUM"
+                ? 1.5
+                : primary.saturation === "LOW"
+                  ? 0.5
+                  : 0,
+          avgSalaryUsdCents:
+            primary.salaryRange?.minUsd != null && primary.salaryRange?.maxUsd != null
+              ? Math.round(((primary.salaryRange.minUsd + primary.salaryRange.maxUsd) / 2) * 100)
+              : null,
+          topSkills: primary.topSkills ?? [],
+          trend7dPercent:
+            primary.trend === "GROWING"
+              ? TRENDING_THRESHOLD_PCT + 5
+              : primary.trend === "DECLINING"
+                ? -20
+                : null,
+        },
+        scope: "GEMINI_LIVE",
+      };
+    }
+  } catch {
+    // silent — fallback best-effort, l'advisor retourne null snapshot
   }
 
   return { snapshot: null, scope: null };
