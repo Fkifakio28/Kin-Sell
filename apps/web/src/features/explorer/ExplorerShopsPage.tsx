@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './explorer.css';
 import { explorer as explorerApi, type ExplorerShopApi } from '../../lib/api-client';
+import { resolveMediaUrl } from '../../lib/api-core';
 import { useMarketPreference } from '../../app/providers/MarketPreferenceProvider';
 import { useHoverPopup, ProfileHoverPopup, type ProfileHoverData } from '../../components/HoverPopup';
 import { useScrollRestore } from '../../utils/useScrollRestore';
@@ -62,12 +63,12 @@ export function ExplorerShopsPage() {
         <div className="explorer-directory-grid explorer-directory-grid--shops">
           {shops.map((shop) => (
             <div role="button" key={shop.id} onClick={() => navigate(`/business/${shop.slug}`)} className="explorer-dir-card"
-              onMouseEnter={(e) => shopHover.handleMouseEnter({ avatarUrl: shop.coverImage || shop.logo, name: shop.name, username: shop.slug, kinId: null, publicPageUrl: `/business/${shop.slug}` }, e)}
+              onMouseEnter={(e) => shopHover.handleMouseEnter({ avatarUrl: resolveMediaUrl(shop.coverImage || shop.logo), name: shop.name, username: shop.slug, kinId: null, publicPageUrl: `/business/${shop.slug}` }, e)}
               onMouseLeave={shopHover.handleMouseLeave}
             >
               <div className="explorer-dir-card-cover">
                 {shop.coverImage ? (
-                  <img src={shop.coverImage} alt={shop.name} />
+                  <img src={resolveMediaUrl(shop.coverImage)} alt={shop.name} loading="lazy" decoding="async" />
                 ) : (
                   <div className="explorer-dir-card-cover--placeholder">🏪</div>
                 )}

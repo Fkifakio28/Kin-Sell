@@ -18,20 +18,14 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
-  display: none;
+  display: block;
 }
 
-/* PC : image 16:9 */
-@media (min-width: 768px) {
-  .ks-splash__img--desktop { display: block; }
-  .ks-splash__img--mobile  { display: none;  }
-}
-
-/* Mobile : image 9:16 */
-@media (max-width: 767px) {
-  .ks-splash__img--desktop { display: none;  }
-  .ks-splash__img--mobile  { display: block; }
-}
+/*
+  Les anciennes variantes .ks-splash__img--desktop / --mobile sont conservées
+  uniquement pour compatibilité : on n'en a plus besoin, <picture>/<source>
+  gère la sélection responsive nativement.
+*/
 
 .ks-splash__hint {
   position: absolute;

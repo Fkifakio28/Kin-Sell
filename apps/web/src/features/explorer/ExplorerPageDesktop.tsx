@@ -457,11 +457,20 @@ export function ExplorerPageDesktop() {
         <div className="explorer-hero-inner">
           {/* Hero Image (Left) */}
           <div className="explorer-hero-image">
-            <img
-              src="/assets/kin-sell/black-man-standing-cafe-with-shopping-bags.jpg"
-              alt="Vendeur Kin-Sell présentant des sacs de shopping"
-              className="explorer-hero-photo"
-            />
+            <picture>
+              <source
+                srcSet="/assets/kin-sell/black-man-standing-cafe-with-shopping-bags.webp"
+                type="image/webp"
+              />
+              <img
+                src="/assets/kin-sell/black-man-standing-cafe-with-shopping-bags.jpg"
+                alt="Vendeur Kin-Sell présentant des sacs de shopping"
+                className="explorer-hero-photo"
+                loading="eager"
+                decoding="async"
+                fetchPriority="high"
+              />
+            </picture>
           </div>
 
           {/* Hero Content (Right) */}

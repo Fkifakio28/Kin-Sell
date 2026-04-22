@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { blog, type PublicBlogPost } from "../../lib/api-client";
+import { resolveMediaUrl } from "../../lib/api-core";
 import { SeoMeta } from "../../components/SeoMeta";
 import { useAuth } from "../../app/providers/AuthProvider";
 import "./blog.css";
@@ -112,13 +113,13 @@ export function BlogPage() {
           {posts.map((post) => (
             <article key={post.id} className="glass-card blog-card">
               {post.coverImage && (
-                <img className="blog-card-cover" src={post.coverImage} alt={post.title} loading="lazy" />
+                <img className="blog-card-cover" src={resolveMediaUrl(post.coverImage)} alt={post.title} loading="lazy" decoding="async" />
               )}
               {post.mediaUrl && post.mediaType === "video" && (
-                <video className="blog-card-video" controls preload="metadata" src={post.mediaUrl} />
+                <video className="blog-card-video" controls preload="metadata" src={resolveMediaUrl(post.mediaUrl)} />
               )}
               {post.gifUrl && (
-                <img className="blog-card-gif" src={post.gifUrl} alt={`GIF ${post.title}`} loading="lazy" />
+                <img className="blog-card-gif" src={resolveMediaUrl(post.gifUrl)} alt={`GIF ${post.title}`} loading="lazy" decoding="async" />
               )}
               <div>
                 <span className="blog-card-meta">

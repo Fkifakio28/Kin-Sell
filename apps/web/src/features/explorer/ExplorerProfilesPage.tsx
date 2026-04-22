@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './explorer.css';
 import { explorer as explorerApi, type ExplorerProfileApi } from '../../lib/api-client';
+import { resolveMediaUrl } from '../../lib/api-core';
 import { useMarketPreference } from '../../app/providers/MarketPreferenceProvider';
 import { useHoverPopup, ProfileHoverPopup, type ProfileHoverData } from '../../components/HoverPopup';
 import { useScrollRestore } from '../../utils/useScrollRestore';
@@ -62,12 +63,12 @@ export function ExplorerProfilesPage() {
         <div className="explorer-directory-grid explorer-directory-grid--profiles">
           {profiles.map((profile) => (
             <div role="button" key={profile.id} onClick={() => navigate(profile.username ? `/user/${profile.username}` : '#')} className="explorer-dir-card explorer-dir-card--profile"
-              onMouseEnter={(e) => profileHover.handleMouseEnter({ avatarUrl: profile.avatarUrl, name: profile.displayName, username: profile.username, kinId: null, publicPageUrl: profile.username ? `/user/${profile.username}` : null }, e)}
+              onMouseEnter={(e) => profileHover.handleMouseEnter({ avatarUrl: resolveMediaUrl(profile.avatarUrl), name: profile.displayName, username: profile.username, kinId: null, publicPageUrl: profile.username ? `/user/${profile.username}` : null }, e)}
               onMouseLeave={profileHover.handleMouseLeave}
             >
               <div className="explorer-dir-card-avatar">
                 {profile.avatarUrl ? (
-                  <img src={profile.avatarUrl} alt={profile.displayName} />
+                  <img src={resolveMediaUrl(profile.avatarUrl)} alt={profile.displayName} loading="lazy" decoding="async" />
                 ) : (
                   <div className="explorer-dir-card-avatar--placeholder">👤</div>
                 )}

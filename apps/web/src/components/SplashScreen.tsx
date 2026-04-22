@@ -32,20 +32,35 @@ export function SplashScreen({ onDismiss }: SplashScreenProps) {
       role="presentation"
       aria-hidden="true"
     >
-      {/* Image PC (16:9) */}
-      <img
-        className="ks-splash__img ks-splash__img--desktop"
-        src="/assets/kin-sell/splash-desktop.png"
-        alt=""
-        draggable={false}
-      />
-      {/* Image mobile (9:16) */}
-      <img
-        className="ks-splash__img ks-splash__img--mobile"
-        src="/assets/kin-sell/splash-mobile.png"
-        alt=""
-        draggable={false}
-      />
+      {/*
+        Un seul <picture> responsive remplace les deux <img> (desktop+mobile)
+        précédemment toujours téléchargées. `<source media>` garantit qu'un
+        seul fichier est réellement chargé par le navigateur, et on privilégie
+        le WebP (plus léger) avec fallback PNG.
+      */}
+      <picture>
+        <source
+          media="(max-width: 767px)"
+          srcSet="/assets/kin-sell/splash-mobile.webp"
+          type="image/webp"
+        />
+        <source
+          media="(max-width: 767px)"
+          srcSet="/assets/kin-sell/splash-mobile.png"
+        />
+        <source
+          srcSet="/assets/kin-sell/splash-desktop.webp"
+          type="image/webp"
+        />
+        <img
+          className="ks-splash__img"
+          src="/assets/kin-sell/splash-desktop.png"
+          alt=""
+          draggable={false}
+          fetchPriority="high"
+          decoding="async"
+        />
+      </picture>
 
       {/* Barre de progression */}
       <span className="ks-splash__bar" />
