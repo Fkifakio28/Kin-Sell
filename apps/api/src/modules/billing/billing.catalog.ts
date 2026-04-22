@@ -57,7 +57,7 @@ export const PLAN_CATALOG: PlanCatalogItem[] = [
     scope: "USER",
     monthlyPriceUsdCents: 2000,
     analyticsTier: "MEDIUM",
-    features: ["IA_ORDER", "AUTO_REPLY", "SALES_AUTOMATION", "ANALYTICS_MEDIUM", "IA_MERCHANT", "IA_MERCHANT_AUTO"]
+    features: ["IA_ORDER", "AUTO_REPLY", "SALES_AUTOMATION", "ANALYTICS_MEDIUM", "IA_MERCHANT", "IA_MERCHANT_AUTO", "MARKET_INTEL_BASIC", "MARKET_INTEL_PREMIUM"]
   },
   {
     code: "STARTER",
@@ -73,7 +73,7 @@ export const PLAN_CATALOG: PlanCatalogItem[] = [
     scope: "BUSINESS",
     monthlyPriceUsdCents: 3000,
     analyticsTier: "MEDIUM",
-    features: ["SHOP", "BASIC_VISIBILITY", "BASIC_ADS", "IA_MERCHANT", "IA_MERCHANT_AUTO", "IA_ORDER", "ANALYTICS_MEDIUM"]
+    features: ["SHOP", "BASIC_VISIBILITY", "BASIC_ADS", "IA_MERCHANT", "IA_MERCHANT_AUTO", "IA_ORDER", "ANALYTICS_MEDIUM", "MARKET_INTEL_BASIC"]
   },
   {
     code: "SCALE",
@@ -81,7 +81,7 @@ export const PLAN_CATALOG: PlanCatalogItem[] = [
     scope: "BUSINESS",
     monthlyPriceUsdCents: 5000,
     analyticsTier: "PREMIUM",
-    features: ["SHOP", "BASIC_VISIBILITY", "BASIC_ADS", "IA_MERCHANT", "IA_MERCHANT_AUTO", "IA_ORDER", "ANALYTICS_PREMIUM"]
+    features: ["SHOP", "BASIC_VISIBILITY", "BASIC_ADS", "IA_MERCHANT", "IA_MERCHANT_AUTO", "IA_ORDER", "ANALYTICS_PREMIUM", "MARKET_INTEL_BASIC", "MARKET_INTEL_PREMIUM", "ARBITRAGE_ENGINE"]
   }
 ];
 

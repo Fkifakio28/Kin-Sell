@@ -18,6 +18,7 @@ const OfflinePage = lazy(() => import("../../features/offline/OfflinePage").then
 const UserDashboard = lazy(() => import("../../features/dashboards/UserDashboard").then(m => ({ default: m.UserDashboard })));
 const BusinessDashboard = lazy(() => import("../../features/dashboards/BusinessDashboard").then(m => ({ default: m.BusinessDashboard })));
 const AdminDashboard = lazy(() => import("../../features/dashboards/AdminDashboard").then(m => ({ default: m.AdminDashboard })));
+const MarketIntelPage = lazy(() => import("../../features/market-intel/MarketIntelPage").then(m => ({ default: m.MarketIntelPage })));
 const AboutPage = lazy(() => import("../../features/info-pages/AboutPage").then(m => ({ default: m.AboutPage })));
 const TermsPage = lazy(() => import("../../features/info-pages/TermsPage").then(m => ({ default: m.TermsPage })));
 const HowItWorksPage = lazy(() => import("../../features/info-pages/HowItWorksPage").then(m => ({ default: m.HowItWorksPage })));
@@ -87,6 +88,7 @@ export const router = createBrowserRouter([
           { path: "/account", element: <RoleGuard allowed="USER"><UserDashboard /></RoleGuard> },
           { path: "/business/dashboard", element: <RoleGuard allowed="BUSINESS"><BusinessDashboard /></RoleGuard> },
           { path: "/admin/dashboard", element: <RoleGuard allowed={["ADMIN", "SUPER_ADMIN"]}><AdminDashboard /></RoleGuard> },
+          { path: "/market-intel", element: <AuthGuard><MarketIntelPage /></AuthGuard> },
 
           { path: "/explorer/shops-online", element: <ExplorerShopsPage /> },
           { path: "/explorer/public-profiles", element: <ExplorerProfilesPage /> },

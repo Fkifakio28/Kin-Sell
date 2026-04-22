@@ -1,0 +1,41 @@
+{
+  "country": "CI",
+  "currency": "XOF",
+  "languages": ["fr"],
+  "sources": [
+    { "name": "Jumia Côte d'Ivoire",      "baseUrl": "https://www.jumia.ci",              "type": "marketplace", "parser": "jumia",         "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Afrimalin CI",             "baseUrl": "https://www.afrimalin.ci",          "type": "marketplace", "parser": "afrimalin",     "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Carrefour Market CI",      "baseUrl": "https://www.carrefour.ci",          "type": "marketplace", "parser": "generic-price", "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Prosuma",                  "baseUrl": "https://www.prosuma.com",           "type": "marketplace", "parser": "generic-price", "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Yango Deli CI",            "baseUrl": "https://deli.yango.com",            "type": "marketplace", "parser": "generic-price", "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Glovo CI",                 "baseUrl": "https://glovoapp.com/ci",           "type": "marketplace", "parser": "generic-price", "language": "fr", "trusted": true,  "verified": true },
+
+    { "name": "CoinAfrique CI",           "baseUrl": "https://www.coinafrique.com/cote-d-ivoire", "type": "classifieds", "parser": "coinafrique", "language": "fr", "trusted": true, "verified": true },
+    { "name": "Afribaba CI",              "baseUrl": "https://ci.afribaba.com",           "type": "classifieds", "parser": "afribaba",      "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Abidjan.net Annonces",     "baseUrl": "https://annonces.abidjan.net",      "type": "classifieds", "parser": "generic-price", "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Expat.com Côte d'Ivoire",  "baseUrl": "https://www.expat.com/en/destination/africa/ivory-coast/", "type": "classifieds", "parser": "expat", "language": "fr", "trusted": true,  "verified": true },
+
+    { "name": "Abidjan.net",              "baseUrl": "https://news.abidjan.net",          "type": "news",        "parser": "news-rss",      "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Fraternité Matin",         "baseUrl": "https://www.fratmat.info",          "type": "news",        "parser": "news-rss",      "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Koaci",                    "baseUrl": "https://www.koaci.com",             "type": "news",        "parser": "news-rss",      "language": "fr", "trusted": true,  "verified": true },
+    { "name": "L'Infodrome",              "baseUrl": "https://www.linfodrome.com",        "type": "news",        "parser": "news-rss",      "language": "fr", "trusted": true,  "verified": true },
+    { "name": "APA News CI",              "baseUrl": "https://apanews.net",               "type": "news",        "parser": "news-rss",      "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Le Patriote",              "baseUrl": "https://www.lepatriote.net",        "type": "news",        "parser": "news-rss",      "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Soir Info",                "baseUrl": "https://www.soirinfo.com",          "type": "news",        "parser": "news-rss",      "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Yeclo",                    "baseUrl": "https://www.yeclo.com",             "type": "news",        "parser": "news-rss",      "language": "fr", "trusted": false, "verified": true },
+    { "name": "RTI Info",                 "baseUrl": "https://www.rti.ci",                "type": "news",        "parser": "news-rss",      "language": "fr", "trusted": true,  "verified": true },
+
+    { "name": "INS — Institut National de la Statistique", "baseUrl": "https://www.ins.ci", "type": "stats",     "parser": "ins-ci",        "language": "fr", "trusted": true,  "verified": true },
+    { "name": "BCEAO",                    "baseUrl": "https://www.bceao.int",             "type": "stats",       "parser": "bceao",         "language": "fr", "trusted": true,  "verified": true },
+    { "name": "CEPICI (Investissements)", "baseUrl": "https://www.cepici.gouv.ci",        "type": "stats",       "parser": "generic-stats", "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Ministère Plan & Dév.",    "baseUrl": "https://www.plan.gouv.ci",          "type": "stats",       "parser": "generic-stats", "language": "fr", "trusted": true,  "verified": true },
+    { "name": "AGEPE",                    "baseUrl": "https://www.agence-emploi.ci",      "type": "stats",       "parser": "generic-stats", "language": "fr", "trusted": true,  "verified": true },
+
+    { "name": "Emploi.ci",                "baseUrl": "https://www.emploi.ci",             "type": "jobs",        "parser": "generic-jobs",  "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Novojob CI",               "baseUrl": "https://www.novojob.com",           "type": "jobs",        "parser": "generic-jobs",  "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Jobberman Côte d'Ivoire",  "baseUrl": "https://www.jobberman.ci",          "type": "jobs",        "parser": "generic-jobs",  "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Abidjan.net Emploi",       "baseUrl": "https://emploi.abidjan.net",        "type": "jobs",        "parser": "generic-jobs",  "language": "fr", "trusted": true,  "verified": true },
+    { "name": "AfricaWork CI",            "baseUrl": "https://www.africawork.com/fr/cote-divoire", "type": "jobs", "parser": "generic-jobs","language": "fr", "trusted": true,  "verified": true },
+    { "name": "LinkedIn Jobs CI",         "baseUrl": "https://www.linkedin.com/jobs/search?location=Ivory%20Coast", "type": "jobs", "parser": "linkedin-jobs", "language": "fr", "trusted": true, "verified": true }
+  ]
+}

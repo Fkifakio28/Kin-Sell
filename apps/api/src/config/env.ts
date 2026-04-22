@@ -107,6 +107,15 @@ const schema = z.object({
   EXTERNAL_INTEL_TIMEOUT_MS: z.coerce.number().default(15000),
   EXTERNAL_INTEL_RETRY_COUNT: z.coerce.number().default(3),
 
+  // ── Kin-Sell Analytique+ (Market Intelligence) ──
+  ENABLE_MARKET_INTEL: z.enum(["true", "false"]).default("true").transform((v) => v === "true"),
+  MAX_GEMINI_MARKET_CALLS_PER_DAY: z.coerce.number().min(0).max(500).default(50),
+  MARKET_INTEL_USER_AGENT: z.string().default("Kin-Sell-MarketIntel/1.0 (+https://kin-sell.com/bot)"),
+  MARKET_INTEL_FETCH_TIMEOUT_MS: z.coerce.number().default(15000),
+  MARKET_INTEL_FETCH_RETRIES: z.coerce.number().default(2),
+  MARKET_INTEL_FETCH_DELAY_MS: z.coerce.number().default(1500),
+  FRANKFURTER_API_URL: z.string().default("https://api.frankfurter.app"),
+
   // ── Firebase (FCM push) ──
   FIREBASE_PROJECT_ID: z.string().optional(),
   FIREBASE_CLIENT_EMAIL: z.string().optional(),

@@ -1,0 +1,38 @@
+{
+  "country": "CD",
+  "currency": "CDF",
+  "languages": ["fr"],
+  "sources": [
+    { "name": "Jumia RDC",                "baseUrl": "https://www.jumia.cd",              "type": "marketplace", "parser": "jumia",         "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Afrimalin RDC",            "baseUrl": "https://www.afrimalin.cd",          "type": "marketplace", "parser": "afrimalin",     "language": "fr", "trusted": true,  "verified": true },
+    { "name": "CongoMall",                "baseUrl": "https://www.congomall.cd",          "type": "marketplace", "parser": "generic-price", "language": "fr", "trusted": false, "verified": true },
+    { "name": "Glovo RDC (Kinshasa)",     "baseUrl": "https://glovoapp.com/cd",            "type": "marketplace", "parser": "generic-price", "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Kinshasa Digital Market",  "baseUrl": "https://www.kdmarket.cd",           "type": "marketplace", "parser": "generic-price", "language": "fr", "trusted": false, "verified": true },
+
+    { "name": "CoinAfrique RDC",          "baseUrl": "https://www.coinafrique.com/rdc",   "type": "classifieds", "parser": "coinafrique",   "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Afribaba RDC",             "baseUrl": "https://cd.afribaba.com",           "type": "classifieds", "parser": "afribaba",      "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Expat.com RDC",            "baseUrl": "https://www.expat.com/en/destination/africa/dr-congo/", "type": "classifieds", "parser": "expat", "language": "fr", "trusted": true,  "verified": true },
+
+    { "name": "Radio Okapi",              "baseUrl": "https://www.radiookapi.net",        "type": "news",        "parser": "news-rss",      "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Actualite.cd",             "baseUrl": "https://actualite.cd",              "type": "news",        "parser": "news-rss",      "language": "fr", "trusted": true,  "verified": true },
+    { "name": "7sur7 RDC",                "baseUrl": "https://7sur7.cd",                  "type": "news",        "parser": "news-rss",      "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Mediacongo",               "baseUrl": "https://www.mediacongo.net",        "type": "news",        "parser": "news-rss",      "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Politico.cd",              "baseUrl": "https://www.politico.cd",           "type": "news",        "parser": "news-rss",      "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Le Potentiel",             "baseUrl": "https://www.lepotentielonline.net", "type": "news",        "parser": "news-rss",      "language": "fr", "trusted": true,  "verified": true },
+    { "name": "DigitalCongo",             "baseUrl": "https://www.digitalcongo.net",      "type": "news",        "parser": "news-rss",      "language": "fr", "trusted": true,  "verified": true },
+    { "name": "ACP (Agence Congolaise)",  "baseUrl": "https://acp.cd",                    "type": "news",        "parser": "news-rss",      "language": "fr", "trusted": true,  "verified": true },
+    { "name": "CAS-Info",                 "baseUrl": "https://cas-info.ca",               "type": "news",        "parser": "news-rss",      "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Kinshasa Times",           "baseUrl": "https://www.kinshasatimes.cd",      "type": "news",        "parser": "news-rss",      "language": "fr", "trusted": false, "verified": true },
+
+    { "name": "INS RDC",                  "baseUrl": "https://www.ins-rdc.org",           "type": "stats",       "parser": "generic-stats", "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Banque Centrale du Congo", "baseUrl": "https://www.bcc.cd",                "type": "stats",       "parser": "bcc",           "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Ministère Budget RDC",     "baseUrl": "https://www.ministerebudget.cd",    "type": "stats",       "parser": "generic-stats", "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Ministère Plan RDC",       "baseUrl": "https://www.plan.gouv.cd",          "type": "stats",       "parser": "generic-stats", "language": "fr", "trusted": true,  "verified": true },
+
+    { "name": "Emploi.cd",                "baseUrl": "https://www.emploi.cd",             "type": "jobs",        "parser": "generic-jobs",  "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Jobs Radio Okapi",         "baseUrl": "https://www.radiookapi.net/emploi", "type": "jobs",        "parser": "generic-jobs",  "language": "fr", "trusted": true,  "verified": true },
+    { "name": "UN Jobs RDC",              "baseUrl": "https://www.unjobnet.org/jobs/location/democratic-republic-of-congo", "type": "jobs", "parser": "generic-jobs", "language": "fr", "trusted": true, "verified": true },
+    { "name": "Mediacongo Emplois",       "baseUrl": "https://www.mediacongo.net/offres-demplois", "type": "jobs", "parser": "generic-jobs", "language": "fr", "trusted": true, "verified": true },
+    { "name": "LinkedIn Jobs RDC",        "baseUrl": "https://www.linkedin.com/jobs/search?location=Democratic%20Republic%20of%20Congo", "type": "jobs", "parser": "linkedin-jobs", "language": "fr", "trusted": true, "verified": true }
+  ]
+}

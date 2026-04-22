@@ -62,7 +62,8 @@ import { startScoringScheduler } from "./modules/sokin/sokin-scoring.service.js"
 import { startAiAutonomyScheduler } from "./modules/analytics/ai-autonomy.service.js";
 import { expireBoosts, notifyBoostExpiringSoon } from "./modules/ads/ads-boost.service.js";
 import { startMessengerScheduler, stopMessengerScheduler } from "./modules/ads/messenger-scheduler.service.js";
-
+import { startMarketIntelScheduler, stopMarketIntelScheduler } from "./modules/market-intel/scheduler.js";
+import marketIntelRoutes from "./modules/market-intel/routes.js";
 const app = express();
 const httpServer = createServer(app);
 
@@ -274,6 +275,7 @@ app.use("/knowledge-ai", knowledgeAiRoutes);
 app.use("/boost", boostRoutes);
 app.use("/analytics/jobs", jobAnalyticsRoutes);
 app.use("/market/external", externalIntelRoutes);
+app.use("/market", marketIntelRoutes);
 
 // ── Client-side error reporting endpoint ──
 const _errorRateLimit = new Map<string, number>();
@@ -436,6 +438,11 @@ httpServer.listen(env.API_PORT, async () => {
 
   // ── Midnight Scheduler (External Intel + KB refresh) ──
   startMidnightScheduler();
+
+  // ── Market-Intel Scheduler (Kin-Sell Analytique+) ──
+  void startMarketIntelScheduler().catch((err) =>
+    logger.error({ err: err?.message }, "[market-intel] scheduler startup failed"),
+  );
 });
 
 // ── Graceful shutdown ──
@@ -443,6 +450,7 @@ const shutdown = async (signal: string) => {
   logger.info(`${signal} reçu — arrêt gracieux...`);
   stopMidnightScheduler();
   stopMessengerScheduler();
+  stopMarketIntelScheduler();
   httpServer.close(async () => {
     await disconnectRedis();
     await prisma.$disconnect();

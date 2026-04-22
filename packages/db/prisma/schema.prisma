@@ -3332,3 +3332,147 @@ model MarketDataGap {
   @@index([lastSeenAt])
   @@index([resolvedAt])
 }
+
+// -----------------------------------------------------------------------
+// Kin-Sell Analytique+ (module market-intel)
+// Voir docs/KIN-SELL-ANALYTIQUE-PLUS-SPEC.md
+// -----------------------------------------------------------------------
+
+model MarketProduct {
+  id             String        @id @default(cuid())
+  slug           String        @unique
+  displayName    String
+  categoryId     String
+  canonicalBrand String?
+  attributes     Json?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  prices         MarketPrice[]
+  trends         MarketTrend[] @relation("TrendProduct")
+
+  @@index([categoryId])
+  @@index([canonicalBrand])
+}
+
+model MarketPrice {
+  id                  String   @id @default(cuid())
+  productId           String
+  countryCode         String
+  city                String?
+  priceMinLocal       Int
+  priceMaxLocal       Int
+  priceMedianLocal    Int
+  localCurrency       String
+  priceMedianEurCents Int
+  sampleSize          Int      @default(1)
+  sourceIds           String[] @default([])
+  collectedAt         DateTime @default(now())
+  confidence          Float    @default(0.5)
+
+  product MarketProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([countryCode, productId])
+  @@index([productId, collectedAt])
+  @@index([collectedAt])
+}
+
+model MarketJob {
+  id               String         @id @default(cuid())
+  slug             String         @unique
+  displayName      String
+  parentCategoryId String
+  seniorityLevel   String         @default("mid") // "junior" | "mid" | "senior"
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  salaries         MarketSalary[]
+  trends           MarketTrend[]  @relation("TrendJob")
+
+  @@index([parentCategoryId])
+}
+
+model MarketSalary {
+  id                   String   @id @default(cuid())
+  jobId                String
+  countryCode          String
+  city                 String?
+  salaryMinLocal       Int
+  salaryMaxLocal       Int
+  salaryMedianLocal    Int
+  localCurrency        String
+  salaryMedianEurCents Int
+  unit                 String   @default("month") // "month" | "day" | "hour" | "project"
+  sampleSize           Int      @default(1)
+  sourceIds            String[] @default([])
+  collectedAt          DateTime @default(now())
+  confidence           Float    @default(0.5)
+
+  job MarketJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([countryCode, jobId])
+  @@index([jobId, collectedAt])
+}
+
+model MarketSource {
+  id            String    @id @default(cuid())
+  name          String
+  baseUrl       String
+  type          String // "marketplace" | "classifieds" | "press" | "stats" | "api"
+  countryCode   String
+  parser        String
+  language      String    @default("fr")
+  trusted       Boolean   @default(false)
+  active        Boolean   @default(true)
+  lastCrawledAt DateTime?
+  lastStatus    String?
+  lastError     String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([baseUrl, countryCode])
+  @@index([countryCode, type])
+  @@index([active, lastCrawledAt])
+}
+
+model MarketTrend {
+  id          String   @id @default(cuid())
+  scope       String // "product" | "job"
+  productId   String?
+  jobId       String?
+  countryCode String
+  period      String // "current" | "weekly" | "monthly" | "seasonal"
+  rank        Int
+  score       Float
+  deltaPct    Float?
+  season      String? // "dry-season" | "rainy-season" | "ramadan" | "back-to-school"
+  computedAt  DateTime @default(now())
+
+  product MarketProduct? @relation("TrendProduct", fields: [productId], references: [id], onDelete: Cascade)
+  job     MarketJob?     @relation("TrendJob", fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([countryCode, scope, period, rank])
+  @@index([computedAt])
+  @@index([productId])
+  @@index([jobId])
+}
+
+model ArbitrageOpportunity {
+  id                 String   @id @default(cuid())
+  scope              String // "product" | "job"
+  entityId           String
+  entityLabel        String
+  shortageCountry    String
+  surplusCountry     String
+  score              Float
+  demandIndex        Float
+  supplyIndex        Float
+  priceDeltaEurCents Int?
+  distanceKm         Int?
+  rationale          String
+  active             Boolean  @default(true)
+  computedAt         DateTime @default(now())
+
+  @@index([shortageCountry, score])
+  @@index([surplusCountry, score])
+  @@index([scope, active])
+  @@index([computedAt])
+}

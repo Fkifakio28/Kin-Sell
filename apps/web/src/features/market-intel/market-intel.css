@@ -1,0 +1,162 @@
+/* ─────────────────────────────────────────────────────
+ * Kin-Sell Analytique+ — Market Intel page
+ * Respect du design system (couleurs, spacing)
+ * ───────────────────────────────────────────────────── */
+
+.market-intel {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 1.5rem 1rem 3rem;
+  color: var(--ks-text, #1a1a1a);
+}
+
+.mi-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+}
+.mi-head h1 { margin: 0 0 0.25rem; font-size: 1.6rem; font-weight: 700; }
+.mi-sub { margin: 0; color: var(--ks-text-muted, #666); font-size: 0.9rem; max-width: 640px; }
+
+.mi-countries { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.mi-country {
+  display: flex; align-items: center; gap: 0.35rem;
+  padding: 0.35rem 0.7rem; border-radius: 999px;
+  background: #f4f4f6; border: 1px solid transparent;
+  cursor: pointer; transition: all 0.15s;
+  font-size: 0.85rem;
+}
+.mi-country:hover { background: #ebedf1; }
+.mi-country.active { background: #1a1a1a; color: #fff; }
+.mi-country .flag { font-size: 1.1rem; }
+.mi-country .code { font-weight: 600; letter-spacing: 0.03em; }
+
+.mi-tabs {
+  display: flex; gap: 0.3rem;
+  border-bottom: 1px solid #e5e7eb;
+  margin-bottom: 1.25rem;
+  overflow-x: auto;
+}
+.mi-tab {
+  padding: 0.6rem 1rem; border: none; background: transparent;
+  cursor: pointer; font-weight: 500; color: #555;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+}
+.mi-tab:hover { color: #111; }
+.mi-tab.active { color: #1a1a1a; border-bottom-color: var(--ks-primary, #0ea5e9); font-weight: 600; }
+
+.mi-subtabs { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+.mi-subtabs button {
+  padding: 0.35rem 0.8rem; border-radius: 999px; border: 1px solid #e5e7eb;
+  background: #fff; cursor: pointer; font-size: 0.85rem;
+}
+.mi-subtabs button.active { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
+
+.mi-body { min-height: 400px; }
+
+/* ── Table ──── */
+.mi-table {
+  width: 100%; border-collapse: collapse; font-size: 0.9rem;
+  background: #fff; border-radius: 12px; overflow: hidden;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+}
+.mi-table th {
+  background: #f9fafb; text-align: left; padding: 0.75rem 0.9rem;
+  font-weight: 600; font-size: 0.8rem; color: #444;
+  border-bottom: 1px solid #e5e7eb;
+}
+.mi-table td {
+  padding: 0.7rem 0.9rem; border-bottom: 1px solid #f3f4f6;
+  vertical-align: middle;
+}
+.mi-table tr:last-child td { border-bottom: none; }
+.mi-table tr:hover { background: #fafbfc; }
+.mi-table .brand { color: #888; font-weight: 400; font-size: 0.82rem; }
+.mi-table .muted { color: #666; font-size: 0.85rem; }
+
+.conf-bar {
+  width: 64px; height: 6px; background: #eceef2; border-radius: 3px; overflow: hidden;
+}
+.conf-bar span { display: block; height: 100%; background: linear-gradient(90deg, #fbbf24, #10b981); }
+
+/* ── Trends ──── */
+.mi-trend-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.4rem; }
+.mi-trend-row {
+  display: grid; grid-template-columns: 50px 1fr auto auto auto; gap: 0.8rem;
+  align-items: center; padding: 0.6rem 0.9rem;
+  background: #fff; border-radius: 10px; border: 1px solid #f0f2f5;
+}
+.mi-trend-row .rank { font-weight: 700; color: #9ca3af; }
+.mi-trend-row .label { font-weight: 500; }
+.mi-trend-row .season { font-size: 0.8rem; background: #fef3c7; padding: 2px 8px; border-radius: 999px; }
+.mi-trend-row .delta { font-weight: 600; font-size: 0.85rem; }
+.mi-trend-row .delta.up { color: #059669; }
+.mi-trend-row .delta.down { color: #dc2626; }
+.mi-trend-row .score { color: #6b7280; font-size: 0.8rem; }
+
+/* ── Arbitrage ──── */
+.mi-arb-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1rem;
+}
+.mi-arb-card {
+  background: #fff; border-radius: 14px; padding: 1rem;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06); border: 1px solid #f0f2f5;
+  display: flex; flex-direction: column; gap: 0.75rem;
+}
+.mi-arb-card header {
+  display: flex; align-items: center; gap: 0.6rem;
+}
+.mi-arb-card header strong { flex: 1; }
+.mi-arb-card .scope { font-size: 1.3rem; }
+.mi-arb-card .arb-score {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 40px; height: 32px; padding: 0 10px; border-radius: 999px;
+  background: linear-gradient(135deg, #0ea5e9, #6366f1); color: #fff;
+  font-weight: 700; font-size: 0.85rem;
+}
+.arb-flow { display: flex; align-items: center; gap: 0.6rem; justify-content: space-between; }
+.arb-side { text-align: center; padding: 0.6rem; border-radius: 10px; flex: 1; }
+.arb-side .cc { font-size: 0.95rem; font-weight: 600; margin-bottom: 2px; }
+.arb-side .lbl { font-size: 0.75rem; text-transform: uppercase; color: #6b7280; letter-spacing: 0.05em; }
+.arb-side .idx { font-size: 0.8rem; color: #374151; margin-top: 4px; }
+.arb-side.shortage { background: #fef2f2; }
+.arb-side.surplus { background: #ecfdf5; }
+.arb-arrow { font-size: 1.4rem; color: #9ca3af; }
+.arb-delta { margin: 0; font-size: 0.9rem; color: #111; }
+.arb-rationale { margin: 0; font-size: 0.85rem; line-height: 1.45; color: #555; }
+
+/* ── States ──── */
+.mi-loading, .mi-empty, .mi-error {
+  padding: 2rem; text-align: center; color: #6b7280;
+  background: #fff; border-radius: 12px; border: 1px dashed #e5e7eb;
+}
+.mi-error { color: #b91c1c; border-color: #fecaca; background: #fef2f2; }
+
+.mi-locked {
+  padding: 2.5rem 1.5rem; text-align: center; background: #fff;
+  border-radius: 14px; border: 1px solid #e5e7eb;
+  max-width: 480px; margin: 2rem auto;
+}
+.mi-locked .lock-icon { font-size: 2.5rem; margin-bottom: 0.5rem; }
+.mi-locked h3 { margin: 0 0 0.5rem; }
+.mi-locked p { margin: 0 0 1rem; color: #555; }
+.mi-locked small { display: block; margin-top: 0.75rem; color: #9ca3af; font-size: 0.75rem; }
+.mi-cta {
+  display: inline-block; padding: 0.6rem 1.25rem;
+  background: #0ea5e9; color: #fff; border-radius: 999px;
+  text-decoration: none; font-weight: 600;
+}
+.mi-cta:hover { background: #0284c7; }
+
+@media (max-width: 640px) {
+  .mi-table thead { display: none; }
+  .mi-table tbody tr {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 4px;
+    padding: 0.6rem; border-bottom: 1px solid #e5e7eb;
+  }
+  .mi-table tbody td { padding: 2px 0; border: none; }
+}
