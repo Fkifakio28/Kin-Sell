@@ -20,6 +20,7 @@ import { getMyApplicationsInsights } from "./job-analytics.service.js";
 import { getRegionalJobContext } from "./regional-job-context.service.js";
 import { AFRICAN_COUNTRIES } from "../external-intel/types.js";
 import { QualificationLevel, type CountryCode } from "@prisma/client";
+import { findMissingSkills, normalizeSkill, userHasSkill } from "./skills-normalizer.js";
 
 export interface DirectAnswer {
   severity: "INFO" | "WARN" | "CRITICAL";
@@ -223,18 +224,14 @@ async function computeEnrichedRules(
     });
   }
 
-  const userSkills = new Set<string>(
-    experiences.flatMap((e) => e.skills.map((s) => s.toLowerCase())),
-  );
+  const userSkills = experiences.flatMap((e) => e.skills);
   const userHasCert = qualifications.some(
     (q) => q.level === QualificationLevel.CERTIFICATION,
   );
 
   // ── R1 SKILL_GAP ──
   if (snapshot && snapshot.topSkills.length > 0) {
-    const missing = snapshot.topSkills.filter(
-      (s) => !userSkills.has(s.toLowerCase()),
-    );
+    const missing = findMissingSkills(userSkills, snapshot.topSkills);
     if (missing.length >= 3) {
       out.push({
         severity: "WARN",
@@ -385,9 +382,11 @@ async function computeEnrichedRules(
 
   // ── R7 CERTIFICATION_BOOST ──
   if (snapshot && snapshot.topSkills.length > 0 && !userHasCert) {
-    const certSkill = snapshot.topSkills.find((s) =>
-      CERT_KEYWORDS.some((k) => s.toLowerCase().includes(k)),
-    );
+    // Repère un topSkill dont la forme canonique matche un mot-clé de cert
+    const certSkill = snapshot.topSkills.find((s) => {
+      const canon = normalizeSkill(s);
+      return CERT_KEYWORDS.some((k) => canon.includes(k)) && !userHasSkill(userSkills, s);
+    });
     if (certSkill) {
       out.push({
         severity: "INFO",
