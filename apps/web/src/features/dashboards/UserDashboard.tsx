@@ -78,6 +78,7 @@ import {
 } from './sections';
 import { DashboardAdvancedAnalytics } from './sections/DashboardAdvancedAnalytics';
 import MyBoostsPanel from '../../components/MyBoostsPanel';
+import { LockedOverlay } from '../../components/LockedOverlay';
 import { DataSaverToggle } from '../../components/DataSaverToggle';
 import './dashboard.css';
 
@@ -614,6 +615,14 @@ export function UserDashboard() {
 
   /* ── Kin-Sell Analytique: fetch insights when analytics tab is opened ── */
   const { hasAnalytics, hasPremiumAnalytics, hasIaMarchand: hasIaMarchandPlan, hasIaOrder: hasIaOrderPlan } = useFeatureGate(activePlan);
+
+  // Accès Boost : plan BOOST/AUTO/PRO_VENDOR ou add-on BOOST_VISIBILITY
+  const hasBoostAccess = (() => {
+    if (!activePlan) return false;
+    const code = activePlan.planCode;
+    if (code === 'BOOST' || code === 'AUTO' || code === 'PRO_VENDOR') return true;
+    return activePlan.addOns?.some((a) => a.code === 'BOOST_VISIBILITY' && a.status === 'ACTIVE') ?? false;
+  })();
 
   // F19+F24: When plan changes, clean up localStorage toggles if access lost
   // NOTE: IA_MERCHANT (auto-nego) is FREE for all users — never wiped here
@@ -4615,13 +4624,29 @@ export function UserDashboard() {
 
         {/* ═══════════════  BOUTIQUE AUTOMATIQUE  ═══════════════ */}
         {activeSection === 'auto-shop' && (
-          <AutoShopTab t={t} formatMoney={formatMoneyFromUsdCents} />
+          <LockedOverlay
+            locked={!hasIaOrderPlan}
+            icon="🤖"
+            title="Auto-Shop nécessite l'IA Commande"
+            message="Automatisez vos ventes (marchandage, relances, validation) avec le forfait AUTO ou l'add-on IA Commande."
+            ctaLabel="Activer l'IA Commande"
+          >
+            <AutoShopTab t={t} formatMoney={formatMoneyFromUsdCents} />
+          </LockedOverlay>
         )}
 
         {/* ═══════════════  MES BOOSTS  ═══════════════ */}
         {activeSection === 'boosts' && (
           <div className="ud-section animate-fade-in">
-            <MyBoostsPanel />
+            <LockedOverlay
+              locked={!hasBoostAccess}
+              icon="🚀"
+              title="Boosts — forfait requis"
+              message="Boostez vos annonces et votre profil avec le forfait BOOST, AUTO, PRO VENDEUR ou l'add-on Boost Visibilité."
+              ctaLabel="Débloquer les boosts"
+            >
+              <MyBoostsPanel />
+            </LockedOverlay>
           </div>
         )}
 

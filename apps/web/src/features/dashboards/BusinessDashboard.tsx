@@ -45,6 +45,7 @@ import { AnalyticsCTAPanel } from '../../components/AnalyticsCTAPanel';
 import { DashboardJobAnalytics } from './DashboardJobAnalytics';
 import { DashboardAdvancedAnalytics } from './sections/DashboardAdvancedAnalytics';
 import MyBoostsPanel from '../../components/MyBoostsPanel';
+import { LockedOverlay } from '../../components/LockedOverlay';
 import { MyIncentivesPanel } from '../../components/MyIncentivesPanel';
 import { SmartUpsellBanner, SmartUpsellCard, PostActionTip } from '../../components/SmartUpsell';
 import { PromoCreator } from '../../components/PromoCreator';
@@ -447,6 +448,14 @@ export function BusinessDashboard() {
 
   /* ── AI plan gating for business ── */
   const { hasAnalytics: bizHasAnalytics, hasPremiumAnalytics: bizHasPremiumAnalytics, hasIaMarchand: bizHasIaMarchandPlan, hasIaOrder: bizHasIaOrderPlan } = useFeatureGate(myPlan, "BUSINESS");
+
+  // Accès Boost business : tout plan business non STARTER/BASED, ou add-on BOOST_VISIBILITY
+  const bizHasBoostAccess = (() => {
+    if (!myPlan) return false;
+    const code = (myPlan.planCode || '').toUpperCase();
+    if (code === 'BUSINESS' || code === 'SCALE' || code === 'MEDIUM' || code === 'PREMIUM') return true;
+    return myPlan.addOns?.some((a) => a.code === 'BOOST_VISIBILITY' && a.status === 'ACTIVE') ?? false;
+  })();
 
   // F19+F24: Clean up localStorage toggles if access lost
   // NOTE: IA_MERCHANT cleanup kept for BUSINESS scope (not free for businesses)
@@ -3375,13 +3384,29 @@ export function BusinessDashboard() {
 
         {/* ═══════════════  BOUTIQUE AUTOMATIQUE (BUSINESS)  ═══════════════ */}
         {activeSection === 'auto-shop' && (
-          <AutoShopTab t={t} formatMoney={formatMoneyFromUsdCents} />
+          <LockedOverlay
+            locked={!bizHasIaOrderPlan}
+            icon="🤖"
+            title="Auto-Shop nécessite l'IA Commande"
+            message="Automatisez vos ventes (marchandage, relances, validation) avec le forfait BUSINESS / SCALE ou l'add-on IA Commande."
+            ctaLabel="Activer l'IA Commande"
+          >
+            <AutoShopTab t={t} formatMoney={formatMoneyFromUsdCents} />
+          </LockedOverlay>
         )}
 
         {/* ═══════════════  MES BOOSTS (BUSINESS)  ═══════════════ */}
         {activeSection === 'boosts' && (
           <div className="ud-section animate-fade-in">
-            <MyBoostsPanel />
+            <LockedOverlay
+              locked={!bizHasBoostAccess}
+              icon="🚀"
+              title="Boosts — forfait requis"
+              message="Boostez votre boutique, vos articles et votre visibilité avec un forfait BUSINESS ou SCALE, ou l'add-on Boost Visibilité."
+              ctaLabel="Débloquer les boosts"
+            >
+              <MyBoostsPanel />
+            </LockedOverlay>
           </div>
         )}
 
