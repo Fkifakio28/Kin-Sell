@@ -144,6 +144,8 @@ export interface ParsedPricingParams {
   tab?: PricingTab;
   highlight?: string;
   section?: string;
+  coupon?: string;
+  plan?: string;
 }
 
 /**
@@ -156,11 +158,15 @@ export function parsePricingParams(
   const tab = params.get("tab");
   const highlight = params.get("highlight");
   const section = params.get("section");
+  const coupon = params.get("coupon");
+  const plan = params.get("plan");
 
   return {
     tab: tab === "users" || tab === "business" || tab === "addons" ? tab : undefined,
     highlight: highlight?.toUpperCase() || undefined,
     section: section || undefined,
+    coupon: coupon?.trim() || undefined,
+    plan: plan?.toUpperCase().trim() || undefined,
   };
 }
 
@@ -173,6 +179,8 @@ export function cleanPricingParams() {
   params.delete("tab");
   params.delete("highlight");
   params.delete("section");
+  params.delete("coupon");
+  params.delete("plan");
   const remaining = params.toString();
   const cleanUrl = remaining
     ? `${window.location.pathname}?${remaining}`

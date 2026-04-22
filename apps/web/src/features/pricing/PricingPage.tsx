@@ -266,21 +266,42 @@ export function PricingPage() {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const paymentRef = useRef<HTMLElement>(null);
 
-  // ── Deep-link : parse URL et appliquer tab + highlight ──
+  // ── Deep-link : parse URL et appliquer tab + highlight + coupon ──
   const deepLinkApplied = useRef(false);
+  const deepLinkCouponRef = useRef<{ code: string; plan: string | null } | null>(null);
   useEffect(() => {
     if (deepLinkApplied.current) return;
     const dl = parsePricingParams();
-    if (!dl.tab && !dl.highlight && !dl.section) return;
+    if (!dl.tab && !dl.highlight && !dl.section && !dl.coupon && !dl.plan) return;
     deepLinkApplied.current = true;
 
-    // Résoudre le bon tab
-    const targetTab: PricingTab = dl.tab ?? (dl.highlight ? tabForCode(dl.highlight) : defaultTab);
+    // Résoudre le bon tab (priorité : tab explicite > plan > highlight > défaut)
+    const targetTab: PricingTab = dl.tab
+      ?? (dl.plan ? tabForCode(dl.plan) : undefined)
+      ?? (dl.highlight ? tabForCode(dl.highlight) : undefined)
+      ?? defaultTab;
     setActiveTab(targetTab);
+
+    // Pré-remplir plan + coupon (IA Messenger ou conversion Grant)
+    if (dl.plan) {
+      setPendingPlanCode(dl.plan);
+      setTimeout(() => {
+        paymentRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 150);
+    }
+    if (dl.coupon) {
+      setPromoCode(dl.coupon);
+      deepLinkCouponRef.current = { code: dl.coupon, plan: dl.plan ?? null };
+      if (!dl.plan) {
+        setInfoMessage(`🎁 Coupon « ${dl.coupon} » prêt à être appliqué — choisissez un forfait pour bénéficier de la réduction.`);
+      }
+    }
 
     // Highlight + scroll
     if (dl.highlight) {
       highlightElement(`plan-${dl.highlight}`);
+    } else if (dl.plan) {
+      highlightElement(`plan-${dl.plan}`);
     } else if (dl.section === "analytics") {
       highlightElement("plan-analytics-lock");
     }
@@ -403,6 +424,18 @@ export function PricingPage() {
       setPromoLoading(false);
     }
   };
+
+  // ── Auto-validation du coupon deep-linké (IA Messenger / MyIncentivesPanel) ──
+  const deepLinkValidatedRef = useRef(false);
+  useEffect(() => {
+    if (deepLinkValidatedRef.current) return;
+    if (!deepLinkCouponRef.current) return;
+    if (!pendingPlanCode || !promoCode.trim()) return;
+    if (promoLoading) return;
+    deepLinkValidatedRef.current = true;
+    void handleValidatePromo();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingPlanCode, promoCode, promoLoading]);
 
   const handlePay = async () => {
     if (!pendingPlanCode) return;
