@@ -62,6 +62,30 @@ export async function unregisterFcmToken(token: string) {
   return prisma.fcmToken.deleteMany({ where: { token } });
 }
 
+/* ── Purge FCM tokens inactifs (> 7 jours sans mise à jour) ──
+ * Évite d'envoyer des notifications à des tokens morts qui coûtent des
+ * quotas FCM et retourne des erreurs (battery/quota).
+ */
+export async function purgeStaleFcmTokens(maxAgeDays = 7): Promise<number> {
+  const cutoff = new Date(Date.now() - maxAgeDays * 24 * 60 * 60 * 1000);
+  const result = await prisma.fcmToken.deleteMany({
+    where: { updatedAt: { lt: cutoff } },
+  });
+  if (result.count > 0) {
+    logger.info({ purged: result.count, maxAgeDays }, "[FCM] Tokens inactifs purgés");
+  }
+  return result.count;
+}
+
+let fcmPurgeInterval: ReturnType<typeof setInterval> | null = null;
+export function startFcmTokenPurgeScheduler(intervalHours = 24): void {
+  if (fcmPurgeInterval) return;
+  const run = () => { void purgeStaleFcmTokens().catch((err) => logger.warn({ err }, "[FCM] Purge échouée")); };
+  // premier run après 5 min (ne pas bloquer le boot)
+  setTimeout(run, 5 * 60 * 1000);
+  fcmPurgeInterval = setInterval(run, intervalHours * 60 * 60 * 1000);
+}
+
 /* ── Send push to a specific user (with retry on transient errors) ── */
 async function trySendNotification(
   sub: { endpoint: string; p256dh: string; auth: string; id: string },

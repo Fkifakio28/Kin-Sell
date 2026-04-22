@@ -52,10 +52,10 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       path: "/ws",
       reconnection: true,
       reconnectionAttempts: isSlow ? 10 : 50,
-      reconnectionDelay: isSlow ? 3000 : 1000,
-      reconnectionDelayMax: isSlow ? 60000 : 30000,
+      reconnectionDelay: isSlow ? 2000 : 800,
+      reconnectionDelayMax: isSlow ? 20000 : 10000,
       randomizationFactor: 0.3,
-      timeout: 30000,
+      timeout: 20000,
       ...(({ withCredentials: true }) as any),
     });
 

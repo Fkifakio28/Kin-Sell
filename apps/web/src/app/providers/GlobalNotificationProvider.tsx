@@ -15,6 +15,7 @@ import {
   onServiceWorkerMessage,
   registerServiceWorker,
   subscribeToPush,
+  unregisterActiveFcmToken,
 } from "../../utils/push-notifications";
 import { SK_PUSH_BANNER_DISMISSED } from "../../shared/constants/storage-keys";
 import { startBackgroundService, stopBackgroundService } from "../../utils/background-service";
@@ -142,7 +143,10 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
     if (isLoggedIn) {
       void startBackgroundService();
     } else {
-      void stopBackgroundService();
+      // Logout : désenregistrer le token FCM avant d'arrêter le service
+      void unregisterActiveFcmToken().finally(() => {
+        void stopBackgroundService();
+      });
     }
   }, [isLoggedIn]);
 

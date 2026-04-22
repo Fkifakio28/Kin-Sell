@@ -28,7 +28,7 @@ public class KinSellConnectionService extends Service {
     public static final int NOTIFICATION_ID = 9990;
     private static final String CHANNEL_ID = "kin-sell-connection-v2";
     private static final String TAG = "KinSellConnectionSvc";
-    private static final long WAKE_LOCK_TIMEOUT_MS = 45L * 60L * 1000L;
+    private static final long WAKE_LOCK_TIMEOUT_MS = 4L * 60L * 60L * 1000L;
     private PowerManager.WakeLock wakeLock;
 
     @Override

@@ -81,7 +81,17 @@ public class CallActionReceiver extends BroadcastReceiver {
             if (nm != null) {
                 nm.cancel(CallNotificationPlugin.ONGOING_NOTIFICATION_ID);
             }
-            // Broadcast interne pour que MainActivity informe le WebView
+            // Persister l'action (si l'app n'est pas encore attachée au receiver)
+            try {
+                android.content.SharedPreferences prefs =
+                    context.getSharedPreferences("kin_sell_prefs", Context.MODE_PRIVATE);
+                prefs.edit()
+                    .putString("pending_call_hangup",
+                        (conversationId != null ? conversationId : "") + "|" +
+                        (remoteUserId != null ? remoteUserId : ""))
+                    .apply();
+            } catch (Exception ignored) {}
+            // Broadcast interne pour que MainActivity informe le WebView (si vivante)
             Intent hangupIntent = new Intent("com.kinsell.app.CALL_HANGUP_INTERNAL");
             hangupIntent.setPackage(context.getPackageName());
             hangupIntent.putExtra("conversationId", conversationId != null ? conversationId : "");

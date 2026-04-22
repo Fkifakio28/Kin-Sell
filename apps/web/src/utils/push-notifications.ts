@@ -162,6 +162,8 @@ async function sendFcmTokenToServer(token: string): Promise<void> {
       console.log("[FCM] Token registered on server");
       // Clear pending token on success
       try { localStorage.removeItem("ks_pending_fcm_token"); } catch {}
+      // Mémoriser le token actif pour pouvoir le désenregistrer au logout
+      try { localStorage.setItem("ks_active_fcm_token", token); } catch {}
     } else {
       console.warn("[FCM] Server rejected token registration:", res.status);
       // Save for retry on next launch
@@ -172,6 +174,23 @@ async function sendFcmTokenToServer(token: string): Promise<void> {
     // Save for retry on next launch
     try { localStorage.setItem("ks_pending_fcm_token", token); } catch {}
   }
+}
+
+/** Supprime le token FCM actif du serveur (à appeler au logout). */
+export async function unregisterActiveFcmToken(): Promise<void> {
+  let token: string | null = null;
+  try { token = localStorage.getItem("ks_active_fcm_token"); } catch {}
+  if (!token) return;
+  try {
+    await fetch(`${API_BASE}/notifications/fcm/unregister`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ token }),
+    });
+  } catch { /* ignore */ }
+  try { localStorage.removeItem("ks_active_fcm_token"); } catch {}
+  try { localStorage.removeItem("ks_pending_fcm_token"); } catch {}
 }
 
 /**

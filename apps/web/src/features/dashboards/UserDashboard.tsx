@@ -644,19 +644,32 @@ export function UserDashboard() {
   }, [planLoaded, hasIaOrderPlan, hasIaMarchandAutoPlan]);
 
   // F24: Refetch plan every 5 min to detect subscription changes
+  // Pause en arrière-plan pour économiser la batterie (mobile)
   useEffect(() => {
     if (!isLoggedIn) return;
     const refreshPlan = () => {
       billing.myPlan().then((p) => setActivePlan(p)).catch(() => {});
     };
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible') refreshPlan();
+    let interval: ReturnType<typeof setInterval> | null = null;
+    const start = () => {
+      if (interval == null) interval = setInterval(refreshPlan, 5 * 60 * 1000);
     };
-    const interval = setInterval(refreshPlan, 60 * 1000);
+    const stop = () => {
+      if (interval != null) { clearInterval(interval); interval = null; }
+    };
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        refreshPlan();
+        start();
+      } else {
+        stop();
+      }
+    };
+    if (!document.hidden) start();
     window.addEventListener('focus', refreshPlan);
     document.addEventListener('visibilitychange', handleVisibility);
     return () => {
-      clearInterval(interval);
+      stop();
       window.removeEventListener('focus', refreshPlan);
       document.removeEventListener('visibilitychange', handleVisibility);
     };

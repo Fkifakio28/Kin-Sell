@@ -50,6 +50,7 @@ import externalIntelRoutes from "./modules/external-intel/external-intel.routes.
 import { startMidnightScheduler, stopMidnightScheduler } from "./modules/external-intel/midnight-scheduler.service.js";
 import { startVerificationScheduler } from "./modules/verification/verification.service.js";
 import { startAdScheduler } from "./modules/ads/ads.service.js";
+import { startFcmTokenPurgeScheduler } from "./modules/notifications/push.service.js";
 import { setupSocketServer } from "./modules/messaging/socket.js";
 import { errorHandler } from "./shared/errors/error-handler.js";
 import { seedDefaultAgents } from "./modules/analytics/ai-admin.service.js";
@@ -325,6 +326,7 @@ httpServer.listen(env.API_PORT, async () => {
   startScoringScheduler();
   await seedDefaultAgents();
   startVerificationScheduler();
+  startFcmTokenPurgeScheduler();
   // Weekly snapshots scheduler: every Sunday at 02:00 (check every hour)
   const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
   const scheduleWeeklySnapshots = () => {

@@ -89,7 +89,7 @@
         <service
             android:name=".KinSellConnectionService"
             android:exported="false"
-            android:foregroundServiceType="remoteMessaging"
+            android:foregroundServiceType="remoteMessaging|phoneCall|microphone"
             android:stopWithTask="false" />
     </application>
 
@@ -111,6 +111,8 @@
     <uses-permission android:name="android.permission.FLASHLIGHT" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_PHONE_CALL" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
 </manifest>
