@@ -53,7 +53,18 @@ function safePlayVideo(video: HTMLVideoElement): void {
     if (video.preload !== 'auto') video.preload = 'auto';
     const maybePromise = video.play();
     if (maybePromise && typeof (maybePromise as Promise<void>).catch === 'function') {
-      (maybePromise as Promise<void>).catch(() => undefined);
+      (maybePromise as Promise<void>).catch(() => {
+        // Mobile: autoplay bloqué quand le son est activé → retry muté
+        try {
+          video.muted = true;
+          const retry = video.play();
+          if (retry && typeof (retry as Promise<void>).catch === 'function') {
+            (retry as Promise<void>).catch(() => undefined);
+          }
+        } catch {
+          /* ignore */
+        }
+      });
     }
     // Ajouter la classe playing pour masquer l'icône play
     video.closest('.sk-media-item--video')?.classList.add('sk-video-playing');
@@ -411,6 +422,14 @@ function VideoItem({
       return;
     }
 
+    // ⚡ Mobile : si la vidéo est en pause, lancer la lecture IMMÉDIATEMENT
+    // pour préserver la user-gesture (sinon iOS/Android bloquent play())
+    if (video.paused) {
+      lastTapRef.current = undefined;
+      if (onVideoToggle) onVideoToggle(video, item);
+      return;
+    }
+
     lastTapRef.current = { time: now, side };
     tapTimerRef.current = setTimeout(() => {
       lastTapRef.current = undefined;
@@ -443,6 +462,7 @@ function VideoItem({
         src={`${videoSrc}#t=0.1`}
         ref={setVideoRef}
         loop
+        muted
         onTimeUpdate={(e) => {
           const v = e.currentTarget;
           if (rafRef.current) cancelAnimationFrame(rafRef.current);
@@ -458,6 +478,8 @@ function VideoItem({
         }}
         data-autoplay={isAutoPlay ? 'true' : undefined}
         playsInline
+        webkit-playsinline="true"
+        x5-playsinline="true"
         preload="metadata"
         disablePictureInPicture
         tabIndex={-1}
