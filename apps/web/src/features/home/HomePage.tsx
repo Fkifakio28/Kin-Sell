@@ -9,6 +9,7 @@ import { useScrollRestore } from "../../utils/useScrollRestore";
 import { useSocket } from "../../hooks/useSocket";
 import { useRealtimeSync } from "../../hooks/useRealtimeSync";
 import { useMarketPreference } from "../../app/providers/MarketPreferenceProvider";
+import { useDataSaver, dsInterval } from "../../app/providers/DataSaverProvider";
 import { NegotiatePopup } from "../negotiations/NegotiatePopup";
 import { BundleNegotiatePopup, type BundleListingItem } from "../negotiations/BundleNegotiatePopup";
 import { getUrgencyLabel } from "../../shared/promo/promo-engine";
@@ -112,6 +113,7 @@ export function HomePage() {
   void sokinTimer; // kept for compatibility
   const { isLoggedIn, user, logout } = useAuth();
   const { effectiveCountry, getCountryConfig } = useMarketPreference();
+  const { lowBandwidth } = useDataSaver();
   const defaultCity = getCountryConfig(effectiveCountry).defaultCity;
   const { on, off } = useSocket();
   const navigate = useNavigate();
@@ -360,9 +362,14 @@ export function HomePage() {
       if (blogRes.status === 'fulfilled') setBlogPosts(blogRes.value.posts);
     };
     void load();
-    const poll = setInterval(() => { void load(); }, 120_000); // refresh sidebar every 2min
+    // Sidebar refresh : 2min normal / 5min en mode économie, suspend si onglet caché.
+    const intervalMs = dsInterval(120_000, 300_000, lowBandwidth);
+    const poll = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      void load();
+    }, intervalMs);
     return () => { cancelled = true; clearInterval(poll); };
-  }, [defaultCity, effectiveCountry]);
+  }, [defaultCity, effectiveCountry, lowBandwidth]);
 
   // Load cart, seller stats, last buyer order
   useEffect(() => {
@@ -414,9 +421,14 @@ export function HomePage() {
       } catch { /* ignore */ }
     };
     void loadDash();
-    const poll = setInterval(() => { void loadDash(); }, 180_000); // fallback 3min (socket couvre le temps réel)
+    // Dashboard fallback : 3min normal / 6min en mode économie (socket couvre le temps réel).
+    const intervalMs = dsInterval(180_000, 360_000, lowBandwidth);
+    const poll = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      void loadDash();
+    }, intervalMs);
     return () => { cancelled = true; clearInterval(poll); };
-  }, [isLoggedIn]);
+  }, [isLoggedIn, lowBandwidth]);
 
   /* ── Realtime: orders/negotiations/cart events → resync dashboard sur reconnexion ── */
   useRealtimeSync({

@@ -15,6 +15,7 @@ import { useScrollRestore } from '../../utils/useScrollRestore';
 import { useAuth } from '../../app/providers/AuthProvider';
 import { useLocaleCurrency } from '../../app/providers/LocaleCurrencyProvider';
 import { useMarketPreference } from '../../app/providers/MarketPreferenceProvider';
+import { useDataSaver, dsLimit, dsInterval } from '../../app/providers/DataSaverProvider';
 import { NegotiatePopup } from '../negotiations/NegotiatePopup';
 import { useLockedCategories, isCategoryLocked } from '../../hooks/useLockedCategories';
 import { AdBanner } from '../../components/AdBanner';
@@ -31,6 +32,7 @@ const MODAL_PAGE_SIZE = 8;
 export function ExplorerPageDesktop() {
   const { t, formatPriceLabelFromUsdCents } = useLocaleCurrency();
   const { effectiveCountry, getCountryConfig } = useMarketPreference();
+  const { lowBandwidth } = useDataSaver();
   const lockedCats = useLockedCategories();
   const tutorial = useTutorial('explorer-desktop');
   const defaultCity = getCountryConfig(effectiveCountry).defaultCity;
@@ -380,20 +382,22 @@ export function ExplorerPageDesktop() {
       setIsLoadingArticles(true);
       try {
         const normalizedQuery = debouncedQuery.trim();
+        // Mode économie : limite réduite à 12 par type (au lieu de 24)
+        const limit = dsLimit(24, 12, lowBandwidth);
         const [productsRes, servicesRes] = await Promise.all([
           listingsApi.search({
             type: 'PRODUIT',
             q: normalizedQuery || undefined,
             country: effectiveCountry,
             city: defaultCity,
-            limit: 24,
+            limit,
           }),
           listingsApi.search({
             type: 'SERVICE',
             q: normalizedQuery || undefined,
             country: effectiveCountry,
             city: defaultCity,
-            limit: 24,
+            limit,
           }),
         ]);
 
@@ -435,11 +439,15 @@ export function ExplorerPageDesktop() {
 
     void loadArticles();
 
-    // Auto-refresh results every 60s
-    const poll = setInterval(() => { void loadArticles(); }, 60_000);
+    // Polling : 60s en normal, 180s en mode économie ; suspension onglet caché.
+    const intervalMs = dsInterval(60_000, 180_000, lowBandwidth);
+    const poll = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      void loadArticles();
+    }, intervalMs);
 
     return () => { cancelled = true; clearInterval(poll); };
-  }, [formatPriceLabelFromUsdCents, debouncedQuery, effectiveCountry, defaultCity]);
+  }, [formatPriceLabelFromUsdCents, debouncedQuery, effectiveCountry, defaultCity, lowBandwidth]);
 
   return (
     <>

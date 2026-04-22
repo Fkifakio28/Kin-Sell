@@ -11,6 +11,7 @@ import { useScrollRestore } from '../../utils/useScrollRestore';
 import { useAuth } from '../../app/providers/AuthProvider';
 import { useLocaleCurrency } from '../../app/providers/LocaleCurrencyProvider';
 import { useMarketPreference } from '../../app/providers/MarketPreferenceProvider';
+import { useDataSaver, dsLimit, dsInterval } from '../../app/providers/DataSaverProvider';
 import { NegotiatePopup } from '../negotiations/NegotiatePopup';
 import { getUrgencyLabel } from '../../shared/promo/promo-engine';
 import { useLockedCategories, isCategoryLocked } from '../../hooks/useLockedCategories';
@@ -282,6 +283,7 @@ function ExplorerPageMobile() {
   /* Mobile + Tablette → layout actuel inchangé */
   const { t, formatPriceLabelFromUsdCents } = useLocaleCurrency();
   const { effectiveCountry, getCountryConfig } = useMarketPreference();
+  const { lowBandwidth } = useDataSaver();
   const lockedCats = useLockedCategories();
   const tutorial = useTutorial('explorer-mobile');
   const defaultCity = getCountryConfig(effectiveCountry).defaultCity;
@@ -453,9 +455,11 @@ function ExplorerPageMobile() {
       setIsLoadingArticles(true);
       try {
         const q = debouncedQuery.trim() || undefined;
+        // Mode économie : limite réduite à 8 par type (au lieu de 24)
+        const limit = dsLimit(24, 8, lowBandwidth);
         const [pRes, sRes] = await Promise.all([
-          listingsApi.search({ type: 'PRODUIT', q, country: effectiveCountry, city: defaultCity, limit: 24 }),
-          listingsApi.search({ type: 'SERVICE', q, country: effectiveCountry, city: defaultCity, limit: 24 }),
+          listingsApi.search({ type: 'PRODUIT', q, country: effectiveCountry, city: defaultCity, limit }),
+          listingsApi.search({ type: 'SERVICE', q, country: effectiveCountry, city: defaultCity, limit }),
         ]);
         const map = (item: (typeof pRes.results)[number]): ExplorerArticlePreview => ({
           id: item.id, title: item.title, priceLabel: formatPriceLabelFromUsdCents(item.promoActive && item.promoPriceUsdCents != null ? item.promoPriceUsdCents : item.priceUsdCents), priceUsdCents: item.priceUsdCents,
@@ -475,9 +479,15 @@ function ExplorerPageMobile() {
       } catch { if (!cancelled) setLiveArticles([]); } finally { if (!cancelled) setIsLoadingArticles(false); }
     };
     void load();
-    const poll = setInterval(() => { void load(); }, 60_000);
+    // Mode économie : rafraîchissement toutes 180s au lieu de 60s,
+    // et suspension complète quand l'onglet est en arrière-plan.
+    const intervalMs = dsInterval(60_000, 180_000, lowBandwidth);
+    const poll = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      void load();
+    }, intervalMs);
     return () => { cancelled = true; clearInterval(poll); };
-  }, [formatPriceLabelFromUsdCents, debouncedQuery, effectiveCountry, defaultCity]);
+  }, [formatPriceLabelFromUsdCents, debouncedQuery, effectiveCountry, defaultCity, lowBandwidth]);
 
   /* ── Render ── */
   return (

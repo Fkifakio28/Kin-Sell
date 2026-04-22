@@ -78,6 +78,7 @@ import {
 } from './sections';
 import { DashboardAdvancedAnalytics } from './sections/DashboardAdvancedAnalytics';
 import MyBoostsPanel from '../../components/MyBoostsPanel';
+import { DataSaverToggle } from '../../components/DataSaverToggle';
 import './dashboard.css';
 
 const PRODUCT_CATEGORIES = LISTING_PRODUCT_CATEGORIES;
@@ -4301,6 +4302,11 @@ export function UserDashboard() {
               <p className="ud-placeholder-text" style={{ margin: '8px 0 0', fontSize: '0.84rem' }}>
                 {t('user.settingsDesc')}
               </p>
+            </section>
+
+            {/* ── Mode économie de données ── */}
+            <section className="ud-glass-panel ud-settings-section">
+              <DataSaverToggle />
             </section>
 
             <form onSubmit={handleSaveSettings}>

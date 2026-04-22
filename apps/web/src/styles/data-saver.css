@@ -1,0 +1,68 @@
+/* ═══════════════════════════════════════════
+   Data Saver toggle (Mode économie de données)
+   ═══════════════════════════════════════════ */
+
+.ks-data-saver {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ks-data-saver__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ks-data-saver__title {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.ks-data-saver__sub {
+  font-size: 0.8rem;
+  color: var(--color-text-muted, #64748b);
+  margin-top: 2px;
+}
+
+.ks-data-saver__row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.ks-data-saver__opt {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--color-border, #e5e7eb);
+  background: var(--color-bg-soft, #f8fafc);
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s ease;
+  font: inherit;
+  color: inherit;
+}
+
+.ks-data-saver__opt:hover {
+  border-color: var(--color-primary, #6f58ff);
+}
+
+.ks-data-saver__opt.is-active {
+  border-color: var(--color-primary, #6f58ff);
+  background: rgba(111, 88, 255, 0.08);
+  box-shadow: 0 0 0 2px rgba(111, 88, 255, 0.2);
+}
+
+.ks-data-saver__opt-label {
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.ks-data-saver__opt-hint {
+  font-size: 0.7rem;
+  color: var(--color-text-muted, #64748b);
+}

@@ -12,6 +12,7 @@ import { GlobalNotificationProvider } from "./app/providers/GlobalNotificationPr
 import { LocaleCurrencyProvider } from "./app/providers/LocaleCurrencyProvider";
 import { MarketPreferenceProvider } from "./app/providers/MarketPreferenceProvider";
 import { SocketProvider } from "./app/providers/SocketProvider";
+import { DataSaverProvider } from "./app/providers/DataSaverProvider";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { NativePermissionsGate } from "./features/onboarding/NativePermissionsGate";
 import { registerServiceWorker } from "./utils/push-notifications";
@@ -101,19 +102,21 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <ErrorBoundary>
       <ThemeProvider>
-        <MarketPreferenceProvider>
-          <LocaleCurrencyProvider>
-            <AuthProvider>
-              <SocketProvider>
-                <GlobalNotificationProvider>
-                  <NativePermissionsGate>
-                    <App />
-                  </NativePermissionsGate>
-                </GlobalNotificationProvider>
-              </SocketProvider>
-            </AuthProvider>
-          </LocaleCurrencyProvider>
-        </MarketPreferenceProvider>
+        <DataSaverProvider>
+          <MarketPreferenceProvider>
+            <LocaleCurrencyProvider>
+              <AuthProvider>
+                <SocketProvider>
+                  <GlobalNotificationProvider>
+                    <NativePermissionsGate>
+                      <App />
+                    </NativePermissionsGate>
+                  </GlobalNotificationProvider>
+                </SocketProvider>
+              </AuthProvider>
+            </LocaleCurrencyProvider>
+          </MarketPreferenceProvider>
+        </DataSaverProvider>
       </ThemeProvider>
     </ErrorBoundary>
   </React.StrictMode>
