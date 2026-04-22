@@ -1,0 +1,370 @@
+/* MyIncentivesPanel — Chantier D Phase D3
+   DESIGN-SYSTEM-LOCK : uniquement variables CSS Kin-Sell, pas de couleurs hard-codées.
+*/
+
+.mip-root {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.mip-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.mip-title {
+  font-size: 1.2rem;
+  color: var(--color-text);
+  margin: 0 0 6px;
+  font-weight: 700;
+}
+
+.mip-subtitle {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--color-text-muted);
+  max-width: 560px;
+  line-height: 1.5;
+}
+
+.mip-refresh-btn {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  width: 36px;
+  height: 36px;
+  color: var(--color-text);
+  cursor: pointer;
+  font-size: 1rem;
+  transition: all 0.18s ease;
+}
+
+.mip-refresh-btn:hover:not(:disabled) {
+  background: var(--color-primary-soft, rgba(111, 88, 255, 0.15));
+  border-color: var(--color-primary);
+  transform: rotate(90deg);
+}
+
+.mip-refresh-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.mip-action-msg {
+  padding: 12px 16px;
+  background: var(--glass-bg);
+  border: 1px solid var(--color-primary-soft, rgba(111, 88, 255, 0.25));
+  border-radius: 10px;
+  color: var(--color-text);
+  font-size: 0.9rem;
+}
+
+.mip-error {
+  padding: 12px 16px;
+  background: var(--color-danger-soft, rgba(244, 67, 54, 0.1));
+  border: 1px solid var(--color-danger);
+  border-radius: 10px;
+  color: var(--color-danger);
+  font-size: 0.9rem;
+}
+
+.mip-loading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 32px;
+  justify-content: center;
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+}
+
+.mip-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--glass-border);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: mip-spin 0.8s linear infinite;
+}
+
+@keyframes mip-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ═══ Section ═══ */
+
+.mip-section {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 14px;
+  padding: 20px;
+  backdrop-filter: blur(8px);
+}
+
+.mip-section-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 0 0 16px;
+}
+
+.mip-section-title--muted {
+  color: var(--color-text-muted);
+}
+
+.mip-count {
+  padding: 2px 10px;
+  background: var(--color-primary-soft, rgba(111, 88, 255, 0.15));
+  color: var(--color-primary);
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+/* ═══ Empty ═══ */
+
+.mip-empty {
+  padding: 24px 16px;
+  text-align: center;
+  color: var(--color-text-muted);
+}
+
+.mip-empty p {
+  margin: 0 0 6px;
+  font-size: 0.9rem;
+}
+
+.mip-empty-hint {
+  font-size: 0.82rem;
+  opacity: 0.75;
+}
+
+/* ═══ Grant cards ═══ */
+
+.mip-grant-list,
+.mip-coupon-list,
+.mip-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mip-grant-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  background: var(--glass-bg-strong, rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  flex-wrap: wrap;
+}
+
+.mip-grant-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.mip-grant-kind {
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.mip-grant-discount {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--color-primary);
+  line-height: 1;
+}
+
+.mip-grant-expiry {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+/* ═══ Buttons ═══ */
+
+.mip-btn {
+  padding: 10px 18px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-size: 0.88rem;
+  font-weight: 600;
+  transition: all 0.18s ease;
+  white-space: nowrap;
+}
+
+.mip-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.mip-btn-primary {
+  background: var(--color-primary);
+  color: #fff;
+}
+
+.mip-btn-primary:hover:not(:disabled) {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+}
+
+.mip-btn-secondary {
+  background: transparent;
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.mip-btn-secondary:hover:not(:disabled) {
+  background: var(--color-primary-soft, rgba(111, 88, 255, 0.1));
+}
+
+/* ═══ Coupon cards ═══ */
+
+.mip-coupon-card {
+  padding: 16px;
+  background: var(--glass-bg-strong, rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--color-primary-soft, rgba(111, 88, 255, 0.3));
+  border-radius: 12px;
+}
+
+.mip-coupon-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.mip-coupon-discount {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--color-primary);
+}
+
+.mip-coupon-expiry {
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+}
+
+.mip-coupon-code-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.mip-coupon-code {
+  flex: 1;
+  min-width: 180px;
+  padding: 10px 14px;
+  background: var(--color-primary-soft, rgba(111, 88, 255, 0.12));
+  border: 1px dashed var(--color-primary);
+  border-radius: 8px;
+  color: var(--color-text);
+  font-family: 'SF Mono', 'Consolas', monospace;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-align: center;
+}
+
+.mip-coupon-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.mip-coupon-meta {
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+}
+
+.mip-coupon-cta {
+  font-size: 0.84rem;
+  color: var(--color-primary);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.mip-coupon-cta:hover {
+  text-decoration: underline;
+}
+
+/* ═══ History ═══ */
+
+.mip-history {
+  opacity: 0.85;
+}
+
+.mip-history-item {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--glass-border);
+  font-size: 0.84rem;
+}
+
+.mip-history-item:last-child {
+  border-bottom: none;
+}
+
+.mip-history-tag {
+  padding: 2px 8px;
+  background: var(--glass-bg-strong, rgba(255, 255, 255, 0.05));
+  border-radius: 999px;
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.mip-history-desc {
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mip-history-date {
+  font-size: 0.76rem;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+@media (max-width: 560px) {
+  .mip-grant-card {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .mip-grant-card .mip-btn {
+    width: 100%;
+  }
+
+  .mip-history-item {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+}

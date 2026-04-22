@@ -1236,6 +1236,7 @@ export const fr: Record<string, string> = {
 
     "user.overview": "Vue d'ensemble",
     "user.articles": "Articles",
+    "user.incentives": "Mes avantages IA",
     "user.publishedArticles": "Articles publiés",
     "user.sales": "Ventes",
     "user.purchases": "Achats",

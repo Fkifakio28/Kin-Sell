@@ -1246,6 +1246,7 @@ export const en: Record<string, string> = {
     "report.submit": "Submit report",
 
     "user.overview": "Overview",
+    "user.incentives": "My AI Rewards",
     "user.articles": "Articles",
     "user.publishedArticles": "Published articles",
     "user.sales": "Sales",

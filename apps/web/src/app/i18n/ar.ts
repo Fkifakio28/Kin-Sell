@@ -1235,6 +1235,7 @@ export const ar: Record<string, string> = {
     "report.submit": "إرسال البلاغ",
 
     "user.overview": "نظرة عامة",
+    "user.incentives": "مكافآت الذكاء الاصطناعي",
     "user.articles": "المقالات",
     "user.publishedArticles": "المقالات المنشورة",
     "user.sales": "المبيعات",

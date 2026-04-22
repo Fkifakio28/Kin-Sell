@@ -29,7 +29,7 @@ type BizSection =
   | 'dashboard' | 'boutique' | 'produits' | 'services'
   | 'commandes' | 'messages' | 'contacts'
   | 'analytics' | 'jobs' | 'verification' | 'auto-shop'
-  | 'boosts' | 'kinsell' | 'parametres';
+  | 'boosts' | 'incentives' | 'kinsell' | 'parametres';
 
 type AbonnementTier = 'based' | 'medium' | 'premium';
 
@@ -45,6 +45,7 @@ import { AnalyticsCTAPanel } from '../../components/AnalyticsCTAPanel';
 import { DashboardJobAnalytics } from './DashboardJobAnalytics';
 import { DashboardAdvancedAnalytics } from './sections/DashboardAdvancedAnalytics';
 import MyBoostsPanel from '../../components/MyBoostsPanel';
+import { MyIncentivesPanel } from '../../components/MyIncentivesPanel';
 import { SmartUpsellBanner, SmartUpsellCard, PostActionTip } from '../../components/SmartUpsell';
 import { PromoCreator } from '../../components/PromoCreator';
 import { PromoBulkBar } from '../../components/PromoBulkBar';
@@ -297,6 +298,7 @@ export function BusinessDashboard() {
     { key: 'jobs',         labelKey: 'user.jobs',          icon: '💼' },
     { key: 'auto-shop',    labelKey: 'user.autoShop',      icon: '🤖' },
     { key: 'boosts',       labelKey: 'user.boosts',         icon: '🚀' },
+    { key: 'incentives',   labelKey: 'user.incentives',     icon: '🎁' },
     { key: 'verification', labelKey: 'biz.navVerification', icon: '✅' },
     { key: 'kinsell',      labelKey: 'Kin-Sell',            icon: '🧠' },
     { key: 'parametres',   labelKey: 'biz.navParametres',  icon: '⚙' },
@@ -3380,6 +3382,13 @@ export function BusinessDashboard() {
         {activeSection === 'boosts' && (
           <div className="ud-section animate-fade-in">
             <MyBoostsPanel />
+          </div>
+        )}
+
+        {/* ═══════════════  MES AVANTAGES IA (BUSINESS)  ═══════════════ */}
+        {activeSection === 'incentives' && (
+          <div className="ud-section animate-fade-in">
+            <MyIncentivesPanel />
           </div>
         )}
 

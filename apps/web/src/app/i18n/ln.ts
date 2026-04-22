@@ -1247,6 +1247,7 @@ export const ln: Record<string, string> = {
     "report.submit": "Kotinda signalement",
 
     "user.overview": "Tala nionso",
+    "user.incentives": "Mabongisi na ngai ya IA",
     "user.articles": "Ba article",
     "user.publishedArticles": "Ba article ebimá",
     "user.sales": "Batéki",
