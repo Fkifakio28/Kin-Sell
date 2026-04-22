@@ -123,6 +123,7 @@ router.post('/boost', requireAuth, asyncHandler(async (req: AuthenticatedRequest
     durationDays || 7,
     boostScope,
     targetCountries ?? [],
+    { skipAddonCheck: req.auth!.role === Role.SUPER_ADMIN },
   );
 
   // Journaliser
@@ -146,7 +147,7 @@ router.post('/boost', requireAuth, asyncHandler(async (req: AuthenticatedRequest
 
 // ── IA ADS: Activate highlight (boost all user listings) ─────────────────────
 // SÉCURITÉ : exige l'add-on BOOST_VISIBILITY actif ou rôle SUPER_ADMIN
-// RATE LIMIT : max 5 highlights actifs par utilisateur
+// RATE LIMIT : max 200 articles en boost simultanés par utilisateur
 router.post('/highlight', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
   const { durationDays, businessId, scope, targetCountries } = req.body as {
     durationDays?: number;
@@ -197,6 +198,7 @@ router.post('/highlight', requireAuth, asyncHandler(async (req: AuthenticatedReq
     businessId,
     hlScope,
     targetCountries ?? [],
+    { skipAddonCheck: req.auth!.role === Role.SUPER_ADMIN },
   );
 
   // Journaliser

@@ -229,9 +229,12 @@ export async function activateBoost(
   durationDays: number,
   scope: PromotionScope = "LOCAL",
   targetCountries: string[] = [],
+  opts: { skipAddonCheck?: boolean } = {},
 ): Promise<AdsBoostStatus> {
-  // Garde-fou dur : vérifier l'addon BOOST_VISIBILITY avant toute mutation
-  await assertAddonAccess(userId, AddonCode.BOOST_VISIBILITY);
+  // Garde-fou addon (sauf si déjà vérifié en amont, ex: SUPER_ADMIN bypass au niveau route)
+  if (!opts.skipAddonCheck) {
+    await assertAddonAccess(userId, AddonCode.BOOST_VISIBILITY);
+  }
 
   const listing = await prisma.listing.findUnique({
     where: { id: listingId },
@@ -287,9 +290,12 @@ export async function activateHighlight(
   businessId?: string,
   scope: PromotionScope = "LOCAL",
   targetCountries: string[] = [],
+  opts: { skipAddonCheck?: boolean } = {},
 ): Promise<{ boostedCount: number; expiresAt: string; boostScope: PromotionScope; pricingMultiplier: number }> {
-  // Garde-fou dur : vérifier l'addon BOOST_VISIBILITY avant toute mutation
-  await assertAddonAccess(userId, AddonCode.BOOST_VISIBILITY);
+  // Garde-fou addon (sauf si déjà vérifié en amont, ex: SUPER_ADMIN bypass)
+  if (!opts.skipAddonCheck) {
+    await assertAddonAccess(userId, AddonCode.BOOST_VISIBILITY);
+  }
 
   if (scope === "CROSS_BORDER" && targetCountries.length === 0) {
     throw new HttpError(400, "La mise en avant inter-pays nécessite au moins un pays cible.");

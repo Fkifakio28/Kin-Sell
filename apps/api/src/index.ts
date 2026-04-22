@@ -42,6 +42,8 @@ import vitrinesRoutes from "./modules/vitrines/vitrines.routes.js";
 import appVersionRoutes from "./modules/app-version/app-version.routes.js";
 import knowledgeBaseRoutes from "./modules/knowledge-base/knowledge-base.routes.js";
 import knowledgeAiRoutes from "./modules/knowledge-ai/knowledge-ai.routes.js";
+import boostRoutes from "./modules/boost/boost.routes.js";
+import { expireBoostCampaigns } from "./modules/boost/boost.service.js";
 import externalIntelRoutes from "./modules/external-intel/external-intel.routes.js";
 import { startMidnightScheduler, stopMidnightScheduler } from "./modules/external-intel/midnight-scheduler.service.js";
 import { startVerificationScheduler } from "./modules/verification/verification.service.js";
@@ -265,6 +267,7 @@ app.use("/vitrines", vitrinesRoutes);
 app.use("/app-version", appVersionRoutes);
 app.use("/knowledge-base", knowledgeBaseRoutes);
 app.use("/knowledge-ai", knowledgeAiRoutes);
+app.use("/boost", boostRoutes);
 app.use("/market/external", externalIntelRoutes);
 
 // ── Client-side error reporting endpoint ──
@@ -381,8 +384,9 @@ httpServer.listen(env.API_PORT, async () => {
     try {
       const expired = await expireBoosts();
       const warned = await notifyBoostExpiringSoon();
-      if (expired > 0 || warned > 0) {
-        logger.info(`[Boost] Scheduler: ${expired} expiré(s), ${warned} pré-notif(s)`);
+      const expiredCampaigns = await expireBoostCampaigns();
+      if (expired > 0 || warned > 0 || expiredCampaigns > 0) {
+        logger.info(`[Boost] Scheduler: ${expired} legacy expiré(s), ${warned} pré-notif(s), ${expiredCampaigns} campagne(s) expirée(s)`);
       }
     } catch (err) {
       logger.error(err, "[Boost] Scheduler error");
