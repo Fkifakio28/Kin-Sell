@@ -3296,6 +3296,10 @@ model JobMarketSnapshot {
   medianSalaryUsdCents Int?
   topSkills            String[]     @default([])
   trend7dPercent       Float? // évolution openJobs sur 7j (en %)
+  isManualOverride     Boolean      @default(false)
+  overriddenBy         String? // userId admin
+  overriddenAt         DateTime?
+  sourceNotes          String? // commentaire libre admin
   createdAt            DateTime     @default(now())
   updatedAt            DateTime     @updatedAt
 
@@ -3303,4 +3307,5 @@ model JobMarketSnapshot {
   @@index([country, category])
   @@index([countryCode, category])
   @@index([snapshotDate])
+  @@index([isManualOverride])
 }

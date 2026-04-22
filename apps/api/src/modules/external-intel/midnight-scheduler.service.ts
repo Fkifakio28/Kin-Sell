@@ -16,6 +16,7 @@ import { getRedis } from "../../shared/db/redis.js";
 import { prisma } from "../../shared/db/prisma.js";
 import { runFullExternalIngestion, type FullIngestionReport } from "./external-intel-orchestrator.service.js";
 import { runNightlyKnowledgeBaseRefresh } from "../knowledge-base/knowledge-base.service.js";
+import { refreshJobMarketSnapshots, type JobMarketSnapshotRefreshReport } from "../job-analytics/job-market-snapshot-refresh.service.js";
 
 const LOCK_KEY = "ks:midnight-scheduler:lock";
 const LAST_RUN_KEY = "ks:midnight-scheduler:last-run";
@@ -70,6 +71,7 @@ export interface MidnightRunReport {
   date: string;
   externalIngestion: FullIngestionReport | null;
   kbRefresh: { productsUpdated: number; statsRefreshed: number; dailyInsights: any; weeklyInsights: any } | null;
+  jobSnapshotRefresh: JobMarketSnapshotRefreshReport | null;
   durationMs: number;
   status: "SUCCESS" | "PARTIAL" | "FAILED" | "SKIPPED";
   error?: string;
@@ -84,11 +86,12 @@ async function executeMidnightRun(date?: Date): Promise<MidnightRunReport> {
 
   let externalResult: FullIngestionReport | null = null;
   let kbResult: any = null;
+  let jobSnapshotResult: JobMarketSnapshotRefreshReport | null = null;
   let errors: string[] = [];
 
   // Phase 1: External intelligence ingestion
   try {
-    logger.info("[MidnightScheduler] Phase 1/2: External intelligence ingestion...");
+    logger.info("[MidnightScheduler] Phase 1/3: External intelligence ingestion...");
     externalResult = await runFullExternalIngestion(targetDate);
     logger.info({
       sources: `${externalResult.successSources}/${externalResult.totalSources}`,
@@ -102,13 +105,29 @@ async function executeMidnightRun(date?: Date): Promise<MidnightRunReport> {
 
   // Phase 2: Knowledge Base refresh (internal collection + external blend)
   try {
-    logger.info("[MidnightScheduler] Phase 2/2: Knowledge Base refresh...");
+    logger.info("[MidnightScheduler] Phase 2/3: Knowledge Base refresh...");
     kbResult = await runNightlyKnowledgeBaseRefresh();
     logger.info("[MidnightScheduler] Phase 2 complete");
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     errors.push(`KB refresh: ${msg}`);
     logger.error(err, "[MidnightScheduler] Phase 2 FAILED");
+  }
+
+  // Phase 3: Job Market Snapshot refresh (blend interne + externe, respecte overrides)
+  try {
+    logger.info("[MidnightScheduler] Phase 3/3: Job Market Snapshot refresh...");
+    jobSnapshotResult = await refreshJobMarketSnapshots(targetDate);
+    logger.info({
+      created: jobSnapshotResult.zonesCreated,
+      updated: jobSnapshotResult.zonesUpdated,
+      skippedOverride: jobSnapshotResult.zonesSkippedOverride,
+      externalSignalsUsed: jobSnapshotResult.externalSignalsUsed,
+    }, "[MidnightScheduler] Phase 3 complete");
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    errors.push(`Job snapshot refresh: ${msg}`);
+    logger.error(err, "[MidnightScheduler] Phase 3 FAILED");
   }
 
   const durationMs = Date.now() - startTime;
@@ -140,6 +159,7 @@ async function executeMidnightRun(date?: Date): Promise<MidnightRunReport> {
     date: dateStr,
     externalIngestion: externalResult,
     kbRefresh: kbResult,
+    jobSnapshotRefresh: jobSnapshotResult,
     durationMs,
     status,
     error: errors.length > 0 ? errors.join("; ") : undefined,
@@ -241,7 +261,7 @@ export function stopMidnightScheduler(): void {
 export async function triggerManualMidnightRun(): Promise<MidnightRunReport> {
   const locked = await acquireLock();
   if (!locked) {
-    return { date: new Date().toISOString().split("T")[0], externalIngestion: null, kbRefresh: null, durationMs: 0, status: "SKIPPED", error: "Another run is in progress" };
+    return { date: new Date().toISOString().split("T")[0], externalIngestion: null, kbRefresh: null, jobSnapshotRefresh: null, durationMs: 0, status: "SKIPPED", error: "Another run is in progress" };
   }
   try {
     return await executeMidnightRun();
