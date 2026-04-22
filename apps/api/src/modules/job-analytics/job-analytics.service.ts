@@ -14,6 +14,7 @@
 import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
 import { getUserTier, tierLimit, type FreemiumTier } from "../../shared/billing/freemium-tier.js";
+import { enrichAnalyticsContext } from "../analytics/analytics-knowledge-bridge.js";
 import {
   JobListingStatus,
   JobApplicationStatus,
@@ -115,9 +116,17 @@ export async function getJobDemandMap(
   const tier = await getUserTier(userId);
   const hardLimit = Math.min(50, Math.max(1, query.limit ?? 20));
 
+  // Flux descendant : si la requête n'a pas de filtre explicite,
+  // on utilise l'intent Knowledge IA pour cibler automatiquement.
+  const ctx = await enrichAnalyticsContext(userId);
+  const effectiveCategory = query.category ?? ctx.categories[0];
+  const effectiveCountries = query.countries?.length
+    ? query.countries
+    : (ctx.countriesInterest.length ? ctx.countriesInterest : undefined);
+
   const whereBase: any = { status: JobListingStatus.ACTIVE };
-  if (query.category) whereBase.category = query.category;
-  if (query.countries?.length) whereBase.countryCode = { in: query.countries };
+  if (effectiveCategory) whereBase.category = effectiveCategory;
+  if (effectiveCountries?.length) whereBase.countryCode = { in: effectiveCountries };
 
   // Agrégation par (countryCode, city, category)
   const grouped = await prisma.jobListing.groupBy({

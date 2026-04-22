@@ -15,6 +15,7 @@ import {
   getRecommendations,
   KNOWLEDGE_COUNTRIES,
 } from "./knowledge-ai.service.js";
+import { enrichKnowledgeWithAnalytics } from "../analytics/analytics-knowledge-bridge.js";
 
 const router = Router();
 
@@ -134,8 +135,9 @@ router.get(
   requireAuth,
   asyncHandler(requireKnowledgeAccess),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const recommendations = await getRecommendations(req.auth!.userId);
-    res.json({ recommendations });
+    const baseRecs = await getRecommendations(req.auth!.userId);
+    const enriched = await enrichKnowledgeWithAnalytics(req.auth!.userId, baseRecs);
+    res.json({ recommendations: enriched });
   }),
 );
 
