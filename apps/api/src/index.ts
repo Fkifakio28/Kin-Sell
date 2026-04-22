@@ -44,6 +44,7 @@ import knowledgeBaseRoutes from "./modules/knowledge-base/knowledge-base.routes.
 import knowledgeAiRoutes from "./modules/knowledge-ai/knowledge-ai.routes.js";
 import boostRoutes from "./modules/boost/boost.routes.js";
 import { expireBoostCampaigns } from "./modules/boost/boost.service.js";
+import jobAnalyticsRoutes from "./modules/job-analytics/job-analytics.routes.js";
 import externalIntelRoutes from "./modules/external-intel/external-intel.routes.js";
 import { startMidnightScheduler, stopMidnightScheduler } from "./modules/external-intel/midnight-scheduler.service.js";
 import { startVerificationScheduler } from "./modules/verification/verification.service.js";
@@ -268,6 +269,7 @@ app.use("/app-version", appVersionRoutes);
 app.use("/knowledge-base", knowledgeBaseRoutes);
 app.use("/knowledge-ai", knowledgeAiRoutes);
 app.use("/boost", boostRoutes);
+app.use("/analytics/jobs", jobAnalyticsRoutes);
 app.use("/market/external", externalIntelRoutes);
 
 // ── Client-side error reporting endpoint ──
