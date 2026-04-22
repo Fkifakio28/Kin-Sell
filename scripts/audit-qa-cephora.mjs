@@ -11,8 +11,7 @@ const qaOwner = await p.user.findUnique({
   where: { id: QA_SHOP_OWNER },
   select: { id: true, email: true, role: true, createdAt: true, profile: { select: { displayName: true } } }
 });
-const qaBiz = await p.business.findFirst({ where: { ownerUserId: QA_SHOP_OWNER }, select: { id: true, publicName: true, slug: true } }).catch(() => null);
-console.log("Business:", JSON.stringify(qaBiz));
+console.log(JSON.stringify(qaOwner, null, 2));
 console.log(JSON.stringify(qaOwner, null, 2));
 
 console.log("\n=== Listings de QA Shop ===");
