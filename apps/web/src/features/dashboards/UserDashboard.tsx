@@ -4609,17 +4609,27 @@ export function UserDashboard() {
         )}
         {activeSection === 'analytics' && !hasAnalytics && (
           <div className="ud-section animate-fade-in">
-            <section className="ud-glass-panel">
-              <div className="ud-panel-head">
-                <h2 className="ud-panel-title">📊 Kin-Sell Analytique</h2>
-              </div>
-              <p style={{ fontSize: 13, color: 'var(--color-text-secondary, #aaa)', marginBottom: 16, lineHeight: 1.6 }}>
-                Kin-Sell Analytique vous aide à mieux décider, mieux vendre et mieux piloter vos performances.
-                Découvrez les recommandations personnalisées basées sur votre activité.
-              </p>
+            <LockedOverlay
+              locked={true}
+              icon="📊"
+              title="Kin-Sell Analytique"
+              message="Accédez aux analyses marché, aux insights personnalisés et aux recommandations IA en activant un forfait avec Analytique."
+              ctaLabel="Activer Analytique"
+              blurPx={6}
+            >
+              <DashboardAnalyticsInsights
+                t={t}
+                basicInsights={basicInsights}
+                deepInsights={deepInsights}
+                analyticsLoading={false}
+                hasAnalytics={true}
+                hasPremiumAnalytics={false}
+                formatMoney={formatMoneyFromUsdCents}
+              />
+            </LockedOverlay>
+            <div style={{ marginTop: 16 }}>
               <FrustrationPanel accountType="user" />
-              <AnalyticsCTAPanel />
-            </section>
+            </div>
           </div>
         )}
 

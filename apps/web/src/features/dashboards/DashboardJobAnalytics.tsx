@@ -291,9 +291,14 @@ function DemandMapCard({ data }: { data: JobDemandMap }) {
         ))}
       </div>
       {data.hiddenCount > 0 && (
-        <p className="dja-hidden-note">
-          {data.hiddenCount} zone{data.hiddenCount > 1 ? "s" : ""} supplémentaire{data.hiddenCount > 1 ? "s" : ""} en Premium.
-        </p>
+        <a href="/pricing" className="dja-hidden-cta">
+          <span className="dja-hidden-cta-icon">🔓</span>
+          <span className="dja-hidden-cta-text">
+            <strong>{data.hiddenCount} zone{data.hiddenCount > 1 ? "s" : ""} supplémentaire{data.hiddenCount > 1 ? "s" : ""}</strong>
+            {" "}réservée{data.hiddenCount > 1 ? "s" : ""} aux forfaits Premium
+          </span>
+          <span className="dja-hidden-cta-arrow">→</span>
+        </a>
       )}
     </div>
   );

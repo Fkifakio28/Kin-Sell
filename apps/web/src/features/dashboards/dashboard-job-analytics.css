@@ -325,6 +325,30 @@
   font-style: italic;
 }
 
+.dja-hidden-cta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 14px 0 0;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(111, 88, 255, 0.14), rgba(155, 122, 255, 0.08));
+  border: 1px solid rgba(111, 88, 255, 0.35);
+  color: var(--color-text-primary, #fff);
+  text-decoration: none;
+  font-size: 0.85rem;
+  transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+.dja-hidden-cta:hover {
+  transform: translateY(-1px);
+  border-color: rgba(111, 88, 255, 0.6);
+  background: linear-gradient(135deg, rgba(111, 88, 255, 0.22), rgba(155, 122, 255, 0.14));
+}
+.dja-hidden-cta-icon { font-size: 1.1rem; }
+.dja-hidden-cta-text { flex: 1; line-height: 1.35; }
+.dja-hidden-cta-text strong { color: #9b7aff; font-weight: 700; }
+.dja-hidden-cta-arrow { color: #9b7aff; font-weight: 700; }
+
 /* ── Responsive ── */
 
 @media (max-width: 480px) {
