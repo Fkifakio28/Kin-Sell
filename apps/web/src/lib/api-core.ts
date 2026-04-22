@@ -16,10 +16,23 @@ function joinWithApiBase(path: string): string {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
 
   if (base.startsWith("http://") || base.startsWith("https://")) {
-    if (base.endsWith("/api") && normalizedPath.startsWith("/api/")) {
-      return `${base}${normalizedPath.slice(4)}`;
+    const parsedBase = new URL(base);
+    const basePath = parsedBase.pathname.replace(/\/+$/, "");
+    let finalPath = normalizedPath;
+
+    // Legacy media URLs are often stored as /api/uploads/...
+    // If API_BASE already points to api subdomain root (without /api),
+    // we must drop that prefix to reach the real backend static route /uploads.
+    if (finalPath.startsWith("/api/uploads/") && basePath !== "/api") {
+      finalPath = finalPath.slice(4);
     }
-    return `${base}${normalizedPath}`;
+
+    // When API_BASE itself ends with /api, avoid duplicating /api.
+    if (basePath === "/api" && finalPath.startsWith("/api/")) {
+      finalPath = finalPath.slice(4);
+    }
+
+    return `${parsedBase.origin}${basePath}${finalPath}`;
   }
 
   if (base === "/api" && normalizedPath.startsWith("/api/")) return normalizedPath;

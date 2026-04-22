@@ -5,3 +5,4 @@ export { DashboardAnalyticsInsights } from "./DashboardAnalyticsInsights";
 export { DashboardContactsSection } from "./DashboardContactsSection";
 export { DashboardVerificationSection } from "./DashboardVerificationSection";
 export { AutoShopTab } from "./AutoShopTab";
+export { KnowledgeIaPanel } from "./KnowledgeIaPanel";

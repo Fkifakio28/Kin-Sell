@@ -41,6 +41,7 @@ import verificationRoutes from "./modules/verification/verification.routes.js";
 import vitrinesRoutes from "./modules/vitrines/vitrines.routes.js";
 import appVersionRoutes from "./modules/app-version/app-version.routes.js";
 import knowledgeBaseRoutes from "./modules/knowledge-base/knowledge-base.routes.js";
+import knowledgeAiRoutes from "./modules/knowledge-ai/knowledge-ai.routes.js";
 import externalIntelRoutes from "./modules/external-intel/external-intel.routes.js";
 import { startMidnightScheduler, stopMidnightScheduler } from "./modules/external-intel/midnight-scheduler.service.js";
 import { startVerificationScheduler } from "./modules/verification/verification.service.js";
@@ -263,6 +264,7 @@ app.use("/verification", verificationRoutes);
 app.use("/vitrines", vitrinesRoutes);
 app.use("/app-version", appVersionRoutes);
 app.use("/knowledge-base", knowledgeBaseRoutes);
+app.use("/knowledge-ai", knowledgeAiRoutes);
 app.use("/market/external", externalIntelRoutes);
 
 // ── Client-side error reporting endpoint ──

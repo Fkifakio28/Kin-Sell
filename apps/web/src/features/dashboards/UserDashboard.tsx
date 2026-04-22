@@ -71,6 +71,7 @@ import {
   DashboardContactsSection,
   DashboardVerificationSection,
   AutoShopTab,
+  KnowledgeIaPanel,
 } from './sections';
 import { DashboardAdvancedAnalytics } from './sections/DashboardAdvancedAnalytics';
 import './dashboard.css';
@@ -4637,6 +4638,9 @@ export function UserDashboard() {
                 )}
               </div>
 
+              {/* Knowledge IA — settings + conseils */}
+              <KnowledgeIaPanel hasAnalytics={hasAnalytics} />
+
               {/* IA disponibles */}
               <div style={{ marginBottom: 16 }}>
                 <h3 style={{ margin: '0 0 10px', fontSize: 15, color: 'var(--color-text-primary, #fff)' }}>🤖 IA disponibles</h3>
@@ -4644,6 +4648,7 @@ export function UserDashboard() {
                   {[
                     { name: 'IA Marchande', icon: '🤝', desc: 'Aide à la négociation', active: true, locked: false },
                     { name: 'Kin-Sell Analytique', icon: '📊', desc: 'Analyses marché & conseils', active: hasAnalytics, locked: !hasAnalytics },
+                    { name: 'Knowledge IA', icon: '🧠', desc: 'Détecte vos besoins & conseille', active: hasAnalytics, locked: !hasAnalytics },
                     { name: 'IA Commande', icon: '📦', desc: 'Automatisation des ventes', active: aiCommandeEnabled && (activePlan?.features?.includes('IA_ORDER') ?? false), locked: !(activePlan?.features?.includes('IA_ORDER') ?? false) },
                   ].map((ia) => (
                     <div key={ia.name} style={{

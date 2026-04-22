@@ -37,7 +37,7 @@ type AbonnementTier = 'based' | 'medium' | 'premium';
 import { USD_TO_CDF_RATE, DEFAULT_CURRENCY_RATES } from '../../shared/constants/currencies';
 import { SK_BIZ_AI_ADVICE, SK_BIZ_AI_AUTO_NEGO, SK_BIZ_AI_COMMANDE } from '../../shared/constants/storage-keys';
 import { useFeatureGate } from '../../shared/hooks/useFeatureGate';
-import { DashboardSecurityBlock, DashboardVerificationSection, DashboardAiSettings, AutoShopTab } from './sections';
+import { DashboardSecurityBlock, DashboardVerificationSection, DashboardAiSettings, AutoShopTab, KnowledgeIaPanel } from './sections';
 import { AdsBoostPopup } from '../../components/AdsBoostPopup';
 import { PostPublishAdvisor } from '../../components/PostPublishAdvisor';
 import { PostSaleAdvisor } from '../../components/PostSaleAdvisor';
@@ -3407,6 +3407,9 @@ export function BusinessDashboard() {
                 )}
               </div>
 
+              {/* Knowledge IA — settings + conseils */}
+              <KnowledgeIaPanel hasAnalytics={bizHasAnalytics} />
+
               {/* IA disponibles */}
               <div style={{ marginBottom: 16 }}>
                 <h3 style={{ margin: '0 0 10px', fontSize: 15, color: 'var(--color-text-primary, #fff)' }}>🤖 IA disponibles</h3>
@@ -3415,6 +3418,7 @@ export function BusinessDashboard() {
                     { name: 'IA Marchande', icon: '🤝', desc: 'Négociation automatisée', active: bizAiAutoNegoEnabled, locked: !bizHasIaMarchandPlan, key: 'autoNego' as const },
                     { name: 'IA Ads', icon: '📢', desc: 'Boost articles & boutique', active: bizAiAdviceEnabled, locked: false, key: 'advice' as const },
                     { name: 'Kin-Sell Analytique', icon: '📊', desc: 'Analyses marché avancées', active: bizHasAnalytics, locked: !bizHasAnalytics, key: 'analytics' as const },
+                    { name: 'Knowledge IA', icon: '🧠', desc: 'Détecte vos besoins & conseille', active: bizHasAnalytics, locked: !bizHasAnalytics, key: 'analytics' as const },
                     { name: 'IA Commande', icon: '📦', desc: 'Automatisation des ventes', active: bizAiCommandeEnabled, locked: !bizHasIaOrderPlan, key: 'commande' as const },
                   ].map((ia) => (
                     <div key={ia.name} style={{
