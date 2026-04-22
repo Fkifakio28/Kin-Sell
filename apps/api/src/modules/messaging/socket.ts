@@ -21,7 +21,11 @@ const SOCKET_MSG_WINDOW_MS = 60_000; // fenêtre de 60 secondes
 
 /** userId → last typing event timestamp (throttle typing indicators) */
 const typingRates = new Map<string, number>();
-const TYPING_MIN_INTERVAL_MS = 2_000; // max 1 typing event par 2s
+// A12 audit : 3s (au lieu de 2s) → 20 events/min max par user
+const TYPING_MIN_INTERVAL_MS = 3_000;
+/** conversationId → Set<userId> of active typers (stop broadcasting after 5) */
+const activeTypersByConv = new Map<string, Set<string>>();
+const MAX_ACTIVE_TYPERS_PER_CONV = 5;
 
 /** conversationId → active call log ID (tracks in-progress calls) */
 const activeCallLogs = new Map<string, string>();
@@ -105,8 +109,10 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
     cors: { origin: corsOrigin, credentials: true },
     path: "/ws",
     transports: ["websocket", "polling"],
-    pingInterval: 25000,   // heartbeat toutes les 25s (détecte déconnexion mobile)
-    pingTimeout: 20000,    // 20s sans pong = déconnecté
+    // A9 audit : pingInterval 15s / pingTimeout 10s → détection plus rapide
+    // des déconnexions en 2G Kinshasa (avant : 25s/20s, trop lent).
+    pingInterval: 15000,
+    pingTimeout: 10000,
   });
   ioInstance = io;
 
@@ -192,22 +198,38 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
 
     /* ── Typing indicators (rate-limited) ── */
     socket.on("typing:start", (data: { conversationId: string }) => {
+      // A7 audit : regex validation
+      if (!data?.conversationId || !/^[A-Za-z0-9_-]{10,50}$/.test(data.conversationId)) return;
       const now = Date.now();
       const last = typingRates.get(userId) ?? 0;
       if (now - last < TYPING_MIN_INTERVAL_MS) return;
       typingRates.set(userId, now);
+      // A12 audit : limiter le nombre de typers actifs par conv à 5 simultanés
+      let typers = activeTypersByConv.get(data.conversationId);
+      if (!typers) {
+        typers = new Set<string>();
+        activeTypersByConv.set(data.conversationId, typers);
+      }
+      if (!typers.has(userId) && typers.size >= MAX_ACTIVE_TYPERS_PER_CONV) return;
+      typers.add(userId);
       socket.to(`conv:${data.conversationId}`).emit("typing:start", { conversationId: data.conversationId, userId });
     });
 
     socket.on("typing:stop", (data: { conversationId: string }) => {
+      if (!data?.conversationId || !/^[A-Za-z0-9_-]{10,50}$/.test(data.conversationId)) return;
+      const typers = activeTypersByConv.get(data.conversationId);
+      if (typers) {
+        typers.delete(userId);
+        if (typers.size === 0) activeTypersByConv.delete(data.conversationId);
+      }
       socket.to(`conv:${data.conversationId}`).emit("typing:stop", { conversationId: data.conversationId, userId });
     });
 
     /* ── Send message via socket ── */
     socket.on("message:send", async (data: { conversationId: string; content?: string; type?: string; mediaUrl?: string; fileName?: string; replyToId?: string }, callback?: (res: unknown) => void) => {
       try {
-        // ── Validation des entrées ──
-        if (!data || typeof data.conversationId !== "string" || data.conversationId.length < 10 || data.conversationId.length > 50) {
+        // ── Validation des entrées (A7 audit : regex strict) ──
+        if (!data || typeof data.conversationId !== "string" || !/^[A-Za-z0-9_-]{10,50}$/.test(data.conversationId)) {
           if (callback) callback({ ok: false, error: "conversationId invalide" }); return;
         }
         if (data.content !== undefined && (typeof data.content !== "string" || data.content.length > 5000)) {
@@ -513,10 +535,35 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
     });
 
     /* WebRTC SDP & ICE relay — with input validation */
-    const MAX_SDP_SIZE = 10_000; // ~10KB max for SDP
+    const MAX_SDP_SIZE = 5_000; // A10 audit : 5KB max (était 10KB — RFC 4566 typical)
+    const CONV_ID_REGEX = /^[A-Za-z0-9_-]{10,50}$/; // A7 audit
+
+    /** A10 audit : validation stricte SDP contre DoS */
+    const isValidSdp = (sdp: unknown): sdp is { type: "offer" | "answer"; sdp: string } => {
+      if (!sdp || typeof sdp !== "object") return false;
+      const s = sdp as { type?: unknown; sdp?: unknown };
+      if (s.type !== "offer" && s.type !== "answer") return false;
+      if (typeof s.sdp !== "string" || s.sdp.length === 0) return false;
+      // SDP doit commencer par "v=" (version line RFC 4566)
+      if (!s.sdp.startsWith("v=")) return false;
+      if (JSON.stringify(sdp).length > MAX_SDP_SIZE) return false;
+      return true;
+    };
+
+    /** A10 audit : validation ICE candidate format */
+    const isValidIceCandidate = (c: unknown): c is RTCIceCandidateInit => {
+      if (!c || typeof c !== "object") return false;
+      const cand = c as { candidate?: unknown };
+      if (typeof cand.candidate !== "string") return false;
+      // Soit chaîne vide (end-of-candidates) soit préfixe "candidate:"
+      if (cand.candidate.length > 0 && !cand.candidate.startsWith("candidate:")) return false;
+      if (cand.candidate.length > 500) return false;
+      return true;
+    };
 
     socket.on("webrtc:offer", (data: { targetUserId: string; sdp: RTCSessionDescriptionInit }) => {
-      if (!data?.sdp || !data.targetUserId || JSON.stringify(data.sdp).length > MAX_SDP_SIZE) return;
+      if (!data?.targetUserId || typeof data.targetUserId !== "string" || data.targetUserId.length > 64) return;
+      if (!isValidSdp(data.sdp)) return;
       const targetSockets = onlineUsers.get(data.targetUserId);
       if (targetSockets) {
         for (const sid of targetSockets) {
@@ -526,7 +573,8 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
     });
 
     socket.on("webrtc:answer", (data: { targetUserId: string; sdp: RTCSessionDescriptionInit }) => {
-      if (!data?.sdp || !data.targetUserId || JSON.stringify(data.sdp).length > MAX_SDP_SIZE) return;
+      if (!data?.targetUserId || typeof data.targetUserId !== "string" || data.targetUserId.length > 64) return;
+      if (!isValidSdp(data.sdp)) return;
       const targetSockets = onlineUsers.get(data.targetUserId);
       if (targetSockets) {
         for (const sid of targetSockets) {
@@ -535,16 +583,34 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
       }
     });
 
-    // ICE candidate deduplication per target user
-    const sentIceCandidates = new Set<string>();
+    // A2 audit : ICE candidate deduplication par peer (Map<targetUserId, Set<string>>)
+    // Cap 100 candidats par peer, max 50 peers.
+    const sentIceCandidatesByPeer = new Map<string, Set<string>>();
+    const MAX_CANDIDATES_PER_PEER = 100;
+    const MAX_PEERS = 50;
+
     socket.on("webrtc:ice-candidate", (data: { targetUserId: string; candidate: RTCIceCandidateInit }) => {
-      if (!data?.candidate || !data.targetUserId) return;
-      // Deduplicate based on candidate string
-      const dedupKey = `${data.targetUserId}:${data.candidate.candidate ?? ""}`;
-      if (sentIceCandidates.has(dedupKey)) return;
-      sentIceCandidates.add(dedupKey);
-      // Cap dedup set size to prevent memory leak
-      if (sentIceCandidates.size > 200) sentIceCandidates.clear();
+      if (!data?.targetUserId || typeof data.targetUserId !== "string" || data.targetUserId.length > 64) return;
+      if (!isValidIceCandidate(data.candidate)) return;
+
+      let peerSet = sentIceCandidatesByPeer.get(data.targetUserId);
+      if (!peerSet) {
+        if (sentIceCandidatesByPeer.size >= MAX_PEERS) {
+          // Evict oldest peer (first in map)
+          const firstKey = sentIceCandidatesByPeer.keys().next().value;
+          if (firstKey) sentIceCandidatesByPeer.delete(firstKey);
+        }
+        peerSet = new Set<string>();
+        sentIceCandidatesByPeer.set(data.targetUserId, peerSet);
+      }
+      const key = data.candidate.candidate ?? "";
+      if (peerSet.has(key)) return;
+      peerSet.add(key);
+      if (peerSet.size > MAX_CANDIDATES_PER_PEER) {
+        // Reset ce peer (signaling frais)
+        peerSet.clear();
+        peerSet.add(key);
+      }
 
       const targetSockets = onlineUsers.get(data.targetUserId);
       if (targetSockets) {

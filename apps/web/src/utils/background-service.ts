@@ -3,6 +3,7 @@ import { Capacitor, registerPlugin } from "@capacitor/core";
 interface KinSellBackgroundPlugin {
   startService(): Promise<void>;
   stopService(): Promise<void>;
+  setLoggedIn(options: { loggedIn: boolean }): Promise<void>;
   requestBatteryExemption(): Promise<{ launched: boolean }>;
   isBatteryOptimized(): Promise<{ optimized: boolean }>;
 }
@@ -31,6 +32,19 @@ export async function stopBackgroundService(): Promise<void> {
     await KinSellBackground.stopService();
   } catch (e) {
     console.warn("[Background] Failed to stop service:", e);
+  }
+}
+
+/**
+ * A17 audit : signale au natif si l'utilisateur est loggé (pour BootReceiver).
+ * Appeler `true` après login, `false` après logout.
+ */
+export async function setNativeLoggedIn(loggedIn: boolean): Promise<void> {
+  if (!Capacitor.isNativePlatform()) return;
+  try {
+    await KinSellBackground.setLoggedIn({ loggedIn });
+  } catch (e) {
+    console.warn("[Background] Failed to set logged-in flag:", e);
   }
 }
 

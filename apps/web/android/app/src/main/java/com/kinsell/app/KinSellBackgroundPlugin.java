@@ -1,6 +1,8 @@
 package com.kinsell.app;
 
+import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.os.Build;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
@@ -14,6 +16,7 @@ import com.getcapacitor.annotation.CapacitorPlugin;
  * Méthodes JS:
  *   KinSellBackground.startService()   — démarre le foreground service
  *   KinSellBackground.stopService()    — arrête le foreground service
+ *   KinSellBackground.setLoggedIn({ loggedIn: boolean }) — flag pour boot receiver
  *   KinSellBackground.requestBatteryExemption() — ouvre les paramètres batterie OEM
  *   KinSellBackground.isBatteryOptimized()      — vérifie si l'app est restreinte
  */
@@ -43,6 +46,23 @@ public class KinSellBackgroundPlugin extends Plugin {
             call.resolve();
         } catch (Exception e) {
             call.reject("Failed to stop service: " + e.getMessage());
+        }
+    }
+
+    /**
+     * A17 audit : JS appelle setLoggedIn(true) après un login réussi et
+     * setLoggedIn(false) au logout. Le flag est lu par KinSellBootReceiver
+     * au boot pour décider de relancer le service.
+     */
+    @PluginMethod
+    public void setLoggedIn(PluginCall call) {
+        try {
+            boolean loggedIn = call.getBoolean("loggedIn", false);
+            SharedPreferences prefs = getContext().getSharedPreferences("kin_sell_prefs", Context.MODE_PRIVATE);
+            prefs.edit().putBoolean("user_logged_in", loggedIn).apply();
+            call.resolve();
+        } catch (Exception e) {
+            call.reject("Failed to set logged in flag: " + e.getMessage());
         }
     }
 

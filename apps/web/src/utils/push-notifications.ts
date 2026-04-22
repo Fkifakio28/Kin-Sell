@@ -166,6 +166,19 @@ export function onServiceWorkerMessage(
 
 async function sendFcmTokenToServer(token: string): Promise<void> {
   const platform = Capacitor.getPlatform(); // "android" | "ios"
+  // A15 audit : throttle retry à 1h pour éviter le flood si le serveur est
+  // durablement indisponible. On ne renvoie pas le même token en boucle.
+  try {
+    const lastAttemptRaw = localStorage.getItem("ks_pending_fcm_last_attempt");
+    const lastToken = localStorage.getItem("ks_pending_fcm_token");
+    if (lastAttemptRaw && lastToken === token) {
+      const lastAttempt = parseInt(lastAttemptRaw, 10);
+      if (!Number.isNaN(lastAttempt) && Date.now() - lastAttempt < 60 * 60 * 1000) {
+        console.log("[FCM] Token retry throttled (< 1h since last attempt)");
+        return;
+      }
+    }
+  } catch { /* ignore */ }
   try {
     const res = await fetch(`${API_BASE}/notifications/fcm/register`, {
       method: "POST",
@@ -176,36 +189,58 @@ async function sendFcmTokenToServer(token: string): Promise<void> {
     if (res.ok) {
       console.log("[FCM] Token registered on server");
       // Clear pending token on success
-      try { localStorage.removeItem("ks_pending_fcm_token"); } catch {}
+      try {
+        localStorage.removeItem("ks_pending_fcm_token");
+        localStorage.removeItem("ks_pending_fcm_last_attempt");
+      } catch { /* ignore */ }
       // Mémoriser le token actif pour pouvoir le désenregistrer au logout
-      try { localStorage.setItem("ks_active_fcm_token", token); } catch {}
+      try { localStorage.setItem("ks_active_fcm_token", token); } catch { /* ignore */ }
     } else {
       console.warn("[FCM] Server rejected token registration:", res.status);
       // Save for retry on next launch
-      try { localStorage.setItem("ks_pending_fcm_token", token); } catch {}
+      try {
+        localStorage.setItem("ks_pending_fcm_token", token);
+        localStorage.setItem("ks_pending_fcm_last_attempt", String(Date.now()));
+      } catch { /* ignore */ }
     }
   } catch (err) {
     console.warn("[FCM] Failed to send token to server:", err);
     // Save for retry on next launch
-    try { localStorage.setItem("ks_pending_fcm_token", token); } catch {}
+    try {
+      localStorage.setItem("ks_pending_fcm_token", token);
+      localStorage.setItem("ks_pending_fcm_last_attempt", String(Date.now()));
+    } catch { /* ignore */ }
   }
 }
 
 /** Supprime le token FCM actif du serveur (à appeler au logout). */
 export async function unregisterActiveFcmToken(): Promise<void> {
   let token: string | null = null;
-  try { token = localStorage.getItem("ks_active_fcm_token"); } catch {}
-  if (!token) return;
+  try { token = localStorage.getItem("ks_active_fcm_token"); } catch { /* ignore */ }
+  // A8 audit : appeler TOUJOURS /fcm/unregister-all côté serveur au logout
+  // pour supprimer tous les tokens de cet utilisateur (défense en profondeur
+  // si un token précédent est resté enregistré côté serveur sans l'être
+  // dans le localStorage de ce device).
   try {
-    await fetch(`${API_BASE}/notifications/fcm/unregister`, {
+    await fetch(`${API_BASE}/notifications/fcm/unregister-all`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
-      body: JSON.stringify({ token }),
     });
   } catch { /* ignore */ }
-  try { localStorage.removeItem("ks_active_fcm_token"); } catch {}
-  try { localStorage.removeItem("ks_pending_fcm_token"); } catch {}
+  // Aussi appeler /fcm/unregister avec le token précis si connu (pour backward-compat)
+  if (token) {
+    try {
+      await fetch(`${API_BASE}/notifications/fcm/unregister`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ token }),
+      });
+    } catch { /* ignore */ }
+  }
+  try { localStorage.removeItem("ks_active_fcm_token"); } catch { /* ignore */ }
+  try { localStorage.removeItem("ks_pending_fcm_token"); } catch { /* ignore */ }
 }
 
 /**

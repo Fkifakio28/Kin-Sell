@@ -128,8 +128,12 @@ public class AudioRoutePlugin extends Plugin implements SensorEventListener {
     @Override
     public void onSensorChanged(SensorEvent event) {
         try {
+            // A5 audit : null-check strict + event.values peut être vide
+            // sur certains capteurs défectueux.
             if (event == null || event.sensor == null
-                || event.sensor.getType() != Sensor.TYPE_PROXIMITY) return;
+                || event.sensor.getType() != Sensor.TYPE_PROXIMITY
+                || event.values == null || event.values.length == 0
+                || proximitySensor == null) return;
             float distance = event.values[0];
             boolean near = distance < proximitySensor.getMaximumRange();
 

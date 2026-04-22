@@ -55,9 +55,10 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       // Même après 50 tentatives échouées, on continue (appels/messages critiques).
       reconnectionAttempts: Infinity,
       reconnectionDelay: isSlow ? 2000 : 800,
-      // Max plus élevé pour réseaux lents (2G/3G Kinshasa) : éviter de pilonner
-      // le serveur et donner le temps au RTT de descendre sous 5s.
-      reconnectionDelayMax: isSlow ? 30000 : 15000,
+      // A6 audit : réduire de 30s/15s → 10s/5s. Avec délais plus courts, on
+      // détecte plus vite le retour du réseau sans pilonner le serveur.
+      // Le randomizationFactor 0.3 évite le thundering herd.
+      reconnectionDelayMax: isSlow ? 10000 : 5000,
       randomizationFactor: 0.3,
       // Handshake timeout : 25s sur réseaux lents (2G latency), 20s sinon.
       timeout: isSlow ? 25000 : 20000,

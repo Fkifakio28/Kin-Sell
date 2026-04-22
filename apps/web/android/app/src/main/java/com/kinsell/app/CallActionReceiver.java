@@ -60,11 +60,14 @@ public class CallActionReceiver extends BroadcastReceiver {
         } else if (ACTION_REJECT.equals(action)) {
             // Refuser : envoyer l'événement de rejet à la WebView sans ouvrir l'UI
             // L'app enregistre le rejet via un SharedPreference que MainActivity vérifiera
+            // A18 audit : timestamp pour TTL 5 minutes — évite de rejouer un rejet
+            // très ancien si l'app est restée tuée longtemps.
             try {
                 android.content.SharedPreferences prefs =
                     context.getSharedPreferences("kin_sell_prefs", Context.MODE_PRIVATE);
                 prefs.edit()
                     .putString("pending_call_reject", conversationId + "|" + callerId + "|" + callType)
+                    .putLong("pending_call_reject_ts", System.currentTimeMillis())
                     .apply();
             } catch (Exception ignored) {}
 

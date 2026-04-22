@@ -79,6 +79,28 @@ public class MainActivity extends BridgeActivity {
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        // A19 audit : capture des crashs natifs non interceptés dans une
+        // SharedPref dédiée — permet de remonter les ANR/stack traces au
+        // prochain démarrage via logcat ou un backend.
+        try {
+            final Thread.UncaughtExceptionHandler previous =
+                Thread.getDefaultUncaughtExceptionHandler();
+            Thread.setDefaultUncaughtExceptionHandler((thread, ex) -> {
+                try {
+                    android.content.SharedPreferences crashPrefs =
+                        getSharedPreferences("kin_sell_crashes", MODE_PRIVATE);
+                    String stack = android.util.Log.getStackTraceString(ex);
+                    if (stack.length() > 4000) stack = stack.substring(0, 4000);
+                    crashPrefs.edit()
+                        .putLong("last_crash_ts", System.currentTimeMillis())
+                        .putString("last_crash_thread", thread != null ? thread.getName() : "?")
+                        .putString("last_crash_stack", stack)
+                        .apply();
+                } catch (Throwable ignored) {}
+                if (previous != null) previous.uncaughtException(thread, ex);
+            });
+        } catch (Throwable ignored) {}
+
         // Force dark mode off globally — Kin-Sell handles its own dark theme
         AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO);
         registerPlugin(AudioRoutePlugin.class);
@@ -215,6 +237,26 @@ public class MainActivity extends BridgeActivity {
     public void onResume() {
         super.onResume();
         flushPendingFcmToken();
+        // A20 audit : rappel périodique (12h max) si l'app est encore soumise
+        // à l'optimisation batterie. Sans ça, l'utilisateur qui désactive
+        // manuellement l'exemption ne reçoit plus les appels et ne sait pas
+        // pourquoi.
+        try {
+            android.content.SharedPreferences batPrefs =
+                getSharedPreferences("kin_sell_prefs", MODE_PRIVATE);
+            long lastCheck = batPrefs.getLong("last_battery_check_ts", 0L);
+            long now = System.currentTimeMillis();
+            if (now - lastCheck > 12L * 60L * 60L * 1000L) {
+                batPrefs.edit().putLong("last_battery_check_ts", now).apply();
+                if (OemBatteryHelper.isBatteryOptimized(this)) {
+                    android.widget.Toast.makeText(
+                        this,
+                        "Autorisez Kin-Sell en batterie pour recevoir les appels en arrière-plan.",
+                        android.widget.Toast.LENGTH_LONG
+                    ).show();
+                }
+            }
+        } catch (Throwable ignored) {}
         // P0 #2 : si on est en plein cycle d'appel (intent call ou SharedPref
         // pending_incoming_call récent), ré-appliquer les flags d'écran verrouillé.
         // Certains OEM retirent les flags au retour depuis keyguard.
@@ -296,7 +338,14 @@ public class MainActivity extends BridgeActivity {
                 getSharedPreferences("kin_sell_prefs", MODE_PRIVATE);
             String pendingReject = prefs.getString("pending_call_reject", null);
             if (pendingReject != null && !pendingReject.isEmpty()) {
-                prefs.edit().remove("pending_call_reject").apply();
+                // A18 audit : TTL 5 minutes — un rejet plus ancien est considéré obsolète.
+                long ts = prefs.getLong("pending_call_reject_ts", 0L);
+                prefs.edit()
+                    .remove("pending_call_reject")
+                    .remove("pending_call_reject_ts")
+                    .apply();
+                long now = System.currentTimeMillis();
+                if (ts <= 0L || now - ts > 5L * 60L * 1000L) return;
                 String[] parts = pendingReject.split("\\|");
                 if (parts.length >= 2) {
                     dispatchCallRejectToWebView(parts[0], parts[1]);

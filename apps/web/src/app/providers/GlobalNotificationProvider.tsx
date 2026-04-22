@@ -18,7 +18,7 @@ import {
   unregisterActiveFcmToken,
 } from "../../utils/push-notifications";
 import { SK_PUSH_BANNER_DISMISSED } from "../../shared/constants/storage-keys";
-import { startBackgroundService, stopBackgroundService } from "../../utils/background-service";
+import { startBackgroundService, stopBackgroundService, setNativeLoggedIn } from "../../utils/background-service";
 import "../../styles/global-notifications.css";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:4000";
@@ -141,9 +141,12 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
   /* ── Foreground service (Android) — comme WhatsApp ── */
   useEffect(() => {
     if (isLoggedIn) {
+      // A17 audit : flag persistent pour BootReceiver
+      void setNativeLoggedIn(true);
       void startBackgroundService();
     } else {
       // Logout : désenregistrer le token FCM avant d'arrêter le service
+      void setNativeLoggedIn(false);
       void unregisterActiveFcmToken().finally(() => {
         void stopBackgroundService();
       });

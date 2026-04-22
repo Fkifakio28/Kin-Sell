@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { requireAuth, type AuthenticatedRequest } from "../../shared/auth/auth-middleware.js";
+import { rateLimit, RateLimits } from "../../shared/middleware/rate-limit.middleware.js";
 import * as pushService from "./push.service.js";
 import { asyncHandler } from "../../shared/utils/async-handler.js";
 
@@ -66,6 +67,7 @@ router.post(
 router.post(
   "/fcm/register",
   requireAuth,
+  rateLimit(RateLimits.FCM_REGISTER),
   asyncHandler(async (req, res) => {
     const userId = (req as AuthenticatedRequest).auth?.userId;
     if (!userId) {
@@ -74,7 +76,7 @@ router.post(
     }
 
     const { token, platform } = req.body as { token?: string; platform?: string };
-    if (!token || typeof token !== "string" || token.length < 20) {
+    if (!token || typeof token !== "string" || token.length < 20 || token.length > 4096) {
       res.status(400).json({ error: "Token FCM invalide" });
       return;
     }
@@ -103,6 +105,21 @@ router.post(
 
     await pushService.unregisterFcmToken(token);
     res.json({ ok: true });
+  }),
+);
+
+/* POST /notifications/fcm/unregister-all — Unregister all FCM tokens (logout) — A8 audit */
+router.post(
+  "/fcm/unregister-all",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const userId = (req as AuthenticatedRequest).auth?.userId;
+    if (!userId) {
+      res.status(401).json({ error: "Authentification requise" });
+      return;
+    }
+    const count = await pushService.unregisterAllFcmTokens(userId);
+    res.json({ ok: true, count });
   }),
 );
 

@@ -190,9 +190,13 @@ export function CartPage() {
   });
 
   // Fallback polling réduit : 120s au lieu de 30s (socket couvre le temps réel)
+  // A13 audit : pause en background pour économiser la batterie
   useEffect(() => {
     if (!isLoggedIn) return;
-    const poll = setInterval(() => { void loadCart(); }, 120_000);
+    const poll = setInterval(() => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      void loadCart();
+    }, 120_000);
     return () => clearInterval(poll);
   }, [isLoggedIn, loadCart]);
 
