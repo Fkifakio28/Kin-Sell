@@ -30,6 +30,7 @@ import {
   getCampaign,
   estimateBoost,
   getAdminBoostKpi,
+  trackBoostEvent,
 } from "./boost.service.js";
 import {
   getWalletSnapshot,
@@ -196,6 +197,18 @@ router.post(
     res.json({ wallet });
   }),
 );
+
+// ── Tracking events (public, rate-limited upstream) ─────────────────────────
+// Incrémente impressions/clicks/contacts + pacing budget + expire si EXHAUSTED
+router.post("/campaigns/:id/event", asyncHandler(async (req, res) => {
+  const { event } = req.body as { event?: string };
+  const valid = ["impression", "click", "contact", "dmOpen", "saleAttributed"];
+  if (!event || !valid.includes(event)) {
+    throw new HttpError(400, "event invalide (impression|click|contact|dmOpen|saleAttributed)");
+  }
+  await trackBoostEvent(req.params.id, event as any);
+  res.json({ ok: true });
+}));
 
 // ── Admin KPI ────────────────────────────────────────────────────────────────
 router.get(

@@ -5,6 +5,7 @@ import { Role } from "../../types/roles.js";
 import { normalizeImageInput, normalizeImageInputs } from "../../shared/utils/media-storage.js";
 import { resolveCountryCode, resolveCountryTerms, getSameRegionCountries } from "../../shared/geo/country-aliases.js";
 import { resolvePromoStatus } from "../../shared/promo/promo-engine.js";
+import { applyBoostRanking, hydrateBoostCampaigns } from "../boost/ranking.service.js";
 
 /** Optimized include for listing search — only fields needed for cards */
 const listingSearchInclude = {
@@ -94,9 +95,9 @@ const toRad = (value: number) => (value * Math.PI) / 180;
 
 /**
  * Check if a boosted listing should display as boosted for the current viewer.
- * Rules:
- * - LOCAL: only if viewer's city matches the listing's city
- * - NATIONAL: only if viewer's country matches the listing's country
+ * Rules (strict — correction bug P1.6) :
+ * - LOCAL: only if viewer's city matches the listing's city (false si viewer anonyme)
+ * - NATIONAL: only if viewer's country matches the listing's country (false si viewer anonyme)
  * - CROSS_BORDER: only if viewer's country is in boostTargetCountries
  * - null/undefined scope → backward compat: always boosted if active
  */
@@ -112,17 +113,20 @@ function isBoostVisibleToViewer(
   // No scope set → backward compat: always visible as boosted
   if (!scope) return true;
 
+  const vCity = viewerCity?.toLowerCase().trim();
+  const vCountry = viewerCountry?.toLowerCase().trim();
+
   switch (scope) {
     case "LOCAL":
-      if (!viewerCity) return true; // No viewer context → show
-      return row.city.toLowerCase() === viewerCity.toLowerCase();
+      if (!vCity) return false; // strict: viewer anonyme ne voit pas les boosts locaux
+      return row.city.toLowerCase() === vCity;
     case "NATIONAL":
-      if (!viewerCountry) return true;
-      return (row.country ?? "").toLowerCase() === viewerCountry.toLowerCase();
+      if (!vCountry) return false;
+      return (row.country ?? "").toLowerCase() === vCountry;
     case "CROSS_BORDER": {
-      if (!viewerCountry) return true;
+      if (!vCountry) return false;
       const targets = row.boostTargetCountries ?? [];
-      return targets.some((t) => t.toLowerCase() === viewerCountry.toLowerCase());
+      return targets.some((t) => t.toLowerCase() === vCountry);
     }
     default:
       return true;
@@ -992,13 +996,32 @@ export const searchListings = async (input: SearchListingsInput) => {
     }
   }
 
-  // Tri : articles boostés en tête, puis par distance ou date
-  enriched.sort((a, b) => {
-    const aBoosted = a.isBoosted ? 1 : 0;
-    const bBoosted = b.isBoosted ? 1 : 0;
-    if (aBoosted !== bBoosted) return bBoosted - aBoosted;
-    if (byCoordinates) return (a.distanceKm ?? 0) - (b.distanceKm ?? 0);
-    return 0;
+  // Ranking unifié : score = relevance*0.4 + boost*0.3 + freshness*0.15 + quality*0.1 + geoMatch*0.05
+  // + cap densité 25% + fairness (pas 2 vendeurs consécutifs)
+  const campaignMap = await hydrateBoostCampaigns(
+    enriched.filter((e) => e.isBoosted).map((e) => ({ id: e.id, isBoosted: true })),
+    "LISTING",
+  );
+  const rankable = enriched.map((e) => {
+    const camp = campaignMap.get(e.id);
+    return {
+      ...e,
+      sellerId: e.owner.userId,
+      boostScope: camp?.scope ?? null,
+      boostTargetCountries: camp?.targetCountries ?? [],
+      boostBudgetSpent: camp?.budgetSpentUsdCents ?? 0,
+      boostBudgetTotal: camp?.budgetUsdCents ?? 0,
+      itemCity: e.city,
+      itemCountry: null,
+    };
+  });
+  const ranked = applyBoostRanking(rankable as any, {
+    viewerCity: input.city,
+    viewerCountry: input.country,
+  });
+  const finalResults = ranked.map((r: any) => {
+    const { sellerId, boostScope, boostTargetCountries, boostBudgetSpent, boostBudgetTotal, itemCity, itemCountry, ...rest } = r;
+    return rest;
   });
 
   return {
@@ -1011,7 +1034,7 @@ export const searchListings = async (input: SearchListingsInput) => {
       : null,
     fallbackLevel,
     total: enriched.length,
-    results: enriched
+    results: finalResults
   };
 };
 

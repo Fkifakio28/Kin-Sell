@@ -461,6 +461,103 @@ export async function expireBoostCampaigns(): Promise<number> {
   return expiring.length;
 }
 
+export { syncTargetBoostState };
+
+// ─────────────────────────────────────────────
+// KPI Tracking (impression / click / contact)
+// ─────────────────────────────────────────────
+
+type BoostEvent = "impression" | "click" | "contact" | "dmOpen" | "saleAttributed";
+
+const EVENT_COST_CENTS: Record<BoostEvent, number> = {
+  impression: 1, // 1 cent par impression (CPM $10)
+  click: 10, // 10 cents par clic
+  contact: 50,
+  dmOpen: 25,
+  saleAttributed: 0, // pas de débit sur vente (déjà monétisé)
+};
+
+/** Tronque une date au jour UTC (00:00:00 UTC). */
+function truncToDayUtc(d: Date): Date {
+  const copy = new Date(d);
+  copy.setUTCHours(0, 0, 0, 0);
+  return copy;
+}
+
+/**
+ * Enregistre un évènement KPI sur une campagne active.
+ * - Incrémente BoostMetric (jour courant)
+ * - Incrémente compteurs cumulés BoostCampaign
+ * - Débit le budget correspondant (pacing)
+ * - Expire automatiquement si budget épuisé
+ */
+export async function trackBoostEvent(campaignId: string, event: BoostEvent): Promise<void> {
+  const campaign = await prisma.boostCampaign.findUnique({
+    where: { id: campaignId },
+    select: { id: true, status: true, expiresAt: true, budgetUsdCents: true, budgetSpentUsdCents: true },
+  });
+  if (!campaign) return;
+  if (campaign.status !== "ACTIVE") return;
+  if (campaign.expiresAt <= new Date()) return;
+
+  const cost = EVENT_COST_CENTS[event];
+  const newSpent = campaign.budgetSpentUsdCents + cost;
+  const today = truncToDayUtc(new Date());
+
+  const metricField: Record<BoostEvent, string> = {
+    impression: "impressions",
+    click: "clicks",
+    contact: "contacts",
+    dmOpen: "dmOpens",
+    saleAttributed: "salesAttributed",
+  };
+  const totalField: Record<BoostEvent, string> = {
+    impression: "totalImpressions",
+    click: "totalClicks",
+    contact: "totalContacts",
+    dmOpen: "totalDmOpens",
+    saleAttributed: "totalSalesAttributed",
+  };
+
+  try {
+    await prisma.$transaction([
+      prisma.boostMetric.upsert({
+        where: { campaignId_date: { campaignId, date: today } },
+        create: {
+          campaignId,
+          date: today,
+          [metricField[event]]: 1,
+          spendUsdCents: cost,
+        } as any,
+        update: {
+          [metricField[event]]: { increment: 1 },
+          spendUsdCents: { increment: cost },
+        } as any,
+      }),
+      prisma.boostCampaign.update({
+        where: { id: campaignId },
+        data: {
+          [totalField[event]]: { increment: 1 },
+          budgetSpentUsdCents: { increment: cost },
+          lastPacingAt: new Date(),
+        } as any,
+      }),
+    ]);
+
+    // Expiration budget épuisé
+    if (newSpent >= campaign.budgetUsdCents) {
+      await prisma.boostCampaign.update({
+        where: { id: campaignId },
+        data: { status: "EXHAUSTED" },
+      });
+      await syncTargetBoostState(campaignId, true);
+      logger.info({ campaignId }, "[Boost] Campagne épuisée (budget atteint)");
+    }
+  } catch (err) {
+    logger.error({ err, campaignId, event }, "[Boost] trackBoostEvent failed");
+  }
+}
+
 // ─────────────────────────────────────────────
 // Admin KPI
 // ─────────────────────────────────────────────
@@ -483,7 +580,7 @@ export async function getAdminBoostKpi() {
       },
     }),
     prisma.boostCampaign.aggregate({
-      _sum: { budgetSpentUsdCents: true, budgetUsdCents: true, totalImpressions: true, totalClicks: true },
+      _sum: { budgetSpentUsdCents: true, budgetUsdCents: true },
     }),
     prisma.boostCampaign.aggregate({ _sum: { totalImpressions: true } }),
     prisma.boostCampaign.aggregate({ _sum: { totalClicks: true } }),
@@ -515,5 +612,3 @@ export async function getAdminBoostKpi() {
     })),
   };
 }
-
-export { syncTargetBoostState };
