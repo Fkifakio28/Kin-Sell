@@ -196,12 +196,19 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
 
 
   /* ── Push notifications setup ── */
+  // P2 #22 : garde anti-double-invocation. En React StrictMode (dev) ou Fast
+  // Refresh, l'effet peut s'exécuter deux fois rapidement. initNativePush()
+  // enregistre des listeners Capacitor — un double call créerait des doublons
+  // de notifications. pushInitRef = true pendant l'exécution.
+  const pushInitRef = useRef(false);
   useEffect(() => {
     if (!isLoggedIn) {
       setPushEnabled(false);
       setShowPushBanner(false);
       return;
     }
+    if (pushInitRef.current) return;
+    pushInitRef.current = true;
 
     let canceled = false;
     let nativeCleanup: (() => void) | null = null;
@@ -267,6 +274,7 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
       canceled = true;
       nativeCleanup?.();
       tokenCleanup?.();
+      pushInitRef.current = false;
     };
   }, [isLoggedIn, pushMissed]);
 
@@ -286,6 +294,23 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
   const vibrationIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   /** Track which calls were accepted so we can detect missed calls */
   const acceptedCallsRef = useRef<Set<string>>(new Set());
+
+  // P0 #7 : cleanup global au unmount du provider — évite les fuites de timers/
+  // intervals si le provider est remonté (ex. logout/login, hot-reload).
+  useEffect(() => {
+    return () => {
+      if (incomingCallTimerRef.current) {
+        clearTimeout(incomingCallTimerRef.current);
+        incomingCallTimerRef.current = null;
+      }
+      if (vibrationIntervalRef.current) {
+        clearInterval(vibrationIntervalRef.current);
+        vibrationIntervalRef.current = null;
+      }
+      try { if ("vibrate" in navigator) navigator.vibrate(0); } catch {}
+      try { stopRingtone(); } catch {}
+    };
+  }, []);
 
   const navigateInApp = useCallback((targetUrl: string) => {
     if (!targetUrl) return;

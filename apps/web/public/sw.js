@@ -70,24 +70,29 @@ function resolveTarget(data) {
 
 self.addEventListener("install", (event) => {
   event.waitUntil((async () => {
+    // P0 #10 : chaque étape protégée individuellement. Si cache.add échoue
+    // (offline.html 404 au déploiement), on continue quand même pour ne pas
+    // bloquer l'installation du SW et laisser l'ancien tourner.
     try {
       const cache = await caches.open(CACHE_PAGES);
       await cache.add(new Request(OFFLINE_URL, { cache: "reload" }));
-    } catch { /* ignore */ }
-    await self.skipWaiting();
-  })());
+    } catch (err) { console.warn("[sw] offline cache failed:", err); }
+    try { await self.skipWaiting(); } catch (err) { console.warn("[sw] skipWaiting failed:", err); }
+  })().catch((err) => { console.error("[sw] install fatal:", err); }));
 });
 
 self.addEventListener("activate", (event) => {
   // Purge les caches obsolètes mais conserve ceux de la version courante
   event.waitUntil((async () => {
-    const keys = await caches.keys();
-    await Promise.all(keys.map((key) => {
-      if (KNOWN_CACHES.includes(key)) return Promise.resolve();
-      return caches.delete(key);
-    }));
-    await self.clients.claim();
-  })());
+    try {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((key) => {
+        if (KNOWN_CACHES.includes(key)) return Promise.resolve();
+        return caches.delete(key).catch(() => {});
+      }));
+    } catch (err) { console.warn("[sw] cache purge failed:", err); }
+    try { await self.clients.claim(); } catch (err) { console.warn("[sw] clients.claim failed:", err); }
+  })().catch((err) => { console.error("[sw] activate fatal:", err); }));
 });
 
 /* ── Helpers runtime caching ───────────────────────────────── */
@@ -112,11 +117,41 @@ async function trimCache(cacheName, maxEntries) {
 
 function isExpired(response, maxAgeSeconds) {
   if (!response) return true;
+  // P1 #18 : tenter d'abord le header "sw-cached-at" qu'on injecte nous-mêmes
+  // au moment du cache.put. Si absent, fallback sur "date" (serveur) puis
+  // sur un headers de la réponse clonée. Si tout échoue, considérer comme
+  // expiré (force refetch) plutôt que garder indéfiniment.
+  const cachedAt = response.headers.get("sw-cached-at");
+  if (cachedAt) {
+    const parsed = parseInt(cachedAt, 10);
+    if (!Number.isNaN(parsed)) {
+      return (Date.now() - parsed) / 1000 > maxAgeSeconds;
+    }
+  }
   const dateHeader = response.headers.get("date");
-  if (!dateHeader) return false;
-  const parsed = Date.parse(dateHeader);
-  if (Number.isNaN(parsed)) return false;
-  return (Date.now() - parsed) / 1000 > maxAgeSeconds;
+  if (dateHeader) {
+    const parsed = Date.parse(dateHeader);
+    if (!Number.isNaN(parsed)) {
+      return (Date.now() - parsed) / 1000 > maxAgeSeconds;
+    }
+  }
+  // Pas de date utilisable → considérer expiré pour forcer revalidation
+  return true;
+}
+
+// Helper : cloner une réponse en ajoutant sw-cached-at pour tracking de fraîcheur
+async function putWithTimestamp(cache, request, response) {
+  try {
+    const body = await response.clone().arrayBuffer();
+    const headers = new Headers(response.headers);
+    headers.set("sw-cached-at", String(Date.now()));
+    const stamped = new Response(body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    });
+    await cache.put(request, stamped);
+  } catch { /* ignore */ }
 }
 
 // NetworkFirst pour les navigations HTML → offline fallback
@@ -146,7 +181,7 @@ async function handleImage(request) {
   try {
     const fresh = await fetch(request);
     if (isCacheableResponse(fresh)) {
-      cache.put(request, fresh.clone()).then(() => trimCache(CACHE_IMAGES, IMAGE_MAX_ENTRIES)).catch(() => {});
+      putWithTimestamp(cache, request, fresh).then(() => trimCache(CACHE_IMAGES, IMAGE_MAX_ENTRIES)).catch(() => {});
     }
     return fresh;
   } catch {
@@ -175,7 +210,7 @@ async function handlePublicApi(request) {
   const cached = await cache.match(request);
   const network = fetch(request).then((res) => {
     if (isCacheableResponse(res)) {
-      cache.put(request, res.clone()).then(() => trimCache(CACHE_API, API_MAX_ENTRIES)).catch(() => {});
+      putWithTimestamp(cache, request, res).then(() => trimCache(CACHE_API, API_MAX_ENTRIES)).catch(() => {});
     }
     return res;
   }).catch(() => null);

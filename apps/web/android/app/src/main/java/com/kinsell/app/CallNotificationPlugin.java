@@ -33,6 +33,11 @@ public class CallNotificationPlugin extends Plugin {
      */
     @PluginMethod
     public void showOngoing(PluginCall call) {
+        // P2 #21 : null-check défensif sur getContext() — plugin peut être
+        // appelé avant attachement complet sur certains cycles Capacitor.
+        android.content.Context ctx = getContext();
+        if (ctx == null) { call.reject("Context unavailable"); return; }
+
         String callerName = call.getString("callerName", "Appel en cours");
         String conversationId = call.getString("conversationId", "");
         String remoteUserId = call.getString("remoteUserId", "");
@@ -42,40 +47,45 @@ public class CallNotificationPlugin extends Plugin {
             piFlags |= PendingIntent.FLAG_IMMUTABLE;
         }
 
-        // ── Tap : retour à la page d'appel ──
-        Intent returnIntent = new Intent(getContext(), MainActivity.class);
-        returnIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-        returnIntent.putExtra("url", "/messaging?convId=" + conversationId);
-        PendingIntent returnPI = PendingIntent.getActivity(getContext(), 10, returnIntent, piFlags);
+        try {
+            // ── Tap : retour à la page d'appel ──
+            Intent returnIntent = new Intent(ctx, MainActivity.class);
+            returnIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            returnIntent.putExtra("url", "/messaging?convId=" + conversationId);
+            PendingIntent returnPI = PendingIntent.getActivity(ctx, 10, returnIntent, piFlags);
 
-        // ── Action : Raccrocher ──
-        Intent hangupIntent = new Intent(getContext(), CallActionReceiver.class);
-        hangupIntent.setAction(CallActionReceiver.ACTION_HANGUP);
-        hangupIntent.putExtra("conversationId", conversationId);
-        hangupIntent.putExtra("remoteUserId", remoteUserId);
-        PendingIntent hangupPI = PendingIntent.getBroadcast(getContext(), 11, hangupIntent, piFlags);
+            // ── Action : Raccrocher ──
+            Intent hangupIntent = new Intent(ctx, CallActionReceiver.class);
+            hangupIntent.setAction(CallActionReceiver.ACTION_HANGUP);
+            hangupIntent.putExtra("conversationId", conversationId);
+            hangupIntent.putExtra("remoteUserId", remoteUserId);
+            PendingIntent hangupPI = PendingIntent.getBroadcast(ctx, 11, hangupIntent, piFlags);
 
-        NotificationCompat.Builder builder = new NotificationCompat.Builder(
-                getContext(), NotificationChannels.CHANNEL_ONGOING_CALL)
-                .setSmallIcon(R.drawable.ic_notification)
-                .setContentTitle("Appel en cours")
-                .setContentText(callerName)
-                .setSubText("Kin-Sell")
-                .setColor(0xFF4CAF50)
-                .setPriority(NotificationCompat.PRIORITY_LOW)
-                .setCategory(NotificationCompat.CATEGORY_CALL)
-                .setOngoing(true)
-                .setAutoCancel(false)
-                .setContentIntent(returnPI)
-                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-                .setUsesChronometer(true)              // Affiche un compteur de temps
-                .setWhen(System.currentTimeMillis())    // Point de départ du chrono
-                .addAction(0, "🔙 Retour", returnPI)
-                .addAction(0, "📞 Raccrocher", hangupPI);
+            NotificationCompat.Builder builder = new NotificationCompat.Builder(
+                    ctx, NotificationChannels.CHANNEL_ONGOING_CALL)
+                    .setSmallIcon(R.drawable.ic_notification)
+                    .setContentTitle("Appel en cours")
+                    .setContentText(callerName)
+                    .setSubText("Kin-Sell")
+                    .setColor(0xFF4CAF50)
+                    .setPriority(NotificationCompat.PRIORITY_LOW)
+                    .setCategory(NotificationCompat.CATEGORY_CALL)
+                    .setOngoing(true)
+                    .setAutoCancel(false)
+                    .setContentIntent(returnPI)
+                    .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                    .setUsesChronometer(true)              // Affiche un compteur de temps
+                    .setWhen(System.currentTimeMillis())    // Point de départ du chrono
+                    .addAction(0, "🔙 Retour", returnPI)
+                    .addAction(0, "📞 Raccrocher", hangupPI);
 
-        NotificationManager manager = getContext().getSystemService(NotificationManager.class);
-        if (manager != null) {
-            manager.notify(ONGOING_NOTIFICATION_ID, builder.build());
+            NotificationManager manager = ctx.getSystemService(NotificationManager.class);
+            if (manager != null) {
+                manager.notify(ONGOING_NOTIFICATION_ID, builder.build());
+            }
+        } catch (Throwable t) {
+            call.reject("showOngoing failed: " + t.getMessage());
+            return;
         }
 
         call.resolve();
@@ -86,10 +96,13 @@ public class CallNotificationPlugin extends Plugin {
      */
     @PluginMethod
     public void hideOngoing(PluginCall call) {
-        NotificationManager manager = getContext().getSystemService(NotificationManager.class);
-        if (manager != null) {
-            manager.cancel(ONGOING_NOTIFICATION_ID);
-        }
+        try {
+            android.content.Context ctx = getContext();
+            if (ctx != null) {
+                NotificationManager manager = ctx.getSystemService(NotificationManager.class);
+                if (manager != null) manager.cancel(ONGOING_NOTIFICATION_ID);
+            }
+        } catch (Throwable ignored) {}
         call.resolve();
     }
 
@@ -99,19 +112,23 @@ public class CallNotificationPlugin extends Plugin {
      */
     @PluginMethod
     public void clearAllNotifications(PluginCall call) {
-        NotificationManager manager = getContext().getSystemService(NotificationManager.class);
-        if (manager != null) {
-            // Supprimer toutes les notifications sauf l'appel en cours (ongoing)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                for (StatusBarNotification sbn : manager.getActiveNotifications()) {
-                    if (sbn.getId() != ONGOING_NOTIFICATION_ID) {
-                        manager.cancel(sbn.getId());
+        try {
+            android.content.Context ctx = getContext();
+            if (ctx != null) {
+                NotificationManager manager = ctx.getSystemService(NotificationManager.class);
+                if (manager != null) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        for (StatusBarNotification sbn : manager.getActiveNotifications()) {
+                            if (sbn.getId() != ONGOING_NOTIFICATION_ID) {
+                                manager.cancel(sbn.getId());
+                            }
+                        }
+                    } else {
+                        manager.cancelAll();
                     }
                 }
-            } else {
-                manager.cancelAll();
             }
-        }
+        } catch (Throwable ignored) {}
         call.resolve();
     }
 
@@ -121,10 +138,13 @@ public class CallNotificationPlugin extends Plugin {
      */
     @PluginMethod
     public void clearCallNotification(PluginCall call) {
-        NotificationManager manager = getContext().getSystemService(NotificationManager.class);
-        if (manager != null) {
-            manager.cancel(CallActionReceiver.CALL_NOTIFICATION_ID);
-        }
+        try {
+            android.content.Context ctx = getContext();
+            if (ctx != null) {
+                NotificationManager manager = ctx.getSystemService(NotificationManager.class);
+                if (manager != null) manager.cancel(CallActionReceiver.CALL_NOTIFICATION_ID);
+            }
+        } catch (Throwable ignored) {}
         call.resolve();
     }
 }

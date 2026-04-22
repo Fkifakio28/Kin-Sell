@@ -114,23 +114,38 @@ public class AudioRoutePlugin extends Plugin implements SensorEventListener {
 
     private void stopProximity() {
         if (!proximityActive) return;
-        sensorManager.unregisterListener(this);
+        try { sensorManager.unregisterListener(this); } catch (Exception ignored) {}
         proximityActive = false;
-        if (proximityWakeLock != null && proximityWakeLock.isHeld()) {
-            proximityWakeLock.release();
-        }
+        // P0 #5 : release dans try/finally pour garantir la libération du
+        // WakeLock même si une exception est levée (sinon écran bloqué noir).
+        try {
+            if (proximityWakeLock != null && proximityWakeLock.isHeld()) {
+                proximityWakeLock.release();
+            }
+        } catch (Exception ignored) {}
     }
 
     @Override
     public void onSensorChanged(SensorEvent event) {
-        if (event.sensor.getType() != Sensor.TYPE_PROXIMITY) return;
-        float distance = event.values[0];
-        boolean near = distance < proximitySensor.getMaximumRange();
+        try {
+            if (event == null || event.sensor == null
+                || event.sensor.getType() != Sensor.TYPE_PROXIMITY) return;
+            float distance = event.values[0];
+            boolean near = distance < proximitySensor.getMaximumRange();
 
-        if (near && proximityWakeLock != null && !proximityWakeLock.isHeld()) {
-            proximityWakeLock.acquire(10 * 60 * 1000L /* 10 min max */);
-        } else if (!near && proximityWakeLock != null && proximityWakeLock.isHeld()) {
-            proximityWakeLock.release();
+            if (near && proximityWakeLock != null && !proximityWakeLock.isHeld()) {
+                proximityWakeLock.acquire(10 * 60 * 1000L /* 10 min max */);
+            } else if (!near && proximityWakeLock != null && proximityWakeLock.isHeld()) {
+                proximityWakeLock.release();
+            }
+        } catch (Exception e) {
+            // Sécurité : si une exception se produit ici, on relâche au cas où
+            // pour éviter d'avoir un écran bloqué noir après un appel.
+            try {
+                if (proximityWakeLock != null && proximityWakeLock.isHeld()) {
+                    proximityWakeLock.release();
+                }
+            } catch (Exception ignored) {}
         }
     }
 

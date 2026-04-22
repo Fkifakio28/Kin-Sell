@@ -26,11 +26,26 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
 }
 
 async function fetchVapidPublicKey(): Promise<string | null> {
+  // P3 #29 : cache local TTL 24h — la clé VAPID change rarement, éviter
+  // un round-trip réseau à chaque subscribeToPush().
+  try {
+    const raw = localStorage.getItem("ks_vapid_cache");
+    if (raw) {
+      const parsed = JSON.parse(raw) as { key: string; ts: number };
+      if (parsed.key && typeof parsed.ts === "number" && Date.now() - parsed.ts < 24 * 60 * 60 * 1000) {
+        return parsed.key;
+      }
+    }
+  } catch { /* ignore */ }
   try {
     const res = await fetch(`${API_BASE}/notifications/vapid-public-key`, { credentials: "include" });
     if (!res.ok) return null;
     const data = (await res.json()) as { publicKey?: string | null };
-    return data?.publicKey ?? null;
+    const key = data?.publicKey ?? null;
+    if (key) {
+      try { localStorage.setItem("ks_vapid_cache", JSON.stringify({ key, ts: Date.now() })); } catch { /* ignore */ }
+    }
+    return key;
   } catch {
     return null;
   }
@@ -218,7 +233,26 @@ export function listenForPendingFcmToken(): () => void {
     }
   } catch {}
 
-  return () => window.removeEventListener("ks:fcm-token", handler);
+  // P1 #17 : retry aussi au retour du réseau / reconnexion socket. Si le
+  // serveur était down au premier enregistrement, on ne peut pas compter
+  // uniquement sur le prochain onNewToken (qui est rare).
+  const retryPending = () => {
+    try {
+      const pending = localStorage.getItem("ks_pending_fcm_token");
+      if (pending) {
+        console.log("[FCM] Retry pending token after socket/network event");
+        void sendFcmTokenToServer(pending);
+      }
+    } catch {}
+  };
+  window.addEventListener("ks:socket-reconnected", retryPending);
+  window.addEventListener("online", retryPending);
+
+  return () => {
+    window.removeEventListener("ks:fcm-token", handler);
+    window.removeEventListener("ks:socket-reconnected", retryPending);
+    window.removeEventListener("online", retryPending);
+  };
 }
 
 /**

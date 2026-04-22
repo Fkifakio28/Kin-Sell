@@ -51,16 +51,25 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     const socket = io(API_BASE, {
       path: "/ws",
       reconnection: true,
-      reconnectionAttempts: isSlow ? 10 : 50,
+      // P0 #6 : une messagerie ne doit JAMAIS abandonner la reconnexion.
+      // Même après 50 tentatives échouées, on continue (appels/messages critiques).
+      reconnectionAttempts: Infinity,
       reconnectionDelay: isSlow ? 2000 : 800,
-      reconnectionDelayMax: isSlow ? 20000 : 10000,
+      // Max plus élevé pour réseaux lents (2G/3G Kinshasa) : éviter de pilonner
+      // le serveur et donner le temps au RTT de descendre sous 5s.
+      reconnectionDelayMax: isSlow ? 30000 : 15000,
       randomizationFactor: 0.3,
-      timeout: 20000,
+      // Handshake timeout : 25s sur réseaux lents (2G latency), 20s sinon.
+      timeout: isSlow ? 25000 : 20000,
       ...(({ withCredentials: true }) as any),
     });
 
     socketRef.current = socket;
     let wasConnectedBefore = false;
+    // P1 #13 : defense in depth — nettoyer avant d'attacher, et removeAllListeners
+    // au cleanup pour éviter les doublons si le provider est remonté rapidement.
+    socket.off("connect");
+    socket.off("disconnect");
     socket.on("connect", () => {
       const isReconnect = wasConnectedBefore;
       wasConnectedBefore = true;
@@ -73,6 +82,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     socket.on("disconnect", () => setIsConnected(false));
 
     return () => {
+      try { socket.removeAllListeners(); } catch {}
       socket.disconnect();
       socketRef.current = null;
       setIsConnected(false);

@@ -73,6 +73,27 @@ export function useAudioCallState() {
   // Keep callRef in sync
   useEffect(() => { callRef.current = call; }, [call]);
 
+  // P0 #8 : cleanup garanti au unmount du hook. Si le composant parent est
+  // démonté pendant un appel actif (navigation, crash), on libère timer, PC,
+  // streams et audio — sinon CPU/micro restent actifs en arrière-plan.
+  useEffect(() => {
+    return () => {
+      try {
+        if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+        try { pcRef.current?.close(); } catch {}
+        pcRef.current = null;
+        localStreamRef.current?.getTracks().forEach((t) => { try { t.stop(); } catch {} });
+        localStreamRef.current = null;
+        remoteStreamRef.current = null;
+        if (remoteAudioRef.current) {
+          try { remoteAudioRef.current.srcObject = null; } catch {}
+          try { remoteAudioRef.current.remove(); } catch {}
+          remoteAudioRef.current = null;
+        }
+      } catch { /* ignore */ }
+    };
+  }, []);
+
   const { emit, on, off, isConnected: socketConnected } = useSocket();
 
   // ── Sons d'appel (réagit automatiquement aux transitions) ──
@@ -240,7 +261,16 @@ export function useAudioCallState() {
 
   /** Get audio-only media stream */
   const getAudioStream = useCallback(async (): Promise<MediaStream> => {
-    return navigator.mediaDevices.getUserMedia({ audio: AUDIO_CONSTRAINTS, video: false });
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: AUDIO_CONSTRAINTS, video: false });
+    // P2 #25 : certains appareils (capteur micro défaillant, permission
+    // partielle Android) renvoient un stream SANS piste audio. On rejette
+    // explicitement pour que startCall/accept déclenche finishCall("ended")
+    // au lieu d'un appel muet qui ne se termine jamais.
+    if (stream.getAudioTracks().length === 0) {
+      try { stream.getTracks().forEach((t) => t.stop()); } catch { /* ignore */ }
+      throw new Error("NO_AUDIO_TRACK");
+    }
+    return stream;
   }, []);
 
   /** Optimize audio sender bitrate */

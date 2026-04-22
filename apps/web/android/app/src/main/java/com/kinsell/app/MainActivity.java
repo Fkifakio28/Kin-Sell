@@ -31,12 +31,18 @@ public class MainActivity extends BridgeActivity {
      */
     private static String sanitizeForJs(String input) {
         if (input == null) return "";
+        // P3 #28 : escape également U+2028 LINE SEPARATOR et U+2029 PARAGRAPH
+        // SEPARATOR qui cassent les chaînes JS (le parseur les traite comme
+        // des sauts de ligne littéraux). Également NUL.
         return input
             .replace("\\", "\\\\")
             .replace("'", "\\'")
             .replace("\"", "\\\"")
             .replace("\n", "\\n")
             .replace("\r", "\\r")
+            .replace("\u2028", "\\u2028")
+            .replace("\u2029", "\\u2029")
+            .replace("\u0000", "\\u0000")
             .replace("<", "\\x3c")
             .replace(">", "\\x3e");
     }
@@ -209,6 +215,24 @@ public class MainActivity extends BridgeActivity {
     public void onResume() {
         super.onResume();
         flushPendingFcmToken();
+        // P0 #2 : si on est en plein cycle d'appel (intent call ou SharedPref
+        // pending_incoming_call récent), ré-appliquer les flags d'écran verrouillé.
+        // Certains OEM retirent les flags au retour depuis keyguard.
+        try {
+            boolean isCallIntent = getIntent() != null
+                && ("call".equals(getIntent().getStringExtra("type"))
+                    || getIntent().getStringExtra("callAction") != null);
+            boolean hasFreshPendingCall = false;
+            android.content.SharedPreferences prefs =
+                getSharedPreferences("kin_sell_prefs", MODE_PRIVATE);
+            long ts = prefs.getLong("pending_incoming_call_ts", 0L);
+            if (ts > 0 && (System.currentTimeMillis() - ts) < 60_000L) {
+                hasFreshPendingCall = true;
+            }
+            if (isCallIntent || hasFreshPendingCall) {
+                ensureLockScreenFlags();
+            }
+        } catch (Exception ignored) {}
     }
 
     /**
@@ -298,8 +322,12 @@ public class MainActivity extends BridgeActivity {
                 .remove("pending_incoming_call_ts")
                 .apply();
             if (pendingCall == null || pendingCall.isEmpty()) return;
+            // P0 #4 : timestamp invalide (0, négatif, futur) → on ignore l'appel
+            // plutôt que de risquer d'afficher une notification obsolète.
+            long now = System.currentTimeMillis();
+            if (ts <= 0L || ts > now + 5_000L) return;
             // Expiration : si l'appel date de plus de 35s, il a expiré côté serveur
-            if (System.currentTimeMillis() - ts > 35_000) return;
+            if (now - ts > 35_000L) return;
 
             enableKeepScreenOn();
 

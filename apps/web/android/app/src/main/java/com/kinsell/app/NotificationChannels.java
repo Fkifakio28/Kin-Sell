@@ -42,11 +42,26 @@ public class NotificationChannels {
         NotificationManager manager = context.getSystemService(NotificationManager.class);
         if (manager == null) return;
 
-        // ── Supprimer les anciens canaux corrompus (migration unique) ──
-        for (String oldId : OLD_CHANNELS) {
-            if (manager.getNotificationChannel(oldId) != null) {
-                manager.deleteNotificationChannel(oldId);
-            }
+        // P2 #20 : migration unique des anciens canaux exécutée une seule fois
+        // et en thread de fond. Sur certains OEM (Huawei, Oppo), boucler sur 18
+        // IDs dans le main thread peut ANR à froid.
+        android.content.SharedPreferences prefs =
+            context.getSharedPreferences("kin_sell_prefs", Context.MODE_PRIVATE);
+        if (!prefs.getBoolean("channels_v4_migrated", false)) {
+            Thread migrate = new Thread(() -> {
+                try {
+                    for (String oldId : OLD_CHANNELS) {
+                        try {
+                            if (manager.getNotificationChannel(oldId) != null) {
+                                manager.deleteNotificationChannel(oldId);
+                            }
+                        } catch (Throwable ignored) {}
+                    }
+                    prefs.edit().putBoolean("channels_v4_migrated", true).apply();
+                } catch (Throwable ignored) {}
+            }, "ks-channels-migrate");
+            migrate.setDaemon(true);
+            try { migrate.start(); } catch (Throwable ignored) {}
         }
 
         // ── Sons système par défaut (pas de sons custom dans l'APK) ──
@@ -131,11 +146,36 @@ public class NotificationChannels {
         defaultChannel.setShowBadge(true);
         defaultChannel.setLockscreenVisibility(android.app.Notification.VISIBILITY_PUBLIC);
 
-        manager.createNotificationChannel(messages);
-        manager.createNotificationChannel(calls);
-        manager.createNotificationChannel(ongoingCall);
-        manager.createNotificationChannel(orders);
-        manager.createNotificationChannel(social);
-        manager.createNotificationChannel(defaultChannel);
+        // P3 #30 : chaque canal est créé indépendamment dans un try/catch —
+        // si un OEM refuse un pattern de vibration spécifique, les autres
+        // canaux restent créés. En cas d'échec, on réessaie SANS vibration
+        // custom (le système appliquera le pattern DEFAULT).
+        createChannelSafe(manager, messages, new long[]{0, 250, 100, 250});
+        createChannelSafe(manager, calls, new long[]{0, 500, 200, 500, 200, 500});
+        createChannelSafe(manager, ongoingCall, null);
+        createChannelSafe(manager, orders, new long[]{0, 300, 150, 300});
+        createChannelSafe(manager, social, new long[]{0, 150, 100, 150});
+        createChannelSafe(manager, defaultChannel, new long[]{0, 250, 100, 250});
+    }
+
+    /**
+     * Crée un canal en fallback safe : si le pattern custom est refusé par
+     * l'OEM, on recrée le canal sans pattern (DEFAULT système).
+     */
+    private static void createChannelSafe(
+            NotificationManager manager,
+            NotificationChannel channel,
+            long[] vibrationPattern) {
+        try {
+            manager.createNotificationChannel(channel);
+        } catch (Throwable t) {
+            try {
+                // Fallback : désactiver le pattern custom et retenter
+                if (vibrationPattern != null) {
+                    channel.setVibrationPattern(null);
+                }
+                manager.createNotificationChannel(channel);
+            } catch (Throwable ignored) {}
+        }
     }
 }

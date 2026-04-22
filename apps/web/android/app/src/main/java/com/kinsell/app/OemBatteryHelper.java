@@ -38,30 +38,42 @@ public class OemBatteryHelper {
 
         // 2. Ensuite, tenter aussi l'interface OEM pour les restrictions supplÃ©mentaires
         //    (Samsung "Suspendre activitÃ©", Xiaomi "Autostart", etc.)
-        String manufacturer = Build.MANUFACTURER.toLowerCase();
+        // P2 #24 : chaque bloc OEM est wrappé dans try/catch — une erreur
+        // spécifique à un fabricant ne doit jamais crasher le flow global.
+        try {
+            String manufacturer = Build.MANUFACTURER != null ? Build.MANUFACTURER.toLowerCase() : "";
 
-        if (manufacturer.contains("samsung")) {
-            trySamsungExemption(context);
-        } else if (manufacturer.contains("xiaomi") || manufacturer.contains("redmi") || manufacturer.contains("poco")) {
-            tryXiaomiExemption(context);
-        } else if (manufacturer.contains("huawei") || manufacturer.contains("honor")) {
-            tryHuaweiExemption(context);
-        } else if (manufacturer.contains("oppo") || manufacturer.contains("realme")) {
-            tryOppoExemption(context);
-        } else if (manufacturer.contains("vivo") || manufacturer.contains("iqoo")) {
-            tryVivoExemption(context);
-        } else if (manufacturer.contains("oneplus")) {
-            tryOnePlusExemption(context);
-        } else if (manufacturer.contains("asus")) {
-            tryAsusExemption(context);
-        } else if (manufacturer.contains("meizu")) {
-            tryMeizuExemption(context);
-        } else if (manufacturer.contains("letv") || manufacturer.contains("leeco")) {
-            tryLetvExemption(context);
-        } else if (manufacturer.contains("nokia") || manufacturer.contains("hmd")) {
-            tryNokiaExemption(context);
-        } else if (manufacturer.contains("infinix") || manufacturer.contains("tecno") || manufacturer.contains("itel")) {
-            tryTranssionExemption(context);
+            if (manufacturer.contains("samsung")) {
+                trySamsungExemption(context);
+            } else if (manufacturer.contains("xiaomi") || manufacturer.contains("redmi") || manufacturer.contains("poco")) {
+                tryXiaomiExemption(context);
+            } else if (manufacturer.contains("huawei") || manufacturer.contains("honor")) {
+                tryHuaweiExemption(context);
+            } else if (manufacturer.contains("oppo") || manufacturer.contains("realme")) {
+                tryOppoExemption(context);
+            } else if (manufacturer.contains("vivo") || manufacturer.contains("iqoo")) {
+                tryVivoExemption(context);
+            } else if (manufacturer.contains("oneplus")) {
+                tryOnePlusExemption(context);
+            } else if (manufacturer.contains("asus")) {
+                tryAsusExemption(context);
+            } else if (manufacturer.contains("meizu")) {
+                tryMeizuExemption(context);
+            } else if (manufacturer.contains("letv") || manufacturer.contains("leeco")) {
+                tryLetvExemption(context);
+            } else if (manufacturer.contains("nokia") || manufacturer.contains("hmd")) {
+                tryNokiaExemption(context);
+            } else if (manufacturer.contains("infinix") || manufacturer.contains("tecno") || manufacturer.contains("itel")) {
+                tryTranssionExemption(context);
+            }
+        } catch (Throwable ignored) {
+            // Fallback générique si un intent OEM est corrompu : ouvrir la liste
+            // standard des apps avec optim batterie.
+            try {
+                Intent fallback = new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS);
+                fallback.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                context.startActivity(fallback);
+            } catch (Throwable ignored2) {}
         }
 
         return standardShown;

@@ -25,16 +25,19 @@ public class KinSellMessagingService extends FirebaseMessagingService {
     @Override
     public void onNewToken(String token) {
         super.onNewToken(token);
-        // Envoyer le nouveau token au serveur immédiatement
-        // (si le token est roté en background, le bridge Capacitor ne le verra pas
-        //  tant que l'utilisateur n'ouvre pas l'app)
-        new Thread(() -> {
+        // P1 #12 : thread daemon (ne bloque pas la JVM si SharedPrefs hang) +
+        // try/catch global. Envoi immédiat au serveur si bridge Capacitor actif,
+        // sinon stocké en SharedPrefs pour flush au prochain onResume.
+        if (token == null || token.isEmpty()) return;
+        Thread t = new Thread(() -> {
             try {
                 android.content.SharedPreferences prefs =
                     getSharedPreferences("kin_sell_prefs", MODE_PRIVATE);
                 prefs.edit().putString("pending_fcm_token", token).apply();
-            } catch (Exception ignored) {}
-        }).start();
+            } catch (Throwable ignored) { /* JVM shutdown ou prefs locked */ }
+        }, "ks-fcm-token-persist");
+        t.setDaemon(true);
+        try { t.start(); } catch (Throwable ignored) {}
     }
 
     @Override
@@ -46,7 +49,13 @@ public class KinSellMessagingService extends FirebaseMessagingService {
         // donc les canaux n'existent pas. Sans canal, Android 8+ ignore la notif.
         NotificationChannels.createChannels(this);
 
-        String type = remoteMessage.getData().get("type");
+        // ── P0 #1 : data peut être null (FCM n'envoie pas toujours de payload
+        //    data, ex. notifs system ou topics-only). On travaille sur une Map
+        //    sûre pour éviter NullPointerException.
+        java.util.Map<String, String> data = remoteMessage.getData();
+        if (data == null) data = java.util.Collections.emptyMap();
+
+        String type = data.get("type");
         String title = "";
         String body = "";
 
@@ -58,15 +67,20 @@ public class KinSellMessagingService extends FirebaseMessagingService {
                     ? remoteMessage.getNotification().getBody() : "";
         }
         // Data payload prend la priorité si présent
-        if (remoteMessage.getData().containsKey("title")) {
-            title = remoteMessage.getData().get("title");
+        if (data.containsKey("title")) {
+            title = data.get("title");
         }
-        if (remoteMessage.getData().containsKey("body")) {
-            body = remoteMessage.getData().get("body");
+        if (data.containsKey("body")) {
+            body = data.get("body");
         }
 
         if (title == null || title.isEmpty()) title = "Kin-Sell";
         if (body == null) body = "";
+
+        // Pas de data ET pas de notification lisible → on ignore (évite une notif vide)
+        if (type == null && (title.equals("Kin-Sell") && body.isEmpty())) {
+            return;
+        }
 
         if ("call".equals(type)) {
             showIncomingCallNotification(remoteMessage, title, body);
