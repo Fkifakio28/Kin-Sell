@@ -669,6 +669,8 @@ export const en: Record<string, string> = {
     "user.verification": "Verification",
     "user.analytics": "Kin-Sell Analytics",
     "user.autoShop": "Auto Shop",
+    "user.jobs": "Jobs",
+    "user.boosts": "Boosts",
     "user.analyticsTitle": "Kin-Sell Analytics",
     "user.analyticsSummary": "Activity summary",
     "user.analyticsMarket": "Market position",
