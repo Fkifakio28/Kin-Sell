@@ -740,6 +740,61 @@ export const admin = {
   iaMessageTargetUsers: (params?: { search?: string; role?: string; limit?: number }) =>
     request<{ users: IaTargetUser[] }>("/admin/ia/messages/target-users", { params: params as Record<string, string | number | undefined> }),
 
+  // ── Chantier J5 : Job Analytics Admin ──
+  jobSnapshots: (params?: {
+    country?: string;
+    countryCode?: string;
+    city?: string;
+    category?: string;
+    onlyOverride?: boolean;
+    limit?: number;
+    offset?: number;
+  }) =>
+    request<{ items: AdminJobSnapshot[]; total: number; limit: number; offset: number }>(
+      "/admin/analytics/jobs/snapshots",
+      {
+        params: params
+          ? ({
+              ...params,
+              onlyOverride: params.onlyOverride ? "true" : undefined,
+            } as Record<string, string | number | undefined>)
+          : undefined,
+      },
+    ),
+  upsertJobSnapshot: (body: {
+    snapshotDate?: string;
+    country: string;
+    countryCode?: string | null;
+    city?: string | null;
+    category: string;
+    openJobs: number;
+    applicants: number;
+    avgSalaryUsdCents?: number | null;
+    medianSalaryUsdCents?: number | null;
+    topSkills?: string[];
+    trend7dPercent?: number | null;
+    sourceNotes?: string | null;
+  }) =>
+    request<{ snapshot: AdminJobSnapshot }>("/admin/analytics/jobs/snapshots", {
+      method: "POST",
+      body,
+    }),
+  clearJobSnapshotOverride: (id: string, mode: "unflag" | "delete" = "unflag") =>
+    request<{ snapshot?: AdminJobSnapshot }>(
+      `/admin/analytics/jobs/snapshots/${encodeURIComponent(id)}`,
+      { method: "DELETE", params: { mode } },
+    ),
+  refreshJobSnapshots: () =>
+    request<JobSnapshotRefreshReport>("/admin/analytics/jobs/refresh", { method: "POST" }),
+  jobIngestionRuns: (limit?: number) =>
+    request<{ runs: AdminJobIngestionRun[] }>("/admin/analytics/jobs/ingestion-runs", {
+      params: limit ? { limit } : undefined,
+    }),
+  jobGeminiMetrics: () =>
+    request<JobGeminiMetrics>("/admin/analytics/jobs/gemini-metrics"),
+  resetJobGeminiMetrics: () =>
+    request<{ ok: boolean }>("/admin/analytics/jobs/gemini-metrics/reset", { method: "POST" }),
+
 };
 
 // ── Admin AI/Subscription types ──
@@ -967,4 +1022,65 @@ export type IaTargetUser = {
   displayName: string;
   city?: string | null;
   country?: string | null;
+};
+
+// ----------------------------------------------
+// CHANTIER J5 � JOB ANALYTICS ADMIN TYPES
+// ----------------------------------------------
+
+export type AdminJobSnapshot = {
+  id: string;
+  snapshotDate: string;
+  country: string;
+  countryCode: string | null;
+  city: string | null;
+  category: string;
+  openJobs: number;
+  applicants: number;
+  saturationIndex: number;
+  avgSalaryUsdCents: number | null;
+  medianSalaryUsdCents: number | null;
+  topSkills: string[];
+  trend7dPercent: number | null;
+  isManualOverride: boolean;
+  overriddenBy: string | null;
+  overriddenAt: string | null;
+  sourceNotes: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type JobSnapshotRefreshReport = {
+  date: string;
+  zonesProcessed: number;
+  zonesCreated: number;
+  zonesUpdated: number;
+  zonesSkippedOverride: number;
+  externalSignalsUsed: number;
+  durationMs: number;
+  errors: string[];
+};
+
+export type AdminJobIngestionRun = {
+  id: string;
+  sourceId: string;
+  runDate: string;
+  status: string;
+  recordsFetched: number;
+  recordsStored: number;
+  errors: number;
+  errorDetails: string | null;
+  latencyMs: number;
+  startedAt: string;
+  completedAt: string | null;
+  source?: { name: string; type: string };
+};
+
+export type JobGeminiMetrics = {
+  totalCalls: number;
+  cached: number;
+  geminiCalled: number;
+  geminiFailed: number;
+  fallback: number;
+  lastResetAt: string;
 };

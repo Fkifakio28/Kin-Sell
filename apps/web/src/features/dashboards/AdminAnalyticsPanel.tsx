@@ -9,6 +9,7 @@
  */
 import { useState, useEffect, useCallback, useRef } from "react";
 import { admin } from "../../lib/services/admin.service";
+import { AdminJobAnalyticsPanel } from "./AdminJobAnalyticsPanel";
 import type {
   AnalytiqueData,
   MarketIntelligenceData,
@@ -44,7 +45,7 @@ const TIERS = [
   { key: "premium", label: "Premium / Agency", color: C.amber, desc: "White-label, revente, export de masse" },
 ] as const;
 
-type Tab = "overview" | "market-intel" | "case-study" | "exports" | "sources";
+type Tab = "overview" | "market-intel" | "case-study" | "exports" | "sources" | "jobs";
 
 // ── Small helpers ──
 const Badge = ({ children, color }: { children: React.ReactNode; color: string }) => (
@@ -352,6 +353,7 @@ export default function AdminAnalyticsPanel() {
         <TabBtn active={tab === "overview"} label="📊 Vue globale" onClick={() => setTab("overview")} />
         <TabBtn active={tab === "market-intel"} label="🔍 Market Intelligence" onClick={() => setTab("market-intel")} />
         <TabBtn active={tab === "case-study"} label="📋 Case Study Studio" onClick={() => setTab("case-study")} />
+        <TabBtn active={tab === "jobs"} label="🧑‍💼 Analytique Emploi" onClick={() => setTab("jobs")} />
         <TabBtn active={tab === "exports"} label="📦 Historique exports" onClick={() => setTab("exports")} />
         <TabBtn active={tab === "sources"} label="🔗 Sources & Enrichissement" onClick={() => setTab("sources")} />
       </div>
@@ -379,6 +381,9 @@ export default function AdminAnalyticsPanel() {
 
       {/* ════════════════ TAB: Exports ════════════════ */}
       {tab === "exports" && renderExports(exports)}
+
+      {/* ════════════════ TAB: Jobs Analytics (J5) ════════════════ */}
+      {tab === "jobs" && <AdminJobAnalyticsPanel />}
 
       {/* ════════════════ TAB: Sources & Enrichissement ════════════════ */}
       {tab === "sources" && (

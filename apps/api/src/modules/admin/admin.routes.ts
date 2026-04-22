@@ -9,6 +9,7 @@ import * as adminService from "./admin.service.js";
 import * as messageGuardService from "../message-guard/message-guard.service.js";
 import * as adsService from "../ads/ads.service.js";
 import aiAdminRoutes from "../analytics/ai-admin.routes.js";
+import adminJobAnalyticsRoutes from "../job-analytics/admin-job-analytics.routes.js";
 import * as iaAdsPlacements from "../ads/ia-ads-placements.service.js";
 import * as iaMessengerPromo from "../ads/ia-messenger-promo.service.js";
 import * as messengerScheduler from "../ads/messenger-scheduler.service.js";
@@ -342,6 +343,9 @@ router.patch("/ai-agents/:id", asyncHandler(async (req: AuthenticatedRequest, re
 
 // ── AI Admin Control Panel (sous-routes avancées) ──
 router.use("/ai-control", aiAdminRoutes);
+
+// ── Job Analytics Admin (Chantier J5) — override manuel + refresh manuel + métriques ──
+router.use("/analytics/jobs", adminJobAnalyticsRoutes);
 
 // ════════════════════════════════════════════
 // 13. RANKINGS
