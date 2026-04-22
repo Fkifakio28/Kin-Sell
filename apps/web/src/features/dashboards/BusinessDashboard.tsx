@@ -449,7 +449,12 @@ export function BusinessDashboard() {
   }, [isLoggedIn, user, on, off]);
 
   /* ── AI plan gating for business ── */
-  const { hasAnalytics: bizHasAnalytics, hasPremiumAnalytics: bizHasPremiumAnalytics, hasIaMarchand: bizHasIaMarchandPlan, hasIaOrder: bizHasIaOrderPlan } = useFeatureGate(myPlan, "BUSINESS");
+  const {
+    hasAnalytics: bizHasAnalytics,
+    hasPremiumAnalytics: bizHasPremiumAnalytics,
+    hasIaMarchandAuto: bizHasIaMarchandAutoPlan,
+    hasIaOrder: bizHasIaOrderPlan,
+  } = useFeatureGate(myPlan, "BUSINESS");
 
   // Accès Boost business : tout plan business non STARTER/BASED, ou add-on BOOST_VISIBILITY
   const bizHasBoostAccess = (() => {
@@ -460,10 +465,9 @@ export function BusinessDashboard() {
   })();
 
   // F19+F24: Clean up localStorage toggles if access lost
-  // NOTE: IA_MERCHANT cleanup kept for BUSINESS scope (not free for businesses)
   useEffect(() => {
     if (!planLoaded) return; // don't wipe toggles before plan is fetched
-    if (!bizHasIaMarchandPlan) {
+    if (!bizHasIaMarchandAutoPlan) {
       localStorage.setItem(SK_BIZ_AI_AUTO_NEGO, 'off');
       setBizAiAutoNegoEnabled(false);
     }
@@ -471,7 +475,7 @@ export function BusinessDashboard() {
       localStorage.setItem(SK_BIZ_AI_COMMANDE, 'off');
       setBizAiCommandeEnabled(false);
     }
-  }, [planLoaded, bizHasIaMarchandPlan, bizHasIaOrderPlan]);
+  }, [planLoaded, bizHasIaMarchandAutoPlan, bizHasIaOrderPlan]);
 
   // F24: Refetch plan every 5 min
   useEffect(() => {
@@ -492,7 +496,7 @@ export function BusinessDashboard() {
     };
   }, [business]);
 
-  const bizAutoNegoActive = bizHasIaMarchandPlan && bizAiAutoNegoEnabled;
+  const bizAutoNegoActive = bizHasIaMarchandAutoPlan && bizAiAutoNegoEnabled;
 
   /* ── Kin-Sell Analytique: fetch AI insights for business ── */
 
@@ -3293,7 +3297,7 @@ export function BusinessDashboard() {
             <DashboardAiSettings
               t={t}
               storageKeys={{ advice: SK_BIZ_AI_ADVICE, autoNego: SK_BIZ_AI_AUTO_NEGO, commande: SK_BIZ_AI_COMMANDE }}
-              hasIaMarchandPlan={bizHasIaMarchandPlan}
+              hasIaMarchandAutoPlan={bizHasIaMarchandAutoPlan}
               hasIaOrderPlan={bizHasIaOrderPlan}
               autoNegoActive={bizAiAutoNegoEnabled}
               planLoaded={planLoaded}
@@ -3482,7 +3486,7 @@ export function BusinessDashboard() {
                 <h3 style={{ margin: '0 0 10px', fontSize: 15, color: 'var(--color-text-primary, #fff)' }}>🤖 IA disponibles</h3>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 10 }}>
                   {[
-                    { name: 'IA Marchande', icon: '🤝', desc: 'Négociation automatisée', active: bizAiAutoNegoEnabled, locked: !bizHasIaMarchandPlan, key: 'autoNego' as const },
+                    { name: 'IA Marchande', icon: '🤝', desc: 'Négociation automatisée', active: bizAiAutoNegoEnabled, locked: !bizHasIaMarchandAutoPlan, key: 'autoNego' as const },
                     { name: 'IA Ads', icon: '📢', desc: 'Boost articles & boutique', active: bizAiAdviceEnabled, locked: false, key: 'advice' as const },
                     { name: 'Kin-Sell Analytique', icon: '📊', desc: 'Analyses marché avancées', active: bizHasAnalytics, locked: !bizHasAnalytics, key: 'analytics' as const },
                     { name: 'Knowledge IA', icon: '🧠', desc: 'Détecte vos besoins & conseille', active: bizHasAnalytics, locked: !bizHasAnalytics, key: 'analytics' as const },

@@ -615,7 +615,12 @@ export function UserDashboard() {
   }, [isLoggedIn, user]);
 
   /* ── Kin-Sell Analytique: fetch insights when analytics tab is opened ── */
-  const { hasAnalytics, hasPremiumAnalytics, hasIaMarchand: hasIaMarchandPlan, hasIaOrder: hasIaOrderPlan } = useFeatureGate(activePlan);
+  const {
+    hasAnalytics,
+    hasPremiumAnalytics,
+    hasIaMarchandAuto: hasIaMarchandAutoPlan,
+    hasIaOrder: hasIaOrderPlan,
+  } = useFeatureGate(activePlan);
 
   // Accès Boost : plan BOOST/AUTO/PRO_VENDOR ou add-on BOOST_VISIBILITY
   const hasBoostAccess = (() => {
@@ -626,14 +631,17 @@ export function UserDashboard() {
   })();
 
   // F19+F24: When plan changes, clean up localStorage toggles if access lost
-  // NOTE: IA_MERCHANT (auto-nego) is FREE for all users — never wiped here
   useEffect(() => {
     if (!planLoaded) return; // don't wipe toggles before plan is fetched
     if (!hasIaOrderPlan) {
       localStorage.setItem(SK_AI_COMMANDE, 'off');
       setAiCommandeEnabled(false);
     }
-  }, [planLoaded, hasIaOrderPlan]);
+    if (!hasIaMarchandAutoPlan) {
+      localStorage.setItem(SK_AI_AUTO_NEGO, 'off');
+      setAiAutoNegoEnabled(false);
+    }
+  }, [planLoaded, hasIaOrderPlan, hasIaMarchandAutoPlan]);
 
   // F24: Refetch plan every 5 min to detect subscription changes
   useEffect(() => {
@@ -657,7 +665,7 @@ export function UserDashboard() {
   /* showAi for NegotiationRespondPopup: free hints always, paid advice when toggled on */
   const showNegAi = aiAdviceEnabled;
   /* auto-negotiate only when plan allows + user toggled on */
-  const autoNegoActive = hasIaMarchandPlan && aiAutoNegoEnabled;
+  const autoNegoActive = hasIaMarchandAutoPlan && aiAutoNegoEnabled;
 
   useEffect(() => {
     if (activeSection !== 'analytics' || !hasAnalytics || basicInsights) return;
@@ -4573,7 +4581,7 @@ export function UserDashboard() {
             <DashboardAiSettings
               t={t}
               storageKeys={{ advice: SK_AI_ADVICE, autoNego: SK_AI_AUTO_NEGO, commande: SK_AI_COMMANDE }}
-              hasIaMarchandPlan={hasIaMarchandPlan}
+              hasIaMarchandAutoPlan={hasIaMarchandAutoPlan}
               hasIaOrderPlan={hasIaOrderPlan}
               autoNegoActive={autoNegoActive}
               planLoaded={planLoaded}

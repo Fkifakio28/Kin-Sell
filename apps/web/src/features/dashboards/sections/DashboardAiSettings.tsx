@@ -14,7 +14,7 @@ interface AiSettingsProps {
     commande: string;
   };
   /** Feature gate booleans */
-  hasIaMarchandPlan: boolean;
+  hasIaMarchandAutoPlan: boolean;
   hasIaOrderPlan: boolean;
   autoNegoActive?: boolean;
   /** True once the billing plan has been fetched (prevents premature toggle wipe) */
@@ -24,7 +24,7 @@ interface AiSettingsProps {
 export function DashboardAiSettings({
   t,
   storageKeys,
-  hasIaMarchandPlan,
+  hasIaMarchandAutoPlan,
   hasIaOrderPlan,
   autoNegoActive = false,
   planLoaded = true,
@@ -64,27 +64,24 @@ export function DashboardAiSettings({
           </button>
         </div>
 
-        {/* ── Marchandage automatique — gratuit pour users, payant pour business ── */}
-        <div className={`ud-ai-toggle-row${!hasIaMarchandPlan ? " ud-ai-toggle-row--locked" : ""}`}>
+        {/* ── Marchandage automatique — toujours payant (IA_MERCHANT_AUTO) ── */}
+        <div className={`ud-ai-toggle-row${!hasIaMarchandAutoPlan ? " ud-ai-toggle-row--locked" : ""}`}>
           <div className="ud-ai-toggle-info">
             <strong>🤝 {t("user.aiAutoNegoLabel")}</strong>
             <span className="ud-ai-toggle-hint">
               {!planLoaded
                 ? "Chargement du plan…"
-                : hasIaMarchandPlan
+                : hasIaMarchandAutoPlan
                   ? t("user.aiAutoNegoHint")
                   : t("user.aiAutoNegoLocked")}
             </span>
-            {planLoaded && hasIaMarchandPlan && (
-              <span className="ud-ai-toggle-badge-free">✓ Inclus par défaut</span>
-            )}
-            {planLoaded && !hasIaMarchandPlan && (
+            {planLoaded && !hasIaMarchandAutoPlan && (
               <span className="ud-ai-toggle-badge-locked">Désactivé par abonnement</span>
             )}
           </div>
           {!planLoaded ? (
             <span className="ud-ai-switch ud-ai-switch--loading"><span className="ud-ai-switch-thumb" /></span>
-          ) : hasIaMarchandPlan ? (
+          ) : hasIaMarchandAutoPlan ? (
             <button
               type="button"
               className={`ud-ai-switch${aiAutoNegoEnabled ? " ud-ai-switch--on" : ""}`}
