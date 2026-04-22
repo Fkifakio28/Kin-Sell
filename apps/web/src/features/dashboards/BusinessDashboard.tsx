@@ -47,6 +47,7 @@ import { DashboardAdvancedAnalytics } from './sections/DashboardAdvancedAnalytic
 import MyBoostsPanel from '../../components/MyBoostsPanel';
 import { LockedOverlay } from '../../components/LockedOverlay';
 import { isRecommendationFree } from '../../shared/utils/recommendation-access';
+import { DataSaverToggle } from '../../components/DataSaverToggle';
 import { MyIncentivesPanel } from '../../components/MyIncentivesPanel';
 import { SmartUpsellBanner, SmartUpsellCard, PostActionTip } from '../../components/SmartUpsell';
 import { PromoCreator } from '../../components/PromoCreator';
@@ -3139,6 +3140,11 @@ export function BusinessDashboard() {
         )}
         {activeSection === 'parametres' && (
           <div className="ud-section animate-fade-in">
+
+            {/* Mode économie de données */}
+            <section className="ud-glass-panel bz-glass-panel" style={{ marginBottom: 16 }}>
+              <DataSaverToggle />
+            </section>
 
             {/* Identité & Coordonnées */}
             <section className="ud-glass-panel bz-glass-panel">
