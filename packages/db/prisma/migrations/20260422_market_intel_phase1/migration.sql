@@ -174,18 +174,3 @@ ALTER TABLE "MarketTrend" ADD CONSTRAINT "MarketTrend_productId_fkey"
 ALTER TABLE "MarketTrend" ADD CONSTRAINT "MarketTrend_jobId_fkey"
     FOREIGN KEY ("jobId") REFERENCES "MarketJob"("id")
     ON DELETE CASCADE ON UPDATE CASCADE;
-node.exe : Error: P1000
-Au caractère Ligne:1 : 1
-+ & "C:\Program Files\nodejs/node.exe" "C:\Program Files\nodejs/node_mo ...
-+ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    + CategoryInfo          : NotSpecified: (Error: P1000:String) [], RemoteEx 
-   ception
-    + FullyQualifiedErrorId : NativeCommandError
- 
-
-Authentication failed against database server at `localhost`, the provided 
-database credentials for `(not available)` are not valid.
-
-Please make sure to provide valid database credentials for the database server 
-at `localhost`.
-
