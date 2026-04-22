@@ -47,6 +47,7 @@ import { PostSaleAdvisor } from '../../components/PostSaleAdvisor';
 import TutorialOverlay, { useTutorial, TutorialRelaunchBtn } from '../../components/TutorialOverlay';
 import { userDashboardSteps, userSalesSteps } from '../../components/tutorial-steps';
 import { AnalyticsCTAPanel } from '../../components/AnalyticsCTAPanel';
+import { FrustrationPanel } from '../../components/FrustrationPanel';
 import { SmartUpsellBanner, SmartUpsellCard, PostActionTip } from '../../components/SmartUpsell';
 import { PromoCreator } from '../../components/PromoCreator';
 import { OrderValidationQrModal } from '../../components/OrderValidationQrModal';
@@ -4594,6 +4595,7 @@ export function UserDashboard() {
                 Kin-Sell Analytique vous aide à mieux décider, mieux vendre et mieux piloter vos performances.
                 Découvrez les recommandations personnalisées basées sur votre activité.
               </p>
+              <FrustrationPanel accountType="user" />
               <AnalyticsCTAPanel />
             </section>
           </div>

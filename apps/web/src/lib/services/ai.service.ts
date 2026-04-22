@@ -461,3 +461,33 @@ export type AnalyticsCTAReport = {
 export const analyticsCTA = {
   evaluate: () => request<AnalyticsCTAReport>("/analytics/ai/analytics-cta"),
 };
+
+// ════════════════════════════════════════
+// Direct Answers — Chantier C Phase 5/6
+// Réponses droit au but unifiées (SELL + JOB)
+// ════════════════════════════════════════
+
+export type DirectAnswerSeverity = "INFO" | "WARN" | "CRITICAL";
+export type DirectAnswerSource = "SELL" | "JOB" | "HYBRID";
+export type DirectAnswerTier = "FREE" | "MEDIUM" | "PREMIUM";
+
+export interface DirectAnswer {
+  id: string;
+  severity: DirectAnswerSeverity;
+  pain: string;
+  action: string;
+  cta: { label: string; action: string; meta?: Record<string, unknown> };
+  source: DirectAnswerSource;
+  priority: number;
+}
+
+export interface DirectAnswerReport {
+  tier: DirectAnswerTier;
+  answers: DirectAnswer[];
+  totalCandidates: number;
+  cappedBy: "TIER" | "NONE";
+}
+
+export const directAnswers = {
+  fetch: () => request<DirectAnswerReport>("/analytics/direct-answers"),
+};
