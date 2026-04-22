@@ -28,6 +28,9 @@ const recordGrowthEventIdempotent = mod.recordGrowthEventIdempotent;
 const runRebalance100Job = mod.runRebalance100Job;
 const diagnosticUser = mod.diagnosticUser;
 const getIncentiveStats = mod.getIncentiveStats;
+const listMyGrants = mod.listMyGrants;
+const listMyCoupons = mod.listMyCoupons;
+const convertGrantToCoupon = mod.convertGrantToCoupon;
 
 // ── Helpers ──
 const NOW = new Date("2026-04-15T12:00:00Z");
@@ -502,5 +505,128 @@ describe("getIncentiveStats", () => {
     expect(result.overview.totalRedemptions).toBe(15);
     expect(result.monthly.couponsDistributed).toBe(30);
     expect(result.monthly.ratio100Percent).toBeCloseTo(16.67, 0);
+  });
+});
+
+// ══════════════════════════════════════════════
+// User self-service — Mes avantages IA (D1)
+// ══════════════════════════════════════════════
+
+describe("listMyGrants", () => {
+  it("retourne les grants avec flag convertible", async () => {
+    mockPrisma.growthIncentiveGrant.findMany.mockResolvedValue([
+      { id: "g1", kind: "CPC", discountPercent: 30, addonCode: null, status: "ACTIVE", expiresAt: new Date("2026-06-01"), createdAt: NOW, metadata: {} },
+      { id: "g2", kind: "CPC", discountPercent: 50, addonCode: null, status: "CONSUMED", expiresAt: new Date("2026-06-01"), createdAt: NOW, metadata: {} },
+      { id: "g3", kind: "CPC", discountPercent: 20, addonCode: null, status: "ACTIVE", expiresAt: new Date("2025-01-01"), createdAt: NOW, metadata: {} },
+    ]);
+    const result = await listMyGrants("user-1");
+    expect(result).toHaveLength(3);
+    expect(result[0].convertible).toBe(true);
+    expect(result[1].convertible).toBe(false); // CONSUMED
+    expect(result[2].convertible).toBe(false); // expired
+  });
+
+  it("filtre par userId", async () => {
+    mockPrisma.growthIncentiveGrant.findMany.mockResolvedValue([]);
+    await listMyGrants("user-X");
+    expect(mockPrisma.growthIncentiveGrant.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { userId: "user-X" } }),
+    );
+  });
+});
+
+describe("listMyCoupons", () => {
+  it("retourne les coupons avec fromGrantId extrait du metadata", async () => {
+    mockPrisma.incentiveCoupon.findMany.mockResolvedValue([
+      { id: "c1", code: "KS-AAA", kind: "PLAN_DISCOUNT", discountPercent: 30, status: "ACTIVE", expiresAt: new Date("2026-06-01"), usedCount: 0, maxUses: 1, maxUsesPerUser: 1, createdAt: NOW, metadata: { fromGrant: "g1" } },
+      { id: "c2", code: "KS-BBB", kind: "PLAN_DISCOUNT", discountPercent: 20, status: "ACTIVE", expiresAt: new Date("2026-06-01"), usedCount: 0, maxUses: 1, maxUsesPerUser: 1, createdAt: NOW, metadata: null },
+    ]);
+    const result = await listMyCoupons("user-1");
+    expect(result[0].fromGrantId).toBe("g1");
+    expect(result[1].fromGrantId).toBeNull();
+  });
+
+  it("filtre par recipientUserId", async () => {
+    mockPrisma.incentiveCoupon.findMany.mockResolvedValue([]);
+    await listMyCoupons("user-Z");
+    expect(mockPrisma.incentiveCoupon.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { recipientUserId: "user-Z" } }),
+    );
+  });
+});
+
+describe("convertGrantToCoupon", () => {
+  it("rejette GRANT_NOT_FOUND", async () => {
+    mockPrisma.growthIncentiveGrant.findUnique.mockResolvedValue(null);
+    await expect(convertGrantToCoupon("user-1", "g1")).rejects.toThrow("GRANT_NOT_FOUND");
+  });
+
+  it("rejette GRANT_NOT_OWNED si userId != grant.userId", async () => {
+    mockPrisma.growthIncentiveGrant.findUnique.mockResolvedValue({
+      id: "g1", userId: "other", status: "ACTIVE", discountPercent: 30, expiresAt: new Date("2026-06-01"), kind: "CPC",
+    });
+    await expect(convertGrantToCoupon("user-1", "g1")).rejects.toThrow("GRANT_NOT_OWNED");
+  });
+
+  it("rejette GRANT_NOT_ACTIVE", async () => {
+    mockPrisma.growthIncentiveGrant.findUnique.mockResolvedValue({
+      id: "g1", userId: "user-1", status: "CONSUMED", discountPercent: 30, expiresAt: new Date("2026-06-01"), kind: "CPC",
+    });
+    await expect(convertGrantToCoupon("user-1", "g1")).rejects.toThrow("GRANT_NOT_ACTIVE");
+  });
+
+  it("rejette GRANT_EXPIRED", async () => {
+    mockPrisma.growthIncentiveGrant.findUnique.mockResolvedValue({
+      id: "g1", userId: "user-1", status: "ACTIVE", discountPercent: 30, expiresAt: new Date("2025-01-01"), kind: "CPC",
+    });
+    await expect(convertGrantToCoupon("user-1", "g1")).rejects.toThrow("GRANT_EXPIRED");
+  });
+
+  it("rejette GRANT_NOT_CONVERTIBLE si discountPercent null", async () => {
+    mockPrisma.growthIncentiveGrant.findUnique.mockResolvedValue({
+      id: "g1", userId: "user-1", status: "ACTIVE", discountPercent: null, expiresAt: new Date("2026-06-01"), kind: "ADDON",
+    });
+    await expect(convertGrantToCoupon("user-1", "g1")).rejects.toThrow("GRANT_NOT_CONVERTIBLE");
+  });
+
+  it("consomme le grant et crée un coupon", async () => {
+    const grantData = {
+      id: "g1", userId: "user-1", status: "ACTIVE", discountPercent: 30, kind: "CPC",
+      expiresAt: new Date("2026-06-01"),
+    };
+    mockPrisma.growthIncentiveGrant.findUnique.mockResolvedValue(grantData);
+    mockPrisma.growthIncentiveGrant.update.mockResolvedValue({ id: "g1", status: "CONSUMED" });
+    mockPrisma.incentiveCoupon.create.mockResolvedValue({
+      id: "c-new", code: "KS-AABBCCDD", expiresAt: new Date("2026-06-01"),
+    });
+    mockPrisma.growthIncentiveEvent.create.mockResolvedValue({ id: "ev-1" });
+    (mockPrisma as any)._$transactionOverride = vi.fn(async (fn: any) => fn(mockPrisma));
+
+    const result = await convertGrantToCoupon("user-1", "g1");
+    expect(result.grantId).toBe("g1");
+    expect(result.couponCode).toBe("KS-AABBCCDD");
+    expect(result.discountPercent).toBe(30);
+    expect(mockPrisma.growthIncentiveGrant.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "g1" }, data: { status: "CONSUMED" } }),
+    );
+    expect(mockPrisma.incentiveCoupon.create).toHaveBeenCalled();
+
+    delete (mockPrisma as any)._$transactionOverride;
+  });
+
+  it("rejette GRANT_ALREADY_CONSUMED si race (fresh status != ACTIVE)", async () => {
+    const grantData = {
+      id: "g1", userId: "user-1", status: "ACTIVE", discountPercent: 30, kind: "CPC",
+      expiresAt: new Date("2026-06-01"),
+    };
+    // 1er findUnique (hors tx) → ACTIVE ; 2e findUnique (dans tx) → CONSUMED (race)
+    mockPrisma.growthIncentiveGrant.findUnique
+      .mockResolvedValueOnce(grantData)
+      .mockResolvedValueOnce({ ...grantData, status: "CONSUMED" });
+    (mockPrisma as any)._$transactionOverride = vi.fn(async (fn: any) => fn(mockPrisma));
+
+    await expect(convertGrantToCoupon("user-1", "g1")).rejects.toThrow("GRANT_ALREADY_CONSUMED");
+
+    delete (mockPrisma as any)._$transactionOverride;
   });
 });

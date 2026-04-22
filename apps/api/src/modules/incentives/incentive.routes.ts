@@ -66,6 +66,55 @@ router.post(
 );
 
 /* ════════════════════════════════════════
+   USER SELF-SERVICE — Mes avantages IA (D1)
+   ════════════════════════════════════════ */
+
+router.get(
+  "/me/grants",
+  requireAuth,
+  asyncHandler(async (request: AuthenticatedRequest, response) => {
+    const grants = await incentiveService.listMyGrants(request.auth!.userId);
+    response.json({ grants });
+  }),
+);
+
+router.get(
+  "/me/coupons",
+  requireAuth,
+  asyncHandler(async (request: AuthenticatedRequest, response) => {
+    const coupons = await incentiveService.listMyCoupons(request.auth!.userId);
+    response.json({ coupons });
+  }),
+);
+
+const convertParamsSchema = z.object({ id: z.string().min(1) });
+
+router.post(
+  "/me/grants/:id/convert",
+  requireAuth,
+  rateLimit(RateLimits.COUPON_VALIDATE),
+  asyncHandler(async (request: AuthenticatedRequest, response) => {
+    const { id } = convertParamsSchema.parse(request.params);
+    try {
+      const result = await incentiveService.convertGrantToCoupon(request.auth!.userId, id);
+      response.status(201).json(result);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "CONVERSION_FAILED";
+      const statusMap: Record<string, number> = {
+        GRANT_NOT_FOUND: 404,
+        GRANT_NOT_OWNED: 403,
+        GRANT_NOT_ACTIVE: 409,
+        GRANT_EXPIRED: 410,
+        GRANT_NOT_CONVERTIBLE: 422,
+        GRANT_ALREADY_CONSUMED: 409,
+      };
+      const status = statusMap[message] ?? 400;
+      response.status(status).json({ error: message });
+    }
+  }),
+);
+
+/* ════════════════════════════════════════
    ADMIN — CRUD coupons
    ════════════════════════════════════════ */
 

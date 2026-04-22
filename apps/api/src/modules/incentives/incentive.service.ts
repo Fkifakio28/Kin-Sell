@@ -813,6 +813,152 @@ export async function revokeGrowthGrant(grantId: string) {
   });
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   USER SELF-SERVICE — Mes avantages IA (Chantier D Phase D1)
+   ═══════════════════════════════════════════════════════════════ */
+
+export interface MyGrantSummary {
+  grantId: string;
+  kind: string;
+  discountPercent: number | null;
+  addonCode: string | null;
+  status: GrantStatus;
+  expiresAt: Date;
+  createdAt: Date;
+  convertible: boolean;
+}
+
+export interface MyCouponSummary {
+  couponId: string;
+  code: string;
+  kind: CouponKind;
+  discountPercent: number | null;
+  status: CouponStatus;
+  expiresAt: Date;
+  usedCount: number;
+  maxUses: number;
+  maxUsesPerUser: number;
+  createdAt: Date;
+  fromGrantId: string | null;
+}
+
+/** Liste les grants d'un utilisateur (self). */
+export async function listMyGrants(userId: string): Promise<MyGrantSummary[]> {
+  const grants = await prisma.growthIncentiveGrant.findMany({
+    where: { userId },
+    orderBy: { createdAt: "desc" },
+    take: 100,
+  });
+  const now = new Date();
+  return grants.map((g) => ({
+    grantId: g.id,
+    kind: g.kind,
+    discountPercent: g.discountPercent,
+    addonCode: g.addonCode,
+    status: g.status,
+    expiresAt: g.expiresAt,
+    createdAt: g.createdAt,
+    convertible: g.status === "ACTIVE" && g.expiresAt > now && g.discountPercent != null,
+  }));
+}
+
+/** Liste les coupons d'un utilisateur (self). */
+export async function listMyCoupons(userId: string): Promise<MyCouponSummary[]> {
+  const coupons = await prisma.incentiveCoupon.findMany({
+    where: { recipientUserId: userId },
+    orderBy: { createdAt: "desc" },
+    take: 100,
+  });
+  return coupons.map((c) => ({
+    couponId: c.id,
+    code: c.code,
+    kind: c.kind,
+    discountPercent: c.discountPercent,
+    status: c.status,
+    expiresAt: c.expiresAt,
+    usedCount: c.usedCount,
+    maxUses: c.maxUses,
+    maxUsesPerUser: c.maxUsesPerUser,
+    createdAt: c.createdAt,
+    fromGrantId: (c.metadata as Record<string, unknown> | null)?.fromGrant as string | undefined ?? null,
+  }));
+}
+
+/**
+ * Convertit un grant ACTIVE en coupon pour l'utilisateur qui le détient.
+ * - Auth : grant.userId doit correspondre à userId
+ * - Idempotence : un grant déjà CONSUMED/EXPIRED/REVOKED → erreur claire
+ * - Race safe : transactionnel avec re-check status
+ * - Effet : grant.status = CONSUMED, coupon ACTIVE créé, notification envoyée
+ */
+export async function convertGrantToCoupon(
+  userId: string,
+  grantId: string,
+): Promise<{
+  grantId: string;
+  couponCode: string;
+  discountPercent: number;
+  expiresAt: Date;
+}> {
+  const grant = await prisma.growthIncentiveGrant.findUnique({ where: { id: grantId } });
+  if (!grant) throw new Error("GRANT_NOT_FOUND");
+  if (grant.userId !== userId) throw new Error("GRANT_NOT_OWNED");
+  if (grant.status !== "ACTIVE") throw new Error("GRANT_NOT_ACTIVE");
+  if (grant.expiresAt <= new Date()) throw new Error("GRANT_EXPIRED");
+  if (grant.discountPercent == null) throw new Error("GRANT_NOT_CONVERTIBLE");
+
+  const result = await prisma.$transaction(async (tx) => {
+    const fresh = await tx.growthIncentiveGrant.findUnique({ where: { id: grantId } });
+    if (!fresh || fresh.status !== "ACTIVE") throw new Error("GRANT_ALREADY_CONSUMED");
+
+    await tx.growthIncentiveGrant.update({
+      where: { id: grantId },
+      data: { status: "CONSUMED" },
+    });
+
+    // Expiry coupon = max(grant.expiresAt, +14 days)
+    const expiresAt = fresh.expiresAt > new Date()
+      ? fresh.expiresAt
+      : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+
+    const coupon = await tx.incentiveCoupon.create({
+      data: {
+        code: generateCode(),
+        kind: fresh.kind,
+        discountPercent: fresh.discountPercent,
+        expiresAt,
+        recipientUserId: userId,
+        status: "ACTIVE",
+        segment: "STANDARD",
+        issuedById: "user-self-convert",
+        metadata: { fromGrant: grantId, engine: "growth-v1", selfConvert: true },
+      },
+    });
+
+    await tx.growthIncentiveEvent.create({
+      data: {
+        grantId,
+        userId,
+        eventType: "conversion",
+        metadata: { selfConvert: true, couponCode: coupon.code },
+      },
+    });
+
+    return { couponCode: coupon.code, discountPercent: fresh.discountPercent!, expiresAt };
+  });
+
+  logger.info({ userId, grantId, couponCode: result.couponCode }, "[Incentive] User self-converted grant → coupon");
+
+  // Notify via IA Messager (best-effort, outside tx)
+  try {
+    await sendGrantConvertedToCouponMessage(userId, grantId, result.couponCode, result.discountPercent, result.expiresAt);
+  } catch (err) {
+    logger.warn({ err, userId, grantId }, "[Incentive] Failed to notify self-conversion");
+  }
+
+  return { grantId, ...result };
+}
+
 /* ─── Delete coupon (hard delete) ─── */
 
 export async function deleteCoupon(couponId: string) {
