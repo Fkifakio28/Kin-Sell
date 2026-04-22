@@ -79,6 +79,7 @@ import {
 import { DashboardAdvancedAnalytics } from './sections/DashboardAdvancedAnalytics';
 import MyBoostsPanel from '../../components/MyBoostsPanel';
 import { LockedOverlay } from '../../components/LockedOverlay';
+import { isRecommendationFree } from '../../shared/utils/recommendation-access';
 import { DataSaverToggle } from '../../components/DataSaverToggle';
 import './dashboard.css';
 
@@ -4786,8 +4787,19 @@ export function UserDashboard() {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
 
                     {/* ═══ Backend AI recommendations ═══ */}
-                    {ksRecommendations.map((rec) => (
-                      <div key={rec.id} style={{
+                    {ksRecommendations.map((rec, recIndex) => {
+                      const recoFree = isRecommendationFree(recIndex, user?.id, hasAnalytics);
+                      return (
+                      <LockedOverlay
+                        key={rec.id}
+                        locked={!recoFree}
+                        icon="💡"
+                        title="Recommandation verrouillée"
+                        message="Cette recommandation IA personnalisée est réservée aux forfaits avec Analytique."
+                        ctaLabel="Débloquer toutes les recommandations"
+                        blurPx={4}
+                      >
+                      <div style={{
                         background: 'rgba(111,88,255,0.04)',
                         border: '1px solid rgba(111,88,255,0.1)',
                         borderRadius: 10, padding: 14,
@@ -4829,7 +4841,9 @@ export function UserDashboard() {
                           </span>
                         </div>
                       </div>
-                    ))}
+                      </LockedOverlay>
+                      );
+                    })}
 
                     {/* ═══ Smart IA ADS recommendation ═══ */}
                     <div style={{
