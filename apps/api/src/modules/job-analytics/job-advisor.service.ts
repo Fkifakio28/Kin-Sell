@@ -203,6 +203,18 @@ async function computeEnrichedRules(
     userCity,
   );
 
+  // K3 — Track gap si on a dû fallback ou rien trouvé
+  if (snapshotScope !== "EXACT") {
+    await trackMarketDataGap(
+      userCategory,
+      userCountryCode,
+      userCity,
+      snapshotScope ?? "NONE",
+    ).catch(() => {
+      /* silencieux */
+    });
+  }
+
   const userSkills = new Set<string>(
     experiences.flatMap((e) => e.skills.map((s) => s.toLowerCase())),
   );
@@ -606,4 +618,52 @@ function aggregateSnapshots(
     topSkills,
     trend7dPercent: avgTrend,
   };
+}
+
+// ═════════════════════════════════════════════════════
+// K3 — Tracker des zones sans snapshot (MarketDataGap)
+// ═════════════════════════════════════════════════════
+
+/**
+ * Incrémente le compteur de requêtes sur une zone sans snapshot EXACT.
+ * Upsert sur (category, countryCode, city). Permet au super-admin de
+ * prioriser les zones les plus demandées via le panneau d'administration.
+ */
+async function trackMarketDataGap(
+  category: string,
+  countryCode: string,
+  city: string | null,
+  scopeResolved: string,
+): Promise<void> {
+  const countryName =
+    AFRICAN_COUNTRIES[countryCode]?.name ?? countryCode;
+  // Pas d'upsert direct : city peut être null → le composite unique ne gère pas NULL.
+  const existing = await prisma.marketDataGap.findFirst({
+    where: {
+      category,
+      countryCode: countryCode as CountryCode,
+      city: city ?? null,
+    },
+  });
+  if (existing) {
+    await prisma.marketDataGap.update({
+      where: { id: existing.id },
+      data: {
+        scopeResolved,
+        requestCount: { increment: 1 },
+        lastSeenAt: new Date(),
+        resolvedAt: null,
+      },
+    });
+  } else {
+    await prisma.marketDataGap.create({
+      data: {
+        category,
+        countryCode: countryCode as CountryCode,
+        country: countryName,
+        city: city ?? null,
+        scopeResolved,
+      },
+    });
+  }
 }

@@ -795,6 +795,16 @@ export const admin = {
   resetJobGeminiMetrics: () =>
     request<{ ok: boolean }>("/admin/analytics/jobs/gemini-metrics/reset", { method: "POST" }),
 
+  // K3 — Market data gaps
+  jobDataGaps: (onlyOpen = true, limit = 30) =>
+    request<{ gaps: AdminJobDataGap[]; total: number }>("/admin/analytics/jobs/data-gaps", {
+      params: { onlyOpen: onlyOpen ? "true" : "false", limit },
+    }),
+  resolveJobDataGap: (id: string) =>
+    request<{ gap: AdminJobDataGap }>(
+      `/admin/analytics/jobs/data-gaps/${encodeURIComponent(id)}/resolve`,
+      { method: "POST" },
+    ),
 };
 
 // ── Admin AI/Subscription types ──
@@ -1083,4 +1093,19 @@ export type JobGeminiMetrics = {
   geminiFailed: number;
   fallback: number;
   lastResetAt: string;
+};
+
+export type AdminJobDataGap = {
+  id: string;
+  category: string;
+  countryCode: string | null;
+  country: string;
+  city: string | null;
+  scopeResolved: string;
+  requestCount: number;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  resolvedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
 };

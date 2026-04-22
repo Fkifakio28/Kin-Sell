@@ -231,4 +231,39 @@ router.post(
   }),
 );
 
+// ════════════════════════════════════════════
+// K3 — GET /data-gaps & POST /data-gaps/:id/resolve
+// ════════════════════════════════════════════
+
+router.get(
+  "/data-gaps",
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const limit = Math.min(100, Math.max(1, Number(req.query.limit ?? 30)));
+    const onlyOpen =
+      req.query.onlyOpen === "true" || req.query.onlyOpen === "1";
+    const where = onlyOpen ? { resolvedAt: null } : {};
+    const [gaps, total] = await Promise.all([
+      prisma.marketDataGap.findMany({
+        where,
+        orderBy: [{ resolvedAt: "asc" }, { requestCount: "desc" }, { lastSeenAt: "desc" }],
+        take: limit,
+      }),
+      prisma.marketDataGap.count({ where }),
+    ]);
+    res.json({ gaps, total });
+  }),
+);
+
+router.post(
+  "/data-gaps/:id/resolve",
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const id = req.params.id;
+    const gap = await prisma.marketDataGap.update({
+      where: { id },
+      data: { resolvedAt: new Date() },
+    });
+    res.json({ gap });
+  }),
+);
+
 export default router;

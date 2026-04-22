@@ -16,6 +16,7 @@ import {
   type AdminJobIngestionRun,
   type JobGeminiMetrics,
   type JobSnapshotRefreshReport,
+  type AdminJobDataGap,
 } from "../../lib/services/admin.service";
 
 const C = {
@@ -79,12 +80,14 @@ export function AdminJobAnalyticsPanel() {
   const [editing, setEditing] = useState<AdminJobSnapshot | null>(null);
   const [form, setForm] = useState(defaultForm);
   const [busy, setBusy] = useState(false);
+  const [dataGaps, setDataGaps] = useState<AdminJobDataGap[]>([]);
+  const [dataGapsTotal, setDataGapsTotal] = useState(0);
 
   const reload = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [snaps, g, r] = await Promise.all([
+      const [snaps, g, r, gaps] = await Promise.all([
         admin.jobSnapshots({
           country: filters.country || undefined,
           countryCode: filters.countryCode || undefined,
@@ -95,11 +98,14 @@ export function AdminJobAnalyticsPanel() {
         }),
         admin.jobGeminiMetrics(),
         admin.jobIngestionRuns(20),
+        admin.jobDataGaps(true, 30),
       ]);
       setSnapshots(snaps.items);
       setTotal(snaps.total);
       setGemini(g);
       setRuns(r.runs);
+      setDataGaps(gaps.gaps);
+      setDataGapsTotal(gaps.total);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -251,6 +257,73 @@ export function AdminJobAnalyticsPanel() {
           </div>
         </div>
       )}
+
+      {/* K3 — Market data gaps */}
+      <div style={card}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+          <h3 style={{ margin: 0, fontSize: 14, color: C.text2 }}>
+            Zones sans données — priorité admin ({dataGapsTotal} ouvertes)
+          </h3>
+        </div>
+        {dataGaps.length === 0 ? (
+          <p style={{ margin: 0, fontSize: 12, color: C.text3 }}>
+            Aucune zone orpheline — toutes les requêtes advisor trouvent un snapshot exact. 🎉
+          </p>
+        ) : (
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
+              <thead>
+                <tr style={{ borderBottom: `1px solid ${C.border}`, color: C.text3 }}>
+                  <th style={th}>Catégorie</th>
+                  <th style={th}>Pays</th>
+                  <th style={th}>Ville</th>
+                  <th style={th}>Résolu via</th>
+                  <th style={{ ...th, textAlign: "right" }}>Demandes</th>
+                  <th style={th}>Dernière vue</th>
+                  <th style={th}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {dataGaps.map((g) => (
+                  <tr key={g.id} style={{ borderBottom: `1px solid ${C.border}` }}>
+                    <td style={td}>{g.category}</td>
+                    <td style={td}>{g.country} ({g.countryCode ?? "—"})</td>
+                    <td style={td}>{g.city ?? "—"}</td>
+                    <td style={td}>
+                      <span style={{
+                        padding: "2px 8px",
+                        borderRadius: 999,
+                        fontSize: 10,
+                        fontWeight: 600,
+                        background:
+                          g.scopeResolved === "NONE" ? C.danger :
+                          g.scopeResolved === "GEMINI_LIVE" ? C.accent :
+                          g.scopeResolved === "AFRICA_AGGREGATE" ? C.amber : C.cyan,
+                        color: "#fff",
+                      }}>
+                        {g.scopeResolved}
+                      </span>
+                    </td>
+                    <td style={{ ...td, textAlign: "right", fontWeight: 700 }}>{g.requestCount}</td>
+                    <td style={td}>{new Date(g.lastSeenAt).toLocaleString()}</td>
+                    <td style={td}>
+                      <button
+                        onClick={async () => {
+                          await admin.resolveJobDataGap(g.id);
+                          reload();
+                        }}
+                        style={{ ...btnSecondary, padding: "3px 8px", fontSize: 10 }}
+                      >
+                        Marquer résolu
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
       {/* Filters */}
       <div style={card}>

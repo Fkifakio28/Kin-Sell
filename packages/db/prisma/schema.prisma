@@ -3309,3 +3309,26 @@ model JobMarketSnapshot {
   @@index([snapshotDate])
   @@index([isManualOverride])
 }
+
+// K3 — Traque les zones (cat+pays+ville) pour lesquelles l'advisor
+// n'a pas trouvé de snapshot → permet au super-admin de prioriser
+// refresh/override des zones les plus demandées.
+model MarketDataGap {
+  id            String       @id @default(cuid())
+  category      String
+  countryCode   CountryCode?
+  country       String
+  city          String?
+  scopeResolved String // "NONE" | "AFRICA_AGGREGATE" | "GEMINI_LIVE" — dernier niveau atteint
+  requestCount  Int          @default(1)
+  firstSeenAt   DateTime     @default(now())
+  lastSeenAt    DateTime     @default(now())
+  resolvedAt    DateTime? // quand admin comble via override/refresh
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@unique([category, countryCode, city])
+  @@index([requestCount])
+  @@index([lastSeenAt])
+  @@index([resolvedAt])
+}
