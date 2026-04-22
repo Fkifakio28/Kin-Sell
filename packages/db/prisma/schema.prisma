@@ -260,6 +260,10 @@ model User {
   boostCampaigns           BoostCampaign[]             @relation("UserBoostCampaigns")
   wallet                   Wallet?                     @relation("UserWallet")
   walletTransactions       WalletTransaction[]         @relation("UserWalletTransactions")
+  jobListingsPosted        JobListing[]                @relation("JobListingRecruiter")
+  jobApplications          JobApplication[]            @relation("JobApplicationCandidate")
+  qualifications           UserQualification[]         @relation("UserQualifications")
+  experiences              UserExperience[]            @relation("UserExperiences")
 
   @@index([role])
   @@index([accountStatus])
@@ -3099,4 +3103,203 @@ model WalletTransaction {
   @@index([userId, createdAt])
   @@index([campaignId])
   @@index([type])
+}
+
+// ══════════════════════════════════════════════
+// EMPLOI (Chantier C — 2026-04-22)
+// Modèles dédiés à la recherche d'emploi :
+//   - JobListing        : offre d'emploi structurée
+//   - JobApplication    : candidature
+//   - UserQualification : diplôme / certification
+//   - UserExperience    : poste passé / en cours
+//   - JobMarketSnapshot : agrégat demande par zone × catégorie
+// ══════════════════════════════════════════════
+
+enum EmploymentType {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  FREELANCE
+  INTERNSHIP
+  TEMPORARY
+}
+
+enum WorkMode {
+  ONSITE
+  HYBRID
+  REMOTE
+}
+
+enum JobListingStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  CLOSED
+  EXPIRED
+}
+
+enum JobApplicationStatus {
+  PENDING
+  SEEN
+  SHORTLISTED
+  INTERVIEW
+  ACCEPTED
+  REJECTED
+  WITHDRAWN
+}
+
+enum QualificationLevel {
+  NONE
+  PRIMARY
+  SECONDARY
+  VOCATIONAL
+  BACHELOR
+  MASTER
+  DOCTORATE
+  CERTIFICATION
+}
+
+/// Offre d'emploi publiée par un recruteur (user ou business).
+model JobListing {
+  id               String           @id @default(cuid())
+  recruiterUserId  String
+  businessId       String?
+  title            String
+  description      String
+  category         String
+  subCategory      String?
+  employmentType   EmploymentType   @default(FULL_TIME)
+  workMode         WorkMode         @default(ONSITE)
+  country          String
+  countryCode      CountryCode?
+  city             String
+  region           String?
+  latitude         Float?
+  longitude        Float?
+  requiredSkills   String[]         @default([])
+  requiredQualifs  String[]         @default([])
+  minExperienceYrs Int              @default(0)
+  salaryMinUsd     Int?
+  salaryMaxUsd     Int?
+  salaryCurrency   String           @default("USD")
+  salaryPeriod     String           @default("MONTH") // MONTH | HOUR | YEAR
+  openings         Int              @default(1)
+  status           JobListingStatus @default(ACTIVE)
+  expiresAt        DateTime?
+  viewCount        Int              @default(0)
+  applicationCount Int              @default(0)
+  isBoosted        Boolean          @default(false)
+  boostExpiresAt   DateTime?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  recruiter    User             @relation("JobListingRecruiter", fields: [recruiterUserId], references: [id], onDelete: Cascade)
+  applications JobApplication[] @relation("JobListingApplications")
+
+  @@index([recruiterUserId])
+  @@index([businessId])
+  @@index([status])
+  @@index([country])
+  @@index([countryCode])
+  @@index([city])
+  @@index([category])
+  @@index([createdAt])
+  @@index([countryCode, status, createdAt])
+  @@index([city, status, createdAt])
+  @@index([category, status, createdAt])
+}
+
+/// Candidature d'un utilisateur sur une offre.
+model JobApplication {
+  id                String               @id @default(cuid())
+  jobListingId      String
+  candidateUserId   String
+  status            JobApplicationStatus @default(PENDING)
+  coverLetter       String?
+  attachmentUrls    String[]             @default([])
+  alignmentScore    Float? // 0-1, calculé à la soumission
+  expectedSalaryUsd Int?
+  recruiterNotes    String?
+  firstSeenAt       DateTime?
+  respondedAt       DateTime?
+  withdrawnAt       DateTime?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  jobListing JobListing @relation("JobListingApplications", fields: [jobListingId], references: [id], onDelete: Cascade)
+  candidate  User       @relation("JobApplicationCandidate", fields: [candidateUserId], references: [id], onDelete: Cascade)
+
+  @@unique([jobListingId, candidateUserId])
+  @@index([candidateUserId, status])
+  @@index([jobListingId, status])
+  @@index([createdAt])
+}
+
+/// Qualification structurée (diplôme, certification).
+model UserQualification {
+  id            String             @id @default(cuid())
+  userId        String
+  label         String // ex: "Licence en informatique"
+  level         QualificationLevel @default(NONE)
+  institution   String?
+  fieldOfStudy  String?
+  countryCode   CountryCode?
+  obtainedYear  Int?
+  expiresAt     DateTime?
+  attachmentUrl String?
+  verified      Boolean            @default(false)
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  user User @relation("UserQualifications", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([level])
+}
+
+/// Expérience professionnelle structurée.
+model UserExperience {
+  id          String       @id @default(cuid())
+  userId      String
+  title       String // ex: "Développeur backend"
+  company     String?
+  category    String? // secteur (IT, Santé, Finance…)
+  countryCode CountryCode?
+  city        String?
+  startDate   DateTime
+  endDate     DateTime? // null = en cours
+  description String?
+  skills      String[]     @default([])
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  user User @relation("UserExperiences", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([category])
+}
+
+/// Agrégat quotidien de la demande emploi par zone × catégorie.
+/// Alimenté par un job scheduler (à créer Phase 3) pour éviter des COUNT() live coûteux.
+model JobMarketSnapshot {
+  id                   String       @id @default(cuid())
+  snapshotDate         DateTime     @default(now())
+  country              String
+  countryCode          CountryCode?
+  city                 String?
+  category             String
+  openJobs             Int          @default(0)
+  applicants           Int          @default(0)
+  saturationIndex      Float        @default(0) // applicants / max(1, openJobs)
+  avgSalaryUsdCents    Int?
+  medianSalaryUsdCents Int?
+  topSkills            String[]     @default([])
+  trend7dPercent       Float? // évolution openJobs sur 7j (en %)
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+
+  @@unique([snapshotDate, country, city, category])
+  @@index([country, category])
+  @@index([countryCode, category])
+  @@index([snapshotDate])
 }
