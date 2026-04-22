@@ -10,14 +10,18 @@
  * le design system (variables CSS uniquement).
  */
 
-import { useEffect, useState, type FC } from "react";
+import { useEffect, useMemo, useState, type FC } from "react";
 import {
   jobAnalytics,
   type JobDemandMap,
   type JobMarketSnapshot,
   type JobApplicationsInsights,
+  type JobDirectAnswer,
+  type RegionalJobContext,
+  type ScoredJobInsight,
 } from "../../lib/services/ai.service";
 import { FrustrationPanel } from "../../components/FrustrationPanel";
+import { useAuth } from "../../app/providers/AuthProvider";
 import "./dashboard-job-analytics.css";
 
 interface Props {
@@ -26,35 +30,76 @@ interface Props {
 }
 
 export const DashboardJobAnalytics: FC<Props> = ({ hide, accountType = "user" }) => {
+  const { user } = useAuth();
   const [snapshot, setSnapshot] = useState<JobMarketSnapshot | null>(null);
   const [demand, setDemand] = useState<JobDemandMap | null>(null);
   const [apps, setApps] = useState<JobApplicationsInsights | null>(null);
+  const [directAnswers, setDirectAnswers] = useState<JobDirectAnswer[]>([]);
+  const [regional, setRegional] = useState<RegionalJobContext | null>(null);
+  const [regionalLoading, setRegionalLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Dérive une catégorie pivot (première hotCategorie user)
+  const pivotCategory = useMemo(() => {
+    if (!snapshot) return null;
+    return snapshot.asCandidate.hotCategories[0]?.category ?? null;
+  }, [snapshot]);
 
   useEffect(() => {
     if (hide) return;
     let cancelled = false;
     (async () => {
       try {
-        const [snap, dem, ap] = await Promise.allSettled([
+        const [snap, dem, ap, da] = await Promise.allSettled([
           jobAnalytics.marketSnapshot(),
           jobAnalytics.demandMap({ limit: 10 }),
           jobAnalytics.myApplicationsInsights(),
+          jobAnalytics.directAnswers(),
         ]);
         if (cancelled) return;
         if (snap.status === "fulfilled") setSnapshot(snap.value);
         if (dem.status === "fulfilled") setDemand(dem.value);
         if (ap.status === "fulfilled") setApps(ap.value);
-        if (snap.status === "rejected" && dem.status === "rejected" && ap.status === "rejected") {
+        if (da.status === "fulfilled") setDirectAnswers(da.value.answers ?? []);
+        if (
+          snap.status === "rejected" &&
+          dem.status === "rejected" &&
+          ap.status === "rejected"
+        ) {
           setError("Impossible de charger les données emploi.");
         }
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [hide]);
+
+  // Regional context — chargé une fois qu'on a city/country/pivotCategory
+  useEffect(() => {
+    if (hide) return;
+    const city = user?.profile?.city;
+    const country = user?.profile?.country;
+    if (!city || !country || !pivotCategory) return;
+    let cancelled = false;
+    setRegionalLoading(true);
+    (async () => {
+      try {
+        const r = await jobAnalytics.regionalContext(pivotCategory, city, country);
+        if (!cancelled) setRegional(r);
+      } catch {
+        /* silent — enrichissement best-effort */
+      } finally {
+        if (!cancelled) setRegionalLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [hide, user?.profile?.city, user?.profile?.country, pivotCategory]);
 
   if (hide) return null;
 
@@ -69,10 +114,23 @@ export const DashboardJobAnalytics: FC<Props> = ({ hide, accountType = "user" })
 
       <FrustrationPanel accountType={accountType} />
 
+      {directAnswers.length > 0 && <DirectAnswersCard answers={directAnswers} />}
+
       {loading && <div className="dja-loading">Chargement des données emploi…</div>}
       {error && !loading && <div className="dja-error">{error}</div>}
 
       {!loading && snapshot && <MarketSnapshotCard data={snapshot} />}
+
+      {(regional || regionalLoading) && (
+        <RegionalContextCard
+          data={regional}
+          loading={regionalLoading}
+          category={pivotCategory}
+          city={user?.profile?.city ?? null}
+          country={user?.profile?.country ?? null}
+        />
+      )}
+
       {!loading && apps && <ApplicationsInsightsCard data={apps} />}
       {!loading && demand && <DemandMapCard data={demand} />}
     </section>
@@ -250,6 +308,148 @@ function Kpi({ label, value }: { label: string; value: string }) {
     <div className="dja-kpi">
       <span className="dja-kpi-value">{value}</span>
       <span className="dja-kpi-label">{label}</span>
+    </div>
+  );
+}
+
+/* ──────────────────────────────────────── */
+/* DirectAnswersCard — J4 rule-based        */
+/* ──────────────────────────────────────── */
+
+function DirectAnswersCard({ answers }: { answers: JobDirectAnswer[] }) {
+  const sorted = [...answers].sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
+  return (
+    <div className="dja-card dja-card--answers">
+      <h3 className="dja-card-title">🎯 Conseils personnalisés</h3>
+      <ul className="dja-answers">
+        {sorted.slice(0, 6).map((a, i) => {
+          const sevLabel =
+            a.severity === "CRITICAL" ? "Critique" : a.severity === "WARN" ? "Attention" : "Info";
+          return (
+            <li
+              key={`${a.rule ?? "ans"}-${i}`}
+              className={`dja-answer dja-answer--${a.severity.toLowerCase()}`}
+            >
+              <div className="dja-answer-head">
+                <span className={`dja-answer-sev dja-answer-sev--${a.severity.toLowerCase()}`}>
+                  {sevLabel}
+                </span>
+                {a.rule && <span className="dja-answer-rule">{a.rule}</span>}
+              </div>
+              <p className="dja-answer-pain">{a.pain}</p>
+              <p className="dja-answer-action">{a.action}</p>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+/* ──────────────────────────────────────── */
+/* RegionalContextCard — J1 Gemini          */
+/* ──────────────────────────────────────── */
+
+function RegionalContextCard({
+  data,
+  loading,
+  category,
+  city,
+  country,
+}: {
+  data: RegionalJobContext | null;
+  loading: boolean;
+  category: string | null;
+  city: string | null;
+  country: string | null;
+}) {
+  if (loading) {
+    return (
+      <div className="dja-card dja-card--regional">
+        <h3 className="dja-card-title">🌍 Contexte régional (IA)</h3>
+        <p className="dja-loading">Analyse du marché en cours…</p>
+      </div>
+    );
+  }
+  if (!data || !data.signals?.length) return null;
+  const primary: ScoredJobInsight = data.signals[0];
+  const s = primary.data;
+  const trendIcon = s.trend === "GROWING" ? "📈" : s.trend === "DECLINING" ? "📉" : "➡️";
+  const demandColor =
+    s.demandLevel === "HIGH"
+      ? "dja-demand--high"
+      : s.demandLevel === "MEDIUM"
+        ? "dja-demand--medium"
+        : s.demandLevel === "LOW"
+          ? "dja-demand--low"
+          : "dja-demand--unknown";
+  const satPct =
+    s.saturation === "HIGH" ? 90 : s.saturation === "MEDIUM" ? 55 : s.saturation === "LOW" ? 20 : 0;
+
+  return (
+    <div className="dja-card dja-card--regional">
+      <h3 className="dja-card-title">
+        🌍 Contexte régional (IA)
+        {category && city && country && (
+          <span className="dja-regional-scope">
+            {category} · {city}, {country}
+          </span>
+        )}
+      </h3>
+
+      <div className="dja-regional-grid">
+        <div className={`dja-regional-demand ${demandColor}`}>
+          <span className="dja-regional-label">Demande</span>
+          <strong>{s.demandLevel}</strong>
+        </div>
+        <div className="dja-regional-trend">
+          <span className="dja-regional-label">Tendance</span>
+          <strong>{trendIcon} {s.trend}</strong>
+        </div>
+        {s.salaryRange && (
+          <div className="dja-regional-salary">
+            <span className="dja-regional-label">Salaire (USD)</span>
+            <strong>
+              {s.salaryRange.minUsd} – {s.salaryRange.maxUsd}
+            </strong>
+          </div>
+        )}
+        <div className="dja-regional-sat">
+          <span className="dja-regional-label">Saturation · {s.saturation}</span>
+          <div className="dja-sat-bar">
+            <div className="dja-sat-fill" style={{ width: `${satPct}%` }} />
+          </div>
+        </div>
+      </div>
+
+      {s.topSkills.length > 0 && (
+        <div className="dja-regional-skills">
+          <span className="dja-regional-label">Compétences demandées</span>
+          <div className="dja-chips">
+            {s.topSkills.slice(0, 8).map((sk) => (
+              <span key={sk} className="dja-skill">{sk}</span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {s.insight && <p className="dja-regional-insight">{s.insight}</p>}
+
+      {s.crossBorderOpportunity && (
+        <div className="dja-regional-crossborder">
+          ✈️ <strong>Opportunité transfrontalière :</strong> {s.crossBorderOpportunity}
+        </div>
+      )}
+
+      {s.sources?.length > 0 && (
+        <p className="dja-regional-sources">
+          Sources : {s.sources.slice(0, 3).join(" · ")}
+        </p>
+      )}
+
+      <p className="dja-regional-conf">
+        Confiance : {primary.confidence.level} ({Math.round((primary.confidence.score ?? 0) * 100)}%)
+      </p>
     </div>
   );
 }

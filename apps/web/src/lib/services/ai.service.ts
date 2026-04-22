@@ -593,4 +593,55 @@ export const jobAnalytics = {
   },
   postingInsights: (jobId: string) =>
     request<JobPostingInsights>(`/analytics/jobs/posting-insights?jobId=${encodeURIComponent(jobId)}`),
+  directAnswers: () =>
+    request<{ answers: JobDirectAnswer[] }>("/analytics/jobs/direct-answers"),
+  regionalContext: (category: string, city: string, country: string) => {
+    const qs = new URLSearchParams({ category, city, country });
+    return request<RegionalJobContext>(`/analytics/jobs/regional-context?${qs.toString()}`);
+  },
+  regionalContextMulti: (categories: string[], city: string, country: string) => {
+    const qs = new URLSearchParams({ categories: categories.join(","), city, country });
+    return request<RegionalJobContext>(`/analytics/jobs/regional-context/multi?${qs.toString()}`);
+  },
 };
+
+export interface JobDirectAnswer {
+  severity: "INFO" | "WARN" | "CRITICAL";
+  pain: string;
+  action: string;
+  cta: { label: string; action: string; meta?: Record<string, unknown> };
+  source: "SELL" | "JOB" | "HYBRID";
+  priority: number;
+  rule?: string;
+}
+
+export interface RegionalJobSignal {
+  category: string;
+  city: string;
+  country: string;
+  salaryRange: { minUsd: number; maxUsd: number } | null;
+  demandLevel: "LOW" | "MEDIUM" | "HIGH" | "UNKNOWN";
+  trend: "GROWING" | "STABLE" | "DECLINING" | "UNKNOWN";
+  saturation: "LOW" | "MEDIUM" | "HIGH" | "UNKNOWN";
+  topSkills: string[];
+  crossBorderOpportunity: string | null;
+  insight: string;
+  sources: string[];
+}
+
+export interface ScoredJobInsight {
+  data: RegionalJobSignal;
+  confidence: {
+    score: number;
+    level: "LOW" | "MEDIUM" | "HIGH";
+    sourceType: "EXTERNAL" | "INTERNAL" | "INFERRED" | "AI_ESTIMATE";
+    explanation: string;
+  };
+}
+
+export interface RegionalJobContext {
+  signals: ScoredJobInsight[];
+  summary: string;
+  generatedAt: string;
+  region: string;
+}
