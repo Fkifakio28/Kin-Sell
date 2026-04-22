@@ -194,7 +194,15 @@ async function computeEnrichedRules(
     null;
   const userCity = profile?.city ?? lastApp?.jobListing.city ?? null;
 
-  if (!userCategory || !userCountryCode) return out;
+  // K4 — Cold-start : pas de pays, on ne peut rien dire de pertinent
+  if (!userCountryCode) return out;
+
+  // K4 — Cold-start : pas de catégorie → ONBOARDING_NEEDED + Top 3 catégories du pays
+  if (!userCategory) {
+    const coldStart = await buildColdStartOnboarding(userCountryCode);
+    if (coldStart) out.push(coldStart);
+    return out;
+  }
 
   // K1 — Résolution snapshot avec fallback géographique progressif
   const { snapshot, scope: snapshotScope } = await resolveEffectiveSnapshot(
@@ -398,6 +406,54 @@ async function computeEnrichedRules(
   }
 
   return out;
+}
+
+// ═════════════════════════════════════════════════════
+// K4 — Cold-start onboarding (user sans catégorie)
+// ═════════════════════════════════════════════════════
+
+/**
+ * Construit une DirectAnswer ONBOARDING_NEEDED qui liste les Top 3 catégories
+ * du pays (par openJobs cumulés, fenêtre 14j) pour inviter l'utilisateur à
+ * renseigner son profil. Retourne null si aucune donnée dans le pays.
+ */
+async function buildColdStartOnboarding(
+  countryCode: string,
+): Promise<DirectAnswer | null> {
+  const fourteenDaysAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
+  const rows = await prisma.jobMarketSnapshot.findMany({
+    where: {
+      countryCode: countryCode as CountryCode,
+      snapshotDate: { gte: fourteenDaysAgo },
+    },
+    select: { category: true, openJobs: true },
+  });
+  if (rows.length === 0) return null;
+
+  const byCat = new Map<string, number>();
+  for (const r of rows) {
+    byCat.set(r.category, (byCat.get(r.category) ?? 0) + r.openJobs);
+  }
+  const top = [...byCat.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([cat]) => cat);
+  if (top.length === 0) return null;
+
+  return {
+    severity: "INFO",
+    pain:
+      "Votre profil est incomplet : nous ne connaissons ni votre métier ni vos compétences.",
+    action: `Renseignez votre catégorie pour recevoir des conseils ciblés. Catégories les plus porteuses dans votre pays : ${top.join(", ")}.`,
+    cta: {
+      label: "Compléter mon profil",
+      action: "EDIT_PROFILE",
+      meta: { section: "categories", suggest: top },
+    },
+    source: "JOB",
+    priority: 40,
+    rule: "ONBOARDING_NEEDED",
+  };
 }
 
 // ═════════════════════════════════════════════════════
