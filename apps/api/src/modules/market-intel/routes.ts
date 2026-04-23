@@ -21,6 +21,7 @@ import { runAggregation } from "./aggregator.js";
 import { computeTrends } from "./trends.js";
 import { runArbitrage } from "./arbitrage.js";
 import { runCrawlCycle } from "./orchestrator.js";
+import { ingestKinSellInternalSignals, computeOrganicDemandSignals } from "./internal-signals.js";
 
 const router = Router();
 
@@ -290,11 +291,12 @@ router.get(
 // Utile quand l'admin veut voir des résultats sans attendre le scheduler.
 
 const TriggerBody = z.object({
-  steps: z.array(z.enum(["crawl", "aggregate", "trends", "arbitrage"]))
+  steps: z.array(z.enum(["internal", "crawl", "aggregate", "trends", "arbitrage"]))
     .min(1)
-    .default(["aggregate", "trends", "arbitrage"]),
+    .default(["internal", "aggregate", "trends", "arbitrage"]),
   crawlType: z.enum(["news", "marketplace", "classifieds", "jobs", "stats"]).optional(),
   crawlBatchSize: z.number().int().min(1).max(100).default(20),
+  skipGemini: z.boolean().default(true), // Par défaut: zero appel Gemini
 });
 
 let triggerInFlight = false;
@@ -307,16 +309,20 @@ router.post(
     if (triggerInFlight) throw new HttpError(409, "Un cycle est déjà en cours — patiente.");
     const parsed = TriggerBody.safeParse(req.body ?? {});
     if (!parsed.success) throw new HttpError(400, parsed.error.issues[0]?.message ?? "Corps invalide");
-    const { steps, crawlType, crawlBatchSize } = parsed.data;
+    const { steps, crawlType, crawlBatchSize, skipGemini } = parsed.data;
 
     triggerInFlight = true;
     const report: Record<string, unknown> = { startedAt: new Date().toISOString() };
     try {
+      if (steps.includes("internal")) {
+        report.internal = await ingestKinSellInternalSignals();
+        report.organic = await computeOrganicDemandSignals();
+      }
       if (steps.includes("crawl") && crawlType) {
         report.crawl = await runCrawlCycle(crawlType, crawlBatchSize);
       }
       if (steps.includes("aggregate")) {
-        report.aggregate = await runAggregation();
+        report.aggregate = await runAggregation({ skipGemini });
       }
       if (steps.includes("trends")) {
         report.trends = await computeTrends();

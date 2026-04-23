@@ -34,14 +34,14 @@ function useAsync<T>(fn: () => Promise<T>, deps: unknown[]): AsyncState<T> {
   return state;
 }
 
-const ALL_STEPS: TriggerStep[] = ["crawl", "aggregate", "trends", "arbitrage"];
+const ALL_STEPS: TriggerStep[] = ["internal", "crawl", "aggregate", "trends", "arbitrage"];
 const CRAWL_TYPES: TriggerCrawlType[] = ["news", "marketplace", "classifieds", "jobs", "stats"];
 
 export function AdminMarketIntelPage() {
   const [reloadKey, setReloadKey] = useState(0);
   const coverageQ = useAsync<MarketCoverage>(() => marketIntel.coverage(), [reloadKey]);
 
-  const [steps, setSteps] = useState<TriggerStep[]>(["aggregate", "trends", "arbitrage"]);
+  const [steps, setSteps] = useState<TriggerStep[]>(["internal", "aggregate", "trends", "arbitrage"]);
   const [crawlType, setCrawlType] = useState<TriggerCrawlType | "">("");
   const [batchSize, setBatchSize] = useState(20);
   const [running, setRunning] = useState(false);

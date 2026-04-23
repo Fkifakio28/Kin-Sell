@@ -87,7 +87,7 @@ export type MarketCoverage = {
   geminiQuota: { used: number; cap: number; date: string };
 };
 
-export type TriggerStep = "crawl" | "aggregate" | "trends" | "arbitrage";
+export type TriggerStep = "internal" | "crawl" | "aggregate" | "trends" | "arbitrage";
 export type TriggerCrawlType = "news" | "marketplace" | "classifieds" | "jobs" | "stats";
 
 // ── API ───────────────────────────────────────────────
@@ -136,7 +136,7 @@ export const marketIntel = {
 
   coverage: () => request<MarketCoverage>("/market/coverage"),
 
-  trigger: (body: { steps: TriggerStep[]; crawlType?: TriggerCrawlType; crawlBatchSize?: number }) =>
+  trigger: (body: { steps: TriggerStep[]; crawlType?: TriggerCrawlType; crawlBatchSize?: number; skipGemini?: boolean }) =>
     request<{ ok: boolean; report: Record<string, unknown> }>("/market/admin/trigger", {
       method: "POST",
       body,

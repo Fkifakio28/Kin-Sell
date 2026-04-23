@@ -22,6 +22,7 @@ import { prisma } from "../../shared/db/prisma.js";
 import { runAggregation } from "./aggregator.js";
 import { computeTrends } from "./trends.js";
 import { runArbitrage } from "./arbitrage.js";
+import { ingestKinSellInternalSignals, computeOrganicDemandSignals } from "./internal-signals.js";
 
 type SchedEntry = {
   type: string;
@@ -106,6 +107,12 @@ export async function startMarketIntelScheduler(): Promise<void> {
   setTimeout(() => {
     void (async () => {
       try {
+        // 1) Signaux internes Kin-Sell (gratuit, le plus fiable)
+        const internalReport = await ingestKinSellInternalSignals();
+        logger.info(internalReport, "[market-intel] internal-signals cycle");
+        const organicReport = await computeOrganicDemandSignals();
+        logger.info(organicReport, "[market-intel] organic demand cycle");
+        // 2) Agrégation crawl externes + fallback Gemini ciblu00e9
         const aggReport = await runAggregation();
         logger.info(aggReport, "[market-intel] aggregation cycle");
         const trendsReport = await computeTrends();
@@ -119,6 +126,8 @@ export async function startMarketIntelScheduler(): Promise<void> {
     aggTimer = setInterval(() => {
       void (async () => {
         try {
+          await ingestKinSellInternalSignals();
+          await computeOrganicDemandSignals();
           await runAggregation();
           await computeTrends();
           await runArbitrage();

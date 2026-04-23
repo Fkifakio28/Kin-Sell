@@ -267,10 +267,23 @@ async function fillPriceGaps(coverage: Record<string, Set<string>>): Promise<{ g
   let geminiCalls = 0;
   let estimatesAdded = 0;
 
+  // Donnu00e9es internes/baseline récentes (30 j) avec confidence >= 0.60 = couverture suffisante
+  const since = new Date(Date.now() - 30 * 86400_000);
+  const covered = await prisma.marketPrice.findMany({
+    where: { collectedAt: { gte: since }, confidence: { gte: 0.60 } },
+    select: { productId: true, countryCode: true },
+  });
+  const internalCov: Record<string, Set<string>> = {};
+  for (const c of covered) {
+    (internalCov[c.productId] ??= new Set()).add(c.countryCode);
+  }
+
   for (const country of COUNTRIES) {
-    const missing: typeof allProducts = allProducts.filter((p) => !coverage[p.id]?.has(country));
+    const missing: typeof allProducts = allProducts.filter(
+      (p) => !coverage[p.id]?.has(country) && !internalCov[p.id]?.has(country),
+    );
     if (missing.length === 0) continue;
-    if (missing.length < 3) continue; // Seuil : on n'appelle Gemini que si ≥3 trous
+    if (missing.length < 10) continue; // Seuil durçç: Gemini uniquement si u2265 10 vrais trous par pays
 
     const labels = missing.slice(0, 20).map((p) => p.displayName);
     const result = await estimatePrices(labels, {
@@ -318,11 +331,21 @@ async function fillPriceGaps(coverage: Record<string, Set<string>>): Promise<{ g
 async function fillSalaryGaps(coverage: Record<string, Set<string>>): Promise<{ geminiCalls: number; estimatesAdded: number }> {
   const allJobs = await prisma.marketJob.findMany();
   let geminiCalls = 0;
+
+  const since = new Date(Date.now() - 30 * 86400_000);
+  const covered = await prisma.marketSalary.findMany({
+    where: { collectedAt: { gte: since }, confidence: { gte: 0.60 } },
+    select: { jobId: true, countryCode: true },
+  });
+  const internalCov: Record<string, Set<string>> = {};
+  for (const c of covered) {
+    (internalCov[c.jobId] ??= new Set()).add(c.countryCode);
+  }
   let estimatesAdded = 0;
 
   for (const country of COUNTRIES) {
-    const missing = allJobs.filter((j) => !coverage[j.id]?.has(country));
-    if (missing.length < 5) continue;
+    const missing = allJobs.filter((j) => !coverage[j.id]?.has(country) && !internalCov[j.id]?.has(country));
+    if (missing.length < 10) continue; // Durcç: Gemini seulement si ≥ 10 vrais trous par pays
 
     const labels = missing.slice(0, 20).map((j) => j.displayName);
     const result = await estimateSalaries(labels, {
