@@ -186,6 +186,24 @@ export async function validateCoupon(
   }
 
   // Scope checks
+  // Récupère le rôle de l'utilisateur pour enforcer USER_PLANS / BUSINESS_PLANS
+  const userForScope = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { role: true },
+  });
+  const userScope: "USER" | "BUSINESS" = userForScope?.role === "BUSINESS" ? "BUSINESS" : "USER";
+
+  if (coupon.targetScope === "USER_PLANS" && userScope !== "USER") {
+    return { ...base, valid: false, reason: "PLAN_NOT_ELIGIBLE" };
+  }
+  if (coupon.targetScope === "BUSINESS_PLANS" && userScope !== "BUSINESS") {
+    return { ...base, valid: false, reason: "PLAN_NOT_ELIGIBLE" };
+  }
+  if (coupon.targetScope === "ALL_ADDONS" && planCode && !addonCode) {
+    // Coupon uniquement utilisable sur add-ons
+    return { ...base, valid: false, reason: "ADDON_NOT_ELIGIBLE" };
+  }
+
   if (coupon.targetScope === "SPECIFIC") {
     if (planCode && coupon.targetPlanCodes.length > 0 && !coupon.targetPlanCodes.includes(planCode))
       return { ...base, valid: false, reason: "PLAN_NOT_ELIGIBLE" };
@@ -414,6 +432,37 @@ export async function createCoupon(
     throw new Error("EXPIRES_AT_IN_PAST");
   }
 
+  // Valider recipientUserId s'il est fourni (évite une FK violation opaque)
+  if (input.recipientUserId) {
+    const recipient = await prisma.user.findUnique({
+      where: { id: input.recipientUserId },
+      select: { id: true },
+    });
+    if (!recipient) throw new Error("RECIPIENT_USER_NOT_FOUND");
+  }
+
+  // Valider issuedById (sauf "system" qui bypass le FK via null)
+  let resolvedIssuedById: string | null = issuedById;
+  if (issuedById === "system") {
+    resolvedIssuedById = null;
+  } else {
+    const issuer = await prisma.user.findUnique({
+      where: { id: issuedById },
+      select: { id: true },
+    });
+    if (!issuer) resolvedIssuedById = null;
+  }
+
+  // Valider les plan codes fournis (SPECIFIC) contre le catalogue
+  if (input.targetScope === "SPECIFIC" && input.targetPlanCodes && input.targetPlanCodes.length > 0) {
+    const { PLAN_CATALOG } = await import("../billing/billing.catalog.js");
+    const validCodes = new Set(PLAN_CATALOG.map((p) => p.code));
+    const invalid = input.targetPlanCodes.filter((c) => !validCodes.has(c));
+    if (invalid.length > 0) {
+      throw new Error(`INVALID_PLAN_CODES:${invalid.join(",")}`);
+    }
+  }
+
   // 100% discount max 14 days enforcement
   if (input.discountPercent === 100) {
     const policy = await getPolicy(input.segment ?? "STANDARD");
@@ -438,7 +487,7 @@ export async function createCoupon(
       expiresAt: input.expiresAt,
       status: input.status ?? "ACTIVE",
       segment: input.segment ?? "STANDARD",
-      issuedById,
+      issuedById: resolvedIssuedById,
       recipientUserId: input.recipientUserId,
       metadata: input.metadata as any,
     },

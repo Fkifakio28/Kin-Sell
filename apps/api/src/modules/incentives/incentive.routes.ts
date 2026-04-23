@@ -146,12 +146,33 @@ router.post(
   requireRoles(Role.SUPER_ADMIN),
   asyncHandler(async (request: AuthenticatedRequest, response) => {
     const input = createCouponSchema.parse(request.body);
-    const coupon = await incentiveService.createCoupon(request.auth!.userId, {
-      ...input,
-      startsAt: input.startsAt ? new Date(input.startsAt) : undefined,
-      expiresAt: new Date(input.expiresAt),
-    });
-    response.status(201).json(coupon);
+    try {
+      const coupon = await incentiveService.createCoupon(request.auth!.userId, {
+        ...input,
+        startsAt: input.startsAt ? new Date(input.startsAt) : undefined,
+        expiresAt: new Date(input.expiresAt),
+      });
+      response.status(201).json(coupon);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "CREATE_FAILED";
+      const map: Record<string, { status: number; msg: string }> = {
+        EXPIRES_AT_IN_PAST: { status: 400, msg: "La date d'expiration doit être dans le futur." },
+        RECIPIENT_USER_NOT_FOUND: { status: 404, msg: "L'utilisateur destinataire n'existe pas." },
+        COUPON_100_MAX_DURATION_EXCEEDED: { status: 400, msg: "Un coupon -100% ne peut pas durer plus de 14 jours." },
+      };
+      if (message.startsWith("INVALID_PLAN_CODES:")) {
+        const codes = message.split(":")[1];
+        response.status(400).json({ error: "INVALID_PLAN_CODES", detail: `Codes de forfait invalides : ${codes}` });
+        return;
+      }
+      const mapped = map[message];
+      if (mapped) {
+        response.status(mapped.status).json({ error: message, detail: mapped.msg });
+        return;
+      }
+      request.log?.error({ err }, "[Incentive] Unexpected create coupon error");
+      response.status(500).json({ error: "CREATE_FAILED", detail: message });
+    }
   }),
 );
 
