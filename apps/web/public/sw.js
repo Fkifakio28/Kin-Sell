@@ -1,5 +1,5 @@
 /* Service Worker — Push Notifications + Runtime Caching (Phase 3) */
-const SW_VERSION = "v5-2026-04-23";
+const SW_VERSION = "v6-2026-04-23-sound";
 const CACHE_STATIC = `ks-static-${SW_VERSION}`;
 const CACHE_IMAGES = `ks-images-${SW_VERSION}`;
 const CACHE_PAGES = `ks-pages-${SW_VERSION}`;
@@ -293,16 +293,48 @@ self.addEventListener("push", (event) => {
   const data = (payload && payload.data) ? payload.data : {};
   const targetUrl = resolveTarget(data);
 
+  // Fallback body par type pour garantir l'affichage + le déclenchement du
+  // son système (certains navigateurs restent silencieux si body est vide).
+  const fallbackBodyByType = {
+    message: "Nouveau message 💬",
+    call: "Appel entrant 📞",
+    order: "Nouvelle activité sur votre commande",
+    negotiation: "Nouvelle offre reçue",
+    like: "Nouveau like sur votre publication",
+    publication: "Nouvelle publication",
+    sokin: "Nouvelle activité So-Kin",
+    promo: "Nouvelle promotion 🎁",
+    COUPON: "Nouveau coupon 🎟️",
+    default: "Vous avez une nouvelle notification Kin-Sell",
+  };
+  const resolvedBody =
+    (payload.body && String(payload.body).trim()) ||
+    fallbackBodyByType[data.type] ||
+    fallbackBodyByType.default;
+  const resolvedTitle = (payload.title && String(payload.title).trim()) || "Kin-Sell";
+  // Tag stable par type/conversation → renotify déclenche le son à chaque push.
+  const resolvedTag =
+    payload.tag ||
+    (data.type === "call" && data.conversationId ? `call-${data.conversationId}` : null) ||
+    (data.type === "message" && data.conversationId ? `msg-${data.conversationId}` : null) ||
+    `ks-${data.type || "default"}-${Date.now()}`;
+
   const options = {
-    body: payload.body || "",
+    body: resolvedBody,
     icon: payload.icon || DEFAULT_ICON,
     badge: payload.badge || DEFAULT_BADGE,
-    tag: payload.tag,
+    tag: resolvedTag,
     renotify: true,
+    // silent:false explicite → déclenche le son OSresolvedTitle
+    // Firefox/Samsung/Brave). Sans ce flag certains navigateurs traitent
+    // l'absence comme "silencieux par sécurité" et aucune alerte sonore
+    // ne se produit même si l'OS l'autorise.
+    silent: false,
     requireInteraction: data.type === "call",
     vibrate: data.type === "call"
       ? [500, 200, 500, 200, 500, 200, 500]
-      : [250, 100, 250],
+      : [300, 120, 300, 120, 300],
+    timestamp: Date.now(),
     data: {
       ...(data || {}),
       url: targetUrl,

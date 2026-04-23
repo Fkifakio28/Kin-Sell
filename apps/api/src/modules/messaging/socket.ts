@@ -336,7 +336,33 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
     socket.on("conversation:read", async (data: { conversationId: string }) => {
       try {
         await messagingService.markConversationRead(data.conversationId, userId);
+
+        // Garantir que TOUS les sockets participants sont dans la room avant d'émettre.
+        // Sans cela, si l'expéditeur (A) s'est reconnecté après l'envoi et n'a pas
+        // eu le temps de re-joindre la room, il ne recevra pas conversation:read et
+        // son UI restera bloquée sur "envoyé" jusqu'à un refresh manuel.
+        const participantIds = await messagingService.getConversationParticipantIds(data.conversationId);
+        for (const pid of participantIds) {
+          const sockets = onlineUsers.get(pid);
+          if (sockets) {
+            for (const sid of sockets) {
+              const s = io.sockets.sockets.get(sid);
+              if (s) await s.join(`conv:${data.conversationId}`);
+            }
+          }
+        }
+
+        // Émission dans la room conv:<id> (exclut l'émetteur courant)
         socket.to(`conv:${data.conversationId}`).emit("conversation:read", { conversationId: data.conversationId, userId });
+
+        // Redondance P0 : émettre aussi dans user:<id> pour chaque autre participant.
+        // Couvre le cas où un socket n'est pas encore dans conv:<id> (reconnexion,
+        // nouveau device, etc.). Double émission = risque de dédup à gérer côté client
+        // (handleConvRead est idempotent, donc ok).
+        for (const pid of participantIds) {
+          if (pid === userId) continue;
+          io.to(`user:${pid}`).emit("conversation:read", { conversationId: data.conversationId, userId });
+        }
       } catch { /* ignore */ }
     });
 
@@ -475,6 +501,9 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
           io.to(sid).emit("call:rejected", { conversationId: data.conversationId, rejecterId: userId });
         }
       }
+      // Redondance : cible aussi la room user:<callerId> au cas où la map
+      // onlineUsers serait obsolète (reconnexion récente, socket fantôme).
+      io.to(`user:${data.callerId}`).emit("call:rejected", { conversationId: data.conversationId, rejecterId: userId });
 
       // Update call log → REJECTED + system message
       const logId = activeCallLogs.get(data.conversationId);
@@ -504,6 +533,10 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
           io.to(sid).emit("call:ended", { conversationId: data.conversationId, enderId: userId });
         }
       }
+      // Redondance : cible aussi la room user:<targetUserId> au cas où la map
+      // onlineUsers serait obsolète (reconnexion, socket fantôme). Idempotent
+      // côté client (handleEnded vérifie callRef avant d'agir).
+      io.to(`user:${data.targetUserId}`).emit("call:ended", { conversationId: data.conversationId, enderId: userId });
 
       // Also emit to ALL sockets of the CALLER (other tabs) so they also clean up
       const callerSockets = onlineUsers.get(userId);

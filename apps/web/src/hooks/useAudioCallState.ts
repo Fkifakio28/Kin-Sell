@@ -142,9 +142,16 @@ export function useAudioCallState() {
     }, 1000);
   }, [stopTimer]);
 
+  /** Watchdog client pour appels sortants sans réponse/signal serveur */
+  const ringingWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   /** Full cleanup — release all resources */
   const cleanup = useCallback(() => {
     stopTimer();
+    if (ringingWatchdogRef.current) {
+      clearTimeout(ringingWatchdogRef.current);
+      ringingWatchdogRef.current = null;
+    }
     pcRef.current?.close();
     pcRef.current = null;
     localStreamRef.current?.getTracks().forEach((t) => t.stop());
@@ -289,6 +296,33 @@ export function useAudioCallState() {
 
   // ── Public actions ─────────────────────────────────────────────────────────
 
+  /** Watchdog client : garde-fou si le serveur rate d'émettre call:no-answer /
+   *  call:rejected / call:ended (perte de socket, bug réseau). Après ce délai
+   *  on force la fermeture côté UI pour éviter d'afficher "sonnerie" indéfiniment.
+   *  Valeur > au timeout serveur (30s) pour laisser priorité au signal réseau.
+   */
+  const RINGING_WATCHDOG_MS = 40_000;
+
+  const clearRingingWatchdog = useCallback(() => {
+    if (ringingWatchdogRef.current) {
+      clearTimeout(ringingWatchdogRef.current);
+      ringingWatchdogRef.current = null;
+    }
+  }, []);
+
+  const armRingingWatchdog = useCallback(() => {
+    clearRingingWatchdog();
+    ringingWatchdogRef.current = setTimeout(() => {
+      const c = callRef.current;
+      if (!c) return;
+      if (c.status === "outgoing_ringing" || c.status === "connecting") {
+        // Sécurité : prévenir l'autre côté + cleanup local
+        try { emit("call:end", { conversationId: c.conversationId, targetUserId: c.remoteUserId }); } catch { /* ignore */ }
+        finishCall("unanswered");
+      }
+    }, RINGING_WATCHDOG_MS);
+  }, [clearRingingWatchdog, emit, finishCall]);
+
   /** Start an outgoing audio call */
   const startCall = useCallback(async (conversationId: string, remoteUserId: string) => {
     if (callRef.current) return; // already in a call
@@ -313,13 +347,14 @@ export function useAudioCallState() {
       setIsSpeakerOn(false);
 
       emit("call:initiate", { conversationId, targetUserId: remoteUserId, callType: "audio" });
+      armRingingWatchdog();
     } catch (err) {
       console.error("[Call] startCall failed", err);
       // Provide UI feedback (e.g. mic permission denied)
       setCallResult({ status: "ended", direction: "outgoing", durationSeconds: 0 });
       cleanup();
     }
-  }, [createPC, getAudioStream, optimizeAudioSender, emit, cleanup]);
+  }, [createPC, getAudioStream, optimizeAudioSender, emit, cleanup, armRingingWatchdog]);
 
   /** Accept an incoming audio call */
   const acceptCall = useCallback(async () => {
