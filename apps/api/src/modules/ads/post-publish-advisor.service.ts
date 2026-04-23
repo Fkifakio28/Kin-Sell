@@ -23,6 +23,7 @@ import {
 } from "./ai-ads-engine.service.js";
 import { PLAN_CATALOG } from "../billing/billing.catalog.js";
 import { OFFER_MAP, type OfferCode } from "./ads-knowledge-base.js";
+import { getMarketContextForUser } from "../market-intel/context.js";
 
 // ═══════════════════════════════════════════════════════
 // Types
@@ -34,6 +35,7 @@ export type AdviceCategory =
   | "ADS_PREMIUM"
   | "PLAN"
   | "ANALYTICS"
+  | "MARKET_INTEL"
   | "CONTENT_TIP";
 
 export interface PostPublishAdvice {
@@ -155,6 +157,12 @@ export async function getPostPublishAdvice(
   if (listing) {
     const marketAdvice = await buildMarketPriceAdvice(listing);
     if (marketAdvice) advice.push(marketAdvice);
+  }
+
+  // ── 8. MARKET INTEL (Analytique+) — tendance pays ──
+  if (listing) {
+    const miAdvice = await buildMarketIntelAdvice(userId, listing, profile);
+    if (miAdvice) advice.push(miAdvice);
   }
 
   // Trier par priorité décroissante, max 5
@@ -555,4 +563,73 @@ async function buildMarketPriceAdvice(
   }
 
   return null;
+}
+
+/**
+ * Construit un conseil Market-Intel : informe le vendeur du rang de son
+ * produit dans les tendances pays et de la saisonnalité active.
+ * Silencieux si aucune donnée — évite de polluer la sortie.
+ */
+async function buildMarketIntelAdvice(
+  userId: string,
+  listing: { title: string; category: string; city: string; priceUsdCents: number },
+  profile: SellerProfile | null,
+): Promise<PostPublishAdvice | null> {
+  try {
+    // Récup pays du user
+    const profileRow = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { profile: { select: { country: true } } },
+    });
+    const country = profileRow?.profile?.country ?? null;
+    if (!country) return null;
+
+    const includeArbitrage = profile?.currentPlan?.code === "SCALE";
+    const snap = await getMarketContextForUser({
+      country,
+      categoryId: listing.category,
+      includeArbitrage,
+    });
+
+    if (!snap.productInsight && snap.topTrends.length === 0) return null;
+
+    // Cas 1 : produit trouvé dans les tendances
+    const insight = snap.productInsight;
+    if (insight?.trendRank) {
+      const dir = (insight.trendDeltaPct ?? 0) >= 0 ? "en hausse" : "en baisse";
+      const season = insight.trendSeason ? ` — saison: ${insight.trendSeason}` : "";
+      return {
+        category: "MARKET_INTEL",
+        priority: 6,
+        icon: "📈",
+        title: `Votre produit est #${insight.trendRank} en tendance (${country})`,
+        message: `${insight.displayName} est actuellement #${insight.trendRank} des produits tendance en ${country}, ${dir} de ${Math.abs(insight.trendDeltaPct ?? 0).toFixed(1)}% sur 14 jours${season}. Prix médian observé: ${insight.priceMedianLocal} ${insight.localCurrency}.`,
+        rationale: "Profitez du momentum : boostez cet article pour capter la demande.",
+        ctaLabel: "Voir Intelligence marché",
+        ctaTarget: "/market-intel",
+        ctaAction: "NAVIGATE",
+        metric: { rank: insight.trendRank, deltaPct: insight.trendDeltaPct ?? 0 },
+      };
+    }
+
+    // Cas 2 : top tendances du pays (sans match précis)
+    if (snap.topTrends.length > 0) {
+      const top = snap.topTrends.slice(0, 3).map((t) => `#${t.rank} ${t.name}`).join(", ");
+      return {
+        category: "MARKET_INTEL",
+        priority: 4,
+        icon: "🌍",
+        title: `Tendances ${country} cette semaine`,
+        message: `Les produits qui montent en ${country}: ${top}. Pensez à diversifier votre catalogue.`,
+        rationale: "Les tendances pays sont mises à jour toutes les 24h par Kin-Sell Analytique+.",
+        ctaLabel: "Explorer les tendances",
+        ctaTarget: "/market-intel",
+        ctaAction: "NAVIGATE",
+      };
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
 }

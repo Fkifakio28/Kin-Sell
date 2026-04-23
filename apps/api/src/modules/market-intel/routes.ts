@@ -15,8 +15,12 @@ import { Role } from "../../types/roles.js";
 import { asyncHandler } from "../../shared/utils/async-handler.js";
 import { HttpError } from "../../shared/errors/http-error.js";
 import { prisma } from "../../shared/db/prisma.js";
-import { requireMarketIntel } from "./gating.js";
+import { requireMarketIntel, getMarketFeaturesForUser } from "./gating.js";
 import { getGeminiQuotaStatus } from "./gemini-fallback.js";
+import { runAggregation } from "./aggregator.js";
+import { computeTrends } from "./trends.js";
+import { runArbitrage } from "./arbitrage.js";
+import { runCrawlCycle } from "./orchestrator.js";
 
 const router = Router();
 
@@ -25,6 +29,20 @@ const CountrySchema = z.enum(COUNTRY_CODES);
 
 const CACHE_SECONDS = 300;
 const setCache = (res: any) => res.setHeader("Cache-Control", `private, max-age=${CACHE_SECONDS}`);
+
+// ── /market/me ─────────────────────────────────────
+// Retourne les features Market-Intel actives pour l'utilisateur courant.
+// Utilisé par l'UI pour afficher les bons onglets.
+
+router.get(
+  "/me",
+  requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const userId = req.auth!.userId;
+    const info = await getMarketFeaturesForUser(userId);
+    res.json(info);
+  }),
+);
 
 // ── /market/products ─────────────────────────────────
 
@@ -264,6 +282,53 @@ router.get(
       totals: { productCount, jobCount, priceCount, salaryCount, trendCount, arbCount },
       geminiQuota,
     });
+  }),
+);
+
+// ── /market/admin/trigger (admin) ────────────────────
+// Déclenche manuellement un cycle : crawl(type) + aggregate + trends + arbitrage
+// Utile quand l'admin veut voir des résultats sans attendre le scheduler.
+
+const TriggerBody = z.object({
+  steps: z.array(z.enum(["crawl", "aggregate", "trends", "arbitrage"]))
+    .min(1)
+    .default(["aggregate", "trends", "arbitrage"]),
+  crawlType: z.enum(["news", "marketplace", "classifieds", "jobs", "stats"]).optional(),
+  crawlBatchSize: z.number().int().min(1).max(100).default(20),
+});
+
+let triggerInFlight = false;
+
+router.post(
+  "/admin/trigger",
+  requireAuth,
+  requireRoles(Role.ADMIN, Role.SUPER_ADMIN),
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    if (triggerInFlight) throw new HttpError(409, "Un cycle est déjà en cours — patiente.");
+    const parsed = TriggerBody.safeParse(req.body ?? {});
+    if (!parsed.success) throw new HttpError(400, parsed.error.issues[0]?.message ?? "Corps invalide");
+    const { steps, crawlType, crawlBatchSize } = parsed.data;
+
+    triggerInFlight = true;
+    const report: Record<string, unknown> = { startedAt: new Date().toISOString() };
+    try {
+      if (steps.includes("crawl") && crawlType) {
+        report.crawl = await runCrawlCycle(crawlType, crawlBatchSize);
+      }
+      if (steps.includes("aggregate")) {
+        report.aggregate = await runAggregation();
+      }
+      if (steps.includes("trends")) {
+        report.trends = await computeTrends();
+      }
+      if (steps.includes("arbitrage")) {
+        report.arbitrage = await runArbitrage();
+      }
+      report.finishedAt = new Date().toISOString();
+      res.json({ ok: true, report });
+    } finally {
+      triggerInFlight = false;
+    }
   }),
 );
 

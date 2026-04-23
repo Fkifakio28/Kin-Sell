@@ -25,6 +25,9 @@ async function userHasMarketFeature(userId: string, feature: MarketIntelFeature)
   });
   if (!user) return false;
 
+  // Admins voient tout, sans gating (vue brute)
+  if (user.role === "ADMIN" || user.role === "SUPER_ADMIN") return true;
+
   const isBusiness = user.role === "BUSINESS";
   const businessId = isBusiness ? user.businesses[0]?.id : null;
 
@@ -62,4 +65,53 @@ export function requireMarketIntel(feature: MarketIntelFeature) {
     }
     next();
   };
+}
+
+/**
+ * Retourne la liste des features Market-Intel actives pour un user,
+ * + le tier analytique global (NONE / MEDIUM / PREMIUM).
+ * Admins voient toutes les features (tier PREMIUM forcé).
+ */
+export async function getMarketFeaturesForUser(userId: string): Promise<{
+  features: MarketIntelFeature[];
+  tier: "NONE" | "MEDIUM" | "PREMIUM";
+  isAdmin: boolean;
+  planCode: string | null;
+}> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { role: true, businesses: { select: { id: true }, take: 1 } },
+  });
+  if (!user) return { features: [], tier: "NONE", isAdmin: false, planCode: null };
+
+  if (user.role === "ADMIN" || user.role === "SUPER_ADMIN") {
+    return {
+      features: ["MARKET_INTEL_BASIC", "MARKET_INTEL_PREMIUM", "ARBITRAGE_ENGINE"],
+      tier: "PREMIUM",
+      isAdmin: true,
+      planCode: null,
+    };
+  }
+
+  const isBusiness = user.role === "BUSINESS";
+  const businessId = isBusiness ? user.businesses[0]?.id : null;
+
+  const sub = await prisma.subscription.findFirst({
+    where: {
+      status: SubscriptionStatus.ACTIVE,
+      ...(isBusiness && businessId ? { businessId } : { userId }),
+      OR: [{ endsAt: null }, { endsAt: { gt: new Date() } }],
+    },
+    orderBy: { createdAt: "desc" },
+    select: { planCode: true },
+  });
+  if (!sub) return { features: [], tier: "NONE", isAdmin: false, planCode: null };
+
+  const scope: "USER" | "BUSINESS" = isBusiness ? "BUSINESS" : "USER";
+  const plan = PLAN_CATALOG.find((p) => p.code === sub.planCode && p.scope === scope);
+  if (!plan) return { features: [], tier: "NONE", isAdmin: false, planCode: sub.planCode };
+
+  const features = (["MARKET_INTEL_BASIC", "MARKET_INTEL_PREMIUM", "ARBITRAGE_ENGINE"] as MarketIntelFeature[])
+    .filter((f) => plan.features.includes(f));
+  return { features, tier: plan.analyticsTier, isAdmin: false, planCode: plan.code };
 }

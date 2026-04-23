@@ -10,6 +10,7 @@ import {
   type MarketSalaryRow,
   type MarketTrendRow,
   type ArbitrageRow,
+  type MarketMeResponse,
 } from "../../lib/services/market-intel.service";
 import "./market-intel.css";
 
@@ -35,26 +36,65 @@ function useAsync<T>(fn: () => Promise<T>, deps: unknown[]): AsyncState<T> {
 
 export function MarketIntelPage() {
   const [country, setCountry] = useState<MarketCountry>("CI");
+  const meQ = useAsync<MarketMeResponse>(() => marketIntel.me(), []);
+
+  const features = meQ.data?.features ?? [];
+  const hasBasic = features.includes("MARKET_INTEL_BASIC");
+  const hasPremium = features.includes("MARKET_INTEL_PREMIUM");
+  const hasArbitrage = features.includes("ARBITRAGE_ENGINE");
+  const isAdmin = meQ.data?.isAdmin ?? false;
+
+  const availableTabs = useMemo<TabKey[]>(() => {
+    const t: TabKey[] = [];
+    if (hasBasic) t.push("products", "salaries");
+    if (hasPremium) t.push("trends");
+    if (hasArbitrage) t.push("arbitrage");
+    return t;
+  }, [hasBasic, hasPremium, hasArbitrage]);
+
   const [tab, setTab] = useState<TabKey>("products");
+  useEffect(() => {
+    if (availableTabs.length > 0 && !availableTabs.includes(tab)) {
+      setTab(availableTabs[0]);
+    }
+  }, [availableTabs, tab]);
+
+  if (meQ.loading) return <div className="market-intel"><Loading /></div>;
+
+  // Aucun abonnement → locked full screen
+  if (availableTabs.length === 0) {
+    return (
+      <div className="market-intel">
+        <header className="mi-head">
+          <div>
+            <h1>🌍 Intelligence marché</h1>
+            <p className="mi-sub">Accès réservé aux forfaits Pro Vendeur / Business / Scale.</p>
+          </div>
+        </header>
+        <ErrorView message="Abonnement requis pour accéder à Kin-Sell Analytique+." feature="MARKET_INTEL_BASIC" />
+      </div>
+    );
+  }
 
   return (
     <div className="market-intel">
       <header className="mi-head">
         <div>
-          <h1>🌍 Intelligence marché</h1>
+          <h1>🌍 Intelligence marché {isAdmin ? <span className="mi-admin-badge">ADMIN</span> : null}</h1>
           <p className="mi-sub">
-            Prix, salaires, tendances et arbitrages sur 8 pays africains —
-            données agrégées depuis {MARKET_COUNTRIES.length} marchés, mises à jour toutes les 24h.
+            {isAdmin
+              ? `Vue brute admin — ${MARKET_COUNTRIES.length} pays, toutes données.`
+              : `Réponses ciblées pour votre forfait ${meQ.data?.planCode ?? ""} — ${MARKET_COUNTRIES.length} pays, mise à jour 24h.`}
           </p>
         </div>
         <CountryPicker value={country} onChange={setCountry} />
       </header>
 
       <nav className="mi-tabs" role="tablist">
-        <TabBtn active={tab === "products"}  onClick={() => setTab("products")}>📦 Marché</TabBtn>
-        <TabBtn active={tab === "salaries"}  onClick={() => setTab("salaries")}>👷 Métiers</TabBtn>
-        <TabBtn active={tab === "trends"}    onClick={() => setTab("trends")}>📈 Tendances</TabBtn>
-        <TabBtn active={tab === "arbitrage"} onClick={() => setTab("arbitrage")}>🔀 Arbitrage</TabBtn>
+        {hasBasic && <TabBtn active={tab === "products"}  onClick={() => setTab("products")}>📦 Marché</TabBtn>}
+        {hasBasic && <TabBtn active={tab === "salaries"}  onClick={() => setTab("salaries")}>👷 Métiers</TabBtn>}
+        {hasPremium && <TabBtn active={tab === "trends"}    onClick={() => setTab("trends")}>📈 Tendances</TabBtn>}
+        {hasArbitrage && <TabBtn active={tab === "arbitrage"} onClick={() => setTab("arbitrage")}>🔀 Arbitrage</TabBtn>}
       </nav>
 
       <section className="mi-body">

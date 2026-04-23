@@ -2404,6 +2404,10 @@ export function UserDashboard() {
                     <span className="ud-ov-quick-icon">⚡</span>
                     <span>{t('user.plans')}</span>
                   </Link>
+                  <Link to="/market-intel" className="ud-ov-quick-tile">
+                    <span className="ud-ov-quick-icon">🌍</span>
+                    <span>Intelligence marché</span>
+                  </Link>
                   <button type="button" className="ud-ov-quick-tile" onClick={() => setActiveSection('settings')}>
                     <span className="ud-ov-quick-icon">⚙</span>
                     <span>{t('user.settings')}</span>

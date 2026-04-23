@@ -1428,6 +1428,12 @@ export function BusinessDashboard() {
           </div>
         )}
 
+        {!sidebarCollapsed && (
+          <Link to="/market-intel" className="ud-premium-btn bz-upgrade-btn" style={{ display: 'block', textAlign: 'center', marginTop: 8, textDecoration: 'none' }}>
+            🌍 Intelligence marché
+          </Link>
+        )}
+
         <div className="ud-drawer-logout">
           <button type="button" className="ud-drawer-logout-btn" onClick={() => { logout(); navigate('/login'); }}>
             🚪 {t('common.logout')}

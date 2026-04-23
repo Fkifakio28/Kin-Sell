@@ -71,9 +71,30 @@ export type ArbitrageRow = {
   computedAt: string;
 };
 
+export type MarketIntelFeature = "MARKET_INTEL_BASIC" | "MARKET_INTEL_PREMIUM" | "ARBITRAGE_ENGINE";
+
+export type MarketMeResponse = {
+  features: MarketIntelFeature[];
+  tier: "NONE" | "MEDIUM" | "PREMIUM";
+  isAdmin: boolean;
+  planCode: string | null;
+};
+
+export type MarketCoverage = {
+  sourcesByCountry: Array<{ countryCode: string; type: string; _count: number }>;
+  recentCrawls: Array<{ name: string; countryCode: string; type: string; lastCrawledAt: string | null; lastStatus: string | null; lastError: string | null }>;
+  totals: { productCount: number; jobCount: number; priceCount: number; salaryCount: number; trendCount: number; arbCount: number };
+  geminiQuota: { used: number; cap: number; date: string };
+};
+
+export type TriggerStep = "crawl" | "aggregate" | "trends" | "arbitrage";
+export type TriggerCrawlType = "news" | "marketplace" | "classifieds" | "jobs" | "stats";
+
 // ── API ───────────────────────────────────────────────
 
 export const marketIntel = {
+  me: () => request<MarketMeResponse>("/market/me"),
+
   products: (country: MarketCountry, opts?: { categoryId?: string; productSlug?: string; limit?: number }) => {
     const qs = new URLSearchParams({ country });
     if (opts?.categoryId) qs.set("categoryId", opts.categoryId);
@@ -112,6 +133,14 @@ export const marketIntel = {
       suffix ? `/market/arbitrage?${suffix}` : "/market/arbitrage",
     );
   },
+
+  coverage: () => request<MarketCoverage>("/market/coverage"),
+
+  trigger: (body: { steps: TriggerStep[]; crawlType?: TriggerCrawlType; crawlBatchSize?: number }) =>
+    request<{ ok: boolean; report: Record<string, unknown> }>("/market/admin/trigger", {
+      method: "POST",
+      body,
+    }),
 };
 
 // ── Formatters ────────────────────────────────────────

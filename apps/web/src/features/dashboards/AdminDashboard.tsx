@@ -5574,7 +5574,17 @@ export function AdminDashboard() {
         </nav>
 
         {/* Drawer logout — always visible in mobile drawer */}
-        <div className="ud-drawer-logout" style={{ padding: '12px 16px', marginTop: 'auto' }}>
+        <div className="ud-drawer-logout" style={{ padding: '12px 16px', marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {!sidebarCollapsed && (
+            <>
+              <Link to="/market-intel" style={{ padding: '8px 10px', fontSize: 13, borderRadius: 6, background: 'rgba(111,88,255,0.08)', color: '#6f58ff', textDecoration: 'none', textAlign: 'center', fontWeight: 600 }}>
+                🌍 Intelligence marché
+              </Link>
+              <Link to="/admin/market-intel" style={{ padding: '8px 10px', fontSize: 13, borderRadius: 6, background: 'rgba(255,140,0,0.12)', color: '#ff8c00', textDecoration: 'none', textAlign: 'center', fontWeight: 700 }}>
+                🛠️ Market Intel (admin)
+              </Link>
+            </>
+          )}
           <button className="ud-drawer-logout-btn" onClick={() => { logout(); navigate('/login'); }}>
             🚪 Déconnexion
           </button>
