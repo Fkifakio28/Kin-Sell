@@ -53,6 +53,8 @@ import {
 import AdminVerificationPanel from './AdminVerificationPanel';
 import AdminAnalyticsPanel from './AdminAnalyticsPanel';
 import AdminIncentivesPanel from './AdminIncentivesPanel';
+import { MarketIntelPage } from '../market-intel/MarketIntelPage';
+import { AdminMarketIntelPage } from '../market-intel/AdminMarketIntelPage';
 import AdminBoostKpiPanel from './AdminBoostKpiPanel';
 import { DashboardMessaging } from './DashboardMessaging';
 import TutorialOverlay, { useTutorial, TutorialRelaunchBtn } from '../../components/TutorialOverlay';
@@ -69,7 +71,8 @@ type AdminSection =
   | 'settings' | 'messaging' | 'appeals' | 'subscriptions' | 'verification' | 'incentives'
   | 'ia-analytique' | 'ia-marchande' | 'ia-commande' | 'ia-ads' | 'ia-message'
   | 'boost-kpi'
-  | 'app-version';
+  | 'app-version'
+  | 'market-intel' | 'market-intel-admin';
 
 type ModalType =
   | null | 'user-detail' | 'user-role' | 'user-message' | 'user-suspend'
@@ -134,6 +137,10 @@ const SECTION_DEFS: Array<{
   { key: 'ia-ads',         label: 'IA ADS',             icon: '📣', permission: 'ADS',           group: 'Intelligence Artificielle' },
   { key: 'boost-kpi',      label: 'Boost KPI',          icon: '🚀', permission: 'ADS',           group: 'Intelligence Artificielle' },
   { key: 'ia-message',     label: 'IA Message',         icon: '📨', permission: 'AI_MANAGEMENT', group: 'Intelligence Artificielle' },
+
+  // Market Intel (Kin-Sell Analytique+)
+  { key: 'market-intel',       label: 'Intelligence marché',    icon: '🌍', permission: 'DASHBOARD',     group: 'Market Intel' },
+  { key: 'market-intel-admin', label: 'Market Intel (admin)',    icon: '🛠️', permission: 'AI_MANAGEMENT', group: 'Market Intel' },
 ];
 
 function roleBadgeClass(role: string) {
@@ -3656,6 +3663,8 @@ export function AdminDashboard() {
   // ═══════════════════════════  INCENTIVES ADMIN  ═══════════════════════════
 
   const renderIncentives = () => <AdminIncentivesPanel />;
+  const renderMarketIntel = () => <MarketIntelPage />;
+  const renderMarketIntelAdmin = () => <AdminMarketIntelPage />;
 
   // ═══════════════════════════════════════════════
   // IA TABS — 5 sections Intelligence Artificielle
@@ -4480,6 +4489,8 @@ export function AdminDashboard() {
       case 'subscriptions': return renderSubscriptions();
       case 'verification': return renderVerification();
       case 'incentives': return renderIncentives();
+      case 'market-intel': return renderMarketIntel();
+      case 'market-intel-admin': return renderMarketIntelAdmin();
       case 'ia-analytique': return renderIaAnalytique();
       case 'ia-marchande': return renderIaMarchande();
       case 'ia-commande': return renderIaCommande();
@@ -5571,29 +5582,6 @@ export function AdminDashboard() {
               ))}
             </div>
           ))}
-
-          {/* ── Market Intel (liens externes, même style que les sections) ── */}
-          <div>
-            {!sidebarCollapsed && <div className="ad-nav-section-label">Market Intel</div>}
-            <Link
-              to="/market-intel"
-              className="ad-nav-item"
-              onClick={() => setMobileSidebarOpen(false)}
-              title="Intelligence marché — vue utilisateur"
-            >
-              <span className="ad-nav-icon">🌍</span>
-              {!sidebarCollapsed && <span className="ad-nav-label">Intelligence marché</span>}
-            </Link>
-            <Link
-              to="/admin/market-intel"
-              className="ad-nav-item"
-              onClick={() => setMobileSidebarOpen(false)}
-              title="Market Intel — vue admin (données brutes + trigger)"
-            >
-              <span className="ad-nav-icon">🛠️</span>
-              {!sidebarCollapsed && <span className="ad-nav-label">Market Intel (admin)</span>}
-            </Link>
-          </div>
         </nav>
 
         {/* Drawer logout — always visible in mobile drawer */}
