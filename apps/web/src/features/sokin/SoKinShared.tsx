@@ -11,6 +11,7 @@ import {
   type SoKinApiComment,
 } from '../../lib/api-client';
 import type { MediaItem } from './AnnounceCard';
+import { useSokinSound, setSokinSoundPref } from './sokin-sound';
 
 /* ─────────────────────────────────────────────────────── */
 /* ICÔNES                                                   */
@@ -36,6 +37,7 @@ export function MediaViewer({ items, startIndex, onClose }: { items: MediaItem[]
   const touchDeltaX = useRef(0);
   const isDragging = useRef(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const [soundEnabled] = useSokinSound();
 
   const item = items[currentIndex];
   const hasPrev = currentIndex > 0;
@@ -111,7 +113,25 @@ export function MediaViewer({ items, startIndex, onClose }: { items: MediaItem[]
           controls
           autoPlay
           playsInline
+          muted={!soundEnabled}
           className="sk-viewer-media"
+          ref={(el) => {
+            if (!el) return;
+            // Appliquer la préférence son et fallback muté si le navigateur
+            // bloque l'autoplay avec son (surtout iOS/Safari).
+            try { el.muted = !soundEnabled; } catch { /* ignore */ }
+            const p = el.play();
+            if (p && typeof p.catch === 'function') {
+              p.catch(() => {
+                try {
+                  el.muted = true;
+                  setSokinSoundPref(false);
+                  const r = el.play();
+                  if (r && typeof r.catch === 'function') r.catch(() => undefined);
+                } catch { /* ignore */ }
+              });
+            }
+          }}
         />
       );
     }

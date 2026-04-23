@@ -98,8 +98,14 @@ export async function registerServiceWorker(): Promise<ServiceWorkerRegistration
   if (!isPushSupported()) return null;
   try {
     const existing = await navigator.serviceWorker.getRegistration();
-    if (existing) return existing;
-    return await navigator.serviceWorker.register(SW_URL, { scope: "/" });
+    const reg = existing ?? await navigator.serviceWorker.register(SW_URL, { scope: "/" });
+    // Fournir API_BASE au SW pour que pushsubscriptionchange puisse renvoyer
+    // la nouvelle subscription au backend sans passer par un onglet ouvert.
+    try {
+      const controller = reg.active || reg.waiting || reg.installing;
+      controller?.postMessage({ type: "set-api-base", apiBase: API_BASE });
+    } catch { /* ignore */ }
+    return reg;
   } catch {
     return null;
   }

@@ -662,3 +662,144 @@ export const cartEmptySteps: TutorialStep[] = [
     placement: "bottom",
   },
 ];
+
+/* -------------------------------------------------------
+   USER — Articles (espace de vente : publication & gestion)
+   ------------------------------------------------------- */
+
+export const userArticlesSteps: TutorialStep[] = [
+  {
+    id: "ua-topbar",
+    selector: ".ud-art-topbar",
+    title: "Votre espace de vente",
+    description:
+      "C'est ici que vous gérez tout ce que vous vendez : produits et services. En un coup d'œil, vous voyez le nombre d'articles actifs, inactifs et archivés.",
+    placement: "bottom",
+  },
+  {
+    id: "ua-stats",
+    selector: ".ud-art-stats-inline",
+    title: "Statistiques rapides",
+    description:
+      "Les chips colorés vous indiquent combien de vos annonces sont visibles (vert) vs hors-ligne. Un article INACTIF n'apparaît plus aux acheteurs.",
+    placement: "bottom",
+  },
+  {
+    id: "ua-publish",
+    selector: ".ud-art-publish-btn",
+    title: "Publier un article",
+    description:
+      "Cliquez sur + pour créer une nouvelle annonce en quelques étapes : titre, catégorie, prix, photos et localisation. C'est gratuit !",
+    placement: "left",
+  },
+  {
+    id: "ua-filters",
+    selector: ".ud-art-filters",
+    title: "Filtrer vos articles",
+    description:
+      "Affichez uniquement les actifs, inactifs, archivés ou en promo pour retrouver rapidement un article à modifier.",
+    placement: "bottom",
+  },
+  {
+    id: "ua-list",
+    selector: ".ud-art-list",
+    title: "Liste de vos annonces",
+    description:
+      "Chaque ligne est un article : image, titre, type, prix et statut. Les actions rapides sont à droite pour modifier, promouvoir ou désactiver.",
+    placement: "top",
+  },
+];
+
+/* -------------------------------------------------------
+   BUSINESS — Produits (catalogue)
+   ------------------------------------------------------- */
+
+export const businessProductsSteps: TutorialStep[] = [
+  {
+    id: "bp-topbar",
+    selector: ".bz-art-topbar",
+    title: "Catalogue produits",
+    description:
+      "Votre espace de vente produits. Stock, statut et prix sont gérés ici. Les acheteurs voient uniquement les produits ACTIFS.",
+    placement: "bottom",
+  },
+  {
+    id: "bp-stats",
+    selector: ".bz-art-stats-inline",
+    title: "Compteurs du catalogue",
+    description:
+      "Actifs / inactifs / archivés. Pensez à réactiver vos articles hors-ligne pour qu'ils reviennent dans les résultats.",
+    placement: "bottom",
+  },
+  {
+    id: "bp-publish",
+    selector: ".bz-art-publish-btn",
+    title: "Ajouter un produit",
+    description:
+      "Créez un nouveau produit en 3 étapes (infos, prix/stock, médias) ou importez-en plusieurs à la fois via CSV / JSON / XML.",
+    placement: "left",
+  },
+  {
+    id: "bp-filters",
+    selector: ".bz-art-filters",
+    title: "Filtres catalogue",
+    description:
+      "Filtrez par statut ou affichez uniquement vos produits en PROMO pour ajuster vos campagnes en un clic.",
+    placement: "bottom",
+  },
+  {
+    id: "bp-grid",
+    selector: ".bz-art-grid",
+    title: "Vos produits",
+    description:
+      "Chaque carte affiche visuel, statut, prix et stock. Cliquez pour éditer, désactiver, archiver ou lancer une promo.",
+    placement: "top",
+  },
+];
+
+/* -------------------------------------------------------
+   BUSINESS — Services
+   ------------------------------------------------------- */
+
+export const businessServicesSteps: TutorialStep[] = [
+  {
+    id: "bs-topbar",
+    selector: ".bz-art-topbar",
+    title: "Vos services",
+    description:
+      "L'espace dédié à vos prestations. Définissez une description claire, une zone d'intervention et votre tarif pour être trouvé par les clients.",
+    placement: "bottom",
+  },
+  {
+    id: "bs-stats",
+    selector: ".bz-art-stats-inline",
+    title: "Visibilité de vos services",
+    description:
+      "Nombre de services actifs, en pause ou archivés. Un service ACTIF apparaît dans l'Explorer et sur votre vitrine.",
+    placement: "bottom",
+  },
+  {
+    id: "bs-publish",
+    selector: ".bz-art-publish-btn",
+    title: "Proposer un service",
+    description:
+      "Cliquez pour créer un nouveau service. Titre clair, catégorie précise et description détaillée = plus de contacts.",
+    placement: "left",
+  },
+  {
+    id: "bs-filters",
+    selector: ".bz-art-filters",
+    title: "Filtrer par statut",
+    description:
+      "Affichez uniquement les services actifs pour vous concentrer sur ce qui est visible auprès des clients.",
+    placement: "bottom",
+  },
+  {
+    id: "bs-grid",
+    selector: ".bz-art-grid",
+    title: "Votre grille de services",
+    description:
+      "Chaque carte = un service. Éditez, désactivez ou boostez directement depuis la carte pour gagner du temps.",
+    placement: "top",
+  },
+];

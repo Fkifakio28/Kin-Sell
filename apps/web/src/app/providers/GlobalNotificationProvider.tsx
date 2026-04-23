@@ -169,10 +169,36 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
 
   const missedCount = missedNotifications.length;
 
+  // P1.6 #2 : flag pour éviter les écritures qui viennent d'arriver par
+  // storage event (sinon boucle infinie write → event → setState → write).
+  const missedFromStorageRef = useRef(false);
+
   // Persist whenever missedNotifications changes
   useEffect(() => {
+    if (missedFromStorageRef.current) {
+      missedFromStorageRef.current = false;
+      return;
+    }
     try { localStorage.setItem(MISSED_KEY, JSON.stringify(missedNotifications)); } catch {}
   }, [missedNotifications]);
+
+  // P1.6 #2 : synchronisation cross-tab de la cloche via storage event.
+  // Quand un autre onglet écrit dans localStorage, on merge côté courant.
+  useEffect(() => {
+    const onStorage = (ev: StorageEvent) => {
+      if (ev.key !== MISSED_KEY || !ev.newValue) return;
+      try {
+        const incoming = JSON.parse(ev.newValue) as MissedNotification[];
+        if (!Array.isArray(incoming)) return;
+        const now = Date.now();
+        const valid = incoming.filter((n) => n && typeof n.id === "string" && now - n.timestamp < MISSED_TTL).slice(0, MAX_MISSED);
+        missedFromStorageRef.current = true;
+        setMissedNotifications(valid);
+      } catch { /* ignore */ }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
 
   const pushMissed = useCallback((notif: Omit<MissedNotification, "id" | "timestamp">, dedupeKey?: string) => {
     const id = dedupeKey ?? `${notif.kind}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
@@ -263,8 +289,19 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
 
       if (!canceled) {
         if (permission === "default") {
+          // P1.6 #3 : re-invite automatique après 14 jours si l'utilisateur
+          // a cliqué "Plus tard". 2e chance élégante sans être spammy.
           let dismissed = false;
-          try { dismissed = !!localStorage.getItem(SK_PUSH_BANNER_DISMISSED); } catch {}
+          try {
+            const raw = localStorage.getItem(SK_PUSH_BANNER_DISMISSED);
+            if (raw) {
+              const dismissedAt = Date.parse(raw);
+              const REINVITE_AFTER_MS = 14 * 24 * 60 * 60 * 1000;
+              if (!Number.isNaN(dismissedAt) && Date.now() - dismissedAt < REINVITE_AFTER_MS) {
+                dismissed = true;
+              }
+            }
+          } catch { /* ignore */ }
           setShowPushBanner(!dismissed);
         } else {
           setShowPushBanner(false);
@@ -460,6 +497,94 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
     return () => window.removeEventListener("ks:native-call-reject", handler);
   }, []);
 
+  /* ── Dédup global : évite les doublons entre socket event + push SW ── */
+  // Clé composite stockée pendant 10s pour filtrer les notifs reçues par les
+  // deux canaux à la fois (socket + service worker push).
+  // Partagée entre onglets via BroadcastChannel + fallback localStorage
+  // (P1.5 A : Safari iOS < 16 n'a pas BroadcastChannel).
+  const seenKeysRef = useRef<Map<string, number>>(new Map());
+  const bcRef = useRef<BroadcastChannel | null>(null);
+  const LS_DEDUP_KEY = "ks-notif-dedup-last";
+
+  useEffect(() => {
+    if (typeof BroadcastChannel !== "undefined") {
+      const bc = new BroadcastChannel("ks-notif-dedup");
+      bcRef.current = bc;
+      bc.onmessage = (ev) => {
+        const k = ev?.data?.key;
+        if (typeof k === "string") seenKeysRef.current.set(k, Date.now());
+      };
+    }
+    // Fallback cross-tab (Safari iOS, Firefox privé, etc.) : écouter les
+    // événements storage qui se déclenchent dans les AUTRES onglets.
+    const onStorage = (ev: StorageEvent) => {
+      if (ev.key !== LS_DEDUP_KEY || !ev.newValue) return;
+      try {
+        const parsed = JSON.parse(ev.newValue) as { key: string; ts: number };
+        if (parsed && typeof parsed.key === "string") {
+          seenKeysRef.current.set(parsed.key, parsed.ts || Date.now());
+        }
+      } catch { /* ignore */ }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => {
+      try { bcRef.current?.close(); } catch { /* ignore */ }
+      bcRef.current = null;
+      window.removeEventListener("storage", onStorage);
+    };
+  }, []);
+
+  const isDuplicate = useCallback((key: string) => {
+    const now = Date.now();
+    const prev = seenKeysRef.current.get(key);
+    // Purge les clés expirées (> 10s) pour éviter la fuite mémoire
+    if (seenKeysRef.current.size > 200) {
+      for (const [k, t] of seenKeysRef.current) {
+        if (now - t > 10_000) seenKeysRef.current.delete(k);
+      }
+    }
+    if (prev && now - prev < 10_000) return true;
+    seenKeysRef.current.set(key, now);
+    // Canal 1 : BroadcastChannel (instantané, navigateurs modernes)
+    try { bcRef.current?.postMessage({ key, ts: now }); } catch { /* ignore */ }
+    // Canal 2 : localStorage (fallback Safari iOS) — storage event ne se
+    // déclenche QUE dans les autres onglets, donc pas de boucle.
+    try { localStorage.setItem(LS_DEDUP_KEY, JSON.stringify({ key, ts: now })); } catch { /* ignore */ }
+    return false;
+  }, []);
+
+  /* ── Audio unlock : certains navigateurs bloquent new Audio().play()
+     tant que l'utilisateur n'a pas interagi. On "prime" le pipeline audio
+     au premier geste utilisateur (click, touch, keydown) pour que toute
+     notif ultérieure joue son son instantanément. ── */
+  const audioUnlockedRef = useRef(false);
+  useEffect(() => {
+    if (audioUnlockedRef.current) return;
+    const unlock = () => {
+      if (audioUnlockedRef.current) return;
+      audioUnlockedRef.current = true;
+      try {
+        const a = new Audio("/assets/sounds/ui/kinsell_message.wav");
+        a.volume = 0;
+        const p = a.play();
+        if (p && typeof p.then === "function") {
+          p.then(() => { try { a.pause(); a.currentTime = 0; } catch {} }).catch(() => {});
+        }
+      } catch { /* ignore */ }
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+      window.removeEventListener("touchstart", unlock);
+    };
+    window.addEventListener("pointerdown", unlock, { once: true, passive: true });
+    window.addEventListener("keydown", unlock, { once: true });
+    window.addEventListener("touchstart", unlock, { once: true, passive: true });
+    return () => {
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+      window.removeEventListener("touchstart", unlock);
+    };
+  }, []);
+
   /* ── Service Worker push messages (background/outside browser) ── */
   useEffect(() => {
     if (!isLoggedIn || !isPushSupported()) return;
@@ -479,6 +604,17 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
       const kind = resolveNotificationKind(data);
       const icon = resolveNotificationIcon(kind);
       const targetUrl = resolveNotificationTarget({ ...data, url: data.url });
+
+      // Dédup croisée socket/push via clé métier
+      const dedupKey =
+        data.conversationId ? `msg-${data.conversationId}-${payload.title}-${payload.body}` :
+        data.orderId ? `order-${data.orderId}-${data.type}` :
+        data.negotiationId ? `nego-${data.negotiationId}-${data.type}` :
+        data.postId ? `sokin-${data.postId}` :
+        payload.tag ? `tag-${payload.tag}` :
+        `push-${Date.now()}`;
+      if (isDuplicate(dedupKey)) return;
+
       const toast: MessageToast = {
         id: `push-${payload.tag ?? Date.now()}`,
         kind,
@@ -490,11 +626,22 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
       };
       pushMissed({ kind: toast.kind, title: toast.title, content: toast.content, icon: toast.icon, targetUrl: toast.targetUrl }, payload.tag ? `push-${payload.tag}` : undefined);
       if (document.visibilityState === "visible" && !(kind === "message" && messagingActiveRef.current)) {
+        // 🔊 Son + vibration immédiats — comme pour les events socket, pour
+        // que chaque notif (message/commande/marchandage/like/…) se manifeste
+        // "au tic au tac" quand elle arrive via le canal SW.
+        try { playMessageSound(); } catch { /* ignore */ }
+        try {
+          if ("vibrate" in navigator && kind !== "message") {
+            // Les messages ont déjà un son court ; on vibre sur les autres
+            // types pour renforcer la spontanéité.
+            navigator.vibrate([150, 60, 150]);
+          }
+        } catch { /* ignore */ }
         setToasts((p) => [toast, ...p].slice(0, 4));
         setTimeout(() => setToasts((p) => p.filter((t) => t.id !== toast.id)), 6000);
       }
     });
-  }, [isLoggedIn, navigateInApp, pushMissed]);
+  }, [isLoggedIn, navigateInApp, pushMissed, isDuplicate, playMessageSound]);
   /* ── Socket event listeners ── */
   useEffect(() => {
     const socket = socketRef.current;
@@ -513,7 +660,12 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
       const msg = data.message;
       if (msg.senderId === user?.id) return;
 
+      // Dédup socket ↔ push SW : si on a déjà traité ce message via push SW,
+      // on skip pour éviter le double toast.
+      if (isDuplicate(`msg-${(msg as any).conversationId}-${msg.id}`)) return;
+
       playMessageSound();
+      try { if ("vibrate" in navigator) navigator.vibrate([100, 40, 100]); } catch { /* ignore */ }
 
       const toast: MessageToast = {
         id: msg.id + "-" + Date.now(),
@@ -801,7 +953,7 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
       socket.off("sokin:post-created", handleSokinPostCreated);
       socket.off("listing:stock-exhausted", handleStockExhausted);
     };
-  }, [isLoggedIn, isConnected, user?.id, playMessageSound, presentIncomingCall, pushMissed, maybeShowSystemNotification]);
+  }, [isLoggedIn, isConnected, user?.id, playMessageSound, presentIncomingCall, pushMissed, maybeShowSystemNotification, isDuplicate]);
 
   /* ── Native bridge: incoming call from Java SharedPreferences (app was killed) ── */
   useEffect(() => {
@@ -829,9 +981,13 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
     if (!isLoggedIn) return;
     const handleReconnect = () => {
       window.dispatchEvent(new CustomEvent("ks:data-stale", { detail: { reason: "socket-reconnected" } }));
+      // P1.5 F : alias sémantique explicite pour les pages qui veulent
+      // écouter uniquement les resync liés aux notifs/listes temps réel.
+      window.dispatchEvent(new CustomEvent("ks:notif-resync", { detail: { reason: "socket-reconnected" } }));
     };
     const handleResume = () => {
       window.dispatchEvent(new CustomEvent("ks:data-stale", { detail: { reason: "app-resumed" } }));
+      window.dispatchEvent(new CustomEvent("ks:notif-resync", { detail: { reason: "app-resumed" } }));
     };
     window.addEventListener("ks:socket-reconnected", handleReconnect);
     window.addEventListener("ks:app-resumed", handleResume);
@@ -853,6 +1009,92 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
     return () => document.removeEventListener("visibilitychange", handleVisibility);
   }, []);
 
+  /* ── Indicateur "reconnexion…" : affich\u00e9 si socket HS > 3s quand logg\u00e9 ── */
+  const [showReconnecting, setShowReconnecting] = useState(false);
+  const [canForceReconnect, setCanForceReconnect] = useState(false);
+  useEffect(() => {
+    if (!isLoggedIn) { setShowReconnecting(false); setCanForceReconnect(false); return; }
+    if (isConnected) { setShowReconnecting(false); setCanForceReconnect(false); return; }
+    const t1 = setTimeout(() => setShowReconnecting(true), 3000);
+    const t2 = setTimeout(() => setCanForceReconnect(true), 10000);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, [isLoggedIn, isConnected]);
+
+  const forceReconnect = useCallback(() => {
+    const s = socketRef.current;
+    if (!s) return;
+    try { s.disconnect(); } catch { /* ignore */ }
+    setTimeout(() => { try { s.connect(); } catch { /* ignore */ } }, 150);
+    setCanForceReconnect(false);
+  }, [socketRef]);
+
+  /* ── Auto-healing de la souscription push : re-register si elle a disparu ── */
+  // Certains navigateurs invalident silencieusement la subscription apr\u00e8s un
+  // nettoyage de donn\u00e9es ou un long d\u00e9sengagement. On v\u00e9rifie \u00e0 chaque
+  // retour d'onglet + au login que la sub existe toujours, sinon on re-souscrit.
+  useEffect(() => {
+    if (!isLoggedIn || !isPushSupported()) return;
+    let cancelled = false;
+    const check = async () => {
+      if (cancelled) return;
+      if (getNotificationPermission() !== "granted") return;
+      const subscribed = await isSubscribedToPush();
+      if (subscribed) return;
+      // P1.5 B : retry avec backoff exponentiel si la re-souscription echoue
+      // (serveur down au boot, 2G flaky, VAPID key temporairement indispo).
+      console.warn("[Push] Subscription disparue - re-souscription avec retry");
+      const delays = [1000, 2000, 5000, 10000, 20000];
+      for (let i = 0; i < delays.length; i++) {
+        if (cancelled) return;
+        try {
+          const ok = await subscribeToPush();
+          if (ok) { console.info(`[Push] Re-souscrit apres tentative ${i + 1}`); return; }
+        } catch (err) { console.warn("[Push] subscribeToPush echec:", err); }
+        await new Promise((r) => setTimeout(r, delays[i]));
+      }
+      console.error("[Push] Impossible de re-souscrire apres 5 tentatives");
+    };
+    void check();
+    const handler = () => { if (document.visibilityState === "visible") void check(); };
+    const onReconnect = () => { void check(); };
+    document.addEventListener("visibilitychange", handler);
+    window.addEventListener("ks:socket-reconnected", onReconnect);
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", handler);
+      window.removeEventListener("ks:socket-reconnected", onReconnect);
+    };
+  }, [isLoggedIn]);
+
+  /* ── Badge dans le titre de l'onglet : "(3) Kin-Sell — …"
+     Effet psychologique fort : quand l'utilisateur est sur un autre onglet,
+     il voit imm\u00e9diatement le compteur monter. Se r\u00e9initialise au focus. ── */
+  const originalTitleRef = useRef<string>(typeof document !== "undefined" ? document.title : "Kin-Sell");
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const captureTitle = () => {
+      const current = document.title.replace(/^\(\d+\+?\)\s*/, "");
+      originalTitleRef.current = current;
+    };
+    const apply = () => {
+      const hidden = document.visibilityState === "hidden";
+      const base = originalTitleRef.current;
+      if (hidden && missedCount > 0) {
+        document.title = `(${missedCount > 99 ? "99+" : missedCount}) ${base}`;
+      } else {
+        document.title = base;
+      }
+    };
+    if (document.visibilityState === "visible") captureTitle();
+    apply();
+    const onVis = () => { if (document.visibilityState === "visible") captureTitle(); apply(); };
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      document.removeEventListener("visibilitychange", onVis);
+      document.title = originalTitleRef.current;
+    };
+  }, [missedCount]);
+
   useEffect(() => {
     return () => {
       if (incomingCallTimerRef.current) {
@@ -873,6 +1115,23 @@ export function GlobalNotificationProvider({ children }: { children: ReactNode }
   return (
     <GlobalNotifContext.Provider value={ctxValue}>
       {children}
+      {showReconnecting &&
+        createPortal(
+          <div className="gn-reconnecting" role="status" aria-live="polite">
+            <span className="gn-reconnecting-dot" /> Reconnexion…
+            {canForceReconnect && (
+              <button
+                type="button"
+                className="gn-reconnecting-btn"
+                onClick={forceReconnect}
+                aria-label="Forcer la reconnexion"
+              >
+                Réessayer
+              </button>
+            )}
+          </div>,
+          document.body,
+        )}
       {showPushBanner &&
         createPortal(
           <div className="gn-push-banner" role="dialog" aria-live="polite">

@@ -1,6 +1,7 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { resolveMediaUrl } from "../lib/api-core";
+import { listings as listingsApi } from "../lib/api-client";
 import "./long-press-popup.css";
 
 /* ──────────────────────────────────────────────
@@ -12,6 +13,9 @@ export interface LongPressArticle {
   title: string;
   description: string | null;
   imageUrl: string | null;
+  /** Optionnel : liste compl\u00e8te des m\u00e9dias (images + vid\u00e9os).
+   * Si non fourni, le popup fait un lazy fetch via listings.publicDetail(id). */
+  mediaUrls?: string[] | null;
   priceLabel: string;
   originalPriceLabel?: string;
   sellerName: string;
@@ -72,6 +76,15 @@ export function useLongPress(
 }
 
 /* ──────────────────────────────────────────────
+   Helpers
+   ────────────────────────────────────────────── */
+
+const VIDEO_EXT = /\.(mp4|webm|mov|m4v|ogg|ogv)(\?|$)/i;
+function isVideoUrl(url: string): boolean {
+  return VIDEO_EXT.test(url);
+}
+
+/* ──────────────────────────────────────────────
    Popup Component
    ────────────────────────────────────────────── */
 
@@ -90,22 +103,72 @@ export function LongPressPopup({
 }) {
   const backdropRef = useRef<HTMLDivElement>(null);
 
+  /* ── Medias : prop initiale ou lazy-fetch ── */
+  const [medias, setMedias] = useState<string[]>(() => {
+    if (article.mediaUrls && article.mediaUrls.length > 0) return article.mediaUrls;
+    return article.imageUrl ? [article.imageUrl] : [];
+  });
+  const [index, setIndex] = useState(0);
+
+  useEffect(() => {
+    // Si on n'a qu'une seule image (ou aucune), tenter un lazy fetch pour
+    // r\u00e9cup\u00e9rer la liste compl\u00e8te des m\u00e9dias (images + vid\u00e9os).
+    if (article.mediaUrls && article.mediaUrls.length > 1) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await listingsApi.publicDetail(article.id);
+        if (cancelled) return;
+        const list = res?.listing?.mediaUrls ?? [];
+        if (list.length > 0) {
+          setMedias(list);
+          setIndex(0);
+        }
+      } catch { /* ignore : on garde l'image unique */ }
+    })();
+    return () => { cancelled = true; };
+  }, [article.id, article.mediaUrls]);
+
+  /* ── Close on Escape ── */
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
+      if (e.key === "ArrowLeft") setIndex((i) => Math.max(0, i - 1));
+      if (e.key === "ArrowRight") setIndex((i) => Math.min(medias.length - 1, i + 1));
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, [onClose]);
+  }, [onClose, medias.length]);
 
-  /* Prevent body scroll while popup is open */
+  /* ── Prevent body scroll ── */
   useEffect(() => {
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prev;
-    };
+    return () => { document.body.style.overflow = prev; };
   }, []);
+
+  /* ── Swipe horizontal sur le carrousel ── */
+  const swipeRef = useRef<{ x: number; y: number } | null>(null);
+  const onSwipeStart = (e: React.TouchEvent) => {
+    const t0 = e.touches[0];
+    swipeRef.current = { x: t0.clientX, y: t0.clientY };
+  };
+  const onSwipeEnd = (e: React.TouchEvent) => {
+    const start = swipeRef.current;
+    if (!start) return;
+    const t0 = e.changedTouches[0];
+    const dx = t0.clientX - start.x;
+    const dy = t0.clientY - start.y;
+    swipeRef.current = null;
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) {
+      if (dx < 0) setIndex((i) => Math.min(medias.length - 1, i + 1));
+      else setIndex((i) => Math.max(0, i - 1));
+    }
+  };
+
+  const hasMedias = medias.length > 0;
+  const current = hasMedias ? medias[index] : null;
+  const isVideo = current ? isVideoUrl(current) : false;
 
   return createPortal(
     <div
@@ -124,10 +187,62 @@ export function LongPressPopup({
           &times;
         </button>
 
-        {/* Image */}
-        {article.imageUrl && (
-          <div className="lp-popup-img">
-            <img src={resolveMediaUrl(article.imageUrl)} alt={article.title} />
+        {/* Carrousel m\u00e9dia */}
+        {hasMedias && current && (
+          <div
+            className="lp-popup-media"
+            onTouchStart={onSwipeStart}
+            onTouchEnd={onSwipeEnd}
+          >
+            {isVideo ? (
+              <video
+                key={current}
+                src={resolveMediaUrl(current)}
+                className="lp-popup-media-el"
+                controls
+                playsInline
+                preload="metadata"
+              />
+            ) : (
+              <img
+                key={current}
+                src={resolveMediaUrl(current)}
+                alt={article.title}
+                className="lp-popup-media-el"
+                loading="lazy"
+              />
+            )}
+
+            {medias.length > 1 && (
+              <>
+                <button
+                  className="lp-popup-nav lp-popup-nav--prev"
+                  onClick={(e) => { e.stopPropagation(); setIndex((i) => Math.max(0, i - 1)); }}
+                  disabled={index === 0}
+                  aria-label="Pr\u00e9c\u00e9dent"
+                >
+                  ‹
+                </button>
+                <button
+                  className="lp-popup-nav lp-popup-nav--next"
+                  onClick={(e) => { e.stopPropagation(); setIndex((i) => Math.min(medias.length - 1, i + 1)); }}
+                  disabled={index === medias.length - 1}
+                  aria-label="Suivant"
+                >
+                  ›
+                </button>
+                <div className="lp-popup-dots" aria-hidden>
+                  {medias.map((_, i) => (
+                    <span
+                      key={i}
+                      className={"lp-popup-dot" + (i === index ? " lp-popup-dot--active" : "")}
+                      onClick={(e) => { e.stopPropagation(); setIndex(i); }}
+                    />
+                  ))}
+                </div>
+                <div className="lp-popup-counter">{index + 1} / {medias.length}</div>
+              </>
+            )}
           </div>
         )}
 

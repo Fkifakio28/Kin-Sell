@@ -1,5 +1,5 @@
 /* Service Worker — Push Notifications + Runtime Caching (Phase 3) */
-const SW_VERSION = "v3-2026-04-22";
+const SW_VERSION = "v5-2026-04-23";
 const CACHE_STATIC = `ks-static-${SW_VERSION}`;
 const CACHE_IMAGES = `ks-images-${SW_VERSION}`;
 const CACHE_PAGES = `ks-pages-${SW_VERSION}`;
@@ -272,6 +272,16 @@ self.addEventListener("fetch", (event) => {
 
 // PAS d'interception hors GET — Nginx couvre le reste.
 
+// API_BASE fourni par le client via postMessage pour que le SW puisse appeler
+// les endpoints backend (ex: re-subscribe apr\u00e8s pushsubscriptionchange).
+let SW_API_BASE = self.location.origin;
+self.addEventListener("message", (event) => {
+  const data = event.data;
+  if (data && data.type === "set-api-base" && typeof data.apiBase === "string") {
+    SW_API_BASE = data.apiBase.replace(/\/+$/, "");
+  }
+});
+
 self.addEventListener("push", (event) => {
   let payload = {};
   try {
@@ -302,10 +312,27 @@ self.addEventListener("push", (event) => {
 
   event.waitUntil(
     (async () => {
-      await self.registration.showNotification(payload.title || "Kin-Sell", options);
+      // Détecte un client visible & focus. Si un onglet Kin-Sell est au
+      // premier plan, on laisse l'UI in-app (toast + son) gérer la notif
+      // pour éviter un doublon avec la notification système de l'OS.
+      // Exception : les appels entrants ("call") affichent toujours la
+      // notif système car elle sert d'ancrage pour les actions accepter/rejeter.
       const clientsList = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      const hasFocusedVisibleClient = clientsList.some(
+        (c) => c.focused === true && c.visibilityState === "visible",
+      );
+      const isCall = data.type === "call";
+
+      if (!hasFocusedVisibleClient || isCall) {
+        try {
+          await self.registration.showNotification(payload.title || "Kin-Sell", options);
+        } catch (err) { console.warn("[sw] showNotification failed:", err); }
+      }
+
+      // Toujours postMessage à tous les clients pour que l'UI in-app
+      // puisse afficher son toast + jouer le son + vibrer.
       for (const client of clientsList) {
-        client.postMessage({ type: "push", payload });
+        try { client.postMessage({ type: "push", payload }); } catch { /* ignore */ }
       }
     })(),
   );
@@ -316,15 +343,69 @@ self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   event.waitUntil(
     (async () => {
+      // P1.5 D : scorer les clients pour focus le plus pertinent
+      //  - +3 si déjà sur la bonne route (messagerie, commandes, sokin...)
+      //  - +2 si focused
+      //  - +1 si visible
+      // Sinon on navigue l'onglet best-scored vers l'URL cible.
       const clientList = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
-      for (const client of clientList) {
-        if ("focus" in client) {
-          client.postMessage({ type: "navigate", targetUrl: url });
-          await client.focus();
-          return;
-        }
+      if (clientList.length === 0) {
+        await self.clients.openWindow(url);
+        return;
+      }
+      const targetPath = (() => { try { return new URL(url, self.location.origin).pathname; } catch { return url; } })();
+      let best = null;
+      let bestScore = -1;
+      for (const c of clientList) {
+        let score = 0;
+        try {
+          const cPath = new URL(c.url).pathname;
+          if (targetPath && cPath.startsWith(targetPath.split("?")[0])) score += 3;
+        } catch { /* ignore */ }
+        if (c.focused === true) score += 2;
+        if (c.visibilityState === "visible") score += 1;
+        if (score > bestScore) { best = c; bestScore = score; }
+      }
+      if (best && "focus" in best) {
+        try { best.postMessage({ type: "navigate", targetUrl: url }); } catch { /* ignore */ }
+        try { await best.focus(); } catch { /* ignore */ }
+        return;
       }
       await self.clients.openWindow(url);
+    })(),
+  );
+});
+
+/* ── Auto-recovery : si le navigateur invalide/renouvelle silencieusement
+ * la subscription VAPID (nettoyage stockage, rotation cl\u00e9, etc.), on
+ * re-souscrit imm\u00e9diatement avec la m\u00eame cl\u00e9 publique et on renvoie
+ * la nouvelle au serveur pour que les push futurs continuent d'arriver. ── */
+self.addEventListener("pushsubscriptionchange", (event) => {
+  event.waitUntil(
+    (async () => {
+      try {
+        const oldSub = event.oldSubscription;
+        const applicationServerKey = oldSub?.options?.applicationServerKey;
+        if (!applicationServerKey) return;
+        const newSub = await self.registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey,
+        });
+        // Notifier le serveur (les clients peuvent \u00eatre ferm\u00e9s, on fetch direct)
+        try {
+          await fetch(`${SW_API_BASE}/notifications/push/subscribe`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ subscription: newSub.toJSON() }),
+          });
+        } catch (e) { console.warn("[sw] push re-subscribe POST failed:", e); }
+        // Notifier les clients ouverts pour qu'ils rafra\u00eechissent leur \u00e9tat
+        const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+        for (const c of clients) {
+          try { c.postMessage({ type: "push-subscription-renewed" }); } catch {}
+        }
+      } catch (err) { console.warn("[sw] pushsubscriptionchange recovery failed:", err); }
     })(),
   );
 });

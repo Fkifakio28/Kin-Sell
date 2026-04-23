@@ -22,7 +22,7 @@ import VisibilitySelector from '../../components/VisibilitySelector';
 import type { StructuredLocation, LocationVisibility } from '../../lib/api-client';
 import { LISTING_PRODUCT_CATEGORIES, LISTING_SERVICE_CATEGORIES } from '../../shared/constants/categories';
 import TutorialOverlay, { useTutorial, TutorialRelaunchBtn } from '../../components/TutorialOverlay';
-import { businessDashboardStepsV2, businessOrdersSteps } from '../../components/tutorial-steps';
+import { businessDashboardStepsV2, businessOrdersSteps, businessProductsSteps, businessServicesSteps } from '../../components/tutorial-steps';
 import { VariantsEditor, type ProductVariantsValue } from './VariantsEditor';
 import './dashboard.css';
 
@@ -99,6 +99,8 @@ export function BusinessDashboard() {
   const { on, off } = useSocket();
   const tutorial = useTutorial('business-dashboard');
   const tutorialOrders = useTutorial('business-orders');
+  const tutorialProducts = useTutorial('business-products');
+  const tutorialServices = useTutorial('business-services');
   const [activeSection, setActiveSection] = useState<BizSection>(() => {
     const stored = sessionStorage.getItem('ud-section');
     if (stored) {
@@ -3940,10 +3942,18 @@ export function BusinessDashboard() {
 
       {activeSection === 'commandes'
         ? <TutorialOverlay pageKey="business-orders" steps={businessOrdersSteps} open={tutorialOrders.isOpen} onClose={tutorialOrders.close} />
+        : activeSection === 'produits'
+        ? <TutorialOverlay pageKey="business-products" steps={businessProductsSteps} open={tutorialProducts.isOpen} onClose={tutorialProducts.close} />
+        : activeSection === 'services'
+        ? <TutorialOverlay pageKey="business-services" steps={businessServicesSteps} open={tutorialServices.isOpen} onClose={tutorialServices.close} />
         : <TutorialOverlay pageKey="business-dashboard" steps={businessDashboardStepsV2} open={tutorial.isOpen} onClose={tutorial.close} />
       }
       {activeSection === 'commandes'
         ? !tutorialOrders.isOpen && <TutorialRelaunchBtn reset={tutorialOrders.reset} start={tutorialOrders.start} />
+        : activeSection === 'produits'
+        ? !tutorialProducts.isOpen && <TutorialRelaunchBtn reset={tutorialProducts.reset} start={tutorialProducts.start} />
+        : activeSection === 'services'
+        ? !tutorialServices.isOpen && <TutorialRelaunchBtn reset={tutorialServices.reset} start={tutorialServices.start} />
         : !tutorial.isOpen && <TutorialRelaunchBtn reset={tutorial.reset} start={tutorial.start} />
       }
     </div>

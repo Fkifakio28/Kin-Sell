@@ -45,7 +45,7 @@ import { AdsBoostPopup } from '../../components/AdsBoostPopup';
 import { PostPublishAdvisor } from '../../components/PostPublishAdvisor';
 import { PostSaleAdvisor } from '../../components/PostSaleAdvisor';
 import TutorialOverlay, { useTutorial, TutorialRelaunchBtn } from '../../components/TutorialOverlay';
-import { userDashboardSteps, userSalesSteps } from '../../components/tutorial-steps';
+import { userDashboardSteps, userSalesSteps, userArticlesSteps } from '../../components/tutorial-steps';
 import { AnalyticsCTAPanel } from '../../components/AnalyticsCTAPanel';
 import { FrustrationPanel } from '../../components/FrustrationPanel';
 import { MyIncentivesPanel } from '../../components/MyIncentivesPanel';
@@ -379,6 +379,7 @@ export function UserDashboard() {
   // Tutoriels — choisir les steps selon la section active
   const tutorialOverview = useTutorial('user-dashboard');
   const tutorialSales = useTutorial('user-sales');
+  const tutorialArticles = useTutorial('user-articles');
 
   // ── Smart Upsell post-action tips ──
   const [showPublishTip, setShowPublishTip] = useState(false);
@@ -5505,6 +5506,12 @@ export function UserDashboard() {
         <>
           <TutorialOverlay pageKey="user-sales" steps={userSalesSteps} open={tutorialSales.isOpen} onClose={tutorialSales.close} />
           {!tutorialSales.isOpen && <TutorialRelaunchBtn reset={tutorialSales.reset} start={tutorialSales.start} />}
+        </>
+      )}
+      {activeSection === 'articles' && (
+        <>
+          <TutorialOverlay pageKey="user-articles" steps={userArticlesSteps} open={tutorialArticles.isOpen} onClose={tutorialArticles.close} />
+          {!tutorialArticles.isOpen && <TutorialRelaunchBtn reset={tutorialArticles.reset} start={tutorialArticles.start} />}
         </>
       )}
     </div>

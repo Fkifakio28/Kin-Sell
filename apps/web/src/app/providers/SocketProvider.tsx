@@ -114,16 +114,72 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  /* ── Web visibility → signaler foreground/background au serveur ── */
+  /* ── Web visibility → signaler foreground/background + forcer reconnect au retour ── */
   useEffect(() => {
     const handleVisibility = () => {
       if (Capacitor.isNativePlatform()) return;
-      emitAppState(document.visibilityState === "hidden" ? "background" : "active");
+      const s = socketRef.current;
+      if (document.visibilityState === "visible") {
+        // Au retour d'onglet : si le socket est mort silencieusement pendant
+        // la mise en veille (transport killed par le navigateur), forcer
+        // la reconnexion immédiatement pour restaurer les notifs temps réel.
+        if (s && s.disconnected) {
+          try { s.connect(); } catch { /* ignore */ }
+        }
+        emitAppState("active", "visible");
+      } else {
+        emitAppState("background", "hidden");
+      }
     };
 
     document.addEventListener("visibilitychange", handleVisibility);
     return () => document.removeEventListener("visibilitychange", handleVisibility);
   }, [emitAppState]);
+
+  /* ── Heartbeat de santé (web) : détection zombie via paquets reçus ── */
+  // P1.5 C : Socket.IO peut rester 'connected' côté client alors que le transport
+  // est mort silencieusement (proxy killed, NAT reset, OS suspend). On track
+  // le timestamp du dernier paquet reçu via engine.io ; si > 45s sans le
+  // moindre ping/pong/data alors que l'onglet est visible, on force un
+  // disconnect/reconnect pour casser le zombie.
+  const lastPacketRef = useRef<number>(Date.now());
+  useEffect(() => {
+    if (Capacitor.isNativePlatform()) return;
+    const s = socketRef.current;
+    if (!s) return;
+    const engine = (s.io as unknown as { engine?: { on: (e: string, h: () => void) => void; off: (e: string, h: () => void) => void } })?.engine;
+    if (!engine) return;
+    const markFresh = () => { lastPacketRef.current = Date.now(); };
+    engine.on("packet", markFresh);
+    engine.on("packetCreate", markFresh);
+    return () => {
+      try { engine.off("packet", markFresh); } catch { /* ignore */ }
+      try { engine.off("packetCreate", markFresh); } catch { /* ignore */ }
+    };
+  }, [isConnected]);
+
+  useEffect(() => {
+    if (Capacitor.isNativePlatform()) return;
+    const interval = setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      const s = socketRef.current;
+      if (!s) return;
+      if (s.disconnected) {
+        try { s.connect(); } catch { /* ignore */ }
+        return;
+      }
+      // Zombie detection : aucun paquet (ni ping serveur ni data) depuis 45s
+      // alors que le ping engine.io natif est configuré à 25s côté serveur.
+      const silent = Date.now() - lastPacketRef.current;
+      if (silent > 45_000) {
+        console.warn(`[Socket] Zombie détecté (${silent}ms sans paquet) - reconnect forcé`);
+        try { s.disconnect(); } catch { /* ignore */ }
+        setTimeout(() => { try { s.connect(); } catch { /* ignore */ } }, 200);
+        lastPacketRef.current = Date.now();
+      }
+    }, 15_000);
+    return () => clearInterval(interval);
+  }, []);
 
   /* ── Capacitor appStateChange : reconnexion au retour du background ── */
   useEffect(() => {

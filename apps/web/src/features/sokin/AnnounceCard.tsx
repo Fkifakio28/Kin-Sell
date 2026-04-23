@@ -18,6 +18,7 @@ import { API_BASE } from '../../lib/api-core';
 import { useSoKinToast } from '../../components/feedback/SoKinToast';
 import { observePostView, trackSoKinEvent } from '../../lib/services/sokin-tracking.service';
 import { resolveBackgroundCss } from './sokin-backgrounds';
+import { getSokinSoundPref, setSokinSoundPref, useSokinSound } from './sokin-sound';
 import type { PostInsight, PostInsightCard, BoostPostStats } from '../../lib/services/sokin-analytics.service';
 
 let activeVideoEl: HTMLVideoElement | null = null;
@@ -51,16 +52,24 @@ function safePlayVideo(video: HTMLVideoElement): void {
   try {
     // Pré-charger avant de jouer
     if (video.preload !== 'auto') video.preload = 'auto';
+    // Respecter la préférence son globale So-Kin
+    const soundOn = getSokinSoundPref();
+    try { video.muted = !soundOn; } catch { /* ignore */ }
     const maybePromise = video.play();
     if (maybePromise && typeof (maybePromise as Promise<void>).catch === 'function') {
       (maybePromise as Promise<void>).catch(() => {
-        // Mobile: autoplay bloqué quand le son est activé → retry muté
+        // Autoplay bloqué avec le son → fallback muté pour au moins
+        // lancer la vidéo. L'utilisateur pourra activer le son via le
+        // bouton 🔇/🔊 affiché en overlay.
         try {
           video.muted = true;
           const retry = video.play();
           if (retry && typeof (retry as Promise<void>).catch === 'function') {
             (retry as Promise<void>).catch(() => undefined);
           }
+          // Mettre à jour la préférence pour refléter que le son est OFF
+          // afin que l'UI affiche le bouton "activer le son" correctement.
+          if (soundOn) setSokinSoundPref(false);
         } catch {
           /* ignore */
         }
@@ -350,6 +359,38 @@ function VideoItem({
   const speedRef = useRef<HTMLDivElement>(null);
   const skipRef = useRef<HTMLDivElement>(null);
 
+  /* ── Pr\u00e9f\u00e9rence son globale So-Kin (persist\u00e9e localStorage) ── */
+  const [soundEnabled, toggleSound] = useSokinSound();
+
+  /* Synchroniser la pr\u00e9f\u00e9rence avec l'\u00e9l\u00e9ment vid\u00e9o :
+   * quand l'utilisateur toggle le son, appliquer imm\u00e9diatement \u00e0 la
+   * vid\u00e9o mont\u00e9e. Si on active le son et que la vid\u00e9o joue, le
+   * navigateur peut la bloquer (pas de user-gesture) \u2192 on appelle play()
+   * dans le m\u00eame handler que le clic pour pr\u00e9server le gesture. */
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    v.muted = !soundEnabled;
+  }, [soundEnabled]);
+
+  const handleSoundToggle = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    const v = videoRef.current;
+    const next = !soundEnabled;
+    // Appliquer imm\u00e9diatement sur la vid\u00e9o dans le m\u00eame gesture que le clic
+    // pour que le navigateur autorise le changement muted \u2192 unmuted.
+    if (v) {
+      try {
+        v.muted = !next;
+        if (next && v.paused) {
+          const p = v.play();
+          if (p && typeof p.catch === 'function') p.catch(() => undefined);
+        }
+      } catch { /* ignore */ }
+    }
+    toggleSound();
+  }, [soundEnabled, toggleSound]);
+
   useEffect(() => {
     return () => {
       if (tapTimerRef.current) clearTimeout(tapTimerRef.current);
@@ -462,7 +503,7 @@ function VideoItem({
         src={`${videoSrc}#t=0.1`}
         ref={setVideoRef}
         loop
-        muted
+        muted={!soundEnabled}
         onTimeUpdate={(e) => {
           const v = e.currentTarget;
           if (rafRef.current) cancelAnimationFrame(rafRef.current);
@@ -495,6 +536,17 @@ function VideoItem({
       <div ref={speedRef} className="sk-speed-indicator">▶▶ 1.5×</div>
       <div ref={skipRef} className="sk-skip-indicator" />
       <span className="sk-media-play-icon" aria-hidden="true">&#9654;</span>
+      <button
+        type="button"
+        className={`sk-sound-toggle${soundEnabled ? ' sk-sound-toggle--on' : ''}`}
+        onClick={handleSoundToggle}
+        onPointerDown={(e) => e.stopPropagation()}
+        onPointerUp={(e) => e.stopPropagation()}
+        aria-label={soundEnabled ? 'Couper le son' : 'Activer le son'}
+        title={soundEnabled ? 'Couper le son' : 'Activer le son'}
+      >
+        {soundEnabled ? '🔊' : '🔇'}
+      </button>
       <div className="sk-video-progress-bar" onPointerDown={handleProgressSeek} onClick={(e) => e.stopPropagation()}>
         <div ref={fillRef} className="sk-video-progress" style={{ width: 0 }} />
       </div>
