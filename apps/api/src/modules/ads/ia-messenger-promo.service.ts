@@ -14,6 +14,43 @@ import { sendMail } from "../../shared/email/mailer.js";
 import { sendPushToUser } from "../notifications/push.service.js";
 import { logger } from "../../shared/logger.js";
 import { isFrequencyCapped } from "./messenger-scheduler.service.js";
+import { getMarketContextForUser, formatSnapshotForPrompt } from "../market-intel/context.js";
+
+/**
+ * Retourne un "teaser" marché court injecté dans les messages promo.
+ * Priorité au pays du destinataire (profil) + catégorie fournie.
+ * Renvoie { text, html } ou null si aucune donnée Analytique+ exploitable.
+ * Non bloquant : catch silencieux.
+ */
+async function getMarketTeaserForUser(
+  userId: string,
+  opts?: { categoryId?: string; includeArbitrage?: boolean },
+): Promise<{ text: string; html: string } | null> {
+  try {
+    const row = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { profile: { select: { country: true } } },
+    });
+    const country = row?.profile?.country ?? null;
+    if (!country) return null;
+    const snap = await getMarketContextForUser({
+      country,
+      categoryId: opts?.categoryId,
+      includeArbitrage: opts?.includeArbitrage ?? false,
+    });
+    if (!snap.productInsight && snap.topTrends.length === 0) return null;
+    const text = formatSnapshotForPrompt(snap);
+    const html = `
+      <div style="background:rgba(111,88,255,0.08);border:1px solid rgba(111,88,255,0.2);border-radius:8px;padding:12px 14px;margin:12px 0;">
+        <p style="margin:0 0 6px;color:#6f58ff;font-size:12px;font-weight:600;">🌍 Tendance marché ${country}</p>
+        <p style="margin:0;color:rgba(255,255,255,0.85);font-size:12px;line-height:1.55;">${text}</p>
+        <p style="margin:8px 0 0;font-size:11px;"><a href="https://kin-sell.com/market-intel" style="color:#6f58ff;">Voir Kin-Sell Analytique+</a></p>
+      </div>`;
+    return { text, html };
+  } catch {
+    return null;
+  }
+}
 
 /** Check idempotency via aiAutonomyLog — returns true if already sent */
 async function hasAlreadySent(actionType: string, targetUserId: string, identifier: string): Promise<boolean> {
@@ -286,11 +323,17 @@ export async function promoteListingBoost(listingId: string): Promise<number> {
 
   let sent = 0;
   for (const buyer of potentialBuyers) {
+    // Contexte marché Analytique+ (pays du destinataire)
+    const teaser = await getMarketTeaserForUser(buyer.id, {
+      categoryId: listing.category,
+      includeArbitrage: false,
+    });
+    const bodyTail = teaser ? ` — ${teaser.text}` : "";
     // Pas de coupon auto-attaché (Chantier D2 — gate unique via selectIncentiveForUser)
     const sent1 = await sendPromoPush(
       buyer.id,
       `Nouveau dans ${listing.category}`,
-      `"${listing.title}" est maintenant disponible${listing.city ? ` à ${listing.city}` : ""} ! Découvrez cette offre sponsorisée.`,
+      `"${listing.title}" est maintenant disponible${listing.city ? ` à ${listing.city}` : ""} !${bodyTail}`,
       "BOOST_PROMO",
       listingId,
     );
@@ -555,6 +598,9 @@ export async function sendGrowthGrantMessage(
   const kindLabel = grantKind === "CPC" ? "Clic" : grantKind === "CPI" ? "Installation" : "Action";
   const discountLabel = discountPercent ? `-${discountPercent}%` : "Avantage";
 
+  // Teaser marché Analytique+ — donne du sens à l'avantage
+  const teaser = await getMarketTeaserForUser(recipientId);
+
   const htmlBody = `
     <p>Félicitations ! Votre activité sur Kin-Sell vous a permis d'obtenir un avantage.</p>
     <div style="background:rgba(111,88,255,0.15);border:1px solid rgba(111,88,255,0.3);border-radius:8px;padding:16px;margin:16px 0;text-align:center;">
@@ -564,6 +610,7 @@ export async function sendGrowthGrantMessage(
         Conversion en code promo: ouvrez Kin-Sell → Mon compte → Mes avantages IA → cliquez "Convertir".
       </p>
     </div>
+    ${teaser?.html ?? ""}
     <div style="background:rgba(255,255,255,0.04);border:1px dashed rgba(255,255,255,0.2);border-radius:8px;padding:12px 14px;margin:12px 0;">
       <p style="margin:0 0 8px;color:#fff;font-size:13px;"><strong>Étapes claires :</strong></p>
       <p style="margin:0;color:rgba(255,255,255,0.8);font-size:12px;line-height:1.6;">
@@ -618,6 +665,8 @@ export async function sendGrantConvertedToCouponMessage(
   if (await hasAlreadySent("GRANT_CONVERTED", recipientId, grantId)) return false;
   if (await isFrequencyCapped(recipientId)) return false;
 
+  const teaser = await getMarketTeaserForUser(recipientId);
+
   const htmlBody = `
     <p>Votre avantage a été converti en code promo !</p>
     <div style="background:rgba(111,88,255,0.15);border:1px solid rgba(111,88,255,0.3);border-radius:8px;padding:16px;margin:16px 0;text-align:center;">
@@ -627,6 +676,7 @@ export async function sendGrantConvertedToCouponMessage(
         -${discountPercent}% · Expire le ${expiresAt.toLocaleDateString("fr-FR")}
       </p>
     </div>
+    ${teaser?.html ?? ""}
     <p>Rendez-vous sur <a href="https://kin-sell.com/forfaits?coupon=${encodeURIComponent(couponCode)}" style="color:#6f58ff;">Forfaits</a> pour l'utiliser (le code sera pré-rempli).</p>`;
 
   const emailSent = await sendPromoEmail(
