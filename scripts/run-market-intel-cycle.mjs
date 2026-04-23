@@ -1,12 +1,19 @@
 /**
- * Lance un cycle complet Market Intel côté serveur (tous types crawl + aggregate + trends + arbitrage).
- * Usage: cd apps/api && node ../../scripts/run-market-intel-cycle.mjs
+ * Lance un cycle complet Market Intel côté serveur.
+ * Usage: node scripts/run-market-intel-cycle.mjs  (depuis racine du repo)
  */
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+
 process.env.ENABLE_MARKET_INTEL = 'true';
-const { runCrawlCycle } = await import('./dist/modules/market-intel/orchestrator.js');
-const { runAggregation } = await import('./dist/modules/market-intel/aggregator.js');
-const { computeTrends } = await import('./dist/modules/market-intel/trends.js');
-const { runArbitrage } = await import('./dist/modules/market-intel/arbitrage.js');
+
+const apiDist = path.resolve(process.cwd(), 'apps/api/dist/modules/market-intel');
+const load = (f) => import(pathToFileURL(path.join(apiDist, f)).href);
+
+const { runCrawlCycle } = await load('orchestrator.js');
+const { runAggregation } = await load('aggregator.js');
+const { computeTrends } = await load('trends.js');
+const { runArbitrage } = await load('arbitrage.js');
 
 const types = ['marketplace', 'jobs', 'classifieds', 'stats', 'news'];
 const report = {};
