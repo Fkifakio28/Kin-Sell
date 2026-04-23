@@ -1,4 +1,13 @@
-import { ingestKinSellInternalSignals, computeOrganicDemandSignals } from "../apps/api/dist/modules/market-intel/internal-signals.js";
+import "dotenv/config";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
+import dotenv from "dotenv";
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.resolve(__dirname, "../apps/api/.env") });
+
+const { ingestKinSellInternalSignals, computeOrganicDemandSignals } = await import(
+  "../apps/api/dist/modules/market-intel/internal-signals.js"
+);
 
 const t0 = Date.now();
 try {
