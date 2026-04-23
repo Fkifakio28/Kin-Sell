@@ -692,9 +692,9 @@ function AiMerchantInsight({ listing, onOpenNegotiate }: { listing: PublicListin
         </div>
         <div className="pd-ai-stat">
           <div className="pd-ai-stat-label">Taux de succès</div>
-          <div className="pd-ai-stat-value">{Math.round(hint.successRate * 100)}%</div>
+          <div className="pd-ai-stat-value">{Math.round(Math.min(100, Math.max(0, hint.successRate)))}%</div>
           <div className="pd-ai-gauge">
-            <div className="pd-ai-gauge-fill" style={{ width: `${Math.min(100, hint.successRate * 100)}%` }} />
+            <div className="pd-ai-gauge-fill" style={{ width: `${Math.min(100, Math.max(0, hint.successRate))}%` }} />
           </div>
         </div>
         <div className="pd-ai-stat">

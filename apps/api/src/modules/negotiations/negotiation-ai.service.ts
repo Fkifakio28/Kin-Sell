@@ -590,8 +590,12 @@ export async function getBuyerNegotiationHint(
   }
 
   // Message suggéré — adapté au contexte marché
+  // Si l'acheteur n'a pas encore saisi de prix, on utilise le prix suggéré par l'IA
+  // pour éviter l'affichage "0.00$" dans le message.
+  const effectivePriceForMessage =
+    proposedPriceUsdCents > 0 ? proposedPriceUsdCents : suggestedOfferUsdCents;
   const discount = Math.round(
-    ((originalPrice - proposedPriceUsdCents) / originalPrice) * 100
+    ((originalPrice - effectivePriceForMessage) / originalPrice) * 100
   );
   let messageSuggestion: string;
   const isHotMarket = enrichmentData && enrichmentData.marketHeatScore > 60;
@@ -599,16 +603,16 @@ export async function getBuyerNegotiationHint(
 
   if (discount <= 5) {
     messageSuggestion = isHotMarket
-      ? `Bonjour, cet article m'intéresse beaucoup. Je propose ${(proposedPriceUsdCents / 100).toFixed(2)}$ — prêt à finaliser immédiatement.`
-      : `Bonjour, je suis très intéressé par cet article. Seriez-vous d'accord pour ${(proposedPriceUsdCents / 100).toFixed(2)}$ ? Je suis prêt à conclure rapidement.`;
+      ? `Bonjour, cet article m'intéresse beaucoup. Je propose ${(effectivePriceForMessage / 100).toFixed(2)}$ — prêt à finaliser immédiatement.`
+      : `Bonjour, je suis très intéressé par cet article. Seriez-vous d'accord pour ${(effectivePriceForMessage / 100).toFixed(2)}$ ? Je suis prêt à conclure rapidement.`;
   } else if (discount <= 15) {
     messageSuggestion = isFlexible
-      ? `Bonjour, les prix dans cette catégorie semblent flexibles. Je propose ${(proposedPriceUsdCents / 100).toFixed(2)}$ — c'est un prix juste pour les deux parties.`
-      : `Bonjour, je vous propose ${(proposedPriceUsdCents / 100).toFixed(2)}$ pour cet article. Votre prix est raisonnable mais j'ai quelques contraintes budgétaires.`;
+      ? `Bonjour, les prix dans cette catégorie semblent flexibles. Je propose ${(effectivePriceForMessage / 100).toFixed(2)}$ — c'est un prix juste pour les deux parties.`
+      : `Bonjour, je vous propose ${(effectivePriceForMessage / 100).toFixed(2)}$ pour cet article. Votre prix est raisonnable mais j'ai quelques contraintes budgétaires.`;
   } else {
     messageSuggestion = isHotMarket
-      ? `Bonjour, malgré la forte demande, je propose ${(proposedPriceUsdCents / 100).toFixed(2)}$. Acheteur sérieux, paiement rapide garanti.`
-      : `Bonjour, je vous propose ${(proposedPriceUsdCents / 100).toFixed(2)}$. Je suis sérieux et disponible pour conclure rapidement si vous acceptez.`;
+      ? `Bonjour, malgré la forte demande, je propose ${(effectivePriceForMessage / 100).toFixed(2)}$. Acheteur sérieux, paiement rapide garanti.`
+      : `Bonjour, je vous propose ${(effectivePriceForMessage / 100).toFixed(2)}$. Je suis sérieux et disponible pour conclure rapidement si vous acceptez.`;
   }
 
   // Insight contextuel — enrichi avec données marché
