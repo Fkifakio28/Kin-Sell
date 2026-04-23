@@ -411,7 +411,7 @@ export function ExplorerPageDesktop() {
           publisherName: item.owner.displayName,
           publisherType: 'personne',
           publisherLink: item.owner.username ? `/user/${item.owner.username}` : '#',
-          targetPath: item.owner.username ? `/user/${item.owner.username}#${item.id}` : '#',
+          targetPath: `/listing/${item.id}`,
           coverImage: resolveMediaUrl(item.imageUrl) || '/assets/kin-sell/black-man-standing-cafe-with-shopping-bags.jpg',
           media: [],
           ownerId: item.owner.userId,

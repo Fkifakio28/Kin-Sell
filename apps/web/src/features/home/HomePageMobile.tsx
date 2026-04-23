@@ -1556,37 +1556,11 @@ export function HomePageMobile() {
   const isAdmin = user?.role === "ADMIN" || user?.role === "SUPER_ADMIN";
 
   const handleArticleTap = useCallback(
-    async (listing: PublicListing) => {
-      if (!isLoggedIn) {
-        void navigate("/login");
-        return;
-      }
-      if (isAdmin) {
-        setCartFeedback(`🔒 ${t("home.adminNoTransact")}`);
-        window.setTimeout(() => setCartFeedback(null), 2200);
-        return;
-      }
-      if (user?.id && listing.owner.userId === user.id) {
-        setCartFeedback(`⚠️ ${t("home.cannotBuyOwn")}`);
-        window.setTimeout(() => setCartFeedback(null), 2200);
-        return;
-      }
-      if (cartBusyId) return;
-
-      setCartBusyId(listing.id);
-      try {
-        const summary = await ordersApi.addCartItem({ listingId: listing.id, quantity: 1 });
-        const freshCart = await ordersApi.buyerCart().catch(() => summary);
-        setBuyerCart(freshCart);
-        setCartFeedback(`✓ ${t("home.addedToCart")}`);
-      } catch {
-        setCartFeedback(`✗ ${t("home.errorGeneric")}`);
-      } finally {
-        setCartBusyId(null);
-        window.setTimeout(() => setCartFeedback(null), 1800);
-      }
+    (listing: PublicListing) => {
+      // Short tap → open product detail page (Jumia-style UX)
+      void navigate(`/listing/${listing.id}`);
     },
-    [cartBusyId, isAdmin, isLoggedIn, navigate, t, user?.id],
+    [navigate],
   );
 
   const handleLongPress = useCallback((listing: PublicListing) => {

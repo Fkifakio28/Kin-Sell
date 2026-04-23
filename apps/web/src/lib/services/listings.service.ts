@@ -103,6 +103,37 @@ export type PublicListing = {
   };
 };
 
+export type PublicListingDetail = PublicListing & {
+  country?: string | null;
+  mediaUrls: string[];
+  stockQuantity?: number | null;
+  serviceDurationMin?: number | null;
+  serviceLocation?: string | null;
+  viewCount?: number;
+  variants?: {
+    sizes?: string[];
+    colors?: { name: string; hex: string }[];
+  } | null;
+  owner: {
+    userId: string;
+    displayName: string;
+    username: string | null;
+    avatarUrl: string | null;
+    city?: string | null;
+    country?: string | null;
+  };
+  business?: {
+    id: string;
+    slug: string | null;
+    publicName: string | null;
+  } | null;
+};
+
+export type PublicListingDetailResponse = {
+  listing: PublicListingDetail;
+  similar: PublicListingDetail[];
+};
+
 export type ListingSearchResponse = {
   location: {
     latitude?: number;
@@ -144,6 +175,8 @@ export const listings = {
     mutate<MyListing>("/listings", { method: "POST", body }, ["/listings"]),
   latest: (params?: { type?: string; city?: string; country?: string; limit?: number }) =>
     request<PublicListing[]>("/listings/latest", { params: params as Record<string, string | number | undefined> }),
+  publicDetail: (id: string) =>
+    request<PublicListingDetailResponse>(`/listings/public/${encodeURIComponent(id)}`),
   mine: (params?: { status?: ListingStatus; type?: string; page?: number; limit?: number }) =>
     request<MyListingsResponse>("/listings/mine", { params: params as Record<string, string | number | undefined> }),
   mineStats: () =>

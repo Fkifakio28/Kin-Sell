@@ -20,6 +20,14 @@ const locationVisibilitySchema = z.enum([
   "REGION_PUBLIC", "COUNTRY_PUBLIC", "EXACT_PRIVATE",
 ]);
 
+const variantsSchema = z.object({
+  sizes: z.array(z.string().min(1).max(20)).max(30).optional(),
+  colors: z.array(z.object({
+    name: z.string().min(1).max(30),
+    hex: z.string().regex(/^#[0-9a-fA-F]{3,8}$/, "Couleur hex invalide"),
+  })).max(30).optional(),
+}).nullable().optional();
+
 const createSchema = z.object({
   type: listingTypeSchema,
   title: z.string().min(2).max(140),
@@ -43,6 +51,7 @@ const createSchema = z.object({
   serviceDurationMin: z.number().int().min(1).nullable().optional(),
   serviceLocation: z.string().max(40).nullable().optional(),
   isNegotiable: z.boolean().optional(),
+  variants: variantsSchema,
 });
 
 const updateSchema = z.object({
@@ -67,6 +76,7 @@ const updateSchema = z.object({
   serviceDurationMin: z.number().int().min(1).nullable().optional(),
   serviceLocation: z.string().max(40).nullable().optional(),
   isNegotiable: z.boolean().optional(),
+  variants: variantsSchema,
 });
 
 const searchSchema = z.object({
@@ -131,6 +141,22 @@ router.get(
       limit: z.coerce.number().int().min(1).max(50).default(12),
     }).parse(request.query);
     const result = await listingsService.latestListings(payload);
+    response.json(result);
+  })
+);
+
+/* ── Public: detail of a single listing (page produit) ── */
+router.get(
+  "/public/:id",
+  scrapeGuard(),
+  rateLimit(RateLimits.PUBLIC_SEARCH),
+  asyncHandler(async (request, response) => {
+    const { id } = request.params;
+    if (!id || id.length < 4) {
+      response.status(400).json({ error: "Identifiant invalide" });
+      return;
+    }
+    const result = await listingsService.getPublicListingDetail(id);
     response.json(result);
   })
 );

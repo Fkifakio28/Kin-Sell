@@ -77,6 +77,7 @@ import {
   KnowledgeIaPanel,
 } from './sections';
 import { DashboardAdvancedAnalytics } from './sections/DashboardAdvancedAnalytics';
+import { VariantsEditor, type ProductVariantsValue } from './VariantsEditor';
 import MyBoostsPanel from '../../components/MyBoostsPanel';
 import { LockedOverlay } from '../../components/LockedOverlay';
 import { isRecommendationFree } from '../../shared/utils/recommendation-access';
@@ -481,6 +482,7 @@ export function UserDashboard() {
     stockQuantity: '',
     serviceDurationMin: '',
     serviceLocation: '' as '' | 'DOMICILE' | 'SUR_PLACE',
+    variants: null as ProductVariantsValue,
   });
   const [uploadFiles, setUploadFiles] = useState<File[]>([]);
   const [uploadPreviews, setUploadPreviews] = useState<string[]>([]);
@@ -1092,6 +1094,7 @@ export function UserDashboard() {
       locationVisibility: 'CITY_PUBLIC', serviceRadiusKm: '',
       latitude: String(cfg.defaultLat), longitude: String(cfg.defaultLng), imageUrl: '', priceUsdCents: '0', stockQuantity: '',
       serviceDurationMin: '', serviceLocation: '',
+      variants: null,
     });
     setEditingArticle(null);
     setShowCreateForm(false);
@@ -1322,6 +1325,7 @@ export function UserDashboard() {
         stockQuantity: articleForm.stockQuantity !== '' ? Number(articleForm.stockQuantity) : null,
         serviceDurationMin: articleForm.type === 'SERVICE' && articleForm.serviceDurationMin !== '' ? Number(articleForm.serviceDurationMin) : null,
         serviceLocation: articleForm.type === 'SERVICE' && articleForm.serviceLocation !== '' ? articleForm.serviceLocation : null,
+        variants: articleForm.type === 'PRODUIT' ? (articleForm.variants ?? null) : null,
       });
       setSuccessMessage(t('user.articleCreated'));
       resetArticleForm();
@@ -1381,6 +1385,7 @@ export function UserDashboard() {
         stockQuantity: articleForm.stockQuantity !== '' ? Number(articleForm.stockQuantity) : null,
         serviceDurationMin: articleForm.type === 'SERVICE' && articleForm.serviceDurationMin !== '' ? Number(articleForm.serviceDurationMin) : null,
         serviceLocation: articleForm.type === 'SERVICE' && articleForm.serviceLocation !== '' ? articleForm.serviceLocation : null,
+        variants: articleForm.type === 'PRODUIT' ? (articleForm.variants ?? null) : null,
       });
       setSuccessMessage(t('user.modified'));
       resetArticleForm();
@@ -1462,6 +1467,7 @@ export function UserDashboard() {
       stockQuantity: article.stockQuantity !== null ? String(article.stockQuantity) : '',
       serviceDurationMin: article.serviceDurationMin !== null ? String(article.serviceDurationMin) : '',
       serviceLocation: (article.serviceLocation as '' | 'DOMICILE' | 'SUR_PLACE') ?? '',
+      variants: ((article as any).variants ?? null) as ProductVariantsValue,
     });
     setPriceCdf(String(Math.round(article.priceUsdCents / 100 * udGetRate(currency))));
   };
@@ -5283,6 +5289,16 @@ export function UserDashboard() {
                       </label>
                     )}
                   </div>
+
+                  {/* ── Variantes (PRODUIT uniquement) ── */}
+                  {articleForm.type === 'PRODUIT' && (
+                    <div className="ud-publish-variants-wrap" style={{ marginTop: 12 }}>
+                      <VariantsEditor
+                        value={articleForm.variants}
+                        onChange={(v) => setArticleForm(p => ({ ...p, variants: v }))}
+                      />
+                    </div>
+                  )}
 
                   {/* ── Champs spécifiques SERVICE ── */}
                   {articleForm.type === 'SERVICE' && (

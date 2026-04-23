@@ -572,6 +572,10 @@ export function HomePage() {
   };
 
   const navigateToArticle = (p: PublicListing) => {
+    if (p.id) {
+      navigate(`/listing/${p.id}`);
+      return;
+    }
     if (p.owner.username) {
       navigate(`/user/${p.owner.username}#listing-${p.id}`);
     } else {
@@ -1080,8 +1084,8 @@ export function HomePage() {
               <div className="h-articles-grid">
                 {liveServices.map((s) => (
                   <div key={s.id} className="h-article-card h-article-card--svc glass-card" role="button" tabIndex={0}
-                    onClick={() => { if (s.owner.username) navigate(`/user/${s.owner.username}#listing-${s.id}`); else navigate('/explorer?type=services'); }}
-                    onKeyDown={(e) => { if (e.key === 'Enter') { if (s.owner.username) navigate(`/user/${s.owner.username}#listing-${s.id}`); else navigate('/explorer?type=services'); } }}
+                    onClick={() => { navigate(`/listing/${s.id}`); }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { navigate(`/listing/${s.id}`); } }}
                     onMouseEnter={(e) => articleHover.handleMouseEnter({ title: s.title, description: s.description, price: formatPriceLabelFromUsdCents(s.promoActive && s.promoPriceUsdCents != null ? s.promoPriceUsdCents : s.priceUsdCents), sellerName: s.owner.displayName || t("common.seller") }, e)}
                     onMouseLeave={articleHover.handleMouseLeave}
                   >

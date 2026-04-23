@@ -43,6 +43,7 @@ export type CreateListingInput = {
   serviceDurationMin?: number | null;
   serviceLocation?: string | null;
   isNegotiable?: boolean;
+  variants?: { sizes?: string[]; colors?: { name: string; hex: string }[] } | null;
 };
 
 export type UpdateListingInput = {
@@ -67,6 +68,7 @@ export type UpdateListingInput = {
   serviceDurationMin?: number | null;
   serviceLocation?: string | null;
   isNegotiable?: boolean;
+  variants?: { sizes?: string[]; colors?: { name: string; hex: string }[] } | null;
 };
 
 export type SearchListingsInput = {
@@ -202,6 +204,7 @@ export const createListing = async (userId: string, payload: CreateListingInput)
         serviceDurationMin: payload.serviceDurationMin ?? null,
         serviceLocation: payload.serviceLocation ?? null,
         isNegotiable: user.role === Role.USER ? true : (payload.isNegotiable ?? true),
+        variants: (payload.type === "PRODUIT" ? (payload.variants ?? null) : null) as any,
         ownerUserId: userId,
         businessId
       }
@@ -714,6 +717,7 @@ export const updateListing = async (userId: string, listingId: string, payload: 
       ...(payload.serviceDurationMin !== undefined && { serviceDurationMin: payload.serviceDurationMin }),
       ...(payload.serviceLocation !== undefined && { serviceLocation: payload.serviceLocation }),
       ...(payload.isNegotiable !== undefined && { isNegotiable: payload.isNegotiable }),
+      ...(payload.variants !== undefined && { variants: existing.type === "PRODUIT" ? (payload.variants as any) : null }),
     },
   });
 
@@ -1035,6 +1039,72 @@ export const searchListings = async (input: SearchListingsInput) => {
     fallbackLevel,
     total: enriched.length,
     results: finalResults
+  };
+};
+
+/* ── Public detail of a single listing (no auth, page produit) ── */
+export const getPublicListingDetail = async (listingId: string) => {
+  const listing = await prisma.listing.findFirst({
+    where: { id: listingId, isPublished: true, status: ListingStatus.ACTIVE },
+    include: {
+      ownerUser: { include: { profile: true } },
+      business: true,
+    },
+  });
+  if (!listing) throw new HttpError(404, "Article introuvable");
+
+  // Similar listings (same category, exclude current) — up to 8
+  const similar = await prisma.listing.findMany({
+    where: {
+      isPublished: true,
+      status: ListingStatus.ACTIVE,
+      category: listing.category,
+      id: { not: listing.id },
+    },
+    include: { ownerUser: { include: { profile: true } } },
+    orderBy: { createdAt: "desc" },
+    take: 8,
+  });
+
+  const mapSimple = (row: typeof listing) => ({
+    id: row.id,
+    type: row.type,
+    title: row.title,
+    description: row.description,
+    category: row.category,
+    city: row.city,
+    country: row.country,
+    imageUrl: row.imageUrl,
+    mediaUrls: (row as any).mediaUrls ?? [],
+    priceUsdCents: row.priceUsdCents,
+    isNegotiable: row.isNegotiable,
+    promoActive: row.promoActive,
+    promoPriceUsdCents: row.promoPriceUsdCents,
+    promoExpiresAt: row.promoExpiresAt,
+    stockQuantity: row.stockQuantity,
+    serviceDurationMin: row.serviceDurationMin,
+    serviceLocation: row.serviceLocation,
+    viewCount: row.viewCount,
+    variants: (row as any).variants ?? null,
+    createdAt: row.createdAt,
+    owner: {
+      userId: row.ownerUserId,
+      displayName: row.ownerUser.profile?.displayName ?? "Utilisateur Kin-Sell",
+      username: row.ownerUser.profile?.username ?? null,
+      avatarUrl: row.ownerUser.profile?.avatarUrl ?? null,
+      city: row.ownerUser.profile?.city ?? null,
+      country: row.ownerUser.profile?.country ?? null,
+    },
+    business: row.business ? {
+      id: row.business.id,
+      slug: (row.business as any).slug ?? null,
+      publicName: (row.business as any).publicName ?? null,
+    } : null,
+  });
+
+  return {
+    listing: mapSimple(listing),
+    similar: similar.map((r) => mapSimple(r as typeof listing)),
   };
 };
 

@@ -23,6 +23,7 @@ import type { StructuredLocation, LocationVisibility } from '../../lib/api-clien
 import { LISTING_PRODUCT_CATEGORIES, LISTING_SERVICE_CATEGORIES } from '../../shared/constants/categories';
 import TutorialOverlay, { useTutorial, TutorialRelaunchBtn } from '../../components/TutorialOverlay';
 import { businessDashboardStepsV2, businessOrdersSteps } from '../../components/tutorial-steps';
+import { VariantsEditor, type ProductVariantsValue } from './VariantsEditor';
 import './dashboard.css';
 
 type BizSection =
@@ -231,7 +232,7 @@ export function BusinessDashboard() {
   // ─── Créer / Modifier listing ────────────────────────────
   const [editingArticleId, setEditingArticleId] = useState<string | null>(null);
   const [createMode, setCreateMode] = useState<'produit' | 'service' | null>(null);
-  const [createForm, setCreateForm] = useState({ title: '', category: '', city: 'Kinshasa', priceCdf: '', stock: '', description: '', isNegotiable: true, latitude: -4.3216965, longitude: 15.3124553, country: 'RDC', countryCode: 'CD', region: '', district: '', formattedAddress: '', placeId: '', locationVisibility: 'CITY_PUBLIC' as LocationVisibility, serviceRadiusKm: '' });
+  const [createForm, setCreateForm] = useState({ title: '', category: '', city: 'Kinshasa', priceCdf: '', stock: '', description: '', isNegotiable: true, latitude: -4.3216965, longitude: 15.3124553, country: 'RDC', countryCode: 'CD', region: '', district: '', formattedAddress: '', placeId: '', locationVisibility: 'CITY_PUBLIC' as LocationVisibility, serviceRadiusKm: '', variants: null as ProductVariantsValue });
   const [createBusy, setCreateBusy] = useState(false);
   const [createMsg, setCreateMsg] = useState<string | null>(null);
   const [createStep, setCreateStep] = useState(1);
@@ -706,6 +707,7 @@ export function BusinessDashboard() {
       placeId: (article as any).placeId ?? '',
       locationVisibility: (article as any).locationVisibility ?? 'CITY_PUBLIC',
       serviceRadiusKm: (article as any).serviceRadiusKm?.toString() ?? '',
+      variants: ((article as any).variants ?? null) as ProductVariantsValue,
     });
     setActiveSection(type === 'service' ? 'services' : 'produits');
     setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 100);
@@ -767,6 +769,7 @@ export function BusinessDashboard() {
         serviceRadiusKm: createForm.serviceRadiusKm ? parseInt(createForm.serviceRadiusKm) : undefined,
         imageUrl: mediaUrls[0] || undefined,
         mediaUrls: mediaUrls.length > 0 ? mediaUrls : undefined,
+        variants: createMode === 'produit' ? (createForm.variants ?? null) : null,
       };
       if (editingArticleId) {
         await listings.update(editingArticleId, payload);
@@ -778,7 +781,7 @@ export function BusinessDashboard() {
       setCreateMsg(editingArticleId ? '✓ Article modifié avec succès' : t('biz.listingSuccess'));
       if (!editingArticleId) setShowBizPublishTip(true);
       setEditingArticleId(null);
-      setCreateForm({ title: '', category: '', city: 'Kinshasa', priceCdf: '', stock: '', description: '', isNegotiable: true, latitude: -4.3216965, longitude: 15.3124553, country: 'RDC', countryCode: 'CD', region: '', district: '', formattedAddress: '', placeId: '', locationVisibility: 'CITY_PUBLIC', serviceRadiusKm: '' });
+      setCreateForm({ title: '', category: '', city: 'Kinshasa', priceCdf: '', stock: '', description: '', isNegotiable: true, latitude: -4.3216965, longitude: 15.3124553, country: 'RDC', countryCode: 'CD', region: '', district: '', formattedAddress: '', placeId: '', locationVisibility: 'CITY_PUBLIC', serviceRadiusKm: '', variants: null });
       setCreateMode(null);
       setCreateStep(1);
       createUploadPreviews.forEach(u => URL.revokeObjectURL(u));
@@ -1951,6 +1954,14 @@ export function BusinessDashboard() {
                       <span className="ud-publish-field-label">{t('biz.stockLabel')}</span>
                       <input className="ud-input" type="number" min={0} value={createForm.stock} onChange={e => setCreateForm(f => ({ ...f, stock: e.target.value }))} placeholder="∞ (illimité)" />
                     </label>
+                    {createMode === 'produit' && (
+                      <div style={{ marginTop: 12, marginBottom: 12 }}>
+                        <VariantsEditor
+                          value={createForm.variants}
+                          onChange={(v) => setCreateForm(f => ({ ...f, variants: v }))}
+                        />
+                      </div>
+                    )}
                     <label className="ud-publish-field">
                       <span className="ud-publish-field-label">🔒 Visibilité</span>
                       <VisibilitySelector value={createForm.locationVisibility} onChange={(v: LocationVisibility) => setCreateForm(f => ({ ...f, locationVisibility: v }))} />

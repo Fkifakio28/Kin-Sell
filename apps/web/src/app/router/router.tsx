@@ -32,6 +32,7 @@ const ContactPage = lazy(() => import("../../features/info-pages/ContactPage").t
 const PricingPage = lazy(() => import("../../features/pricing/PricingPage").then(m => ({ default: m.PricingPage })));
 const CartPage = lazy(() => import("../../features/cart/CartPage").then(m => ({ default: m.CartPage })));
 const MessagingPage = lazy(() => import("../../features/messaging/MessagingPage").then(m => ({ default: m.MessagingPage })));
+const ProductDetailPage = lazy(() => import("../../features/product-detail/ProductDetailPage").then(m => ({ default: m.ProductDetailPage })));
 
 /* Param wrappers */
 import { PublicProfileWrapper, BusinessShopWrapper } from "./ParamWrappers";
@@ -96,6 +97,11 @@ export const router = createBrowserRouter([
           { path: "/explorer/public-profiles", element: <ExplorerProfilesPage /> },
           { path: "/user/:username", element: <PublicProfileWrapper /> },
           { path: "/business/:slug", element: <BusinessShopWrapper /> },
+
+          /* Page détail produit/article (style Jumia, thème Kin-Sell) */
+          { path: "/listing/:id", element: <ProductDetailPage /> },
+          { path: "/product/:id", element: <ProductDetailPage /> },
+          { path: "/produit/:id", element: <ProductDetailPage /> },
         ],
       },
 
