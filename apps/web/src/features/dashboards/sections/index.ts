@@ -4,5 +4,6 @@ export { DashboardAiSettings } from "./DashboardAiSettings";
 export { DashboardAnalyticsInsights } from "./DashboardAnalyticsInsights";
 export { DashboardContactsSection } from "./DashboardContactsSection";
 export { DashboardVerificationSection } from "./DashboardVerificationSection";
+export { DashboardNotificationsSection } from "./DashboardNotificationsSection";
 export { AutoShopTab } from "./AutoShopTab";
 export { KnowledgeIaPanel } from "./KnowledgeIaPanel";

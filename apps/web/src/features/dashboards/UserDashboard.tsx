@@ -73,6 +73,7 @@ import {
   DashboardAnalyticsInsights,
   DashboardContactsSection,
   DashboardVerificationSection,
+  DashboardNotificationsSection,
   AutoShopTab,
   KnowledgeIaPanel,
 } from './sections';
@@ -4586,6 +4587,9 @@ export function UserDashboard() {
                 </button>
               </div>
             </form>
+
+            {/* ── Section: Notifications ── */}
+            <DashboardNotificationsSection t={t} />
 
             {/* ── Section: Sécurité ── */}
             <section className="ud-glass-panel ud-settings-section">

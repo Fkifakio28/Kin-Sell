@@ -30,16 +30,20 @@ export interface LongPressArticle {
 export function useLongPress(
   onLongPress: () => void,
   onTap?: () => void,
-  { delay = 500 }: { delay?: number } = {},
+  { delay = 500, moveThreshold = 8 }: { delay?: number; moveThreshold?: number } = {},
 ) {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const firedRef = useRef(false);
+  const movedRef = useRef(false);
   const startPos = useRef<{ x: number; y: number } | null>(null);
+  const startTime = useRef<number>(0);
 
   const start = (e: React.TouchEvent) => {
     firedRef.current = false;
+    movedRef.current = false;
     const touch = e.touches[0];
     startPos.current = { x: touch.clientX, y: touch.clientY };
+    startTime.current = Date.now();
     timerRef.current = setTimeout(() => {
       firedRef.current = true;
       onLongPress();
@@ -47,13 +51,16 @@ export function useLongPress(
   };
 
   const move = (e: React.TouchEvent) => {
-    if (!startPos.current || !timerRef.current) return;
+    if (!startPos.current) return;
     const touch = e.touches[0];
     const dx = Math.abs(touch.clientX - startPos.current.x);
     const dy = Math.abs(touch.clientY - startPos.current.y);
-    if (dx > 10 || dy > 10) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
+    if (dx > moveThreshold || dy > moveThreshold) {
+      movedRef.current = true;
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
     }
   };
 
@@ -62,16 +69,28 @@ export function useLongPress(
       clearTimeout(timerRef.current);
       timerRef.current = null;
     }
-    if (!firedRef.current && onTap) {
+    // Ne déclenche onTap que si pas de long-press ET pas de swipe/drag détecté
+    // + durée raisonnable (évite tap fantôme après scroll lent)
+    const duration = Date.now() - startTime.current;
+    if (!firedRef.current && !movedRef.current && duration < 500 && onTap) {
       onTap();
     }
     startPos.current = null;
+  };
+
+  const cancel = () => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    movedRef.current = true; // annule le tap si le touch est cancel (scroll pris par le navigateur)
   };
 
   return {
     onTouchStart: start,
     onTouchMove: move,
     onTouchEnd: end,
+    onTouchCancel: cancel,
   };
 }
 

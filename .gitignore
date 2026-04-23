@@ -11,6 +11,11 @@ build/
 .env.*
 !.env.example
 
+# Firebase Admin SDK service account keys (NEVER commit)
+*firebase-adminsdk*.json
+firebase-admin.json
+serviceAccountKey.json
+
 # VS Code
 .vscode/
 

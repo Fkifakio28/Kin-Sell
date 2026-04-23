@@ -2,6 +2,8 @@ import { Router } from "express";
 import { requireAuth, type AuthenticatedRequest } from "../../shared/auth/auth-middleware.js";
 import { rateLimit, RateLimits } from "../../shared/middleware/rate-limit.middleware.js";
 import * as pushService from "./push.service.js";
+import { isFcmConfigured } from "./fcm.service.js";
+import { prisma } from "../../shared/db/prisma.js";
 import { asyncHandler } from "../../shared/utils/async-handler.js";
 
 const router = Router();
@@ -12,6 +14,74 @@ router.get(
   asyncHandler(async (_req, res) => {
     const key = pushService.getVapidPublicKey();
     res.json({ publicKey: key });
+  }),
+);
+
+/* GET /notifications/diagnostic — État complet pour l'espace privé */
+router.get(
+  "/diagnostic",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const userId = (req as AuthenticatedRequest).auth?.userId;
+    if (!userId) {
+      res.status(401).json({ error: "Authentification requise" });
+      return;
+    }
+
+    const [webSubs, fcmTokens] = await Promise.all([
+      prisma.pushSubscription.count({ where: { userId } }),
+      prisma.fcmToken.count({ where: { userId } }),
+    ]);
+
+    res.json({
+      server: {
+        vapidConfigured: !!pushService.getVapidPublicKey(),
+        fcmConfigured: isFcmConfigured(),
+      },
+      user: {
+        webSubscriptions: webSubs,
+        fcmTokens,
+      },
+    });
+  }),
+);
+
+/* POST /notifications/test — Envoyer une notification de test à l'utilisateur */
+router.post(
+  "/test",
+  requireAuth,
+  rateLimit(RateLimits.FCM_REGISTER),
+  asyncHandler(async (req, res) => {
+    const userId = (req as AuthenticatedRequest).auth?.userId;
+    if (!userId) {
+      res.status(401).json({ error: "Authentification requise" });
+      return;
+    }
+
+    const [webSubs, fcmTokens] = await Promise.all([
+      prisma.pushSubscription.count({ where: { userId } }),
+      prisma.fcmToken.count({ where: { userId } }),
+    ]);
+
+    if (webSubs === 0 && fcmTokens === 0) {
+      res.status(400).json({
+        ok: false,
+        error: "Aucun appareil n'est enregistré. Activez d'abord les notifications sur ce device.",
+      });
+      return;
+    }
+
+    await pushService.sendPushToUser(userId, {
+      title: "Kin-Sell • Test",
+      body: "Si vous voyez cette notification, tout fonctionne ✅",
+      tag: `test-${Date.now()}`,
+      data: { type: "system", url: "/account?section=settings" },
+    });
+
+    res.json({
+      ok: true,
+      sent: { webSubscriptions: webSubs, fcmTokens },
+    });
   }),
 );
 
