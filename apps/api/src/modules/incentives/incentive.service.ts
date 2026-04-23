@@ -990,7 +990,9 @@ export async function convertGrantToCoupon(
         recipientUserId: userId,
         status: "ACTIVE",
         segment: "STANDARD",
-        issuedById: "user-self-convert",
+        // issuedById null → conversion self (pas un admin).
+        // Le marqueur selfConvert: true dans metadata permet de tracer l'origine.
+        issuedById: null,
         metadata: { fromGrant: grantId, engine: "growth-v1", selfConvert: true },
       },
     });

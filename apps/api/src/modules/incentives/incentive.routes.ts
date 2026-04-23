@@ -108,8 +108,14 @@ router.post(
         GRANT_NOT_CONVERTIBLE: 422,
         GRANT_ALREADY_CONSUMED: 409,
       };
-      const status = statusMap[message] ?? 400;
-      response.status(status).json({ error: message });
+      const knownCode = statusMap[message];
+      if (!knownCode) {
+        // Erreur inattendue (FK, DB, ...) → log + 500 pour que le front affiche un vrai message
+        request.log?.error({ err, grantId: id, userId: request.auth?.userId }, "[Incentive] Unexpected grant conversion error");
+        response.status(500).json({ error: "CONVERSION_FAILED", detail: message });
+        return;
+      }
+      response.status(knownCode).json({ error: message });
     }
   }),
 );
