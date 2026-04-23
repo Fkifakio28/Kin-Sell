@@ -673,7 +673,19 @@ export function PricingPage() {
                         + `${(promoStatus.originalAmountUsdCents! / 100).toFixed(2)}$`
                         + ` → ${(promoStatus.finalAmountUsdCents / 100).toFixed(2)}$`
                       : `✓ Coupon valide — ${promoStatus.discountPercent}% de réduction`
-                    : `✕ ${promoStatus.reason === "INVALID_CODE" ? "Code invalide" : promoStatus.reason === "EXPIRED" ? "Code expiré" : promoStatus.reason === "MONTHLY_QUOTA_REACHED" ? "Quota mensuel atteint" : promoStatus.reason ?? "Code non valide"}`}
+                    : `✕ ${
+                        promoStatus.reason === "INVALID_CODE" ? "Code invalide"
+                          : promoStatus.reason === "INVALID_OR_EXPIRED" ? "Code invalide ou expiré"
+                          : promoStatus.reason === "EXPIRED" ? "Code expiré"
+                          : promoStatus.reason === "NOT_YET_ACTIVE" ? "Code pas encore actif"
+                          : promoStatus.reason === "MAX_USES_REACHED" ? "Ce code a atteint sa limite d'utilisation"
+                          : promoStatus.reason === "MAX_USES_PER_USER" ? "Vous avez déjà utilisé ce code"
+                          : promoStatus.reason === "NOT_RECIPIENT" ? "Ce code n'est pas attribué à votre compte"
+                          : promoStatus.reason === "PLAN_NOT_ELIGIBLE" ? "Ce code n'est pas valable pour ce forfait"
+                          : promoStatus.reason === "ADDON_NOT_ELIGIBLE" ? "Ce code n'est pas valable pour ce module"
+                          : promoStatus.reason === "MONTHLY_QUOTA_REACHED" ? "Quota mensuel atteint"
+                          : promoStatus.reason ?? "Code non valide"
+                      }`}
                 </p>
               )}
               {promoStatus?.valid && promoStatus.finalAmountUsdCents != null && (

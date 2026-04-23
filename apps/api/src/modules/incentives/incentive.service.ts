@@ -174,8 +174,16 @@ export async function validateCoupon(
   if (userRedemptions >= coupon.maxUsesPerUser)
     return { ...base, valid: false, reason: "MAX_USES_PER_USER" };
 
-  if (coupon.recipientUserId && coupon.recipientUserId !== userId)
+  if (coupon.recipientUserId && coupon.recipientUserId !== userId) {
+    // Debug log pour diagnostiquer les faux NOT_RECIPIENT (session mismatch, double-user, etc.)
+    console.warn("[validateCoupon] NOT_RECIPIENT", {
+      couponCode: coupon.code,
+      couponRecipient: coupon.recipientUserId,
+      requestUser: userId,
+      metadata: coupon.metadata,
+    });
     return { ...base, valid: false, reason: "NOT_RECIPIENT" };
+  }
 
   // Scope checks
   if (coupon.targetScope === "SPECIFIC") {
