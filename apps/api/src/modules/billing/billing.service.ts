@@ -627,7 +627,27 @@ export const createPaypalCheckout = async (
   payload: { planCode: string; billingCycle: "MONTHLY" | "ONE_TIME"; promoCode?: string }
 ) => {
   const { scope, businessId } = await resolveContext(userId);
-  const targetPlan = getPlanOrThrow(payload.planCode, scope);
+
+  // ── Garde de scope explicite (défense en profondeur) ──
+  // getPlanOrThrow lève déjà si le plan n'existe pas pour ce scope,
+  // mais on renvoie un HttpError 400 lisible pour le front.
+  const targetPlan = (() => {
+    try {
+      return getPlanOrThrow(payload.planCode, scope);
+    } catch {
+      throw new HttpError(
+        400,
+        scope === "BUSINESS"
+          ? "Ce forfait est réservé aux comptes particuliers. Votre compte est Business — choisissez un forfait Business (STARTER, BUSINESS, SCALE)."
+          : "Ce forfait est réservé aux comptes Business. Votre compte est particulier — choisissez un forfait utilisateur (FREE, BOOST, AUTO, PRO_VENDEUR)."
+      );
+    }
+  })();
+
+  // Sanity check explicite (devrait être redondant)
+  if (targetPlan.scope !== scope) {
+    throw new HttpError(400, `Incohérence de scope : ce forfait est ${targetPlan.scope} mais votre compte est ${scope}.`);
+  }
 
   let amountUsdCents = targetPlan.monthlyPriceUsdCents;
   let couponRedemption: { redemptionId: string; discountAmountUsdCents: number; finalAmountUsdCents: number } | null = null;
@@ -648,6 +668,17 @@ export const createPaypalCheckout = async (
       finalAmountUsdCents: couponRedemption.finalAmountUsdCents,
     };
     amountUsdCents = couponRedemption.finalAmountUsdCents;
+
+    // Log explicite pour audit : la réduction est bien appliquée sur le montant PayPal
+    console.info("[billing] PayPal checkout avec coupon", {
+      userId,
+      scope,
+      planCode: targetPlan.code,
+      originalUsdCents: targetPlan.monthlyPriceUsdCents,
+      discountUsdCents: couponRedemption.discountAmountUsdCents,
+      finalUsdCents: amountUsdCents,
+      couponCode: couponMeta.couponCode,
+    });
   }
 
   const expiresAt = new Date(Date.now() + env.BILLING_TRANSFER_ORDER_TTL_HOURS * 60 * 60 * 1000);
