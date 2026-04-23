@@ -3,11 +3,12 @@
  * Usage: node scripts/run-market-intel-cycle.mjs  (depuis racine du repo)
  */
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 process.env.ENABLE_MARKET_INTEL = 'true';
 
-const apiDist = path.resolve(process.cwd(), 'apps/api/dist/modules/market-intel');
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const apiDist = path.resolve(__dirname, '..', 'apps/api/dist/modules/market-intel');
 const load = (f) => import(pathToFileURL(path.join(apiDist, f)).href);
 
 const { runCrawlCycle } = await load('orchestrator.js');
