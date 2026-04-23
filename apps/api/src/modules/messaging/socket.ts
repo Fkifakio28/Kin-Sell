@@ -385,6 +385,20 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
         if (!membership) return;
       } catch { return; }
 
+      // Persist call log FIRST (default MISSED — updated on accept/reject/end)
+      // Doit être fait AVANT d'émettre call:incoming pour éviter une race
+      // où l'appelé accepte avant que activeCallLogs soit peuplée — le log
+      // ne serait alors jamais marqué ANSWERED.
+      try {
+        const log = await callLogService.createCallLog({
+          conversationId: data.conversationId,
+          callerUserId: userId,
+          receiverUserId: data.targetUserId,
+          callType: data.callType === "video" ? "VIDEO" : "AUDIO",
+        });
+        activeCallLogs.set(data.conversationId, log.id);
+      } catch (e) { console.error("[CallLog] create error", e); }
+
       const targetSockets = onlineUsers.get(data.targetUserId);
       if (targetSockets) {
         for (const sid of targetSockets) {
@@ -395,19 +409,6 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
           });
         }
       }
-
-      // Persist call log (default MISSED — updated on accept/reject/end)
-      void (async () => {
-        try {
-          const log = await callLogService.createCallLog({
-            conversationId: data.conversationId,
-            callerUserId: userId,
-            receiverUserId: data.targetUserId,
-            callType: data.callType === "video" ? "VIDEO" : "AUDIO",
-          });
-          activeCallLogs.set(data.conversationId, log.id);
-        } catch (e) { console.error("[CallLog] create error", e); }
-      })();
 
       // Push notification for call (send even when socket presence is stale)
       void (async () => {
@@ -462,6 +463,17 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
         if (!m) return;
       } catch { return; }
 
+      // Sécurité : vérifier que le user est bien le receiver de l'appel
+      // (empêche un autre participant d'un groupe d'accepter à la place
+      // du destinataire prévu).
+      const acceptLogId = activeCallLogs.get(data.conversationId);
+      if (acceptLogId) {
+        try {
+          const acceptLog = await prisma.callLog.findUnique({ where: { id: acceptLogId }, select: { receiverUserId: true, callerUserId: true } });
+          if (!acceptLog || acceptLog.receiverUserId !== userId || acceptLog.callerUserId !== data.callerId) return;
+        } catch { return; }
+      }
+
       // Cancel no-answer timer
       const timer = activeCallTimers.get(data.conversationId);
       if (timer) { clearTimeout(timer); activeCallTimers.delete(data.conversationId); }
@@ -490,6 +502,16 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
         const m = await prisma.conversationParticipant.findFirst({ where: { conversationId: data.conversationId, userId } });
         if (!m) return;
       } catch { return; }
+
+      // Sécurité : seul le receiver prévu peut rejeter, et callerId doit
+      // correspondre au caller réel de l'appel.
+      const rejectLogId = activeCallLogs.get(data.conversationId);
+      if (rejectLogId) {
+        try {
+          const rejectLog = await prisma.callLog.findUnique({ where: { id: rejectLogId }, select: { receiverUserId: true, callerUserId: true } });
+          if (!rejectLog || rejectLog.receiverUserId !== userId || rejectLog.callerUserId !== data.callerId) return;
+        } catch { return; }
+      }
 
       // Cancel no-answer timer
       const timer = activeCallTimers.get(data.conversationId);
@@ -521,6 +543,20 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
         const m = await prisma.conversationParticipant.findFirst({ where: { conversationId: data.conversationId, userId } });
         if (!m) return;
       } catch { return; }
+
+      // Sécurité : seul un participant réel de l'appel peut le terminer,
+      // et targetUserId doit être l'autre partie de l'appel.
+      const endLogId = activeCallLogs.get(data.conversationId);
+      if (endLogId) {
+        try {
+          const endLog = await prisma.callLog.findUnique({ where: { id: endLogId }, select: { receiverUserId: true, callerUserId: true } });
+          if (!endLog) return;
+          const isParticipant = endLog.callerUserId === userId || endLog.receiverUserId === userId;
+          const otherIsTarget = (endLog.callerUserId === userId && endLog.receiverUserId === data.targetUserId)
+            || (endLog.receiverUserId === userId && endLog.callerUserId === data.targetUserId);
+          if (!isParticipant || !otherIsTarget) return;
+        } catch { return; }
+      }
 
       // Cancel no-answer timer
       const noAnswerTimer = activeCallTimers.get(data.conversationId);
