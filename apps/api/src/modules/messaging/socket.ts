@@ -704,6 +704,18 @@ export function setupSocketServer(httpServer: HttpServer, corsOrigin: string) {
             clearTimeout(timer);
             activeCallTimers.delete(convId);
             activeCallLogs.delete(convId);
+
+            // Notifier explicitement l'AUTRE partie que l'appel se termine
+            // à cause d'une déconnexion (sans ce signal, l'autre côté
+            // resterait bloqué en "sonnerie" ou "connecté" jusqu'au timeout
+            // ICE natif ~2 min).
+            const otherUserId = log.callerUserId === userId ? log.receiverUserId : log.callerUserId;
+            io.to(`user:${otherUserId}`).emit("call:ended", {
+              conversationId: convId,
+              enderId: userId,
+              reason: "disconnected",
+            });
+
             // Determine correct status: ANSWERED if call was connected, CANCELLED if still ringing
             const status = log.answeredAt ? "ANSWERED" : "CANCELLED";
             const endedAt = new Date();
