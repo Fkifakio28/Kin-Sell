@@ -315,7 +315,10 @@ export function useAudioCallState() {
     ringingWatchdogRef.current = setTimeout(() => {
       const c = callRef.current;
       if (!c) return;
-      if (c.status === "outgoing_ringing" || c.status === "connecting") {
+      // Déclenche UNIQUEMENT pour outgoing_ringing : si l'appel est passé
+      // à "connecting" c'est que call:accepted a été reçu, WebRTC prend le
+      // relais (qui a ses propres retries ICE) — on ne doit pas couper.
+      if (c.status === "outgoing_ringing") {
         // Sécurité : prévenir l'autre côté + cleanup local
         try { emit("call:end", { conversationId: c.conversationId, targetUserId: c.remoteUserId }); } catch { /* ignore */ }
         finishCall("unanswered");
@@ -466,6 +469,9 @@ export function useAudioCallState() {
       const c = callRef.current;
       if (!c || c.direction !== "outgoing") return;
 
+      // Libère le watchdog "ringing" : l'appel a été accepté, WebRTC prend le relais.
+      clearRingingWatchdog();
+
       // Move to connecting, then send WebRTC offer
       transition("connecting");
 
@@ -558,7 +564,7 @@ export function useAudioCallState() {
       off("webrtc:answer", handleAnswer as any);
       off("webrtc:ice-candidate", handleIce as any);
     };
-  }, [on, off, emit, transition, finishCall]);
+  }, [on, off, emit, transition, finishCall, clearRingingWatchdog]);
 
   // ── Cleanup on unmount / tab close ─────────────────────────────────────────
 

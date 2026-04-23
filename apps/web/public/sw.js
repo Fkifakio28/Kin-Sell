@@ -325,10 +325,6 @@ self.addEventListener("push", (event) => {
     badge: payload.badge || DEFAULT_BADGE,
     tag: resolvedTag,
     renotify: true,
-    // silent:false explicite → déclenche le son OSresolvedTitle
-    // Firefox/Samsung/Brave). Sans ce flag certains navigateurs traitent
-    // l'absence comme "silencieux par sécurité" et aucune alerte sonore
-    // ne se produit même si l'OS l'autorise.
     silent: false,
     requireInteraction: data.type === "call",
     vibrate: data.type === "call"
@@ -357,7 +353,7 @@ self.addEventListener("push", (event) => {
 
       if (!hasFocusedVisibleClient || isCall) {
         try {
-          await self.registration.showNotification(payload.title || "Kin-Sell", options);
+          await self.registration.showNotification(resolvedTitle, options);
         } catch (err) { console.warn("[sw] showNotification failed:", err); }
       }
 
