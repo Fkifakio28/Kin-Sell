@@ -14,6 +14,7 @@
 
 import { prisma } from "../../shared/db/prisma.js";
 import type { CountryCode, KnowledgeGoal } from "@prisma/client";
+import { getMarketContextForUser, formatSnapshotForPrompt, type MarketContextSnapshot } from "../market-intel/context.js";
 
 // Pays où Kin-Sell est déployé (8) — aligné sur MARKET_COUNTRIES frontend
 export const KNOWLEDGE_COUNTRIES: CountryCode[] = [
@@ -274,6 +275,12 @@ export interface Recommendation {
   topZones: Array<{ countryCode: CountryCode | null; city: string | null; score: number; level: string }>;
   category?: string;
   keywords?: string[];
+  /** Contexte marché externe (Kin-Sell Analytique+) injecté depuis context.ts */
+  marketContext?: {
+    country: string;
+    summary: string;
+    snapshot: MarketContextSnapshot;
+  };
 }
 
 export async function getRecommendations(userId: string): Promise<Recommendation[]> {
@@ -341,6 +348,31 @@ export async function getRecommendations(userId: string): Promise<Recommendation
       }
     }
   }
+
+  // ── Enrichissement Analytique+ (contexte marché externe) ──
+  // Pour chaque reco, on ajoute le snapshot marché du pays le plus pertinent
+  // (1ère topZone). Silencieux en cas d'échec — non bloquant.
+  await Promise.all(
+    recos.map(async (r) => {
+      const topCountry = r.topZones[0]?.countryCode ?? countries[0] ?? null;
+      if (!topCountry) return;
+      try {
+        const snap = await getMarketContextForUser({
+          country: topCountry,
+          categoryId: r.category,
+          includeArbitrage: r.goal === "SELL" || r.goal === "BUY",
+        });
+        if (!snap.productInsight && snap.topTrends.length === 0 && snap.arbitrageHints.length === 0) return;
+        r.marketContext = {
+          country: topCountry,
+          summary: formatSnapshotForPrompt(snap),
+          snapshot: snap,
+        };
+      } catch {
+        // Analytique+ indisponible : reco reste valide sans contexte externe
+      }
+    }),
+  );
 
   return recos;
 }
