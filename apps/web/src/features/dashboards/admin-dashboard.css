@@ -180,6 +180,13 @@
   white-space: nowrap;
   overflow: hidden;
   font-family: inherit;
+  text-decoration: none;
+  width: 100%;
+}
+a.ad-nav-item,
+a.ad-nav-item:visited {
+  color: var(--ad-text-2);
+  text-decoration: none;
 }
 .ad-nav-item:hover {
   background: rgba(111, 88, 255, 0.10);
