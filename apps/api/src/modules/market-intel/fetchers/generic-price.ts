@@ -20,12 +20,17 @@ import {
 } from "./base.js";
 
 const PRICE_SELECTORS = [
-  "[class*=price i]",
-  "[data-price]",
   "[itemprop=price]",
-  ".price",
+  "[data-price]",
   ".product-price",
+  "[class*=product-price i]",
+  "article [class*=price i]",
+  "li [class*=price i]",
+  ".card [class*=price i]",
 ];
+
+// Mots-clés éliminant un faux titre (menu de navigation, footer, etc.).
+const NOISE_TITLE = /\b(connexion|compte|panier|menu|contact|newsletter|livraison|promo|soldes?|promotions?|cookies?|faq|conditions|mentions|politique|accueil|home|categories|boutique|shop|page|filtrer|trier)\b/i;
 
 export const genericPriceFetcher: Fetcher = {
   parser: "generic-price",
@@ -50,11 +55,20 @@ export const genericPriceFetcher: Fetcher = {
           const parsed = parsePrice(priceText);
           if (!parsed) return;
 
-          // Remonte au container pour trouver un titre
-          const container = $(el).closest("article, .product, li, .card, [class*=item i]").first();
+          // Remonte au container pour trouver un titre. Si aucun container
+          // "article/li/product/card" trouvé → on abandonne (c'est un prix
+          // isolé dans nav/footer/widget — bruit garanti).
+          const container = $(el).closest("article, .product, li, .card, [data-product], [class*=item i]").first();
+          if (container.length === 0) return;
+
           const titleEl = container.find("h1, h2, h3, h4, a[title]").first();
           const title = (titleEl.attr("title") ?? titleEl.text().trim()) || "";
-          if (!title || title.length < 3 || title.length > 200) return;
+          // Titre de produit plausible : >= 8 chars, pas du bruit de navigation.
+          if (!title || title.length < 8 || title.length > 200) return;
+          if (NOISE_TITLE.test(title)) return;
+
+          // Prix absurdes filtrés dès la source (complément aux bornes agg).
+          if (parsed.value <= 0 || parsed.value > 1_000_000_000_000) return;
 
           const link = container.find("a[href]").first().attr("href") ?? source.baseUrl;
           const absLink = link.startsWith("http") ? link : source.baseUrl.replace(/\/$/, "") + link;

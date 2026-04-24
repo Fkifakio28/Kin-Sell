@@ -16,7 +16,22 @@ import {
   type MarketSourceRow,
 } from "./base.js";
 
-const CATEGORIES = ["voitures", "motos", "telephones", "ordinateurs", "electronique", "meubles", "immobilier"];
+const CATEGORIES = [
+  "voitures",
+  "motos",
+  "telephones",
+  "ordinateurs",
+  "electronique",
+  "meubles",
+  "immobilier",
+  "vetements-enfants-bebes",
+  "vetements-accessoires-homme",
+  "vetements-accessoires-femme",
+  "beaute-et-bien-etre",
+  "sport-forme-et-loisirs",
+  "alimentations",
+  "jeux-video-consoles",
+];
 
 export const coinafriqueFetcher: Fetcher = {
   parser: "coinafrique",

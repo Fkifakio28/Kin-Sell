@@ -26,6 +26,60 @@ const CURRENCY_BY_COUNTRY: Record<string, string> = {
   MA: "MAD", CI: "XOF", SN: "XOF", CD: "CDF", GA: "XAF", CG: "XAF", GN: "GNF", AO: "AOA",
 };
 
+// Zones monétaires où "EUR" dans un scrape est TRÈS probablement une erreur
+// (le site affiche le prix en devise locale mais notre parser a pris la
+// conversion affichée en euros à côté). Dans ce cas on force la devise
+// locale pour l'observation afin d'éviter un prix ridicule type "Corolla 50 €".
+const NON_EUR_COUNTRIES = new Set(["MA", "CI", "SN", "CD", "GA", "CG", "GN", "AO", "CM", "TD"]);
+
+// Bornes de sanité par devise locale (prix d'article) — rejet hors bornes.
+// Tout produit réel à moins du min ou plus du max est considéré aberrant.
+const PRICE_BOUNDS_LOCAL: Record<string, { min: number; max: number }> = {
+  EUR: { min: 1, max: 500_000 },          // 1 € à 500 k€
+  MAD: { min: 5, max: 5_000_000 },        // ~0.5 € à ~500 k€
+  XOF: { min: 500, max: 300_000_000 },    // ~0.75 € à ~500 k€
+  XAF: { min: 500, max: 300_000_000 },
+  CDF: { min: 2_000, max: 1_500_000_000 },// ~0.7 € à ~500 k€
+  GNF: { min: 5_000, max: 4_000_000_000 },
+  AOA: { min: 500, max: 500_000_000 },
+  USD: { min: 1, max: 500_000 },
+};
+
+// Bornes de sanité salaires mensuels locaux.
+const SALARY_BOUNDS_LOCAL: Record<string, { min: number; max: number }> = {
+  EUR: { min: 100, max: 50_000 },
+  MAD: { min: 1_000, max: 500_000 },
+  XOF: { min: 50_000, max: 30_000_000 },
+  XAF: { min: 50_000, max: 30_000_000 },
+  CDF: { min: 200_000, max: 150_000_000 },
+  GNF: { min: 500_000, max: 400_000_000 },
+  AOA: { min: 50_000, max: 50_000_000 },
+  USD: { min: 100, max: 50_000 },
+};
+
+function normalizeCurrencyForCountry(currency: string | undefined, country: string): string {
+  const cur = (currency ?? "").toUpperCase();
+  // Si scrape ne donne pas de devise, utiliser celle du pays.
+  if (!cur) return CURRENCY_BY_COUNTRY[country] ?? "EUR";
+  // Override anti-affichage-EUR-trompeur hors zone euro.
+  if (cur === "EUR" && NON_EUR_COUNTRIES.has(country)) {
+    return CURRENCY_BY_COUNTRY[country] ?? "EUR";
+  }
+  return cur;
+}
+
+function isPriceInRange(value: number, currency: string): boolean {
+  const b = PRICE_BOUNDS_LOCAL[currency.toUpperCase()];
+  if (!b) return value > 0; // devise inconnue → on accepte juste > 0
+  return value >= b.min && value <= b.max;
+}
+
+function isSalaryInRange(value: number, currency: string): boolean {
+  const b = SALARY_BOUNDS_LOCAL[currency.toUpperCase()];
+  if (!b) return value > 0;
+  return value >= b.min && value <= b.max;
+}
+
 // ── Tokenisation / matching ────────────────────────────
 
 function tokens(s: string): Set<string> {
@@ -116,6 +170,14 @@ async function aggregatePrices(observations: PriceObservation[]): Promise<{
     const country = sourceCountry.get(obs.sourceId);
     if (!country) continue;
 
+    // Normalise la devise : anti "EUR" trompeur en zone locale + fallback pays.
+    const normalizedCurrency = normalizeCurrencyForCountry(obs.currency, country);
+
+    // Rejet des prix aberrants (outliers qui cassent la médiane).
+    if (!isPriceInRange(obs.priceLocal, normalizedCurrency)) {
+      continue;
+    }
+
     const product = bestMatch(obs.title, productAnchors);
     if (!product) {
       unmatched++;
@@ -127,7 +189,7 @@ async function aggregatePrices(observations: PriceObservation[]): Promise<{
     const group = groups.get(key) ?? {
       productId: product.id,
       countryCode: country,
-      currency: obs.currency || CURRENCY_BY_COUNTRY[country] || "EUR",
+      currency: normalizedCurrency,
       values: [],
       sourceIds: new Set(),
     };
@@ -216,15 +278,22 @@ async function aggregateJobs(observations: JobObservation[]): Promise<{
     const sal = obs.salaryMinLocal ?? obs.salaryMaxLocal;
     if (!sal || sal <= 0) continue;
 
+    const normalizedCurrency = normalizeCurrencyForCountry(obs.currency, country);
+
+    // Rejet salaires hors bornes (annonces "volontariat 0 €" ou PDG cheaté).
+    const minVal = obs.salaryMinLocal ?? sal;
+    if (!isSalaryInRange(minVal, normalizedCurrency)) continue;
+    if (obs.salaryMaxLocal && !isSalaryInRange(obs.salaryMaxLocal, normalizedCurrency)) continue;
+
     const key = `${job.id}|${country}`;
     const group = groups.get(key) ?? {
       jobId: job.id,
       countryCode: country,
-      currency: obs.currency || CURRENCY_BY_COUNTRY[country] || "EUR",
+      currency: normalizedCurrency,
       values: [],
       sourceIds: new Set(),
     };
-    group.values.push(obs.salaryMinLocal ?? sal);
+    group.values.push(minVal);
     if (obs.salaryMaxLocal && obs.salaryMaxLocal !== obs.salaryMinLocal) group.values.push(obs.salaryMaxLocal);
     group.sourceIds.add(obs.sourceId);
     groups.set(key, group);
@@ -302,7 +371,14 @@ async function fillPriceGaps(coverage: Record<string, Set<string>>): Promise<{ g
       );
       if (!match) continue;
 
-      const eurCents = await toEurCents(est.priceMedianLocal, est.localCurrency);
+      // Validation anti-hallucination Gemini : prix dans bornes locales.
+      const estCurrency = normalizeCurrencyForCountry(est.localCurrency, country);
+      if (!isPriceInRange(est.priceMedianLocal, estCurrency)) {
+        logger.warn({ country, product: est.productLabel, median: est.priceMedianLocal, currency: estCurrency }, "[agg.gemini] price estimate out of range — rejected");
+        continue;
+      }
+
+      const eurCents = await toEurCents(est.priceMedianLocal, estCurrency);
       try {
         await prisma.marketPrice.create({
           data: {
@@ -311,7 +387,7 @@ async function fillPriceGaps(coverage: Record<string, Set<string>>): Promise<{ g
             priceMinLocal: est.priceMinLocal,
             priceMaxLocal: est.priceMaxLocal,
             priceMedianLocal: est.priceMedianLocal,
-            localCurrency: est.localCurrency,
+            localCurrency: estCurrency,
             priceMedianEurCents: eurCents,
             sampleSize: est.sampleSize ?? 1,
             sourceIds: [],
@@ -362,7 +438,14 @@ async function fillSalaryGaps(coverage: Record<string, Set<string>>): Promise<{ 
       );
       if (!match) continue;
 
-      const eurCents = await toEurCents(est.salaryMedianLocal, est.localCurrency);
+      // Validation anti-hallucination Gemini : salaire dans bornes locales.
+      const estCurrency = normalizeCurrencyForCountry(est.localCurrency, country);
+      if (!isSalaryInRange(est.salaryMedianLocal, estCurrency)) {
+        logger.warn({ country, job: est.jobLabel, median: est.salaryMedianLocal, currency: estCurrency }, "[agg.gemini] salary estimate out of range — rejected");
+        continue;
+      }
+
+      const eurCents = await toEurCents(est.salaryMedianLocal, estCurrency);
       try {
         await prisma.marketSalary.create({
           data: {
@@ -371,7 +454,7 @@ async function fillSalaryGaps(coverage: Record<string, Set<string>>): Promise<{ 
             salaryMinLocal: est.salaryMinLocal,
             salaryMaxLocal: est.salaryMaxLocal,
             salaryMedianLocal: est.salaryMedianLocal,
-            localCurrency: est.localCurrency,
+            localCurrency: estCurrency,
             salaryMedianEurCents: eurCents,
             unit: est.unit ?? "month",
             sampleSize: est.sampleSize ?? 1,
