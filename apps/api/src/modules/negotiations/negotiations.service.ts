@@ -3,6 +3,7 @@ import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
 import { randomBytes } from "crypto";
 import { sendPushToUser } from "../notifications/push.service.js";
+import { emitOrderCreated } from "../notifications/notification.events.js";
 import { emitToUsers, emitToUser, isUserOnline } from "../messaging/socket.js";
 import { getEffectiveItemPrice } from "../../shared/promo/promo-engine.js";
 
@@ -427,41 +428,16 @@ export const respondToNegotiation = async (userId: string, negotiationId: string
 
     // ── Notifications (hors transaction — fire-and-forget) ──
     if (order && notifCtx) {
-      if (isBundle) {
-        if (!isUserOnline(negotiation.buyerUserId)) {
-          void sendPushToUser(negotiation.buyerUserId, {
-            title: "✅ Lot accepté !",
-            body: `Votre offre groupée pour ${notifCtx.itemsCount} articles a été acceptée. Commande #${order.id.slice(-6)} créée.`,
-            tag: `nego-accepted-${negotiationId}`,
-            data: { type: "order", orderId: order.id, negotiationId },
-          });
-        }
-        if (!isUserOnline(notifCtx.sellerUserId)) {
-          void sendPushToUser(notifCtx.sellerUserId, {
-            title: "🛒 Commande lot créée",
-            body: `Commande #${order.id.slice(-6)} créée — ${notifCtx.itemsCount} articles, marchandage lot accepté.`,
-            tag: `order-${order.id}`,
-            data: { type: "order", orderId: order.id },
-          });
-        }
-      } else {
-        if (!isUserOnline(negotiation.buyerUserId)) {
-          void sendPushToUser(negotiation.buyerUserId, {
-            title: "✅ Marchandage accepté !",
-            body: `Votre offre pour "${notifCtx.listingTitle}" a été acceptée. Commande #${order.id.slice(-6)} créée.`,
-            tag: `nego-accepted-${negotiationId}`,
-            data: { type: "order", orderId: order.id, negotiationId },
-          });
-        }
-        if (!isUserOnline(notifCtx.sellerUserId)) {
-          void sendPushToUser(notifCtx.sellerUserId, {
-            title: "🛒 Commande créée automatiquement",
-            body: `Commande #${order.id.slice(-6)} créée suite au marchandage accepté.`,
-            tag: `order-${order.id}`,
-            data: { type: "order", orderId: order.id },
-          });
-        }
-      }
+      // Notif unifiée BD + Push + Email (acheteur + vendeur) via les helpers
+      void emitOrderCreated({
+        orderId: order.id,
+        buyerUserId: negotiation.buyerUserId,
+        sellerUserId: notifCtx.sellerUserId,
+        totalUsdCents: notifCtx.totalUsdCents,
+        itemsCount: notifCtx.itemsCount,
+        itemTitle: notifCtx.listingTitle,
+        validationCode: order.validationCode,
+      });
 
       const orderCreatedPayload = {
         type: "ORDER_CREATED" as const,

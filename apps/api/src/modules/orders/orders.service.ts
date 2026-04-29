@@ -3,6 +3,7 @@ import type { Prisma } from "@prisma/client";
 import { randomBytes } from "crypto";
 import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
+import { emitOrderStatusChanged } from "../notifications/notification.events.js";
 
 type PagingInput = {
   page: number;
@@ -865,6 +866,17 @@ export const buyerConfirmDelivery = async (userId: string, orderId: string, code
       });
     }
   } catch { /* non-blocking */ }
+
+  // Notif unifiée (BD + push + email) acheteur + vendeur
+  void emitOrderStatusChanged({
+    orderId: updated.id,
+    buyerUserId: updated.buyerUserId,
+    sellerUserId: updated.sellerUserId,
+    totalUsdCents: updated.totalUsdCents,
+    itemsCount: updated.items?.length ?? 1,
+    itemTitle: updated.items?.[0]?.title,
+    status: "DELIVERED",
+  });
 
   return mapOrder(updated);
 };

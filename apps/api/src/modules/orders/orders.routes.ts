@@ -7,6 +7,10 @@ import { prisma } from "../../shared/db/prisma.js";
 import { Role } from "../../types/roles.js";
 import * as ordersService from "./orders.service.js";
 import { sendPushToUser } from "../notifications/push.service.js";
+import {
+  emitOrderCreated,
+  emitOrderStatusChanged,
+} from "../notifications/notification.events.js";
 import { emitToUsers, emitToUser, isUserOnline } from "../messaging/socket.js";
 import * as momoService from "../mobile-money/mobile-money.service.js";
 import { requireIa } from "../../shared/billing/subscription-guard.js";
@@ -152,14 +156,15 @@ router.post(
     // Push + Socket notify sellers about new orders
     for (const order of data.orders ?? []) {
       if (order.seller?.userId && order.seller.userId !== request.auth!.userId) {
-        if (!isUserOnline(order.seller.userId)) {
-          void sendPushToUser(order.seller.userId, {
-            title: "Kin-Sell • 🛒 Commande",
-            body: `${request.auth!.userId.slice(0, 8)} a effectué une commande de ${order.itemsCount ?? 1} article(s)`,
-            tag: `order-${order.id}`,
-            data: { type: "order", orderId: order.id, url: "/account?tab=commandes" },
-          });
-        }
+        // Notif unifiée (BD + push + email + socket-notif)
+        void emitOrderCreated({
+          orderId: order.id,
+          buyerUserId: request.auth!.userId,
+          sellerUserId: order.seller.userId,
+          totalUsdCents: order.totalUsdCents ?? 0,
+          itemsCount: order.itemsCount ?? 1,
+          itemTitle: order.items?.[0]?.title,
+        });
         emitToUser(order.seller.userId, "order:created", {
           type: "ORDER_CREATED",
           orderId: order.id,
@@ -212,14 +217,14 @@ router.post(
 
       // Push + Socket notify sellers
       if (order.seller?.userId && order.seller.userId !== request.auth!.userId) {
-        if (!isUserOnline(order.seller.userId)) {
-          void sendPushToUser(order.seller.userId, {
-            title: "🛒 Nouvelle commande !",
-            body: `Vous avez reçu une nouvelle commande de ${order.itemsCount ?? 1} article(s)`,
-            tag: `order-${order.id}`,
-            data: { type: "order", orderId: order.id },
-          });
-        }
+        void emitOrderCreated({
+          orderId: order.id,
+          buyerUserId: request.auth!.userId,
+          sellerUserId: order.seller.userId,
+          totalUsdCents: order.totalUsdCents ?? 0,
+          itemsCount: order.itemsCount ?? 1,
+          itemTitle: order.items?.[0]?.title,
+        });
         emitToUser(order.seller.userId, "order:created", {
           type: "ORDER_CREATED",
           orderId: order.id,
@@ -282,15 +287,16 @@ router.patch(
   asyncHandler(async (request: AuthenticatedRequest, response) => {
     const payload = updateStatusSchema.parse(request.body);
     const data = await ordersService.updateSellerOrderStatus(request.auth!.userId, request.params.orderId, payload.status);
-    // Push notify buyer about order status change
-    const statusLabels: Record<string, string> = { CONFIRMED: "confirmée", SHIPPED: "expédiée", DELIVERED: "livrée", CANCELED: "annulée" };
-    const label = statusLabels[payload.status] ?? payload.status;
-    if (data.buyer?.userId && data.buyer.userId !== request.auth!.userId && !isUserOnline(data.buyer.userId)) {
-      void sendPushToUser(data.buyer.userId, {
-        title: "📦 Commande " + label,
-        body: `Votre commande #${data.id.slice(-6)} a été ${label}`,
-        tag: `order-${data.id}`,
-        data: { type: "order", orderId: data.id },
+    // Notif unifiée (BD + push + email + socket) acheteur
+    if (data.buyer?.userId && data.buyer.userId !== request.auth!.userId) {
+      void emitOrderStatusChanged({
+        orderId: data.id,
+        buyerUserId: data.buyer.userId,
+        sellerUserId: data.seller.userId,
+        totalUsdCents: data.totalUsdCents ?? 0,
+        itemsCount: data.items?.length ?? 1,
+        itemTitle: data.items?.[0]?.title,
+        status: payload.status as any,
       });
     }
     emitToUsers([data.buyer.userId, data.seller.userId], "order:status-updated", {

@@ -23,6 +23,7 @@ import { AnnounceCard, type MediaItem } from "../sokin/AnnounceCard";
 import { MediaViewer, CommentsDrawer, type CommentProfileState, type MissingPublicProfile, type ViewerState } from "../sokin/SoKinShared";
 import NotificationCenter from "../../components/NotificationCenter";
 import { useGlobalNotification } from "../../app/providers/GlobalNotificationProvider";
+import { useNotificationBadge } from "../../hooks/useNotificationBadge";
 import TutorialOverlay, { useTutorial, TutorialRelaunchBtn } from "../../components/TutorialOverlay";
 import { homeDesktopSteps } from "../../components/tutorial-steps";
 import { WelcomeOnboarding } from "../onboarding/WelcomeOnboarding";
@@ -69,6 +70,8 @@ export function HomePage() {
   const { t, formatMoneyFromUsdCents, formatPriceLabelFromUsdCents } = useLocaleCurrency();
   const lockedCats = useLockedCategories();
   const { missedCount } = useGlobalNotification();
+  const { count: bdUnread } = useNotificationBadge();
+  const totalUnread = missedCount + bdUnread;
   const tutorial = useTutorial("home-desktop");
   const [showWelcome, setShowWelcome] = useState(() => !localStorage.getItem(SK_WELCOME_ONBOARDING_DONE));
   const [ncOpen, setNcOpen] = useState(false);
@@ -724,7 +727,7 @@ export function HomePage() {
               <div className="h-notif-wrap" ref={notifRef} style={{ position: 'relative' }}>
                 <button type="button" className="h-action-btn h-action-btn--notif" aria-label={t('home.notifications')} title={t('home.notifications')} onClick={() => setNcOpen(true)}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-                  {missedCount > 0 && <span className="nc-badge">{missedCount}</span>}
+                  {totalUnread > 0 && <span className="nc-badge">{totalUnread > 99 ? '99+' : totalUnread}</span>}
                 </button>
               </div>
               <NotificationCenter open={ncOpen} onClose={() => setNcOpen(false)} />

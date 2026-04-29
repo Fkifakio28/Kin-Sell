@@ -8,6 +8,12 @@ import { requireNoRestriction } from "../../shared/middleware/trust-guard.middle
 import { Role } from "../../types/roles.js";
 import * as negotiationsService from "./negotiations.service.js";
 import { sendPushToUser } from "../notifications/push.service.js";
+import {
+  emitNegotiationReceived,
+  emitNegotiationCountered,
+  emitNegotiationAccepted,
+  emitNegotiationRefused,
+} from "../notifications/notification.events.js";
 import { emitToUsers, isUserOnline } from "../messaging/socket.js";
 import { requireIa } from "../../shared/billing/subscription-guard.js";
 
@@ -144,13 +150,17 @@ router.post(
   asyncHandler(async (request: AuthenticatedRequest, response) => {
     const payload = createSchema.parse(request.body);
     const data = await negotiationsService.createNegotiation(request.auth!.userId, payload);
-    // Push notify seller about new negotiation
-    if (data.sellerUserId && data.sellerUserId !== request.auth!.userId && !isUserOnline(data.sellerUserId)) {
-      void sendPushToUser(data.sellerUserId, {
-        title: "Kin-Sell • 🤝 Marchandage",
-        body: `Un acheteur propose un prix pour « ${data.listing?.title ?? "votre article"} »`,
-        tag: `nego-${data.id}`,
-        data: { type: "negotiation", negotiationId: data.id, url: "/account?tab=commandes" },
+    // Notif unifiée (BD + Socket + Push + Email) pour le vendeur
+    if (data.sellerUserId && data.sellerUserId !== request.auth!.userId) {
+      const lastOffer = data.offers?.[data.offers.length - 1];
+      void emitNegotiationReceived({
+        negotiationId: data.id,
+        buyerUserId: data.buyerUserId,
+        sellerUserId: data.sellerUserId,
+        listingTitle: data.listing?.title,
+        proposedPriceUsdCents: lastOffer?.priceUsdCents,
+        quantity: data.quantity,
+        message: lastOffer?.message ?? undefined,
       });
     }
     emitNegotiationUpdated(data, "CREATED", request.auth!.userId);
@@ -199,12 +209,16 @@ router.post(
       minBuyers: z.coerce.number().int().min(2).max(50).optional()
     }).parse(request.body);
     const data = await negotiationsService.createBundleNegotiation(request.auth!.userId, payload);
-    if (data.sellerUserId && data.sellerUserId !== request.auth!.userId && !isUserOnline(data.sellerUserId)) {
-      void sendPushToUser(data.sellerUserId, {
-        title: "📦 Offre lot — Marchandage",
-        body: `Un acheteur propose un prix groupé pour ${(data as any).bundle?.items?.length ?? 0} articles`,
-        tag: `nego-bundle-${data.id}`,
-        data: { type: "negotiation", negotiationId: data.id },
+    if (data.sellerUserId && data.sellerUserId !== request.auth!.userId) {
+      const itemsCount = (data as any).bundle?.items?.length ?? 0;
+      const lastOffer = data.offers?.[data.offers.length - 1];
+      void emitNegotiationReceived({
+        negotiationId: data.id,
+        buyerUserId: data.buyerUserId,
+        sellerUserId: data.sellerUserId,
+        listingTitle: `Lot de ${itemsCount} articles`,
+        proposedPriceUsdCents: lastOffer?.priceUsdCents,
+        message: lastOffer?.message ?? undefined,
       });
     }
     emitNegotiationUpdated(data, "BUNDLE_CREATED", request.auth!.userId);
@@ -261,7 +275,7 @@ router.post(
       message: z.string().max(500).optional()
     }).parse(request.body);
     const data = await negotiationsService.joinGroupNegotiation(request.auth!.userId, request.params.groupId, payload);
-    // Push notify seller
+    // Notif unifiée au vendeur (sans email pour cet événement secondaire)
     if (data.sellerUserId && data.sellerUserId !== request.auth!.userId && !isUserOnline(data.sellerUserId)) {
       void sendPushToUser(data.sellerUserId, {
         title: "👥 Nouveau membre — Marchandage groupé",
@@ -292,16 +306,30 @@ router.post(
   asyncHandler(async (request: AuthenticatedRequest, response) => {
     const payload = respondSchema.parse(request.body);
     const data = await negotiationsService.respondToNegotiation(request.auth!.userId, request.params.negotiationId, payload);
-    // Push notify the other party
+    // Notif unifiée (BD + Socket + Push + Email) selon l'action
     const targetUserId = data.buyerUserId === request.auth!.userId ? data.sellerUserId : data.buyerUserId;
-    if (targetUserId && !isUserOnline(targetUserId)) {
-      const actionLabels: Record<string, string> = { ACCEPT: "acceptée ✅", REFUSE: "refusée ❌", COUNTER: "contre-offre 🔄" };
-      void sendPushToUser(targetUserId, {
-        title: "🤝 Marchandage — " + (actionLabels[payload.action] ?? payload.action),
-        body: `Réponse sur ${data.listing?.title ?? "un article"}`,
-        tag: `nego-${data.id}`,
-        data: { type: "negotiation", negotiationId: data.id },
-      });
+    if (targetUserId) {
+      const lastOffer = data.offers?.[data.offers.length - 1];
+      const previousOffer = data.offers && data.offers.length >= 2 ? data.offers[data.offers.length - 2] : undefined;
+      const baseInput = {
+        negotiationId: data.id,
+        buyerUserId: data.buyerUserId,
+        sellerUserId: data.sellerUserId,
+        listingTitle: data.listing?.title,
+        quantity: data.quantity,
+        finalPriceUsdCents: data.finalPriceUsdCents ?? undefined,
+        proposedPriceUsdCents: lastOffer?.priceUsdCents,
+        previousPriceUsdCents: previousOffer?.priceUsdCents,
+        message: lastOffer?.message ?? undefined,
+        reason: payload.message,
+      };
+      if (payload.action === "ACCEPT") {
+        void emitNegotiationAccepted(baseInput);
+      } else if (payload.action === "REFUSE") {
+        void emitNegotiationRefused(baseInput);
+      } else if (payload.action === "COUNTER") {
+        void emitNegotiationCountered({ ...baseInput, recipientUserId: targetUserId });
+      }
     }
     emitNegotiationUpdated(data, "RESPONDED", request.auth!.userId, {
       respondAction: payload.action,

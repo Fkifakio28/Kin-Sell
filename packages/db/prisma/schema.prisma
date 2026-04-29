@@ -203,6 +203,7 @@ model User {
   negotiationOffers        NegotiationOffer[]
   pushSubscriptions        PushSubscription[]
   fcmTokens                FcmToken[]
+  notifications            Notification[]              @relation("UserNotifications")
   callerCallLogs           CallLog[]                   @relation("CallerCallLogs")
   receiverCallLogs         CallLog[]                   @relation("ReceiverCallLogs")
   adminProfile             AdminProfile?
@@ -406,6 +407,25 @@ model UserPreference {
   aiAdviceEnabled     Boolean      @default(true)
   aiAutoNegoEnabled   Boolean      @default(false)
   aiCommandeEnabled   Boolean      @default(true)
+  // ── Préférences granulaires de notifications (par catégorie / canal) ──
+  notifyOrderEmail        Boolean @default(true)
+  notifyOrderPush         Boolean @default(true)
+  notifyOrderInApp        Boolean @default(true)
+  notifyNegotiationEmail  Boolean @default(true)
+  notifyNegotiationPush   Boolean @default(true)
+  notifyNegotiationInApp  Boolean @default(true)
+  notifyPaymentEmail      Boolean @default(true)
+  notifyPaymentPush       Boolean @default(true)
+  notifyPaymentInApp      Boolean @default(true)
+  notifyMessageEmail      Boolean @default(false)
+  notifyMessagePush       Boolean @default(true)
+  notifyMessageInApp      Boolean @default(true)
+  notifySocialEmail       Boolean @default(false)
+  notifySocialPush        Boolean @default(true)
+  notifySocialInApp       Boolean @default(true)
+  notifySystemEmail       Boolean @default(true)
+  notifySystemPush        Boolean @default(true)
+  notifySystemInApp       Boolean @default(true)
   createdAt           DateTime     @default(now())
   updatedAt           DateTime     @updatedAt
 
@@ -952,6 +972,43 @@ model CallLog {
   @@index([callerUserId, startedAt])
   @@index([receiverUserId, startedAt])
   @@index([conversationId])
+}
+
+// ══════════════════════════════════════════════
+// Notifications persistantes (centre serveur multi-device)
+// ══════════════════════════════════════════════
+enum NotificationCategory {
+  ORDER
+  NEGOTIATION
+  PAYMENT
+  MESSAGE
+  SOCIAL
+  SYSTEM
+  AI
+  PROMO
+}
+
+model Notification {
+  id         String               @id @default(cuid())
+  userId     String
+  category   NotificationCategory
+  type       String               // ex: "order.created", "negotiation.counter"
+  title      String
+  body       String
+  data       Json?                // payload (orderId, negotiationId, etc.)
+  url        String?              // deep link
+  icon       String?
+  readAt     DateTime?
+  archivedAt DateTime?
+  emailSent  Boolean              @default(false)
+  pushSent   Boolean              @default(false)
+  createdAt  DateTime             @default(now())
+
+  user User @relation("UserNotifications", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt, createdAt])
+  @@index([userId, category, createdAt])
+  @@index([userId, archivedAt])
 }
 
 // ══════════════════════════════════════════════

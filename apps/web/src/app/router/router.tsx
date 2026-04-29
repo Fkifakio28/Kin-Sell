@@ -33,6 +33,7 @@ const PricingPage = lazy(() => import("../../features/pricing/PricingPage").then
 const CartPage = lazy(() => import("../../features/cart/CartPage").then(m => ({ default: m.CartPage })));
 const MessagingPage = lazy(() => import("../../features/messaging/MessagingPage").then(m => ({ default: m.MessagingPage })));
 const ProductDetailPage = lazy(() => import("../../features/product-detail/ProductDetailPage").then(m => ({ default: m.ProductDetailPage })));
+const NotificationsPage = lazy(() => import("../../features/notifications/NotificationsPage").then(m => ({ default: m.NotificationsPage })));
 
 /* Param wrappers */
 import { PublicProfileWrapper, BusinessShopWrapper } from "./ParamWrappers";
@@ -87,6 +88,7 @@ export const router = createBrowserRouter([
           { path: "/plans", element: <Navigate to="/forfaits" replace /> },
           { path: "/pricing", element: <Navigate to="/forfaits" replace /> },
           { path: "/cart", element: <CartPage /> },
+          { path: "/notifications", element: <AuthGuard><NotificationsPage /></AuthGuard> },
           { path: "/account", element: <RoleGuard allowed="USER"><UserDashboard /></RoleGuard> },
           { path: "/business/dashboard", element: <RoleGuard allowed="BUSINESS"><BusinessDashboard /></RoleGuard> },
           { path: "/admin/dashboard", element: <RoleGuard allowed={["ADMIN", "SUPER_ADMIN"]}><AdminDashboard /></RoleGuard> },

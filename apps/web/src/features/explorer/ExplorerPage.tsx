@@ -26,6 +26,7 @@ import { ExplorerPageDesktop } from './ExplorerPageDesktop';
 import { RegionLanguageCurrencySelector } from '../../components/RegionLanguageCurrencySelector';
 import NotificationCenter from '../../components/NotificationCenter';
 import { useGlobalNotification } from '../../app/providers/GlobalNotificationProvider';
+import { useNotificationBadge } from '../../hooks/useNotificationBadge';
 import TutorialOverlay, { useTutorial, TutorialRelaunchBtn } from '../../components/TutorialOverlay';
 import { explorerMobileSteps } from '../../components/tutorial-steps';
 import { LongPressPopup, useLongPress, type LongPressArticle } from '../../components/LongPressPopup';
@@ -162,6 +163,8 @@ function ExBottomNav({ visible, createOpen, onToggleCreate }: {
   const { user } = useAuth();
   const dashPath = getDashboardPath(user?.role);
   const { missedCount } = useGlobalNotification();
+  const { count: bdUnread } = useNotificationBadge();
+  const totalUnread = missedCount + bdUnread;
   const [ncOpen, setNcOpen] = useState(false);
 
   return (
@@ -179,7 +182,7 @@ function ExBottomNav({ visible, createOpen, onToggleCreate }: {
       </button>
       <button className="ex-bnav-item" style={{ position: 'relative' }} onClick={() => setNcOpen(true)} aria-label="Notifications">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-        {missedCount > 0 && <span className="nc-badge">{missedCount}</span>}
+        {totalUnread > 0 && <span className="nc-badge">{totalUnread > 99 ? '99+' : totalUnread}</span>}
         <span>Notifs</span>
       </button>
       <Link to={dashPath} className="ex-bnav-item">

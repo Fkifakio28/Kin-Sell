@@ -9,6 +9,7 @@ import { HttpError } from "../../shared/errors/http-error.js";
 import * as orangeMoney from "../../shared/payment/orange-money.provider.js";
 import * as mpesa from "../../shared/payment/mpesa.provider.js";
 import { sendPushToUser } from "../notifications/push.service.js";
+import { emitPaymentSucceeded, emitPaymentFailed } from "../notifications/notification.events.js";
 import { env } from "../../config/env.js";
 import crypto from "node:crypto";
 import { logger } from "../../shared/logger.js";
@@ -172,6 +173,20 @@ export async function checkStatus(userId: string, paymentId: string) {
     // Si succès, finaliser la commande / abonnement relié
     if (newStatus === MomoStatus.SUCCESS) {
       await handlePaymentSuccess(updated);
+    }
+    // Si échec, notifier l'acheteur
+    if (newStatus === MomoStatus.FAILED || newStatus === MomoStatus.EXPIRED) {
+      const order = updated.purpose === "ORDER" && updated.targetId
+        ? await prisma.order.findUnique({ where: { id: updated.targetId }, select: { totalUsdCents: true } })
+        : null;
+      void emitPaymentFailed({
+        paymentId: updated.id,
+        orderId: updated.targetId ?? undefined,
+        buyerUserId: updated.userId,
+        amountUsdCents: order?.totalUsdCents ?? 0,
+        method: "Mobile Money",
+        reason: newStatus === MomoStatus.EXPIRED ? "Délai expiré" : (updated.errorMessage ?? "Paiement refusé"),
+      });
     }
 
     return formatPaymentResponse(updated);
@@ -417,22 +432,14 @@ async function handlePaymentSuccess(record: {
       data: { status: "CONFIRMED" },
     });
 
-    // Notifier l'acheteur (paiement confirmé)
-    sendPushToUser(record.userId, {
-      title: "Kin-Sell • Paiement confirmé ✅",
-      body: "Votre paiement Mobile Money a été accepté.",
-      tag: `momo-${record.id}`,
-      data: { type: "order", orderId: order.id, url: "/account?tab=commandes" },
-    }).catch(() => {});
-
-    // Notifier le vendeur (nouvelle commande)
-    if (order.sellerUserId && order.sellerUserId !== record.userId) {
-      sendPushToUser(order.sellerUserId, {
-        title: "Kin-Sell • 🛒 Commande",
-        body: "Nouvelle commande confirmée par paiement Mobile Money !",
-        tag: `order-momo-${order.id}`,
-        data: { type: "order", orderId: order.id, url: "/account?tab=commandes" },
-      }).catch(() => {});
-    }
+    // Notif unifiée (BD + push + email) acheteur + vendeur
+    void emitPaymentSucceeded({
+      paymentId: record.id,
+      orderId: order.id,
+      buyerUserId: record.userId,
+      sellerUserId: order.sellerUserId ?? undefined,
+      amountUsdCents: order.totalUsdCents,
+      method: "Mobile Money",
+    });
   }
 }

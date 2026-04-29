@@ -78,6 +78,7 @@ import {
   KnowledgeIaPanel,
 } from './sections';
 import { DashboardAdvancedAnalytics } from './sections/DashboardAdvancedAnalytics';
+import { NotificationPreferencesPanel } from '../notifications/NotificationPreferencesPanel';
 import { VariantsEditor, type ProductVariantsValue } from './VariantsEditor';
 import MyBoostsPanel from '../../components/MyBoostsPanel';
 import { LockedOverlay } from '../../components/LockedOverlay';
@@ -4590,6 +4591,7 @@ export function UserDashboard() {
 
             {/* ── Section: Notifications ── */}
             <DashboardNotificationsSection t={t} />
+            <NotificationPreferencesPanel />
 
             {/* ── Section: Sécurité ── */}
             <section className="ud-glass-panel ud-settings-section">
