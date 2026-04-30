@@ -24,7 +24,7 @@ export function BlogPage() {
     let cancelled = false;
     const load = async () => {
       try {
-        const data = await blog.publicPosts({ limit: 12 });
+        const data = await blog.publicPosts({ limit: 50 });
         const posts = Array.isArray(data.posts) ? data.posts : [];
         if (!cancelled) {
           setPosts(posts);

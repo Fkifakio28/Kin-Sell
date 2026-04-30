@@ -85,7 +85,7 @@ router.get(
   asyncHandler(async (req, res) => {
     const params = z.object({
       page: z.coerce.number().int().min(1).optional(),
-      limit: z.coerce.number().int().min(1).max(20).optional(),
+      limit: z.coerce.number().int().min(1).max(100).optional(),
     }).parse(req.query);
 
     const page = params.page ?? 1;

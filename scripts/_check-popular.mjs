@@ -1,0 +1,11 @@
+import { PrismaClient } from "@prisma/client";
+const p = new PrismaClient();
+const totalProfiles = await p.userProfile.count();
+const withListings = await p.userProfile.count({ where: { user: { listings: { some: { isPublished: true, status: "ACTIVE" } } } } });
+const withSales = await p.userProfile.count({ where: { user: { listings: { some: { isPublished: true, status: "ACTIVE" } }, sellerOrders: { some: { status: { not: "CANCELED" } } } } } });
+const totalShops = await p.businessShop.count();
+const shopsActive = await p.businessShop.count({ where: { active: true } });
+const shopsWithListings = await p.businessShop.count({ where: { active: true, business: { listings: { some: { isPublished: true, status: "ACTIVE" } } } } });
+const shopsWithSales = await p.businessShop.count({ where: { active: true, business: { listings: { some: { isPublished: true, status: "ACTIVE" } }, sellerOrders: { some: { status: { not: "CANCELED" } } } } } });
+console.log(JSON.stringify({ totalProfiles, withListings, withSales, totalShops, shopsActive, shopsWithListings, shopsWithSales }, null, 2));
+await p.$disconnect();
