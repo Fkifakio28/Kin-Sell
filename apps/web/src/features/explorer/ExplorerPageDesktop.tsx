@@ -336,7 +336,7 @@ export function ExplorerPageDesktop() {
 
     const loadShops = async () => {
       try {
-        const data = await explorerApi.shops({ limit: 4, city: cityForApi, country: effectiveCountry });
+        const data = await explorerApi.shops({ limit: 4, city: cityForApi, country: effectiveCountry, popularOnly: true });
         setShops(data);
       } catch {
         // silencieux
@@ -345,7 +345,7 @@ export function ExplorerPageDesktop() {
 
     const loadProfiles = async () => {
       try {
-        const data = await explorerApi.profiles({ limit: 4, city: cityForApi, country: effectiveCountry });
+        const data = await explorerApi.profiles({ limit: 4, city: cityForApi, country: effectiveCountry, popularOnly: true });
         setProfiles(data);
       } catch {
         // silencieux

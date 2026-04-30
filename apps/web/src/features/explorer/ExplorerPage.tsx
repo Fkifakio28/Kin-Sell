@@ -433,8 +433,8 @@ function ExplorerPageMobile() {
         if (res.ok) setStats(await res.json() as typeof stats);
       } catch { /* silencieux */ } finally { if (!ctrl.signal.aborted) setIsLoadingStats(false); }
     };
-    const loadShops = async () => { try { setShops(await explorerApi.shops({ limit: 4, city: defaultCity, country: effectiveCountry })); } catch { /* */ } };
-    const loadProfiles = async () => { try { setProfiles(await explorerApi.profiles({ limit: 4, city: defaultCity, country: effectiveCountry })); } catch { /* */ } };
+    const loadShops = async () => { try { setShops(await explorerApi.shops({ limit: 4, city: defaultCity, country: effectiveCountry, popularOnly: true })); } catch { /* */ } };
+    const loadProfiles = async () => { try { setProfiles(await explorerApi.profiles({ limit: 4, city: defaultCity, country: effectiveCountry, popularOnly: true })); } catch { /* */ } };
     loadStats(); loadShops(); loadProfiles();
     listingsApi.getActiveBundles(6).then(setActiveBundles).catch(() => {});
     return () => { ctrl.abort(); };

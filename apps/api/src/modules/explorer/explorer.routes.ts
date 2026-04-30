@@ -36,7 +36,8 @@ router.get(
     const limit = typeof request.query.limit === "string" ? Math.min(Number(request.query.limit) || 4, 50) : 4;
     const city = typeof request.query.city === "string" ? request.query.city : undefined;
     const country = typeof request.query.country === "string" ? request.query.country : undefined;
-    const result = await explorerService.getFeaturedShops(limit, city, country);
+    const popularOnly = request.query.popularOnly === "true" || request.query.popularOnly === "1";
+    const result = await explorerService.getFeaturedShops(limit, city, country, popularOnly);
     response.json(result);
   })
 );
@@ -49,7 +50,8 @@ router.get(
     const limit = typeof request.query.limit === "string" ? Math.min(Number(request.query.limit) || 4, 50) : 4;
     const city = typeof request.query.city === "string" ? request.query.city : undefined;
     const country = typeof request.query.country === "string" ? request.query.country : undefined;
-    const result = await explorerService.getFeaturedProfiles(limit, city, country);
+    const popularOnly = request.query.popularOnly === "true" || request.query.popularOnly === "1";
+    const result = await explorerService.getFeaturedProfiles(limit, city, country, popularOnly);
     response.json(result);
   })
 );

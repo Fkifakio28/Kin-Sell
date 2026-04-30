@@ -27,20 +27,22 @@ export const explorer = {
   stats: () => request<{ categories: number; publicProfiles: number; onlineShops: number }>("/explorer/stats"),
   ads: (params?: { city?: string; country?: string }) =>
     request<unknown>("/explorer/ads", { params }),
-  shops: (params?: { limit?: number; city?: string; country?: string }) =>
+  shops: (params?: { limit?: number; city?: string; country?: string; popularOnly?: boolean }) =>
     request<ExplorerShopApi[]>("/explorer/shops", {
       params: {
         limit: params?.limit ?? 4,
         city: params?.city,
         country: params?.country,
+        ...(params?.popularOnly ? { popularOnly: "true" } : {}),
       },
     }),
-  profiles: (params?: { limit?: number; city?: string; country?: string }) =>
+  profiles: (params?: { limit?: number; city?: string; country?: string; popularOnly?: boolean }) =>
     request<ExplorerProfileApi[]>("/explorer/profiles", {
       params: {
         limit: params?.limit ?? 4,
         city: params?.city,
         country: params?.country,
+        ...(params?.popularOnly ? { popularOnly: "true" } : {}),
       },
     }),
 };

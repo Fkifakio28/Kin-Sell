@@ -354,8 +354,8 @@ export function HomePage() {
     let cancelled = false;
     const load = async () => {
       const [shopsRes, profilesRes, feedRes, blogRes] = await Promise.allSettled([
-        explorerApi.shops({ limit: 3, city: cityForApi, country: effectiveCountry }),
-        explorerApi.profiles({ limit: 3, city: cityForApi, country: effectiveCountry }),
+        explorerApi.shops({ limit: 3, city: cityForApi, country: effectiveCountry, popularOnly: true }),
+        explorerApi.profiles({ limit: 3, city: cityForApi, country: effectiveCountry, popularOnly: true }),
         sokinApi.publicFeed({ limit: 4 }),
         blogApi.publicPosts({ limit: 3 }),
       ]);
