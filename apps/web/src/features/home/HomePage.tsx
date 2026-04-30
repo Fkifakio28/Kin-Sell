@@ -9,6 +9,7 @@ import { useScrollRestore } from "../../utils/useScrollRestore";
 import { useSocket } from "../../hooks/useSocket";
 import { useRealtimeSync } from "../../hooks/useRealtimeSync";
 import { useMarketPreference } from "../../app/providers/MarketPreferenceProvider";
+import { useDataSaver, dsInterval } from "../../app/providers/DataSaverProvider";
 import { NegotiatePopup } from "../negotiations/NegotiatePopup";
 import { BundleNegotiatePopup, type BundleListingItem } from "../negotiations/BundleNegotiatePopup";
 import { getUrgencyLabel } from "../../shared/promo/promo-engine";
@@ -19,11 +20,15 @@ import { InlineSearchResults } from "../../components/InlineSearchResults";
 import { HOME_PRODUCT_CATEGORIES, HOME_SERVICE_CATEGORIES } from "../../shared/constants/categories";
 import { SoKinToastProvider } from "../../components/feedback/SoKinToast";
 import { AnnounceCard, type MediaItem } from "../sokin/AnnounceCard";
-import { MediaViewer, CommentsDrawer, type CommentProfileState, type MissingPublicProfile } from "../sokin/SoKinShared";
+import { MediaViewer, CommentsDrawer, type CommentProfileState, type MissingPublicProfile, type ViewerState } from "../sokin/SoKinShared";
 import NotificationCenter from "../../components/NotificationCenter";
 import { useGlobalNotification } from "../../app/providers/GlobalNotificationProvider";
+import { useNotificationBadge } from "../../hooks/useNotificationBadge";
 import TutorialOverlay, { useTutorial, TutorialRelaunchBtn } from "../../components/TutorialOverlay";
 import { homeDesktopSteps } from "../../components/tutorial-steps";
+import { WelcomeOnboarding } from "../onboarding/WelcomeOnboarding";
+import { SK_WELCOME_ONBOARDING_DONE } from "../../shared/constants/storage-keys";
+import { OnboardingHelpFab } from "../../components/OnboardingHelpFab";
 import "../sokin/sokin.css";
 import "./home.css";
 
@@ -65,7 +70,10 @@ export function HomePage() {
   const { t, formatMoneyFromUsdCents, formatPriceLabelFromUsdCents } = useLocaleCurrency();
   const lockedCats = useLockedCategories();
   const { missedCount } = useGlobalNotification();
+  const { count: bdUnread } = useNotificationBadge();
+  const totalUnread = missedCount + bdUnread;
   const tutorial = useTutorial("home-desktop");
+  const [showWelcome, setShowWelcome] = useState(() => !localStorage.getItem(SK_WELCOME_ONBOARDING_DONE));
   const [ncOpen, setNcOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [isInfoOpen, setIsInfoOpen] = useState(false);
@@ -86,7 +94,7 @@ export function HomePage() {
   const [trendingProfiles, setTrendingProfiles] = useState<ExplorerProfileApi[]>([]);
   const [sokinFeed, setSokinFeed] = useState<SoKinApiFeedPost[]>([]);
   /* So-Kin interaction state (media viewer, comments, contact) */
-  const [viewerItem, setViewerItem] = useState<MediaItem | null>(null);
+  const [viewerItem, setViewerItem] = useState<ViewerState | null>(null);
   const [openCommentsPostId, setOpenCommentsPostId] = useState<string | null>(null);
   const [commentsByPost, setCommentsByPost] = useState<Record<string, SoKinApiComment[]>>({});
   const [loadingCommentsPostId, setLoadingCommentsPostId] = useState<string | null>(null);
@@ -107,8 +115,10 @@ export function HomePage() {
   const sokinTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   void sokinTimer; // kept for compatibility
   const { isLoggedIn, user, logout } = useAuth();
-  const { effectiveCountry, getCountryConfig } = useMarketPreference();
+  const { effectiveCountry, getCountryConfig, isGlobalScope } = useMarketPreference();
+  const { lowBandwidth } = useDataSaver();
   const defaultCity = getCountryConfig(effectiveCountry).defaultCity;
+  const cityForApi = isGlobalScope ? undefined : defaultCity;
   const { on, off } = useSocket();
   const navigate = useNavigate();
   const articleHover = useHoverPopup<ArticleHoverData>();
@@ -311,7 +321,7 @@ export function HomePage() {
     let cancelled = false;
     const loadType = async (type: 'PRODUIT' | 'SERVICE', limit: number) => {
       // Try with city + country
-      let results = await listingsApi.latest({ type, city: defaultCity, country: effectiveCountry, limit }).catch(() => []);
+      let results = await listingsApi.latest({ type, city: cityForApi, country: effectiveCountry, limit }).catch(() => []);
       if (results.length > 0) return results;
       // Fallback: country only (no city filter)
       results = await listingsApi.latest({ type, country: effectiveCountry, limit }).catch(() => []);
@@ -337,15 +347,15 @@ export function HomePage() {
     };
     void load();
     return () => { cancelled = true; };
-  }, [defaultCity, effectiveCountry]);
+  }, [defaultCity, effectiveCountry, cityForApi]);
 
   // Load sidebar data: trending shops, profiles, So-Kin feed
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
       const [shopsRes, profilesRes, feedRes, blogRes] = await Promise.allSettled([
-        explorerApi.shops({ limit: 3, city: defaultCity, country: effectiveCountry }),
-        explorerApi.profiles({ limit: 3, city: defaultCity, country: effectiveCountry }),
+        explorerApi.shops({ limit: 3, city: cityForApi, country: effectiveCountry }),
+        explorerApi.profiles({ limit: 3, city: cityForApi, country: effectiveCountry }),
         sokinApi.publicFeed({ limit: 4 }),
         blogApi.publicPosts({ limit: 3 }),
       ]);
@@ -356,9 +366,14 @@ export function HomePage() {
       if (blogRes.status === 'fulfilled') setBlogPosts(blogRes.value.posts);
     };
     void load();
-    const poll = setInterval(() => { void load(); }, 120_000); // refresh sidebar every 2min
+    // Sidebar refresh : 2min normal / 5min en mode économie, suspend si onglet caché.
+    const intervalMs = dsInterval(120_000, 300_000, lowBandwidth);
+    const poll = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      void load();
+    }, intervalMs);
     return () => { cancelled = true; clearInterval(poll); };
-  }, [defaultCity, effectiveCountry]);
+  }, [defaultCity, effectiveCountry, lowBandwidth, cityForApi]);
 
   // Load cart, seller stats, last buyer order
   useEffect(() => {
@@ -410,9 +425,14 @@ export function HomePage() {
       } catch { /* ignore */ }
     };
     void loadDash();
-    const poll = setInterval(() => { void loadDash(); }, 180_000); // fallback 3min (socket couvre le temps réel)
+    // Dashboard fallback : 3min normal / 6min en mode économie (socket couvre le temps réel).
+    const intervalMs = dsInterval(180_000, 360_000, lowBandwidth);
+    const poll = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      void loadDash();
+    }, intervalMs);
     return () => { cancelled = true; clearInterval(poll); };
-  }, [isLoggedIn]);
+  }, [isLoggedIn, lowBandwidth]);
 
   /* ── Realtime: orders/negotiations/cart events → resync dashboard sur reconnexion ── */
   useRealtimeSync({
@@ -556,6 +576,10 @@ export function HomePage() {
   };
 
   const navigateToArticle = (p: PublicListing) => {
+    if (p.id) {
+      navigate(`/listing/${p.id}`);
+      return;
+    }
     if (p.owner.username) {
       navigate(`/user/${p.owner.username}#listing-${p.id}`);
     } else {
@@ -704,7 +728,7 @@ export function HomePage() {
               <div className="h-notif-wrap" ref={notifRef} style={{ position: 'relative' }}>
                 <button type="button" className="h-action-btn h-action-btn--notif" aria-label={t('home.notifications')} title={t('home.notifications')} onClick={() => setNcOpen(true)}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-                  {missedCount > 0 && <span className="nc-badge">{missedCount}</span>}
+                  {totalUnread > 0 && <span className="nc-badge">{totalUnread > 99 ? '99+' : totalUnread}</span>}
                 </button>
               </div>
               <NotificationCenter open={ncOpen} onClose={() => setNcOpen(false)} />
@@ -755,7 +779,7 @@ export function HomePage() {
             title={t('home.homeAria')}
             style={{ cursor: 'pointer' }}
           >
-            <img src="/assets/kin-sell/logo-kinsell.png" alt="Kin-Sell" />
+            <img src="/assets/kin-sell/logo.png" alt="Kin-Sell" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
           </div>
         </div>
       </header>
@@ -1064,8 +1088,8 @@ export function HomePage() {
               <div className="h-articles-grid">
                 {liveServices.map((s) => (
                   <div key={s.id} className="h-article-card h-article-card--svc glass-card" role="button" tabIndex={0}
-                    onClick={() => { if (s.owner.username) navigate(`/user/${s.owner.username}#listing-${s.id}`); else navigate('/explorer?type=services'); }}
-                    onKeyDown={(e) => { if (e.key === 'Enter') { if (s.owner.username) navigate(`/user/${s.owner.username}#listing-${s.id}`); else navigate('/explorer?type=services'); } }}
+                    onClick={() => { navigate(`/listing/${s.id}`); }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { navigate(`/listing/${s.id}`); } }}
                     onMouseEnter={(e) => articleHover.handleMouseEnter({ title: s.title, description: s.description, price: formatPriceLabelFromUsdCents(s.promoActive && s.promoPriceUsdCents != null ? s.promoPriceUsdCents : s.priceUsdCents), sellerName: s.owner.displayName || t("common.seller") }, e)}
                     onMouseLeave={articleHover.handleMouseLeave}
                   >
@@ -1127,7 +1151,7 @@ export function HomePage() {
                           post={post}
                           t={t}
                           isLoggedIn={isLoggedIn}
-                          onMediaClick={(item) => setViewerItem(item)}
+                          onMediaClick={(items, idx) => setViewerItem({ items, index: idx })}
                           isCommentsOpen={openCommentsPostId === post.id}
                           onOpenComments={() => handleOpenComments(post.id)}
                           onContact={() => void handleSokinContact(post)}
@@ -1288,7 +1312,7 @@ export function HomePage() {
       ) : null}
 
       {/* So-Kin Media Viewer */}
-      {viewerItem && <MediaViewer item={viewerItem} onClose={() => setViewerItem(null)} />}
+      {viewerItem && <MediaViewer items={viewerItem.items} startIndex={viewerItem.index} onClose={() => setViewerItem(null)} />}
 
       {/* So-Kin Comments Drawer */}
       <CommentsDrawer
@@ -1313,6 +1337,9 @@ export function HomePage() {
 
       <TutorialOverlay pageKey="home-desktop" steps={homeDesktopSteps} open={tutorial.isOpen} onClose={tutorial.close} />
       {!tutorial.isOpen && <TutorialRelaunchBtn reset={tutorial.reset} start={tutorial.start} />}
+      <OnboardingHelpFab />
+
+      {showWelcome && <WelcomeOnboarding onClose={() => setShowWelcome(false)} />}
     </div>
   );
 }

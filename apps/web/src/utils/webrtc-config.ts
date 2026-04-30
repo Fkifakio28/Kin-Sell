@@ -66,8 +66,8 @@ export const AUDIO_CONSTRAINTS: MediaTrackConstraints = {
   sampleRate: 48000,
 };
 
-// 128 kbps Opus (up from 64 kbps) — améliore nettement la clarté vocale
-export const AUDIO_BITRATE = 128_000;
+// 48 kbps Opus — bon compromis clarté / bande passante pour réseaux Kinshasa
+export const AUDIO_BITRATE = 48_000;
 
 /* ── Quality Thresholds ── */
 export const QUALITY_POOR = { lossRate: 0.12, minFps: 12, maxRtt: 0.8 } as const;

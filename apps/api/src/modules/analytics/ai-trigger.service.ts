@@ -18,6 +18,121 @@ import { prisma } from "../../shared/db/prisma.js";
 import { getMarketMedian, computePricePosition } from "../../shared/market/market-shared.js";
 import { HttpError } from "../../shared/errors/http-error.js";
 import { computeSellerProfile, generateSmartOffers, type SellerProfile, type SmartOffer } from "../ads/ai-ads-engine.service.js";
+import { logger } from "../../shared/logger.js";
+import { selectIncentiveForUser, emitGrowthGrant } from "../incentives/incentive.service.js";
+import { sendCouponIncentiveMessage, sendGrowthGrantMessage } from "../ads/ia-messenger-promo.service.js";
+
+// ─────────────────────────────────────────────
+// Incentive branching — idempotent per event
+// ─────────────────────────────────────────────
+
+async function hasRecentIncentiveForEvent(userId: string, eventKey: string): Promise<boolean> {
+  const existing = await prisma.growthIncentiveEvent.findFirst({
+    where: {
+      userId,
+      metadata: { path: ["eventKey"], equals: eventKey },
+    },
+  });
+  return !!existing;
+}
+
+/**
+ * Tente d'attacher un coupon incentive au moment d'un trigger IA ADS.
+ * Gate 1/10, quotas, etc. sont gérés par selectIncentiveForUser.
+ * Retourne les données à enrichir dans actionData, ou null.
+ */
+async function tryAttachIncentiveCoupon(
+  userId: string,
+  eventKey: string,
+  segment?: "STANDARD" | "TESTER",
+): Promise<{ couponCode: string; discountPercent: number; expiresAt: Date } | null> {
+  if (await hasRecentIncentiveForEvent(userId, eventKey)) return null;
+  try {
+    const result = await selectIncentiveForUser(userId, { segment });
+    if (!result) return null;
+    // Log idempotency marker
+    await prisma.growthIncentiveEvent.create({
+      data: {
+        grantId: null as any, // no grant for coupon-only
+        userId,
+        eventType: "coupon_attached",
+        metadata: { eventKey, couponCode: result.couponCode },
+      },
+    });
+    return { couponCode: result.couponCode, discountPercent: result.discountPercent, expiresAt: result.expiresAt };
+  } catch (err) {
+    logger.warn({ err, userId, eventKey }, "[AI-Trigger] Erreur incentive coupon");
+    return null;
+  }
+}
+
+/**
+ * Tente d'émettre un growth grant CPC/CPI/CPA au moment d'un trigger.
+ * Gate 1/10, quotas gérés par emitGrowthGrant.
+ */
+async function tryEmitGrowthGrant(
+  userId: string,
+  kind: "CPC" | "CPI" | "CPA",
+  eventKey: string,
+  metadata?: Record<string, unknown>,
+): Promise<{ grantId: string; grantKind: string; discountPercent: number | null; expiresAt: Date } | null> {
+  if (await hasRecentIncentiveForEvent(userId, eventKey)) return null;
+  try {
+    const result = await emitGrowthGrant(userId, kind, { metadata: { ...metadata, eventKey } });
+    if (!result) return null;
+    return { grantId: result.grantId, grantKind: result.kind, discountPercent: result.discountPercent, expiresAt: result.expiresAt };
+  } catch (err) {
+    logger.warn({ err, userId, kind, eventKey }, "[AI-Trigger] Erreur growth grant");
+    return null;
+  }
+}
+
+type CouponIncentiveData = { couponCode: string; discountPercent: number; expiresAt: Date };
+type GrantIncentiveData = { grantId: string; grantKind: string; discountPercent: number | null; expiresAt: Date };
+
+/**
+ * Attache coupon + grant en parallèle, puis notifie via IA Messager.
+ * Factorise la logique dupliquée dans chaque trigger.
+ */
+async function attachAndNotifyIncentives(
+  userId: string,
+  eventKey: string,
+  grantKind: "CPC" | "CPI" | "CPA" | null,
+  trigger: string,
+): Promise<{ coupon: CouponIncentiveData | null; grant: GrantIncentiveData | null }> {
+  const [coupon, grant] = await Promise.all([
+    tryAttachIncentiveCoupon(userId, eventKey),
+    grantKind ? tryEmitGrowthGrant(userId, grantKind, eventKey, { source: trigger }) : Promise.resolve(null),
+  ]);
+
+  if (coupon || grant) {
+    try {
+      if (coupon) await sendCouponIncentiveMessage(userId, coupon.couponCode, coupon.discountPercent, coupon.expiresAt, trigger);
+      if (grant) await sendGrowthGrantMessage(userId, grant.grantId, grant.grantKind, grant.discountPercent, trigger);
+    } catch (err) {
+      logger.warn({ err, userId, trigger }, "[AI-Trigger] Messenger notification failed");
+    }
+  }
+  return { coupon, grant };
+}
+
+/** Enrichit actionData avec les données incentive (coupon + grant). */
+function enrichActionData(
+  base: Record<string, unknown>,
+  coupon: CouponIncentiveData | null,
+  grant: GrantIncentiveData | null,
+): Record<string, unknown> {
+  return {
+    ...base,
+    ...(coupon ? { couponCode: coupon.couponCode, discountPercent: coupon.discountPercent, couponExpiresAt: coupon.expiresAt } : {}),
+    ...(grant ? { grantId: grant.grantId, grantKind: grant.grantKind, grantDiscountPercent: grant.discountPercent } : {}),
+  };
+}
+
+/** Ajoute le code promo au message si coupon distribué. */
+function appendCouponToMessage(message: string, coupon: CouponIncentiveData | null): string {
+  return coupon ? `${message}\n\n🎁 Code promo : ${coupon.couponCode} (-${coupon.discountPercent}%)` : message;
+}
 
 // ─────────────────────────────────────────────
 // Helpers
@@ -156,6 +271,11 @@ export async function onListingPublished(userId: string, listingId: string) {
       listingCategory: listing.category,
     });
 
+    // ── Incentive branching : coupon + CPI grant ──
+    const { coupon: couponData, grant: grantData } = await attachAndNotifyIncentives(
+      userId, `listing_published:${listingId}`, "CPI", "LISTING_PUBLISHED",
+    );
+
     const results = [];
     for (const offer of smartOffers) {
       // Anti-spam par triggerType
@@ -167,10 +287,10 @@ export async function onListingPublished(userId: string, listingId: string) {
         accountType: ctx.isBusiness ? "BUSINESS" : "USER",
         triggerType: offer.triggerType,
         title: offer.title,
-        message: offer.message,
+        message: appendCouponToMessage(offer.message, couponData),
         actionType: offer.actionType,
         actionTarget: offer.actionTarget,
-        actionData: offer.actionData,
+        actionData: enrichActionData(offer.actionData ?? {}, couponData, grantData),
         priority: offer.priority,
         expiresInHours: offer.expiresInHours,
       });
@@ -314,6 +434,11 @@ export async function onSaleCompleted(userId: string, orderId: string) {
 
   const results: Array<Awaited<ReturnType<typeof createRecommendation>>> = [];
 
+  // ── Incentive branching : coupon + CPA grant on sale ──
+  const { coupon: couponData, grant: grantData } = await attachAndNotifyIncentives(
+    userId, `sale_completed:${orderId}`, "CPA", "SALE_COMPLETED",
+  );
+
   // ── Moteur intelligent : profiler le vendeur et générer des offres adaptées ──
   const profile = await computeSellerProfile(userId);
   if (profile) {
@@ -327,15 +452,16 @@ export async function onSaleCompleted(userId: string, orderId: string) {
         accountType: ctx.isBusiness ? "BUSINESS" : "USER",
         triggerType: offer.triggerType,
         title: offer.title,
-        message: offer.message,
+        message: appendCouponToMessage(offer.message, couponData),
         actionType: offer.actionType,
         actionTarget: offer.actionTarget,
-        actionData: offer.actionData,
+        actionData: enrichActionData(offer.actionData ?? {}, couponData, grantData),
         priority: offer.priority,
         expiresInHours: offer.expiresInHours,
       });
       results.push(rec);
     }
+
     if (results.length > 0) return results;
   }
 
@@ -438,6 +564,11 @@ export async function checkStagnation(userId: string) {
   // ── Moteur intelligent : profiler et proposer l'offre adaptée ──
   const profile = await computeSellerProfile(userId);
   if (profile && profile.hasStagnantListings) {
+    // ── Incentive branching : coupon pour relancer (pas de grant sur stagnation) ──
+    const { coupon: couponData } = await attachAndNotifyIncentives(
+      userId, `stagnation_check:${userId}:${new Date().toISOString().slice(0, 10)}`, null, "STAGNATION_CHECK",
+    );
+
     const smartOffers = await generateSmartOffers(profile, { event: "STAGNATION_CHECK" });
     const results = [];
     for (const offer of smartOffers) {
@@ -449,10 +580,10 @@ export async function checkStagnation(userId: string) {
         accountType: ctx.isBusiness ? "BUSINESS" : "USER",
         triggerType: offer.triggerType,
         title: offer.title,
-        message: offer.message,
+        message: appendCouponToMessage(offer.message, couponData),
         actionType: offer.actionType,
         actionTarget: offer.actionTarget,
-        actionData: offer.actionData,
+        actionData: enrichActionData(offer.actionData ?? {}, couponData, null),
         priority: offer.priority,
         expiresInHours: offer.expiresInHours,
       });
@@ -541,6 +672,11 @@ export async function runPeriodicSmartCheck(userId: string) {
   const smartOffers = await generateSmartOffers(profile, { event: "PERIODIC" });
   const results = [];
 
+  // ── Incentive branching : coupon + CPC grant ──
+  const { coupon: couponData, grant: grantData } = await attachAndNotifyIncentives(
+    userId, `periodic_check:${userId}:${new Date().toISOString().slice(0, 10)}`, "CPC", "PERIODIC",
+  );
+
   for (const offer of smartOffers) {
     if (await hasRecentRecommendation(userId, offer.triggerType, 168)) continue;
     const rec = await createRecommendation({
@@ -550,10 +686,10 @@ export async function runPeriodicSmartCheck(userId: string) {
       accountType: ctx.isBusiness ? "BUSINESS" : "USER",
       triggerType: offer.triggerType,
       title: offer.title,
-      message: offer.message,
+      message: appendCouponToMessage(offer.message, couponData),
       actionType: offer.actionType,
       actionTarget: offer.actionTarget,
-      actionData: offer.actionData,
+      actionData: enrichActionData(offer.actionData ?? {}, couponData, grantData),
       priority: offer.priority,
       expiresInHours: offer.expiresInHours,
     });

@@ -122,7 +122,7 @@ export const TutorialOverlay: FC<TutorialOverlayProps> = ({ pageKey, steps, open
   const [tooltipPos, setTooltipPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
   const [placement, setPlacement] = useState<Exclude<TutorialPlacement, "auto">>("bottom");
   const [visible, setVisible] = useState(false);
-  const [dontShow, setDontShow] = useState(false);
+
 
   const tooltipRef = useRef<HTMLDivElement>(null);
   const prevBtnRef = useRef<HTMLButtonElement>(null);
@@ -191,15 +191,13 @@ export const TutorialOverlay: FC<TutorialOverlayProps> = ({ pageKey, steps, open
     };
   }, [visible, updatePosition]);
 
-  // Fermeture
+  // Fermeture — toujours marquer comme vu
   const close = useCallback(() => {
-    if (dontShow) {
-      try { localStorage.setItem(LS_PREFIX + pageKey, "1"); } catch {}
-    }
+    try { localStorage.setItem(LS_PREFIX + pageKey, "1"); } catch {}
     setVisible(false);
     setTargetRect(null);
     onClose();
-  }, [dontShow, pageKey, onClose]);
+  }, [pageKey, onClose]);
 
   // Clavier
   useEffect(() => {
@@ -327,14 +325,6 @@ export const TutorialOverlay: FC<TutorialOverlayProps> = ({ pageKey, steps, open
 
         {/* Contrôles */}
         <div className="tuto-controls">
-          <label className="tuto-dontshow">
-            <input
-              type="checkbox"
-              checked={dontShow}
-              onChange={(e) => setDontShow(e.target.checked)}
-            />
-            <span>Ne plus afficher</span>
-          </label>
           <div className="tuto-btns">
             {currentIndex > 0 && (
               <button ref={prevBtnRef} className="tuto-btn tuto-btn--prev" onClick={goPrev}>
@@ -355,20 +345,53 @@ export const TutorialOverlay: FC<TutorialOverlayProps> = ({ pageKey, steps, open
 /* ── Hook utilitaire ── */
 
 /**
+ * Compteur de sessions — incrémenté une seule fois par chargement d'app.
+ * Permet de ne déclencher les tutos qu'après N sessions.
+ */
+const LS_SESSION_KEY = "ks-session-count";
+const SESSION_THRESHOLD = 3;   // ne rien montrer avant la 3e session
+const AUTO_DELAY_MS = 8000;    // 8 s d'inactivité sur la page avant d'afficher
+
+let sessionCounted = false;
+function incrementSessionCount() {
+  if (sessionCounted) return;
+  sessionCounted = true;
+  try {
+    const count = parseInt(localStorage.getItem(LS_SESSION_KEY) || "0", 10);
+    localStorage.setItem(LS_SESSION_KEY, String(count + 1));
+  } catch {}
+}
+
+/**
  * Hook pour gérer le tutoriel par page.
- * - Auto-lance au premier rendu si jamais vu
- * - Offre `start()` pour relancer manuellement
+ * Déclencheurs intelligents :
+ *  1. Jamais avant la 3e session d'utilisation
+ *  2. Délai de 8 s sur la page (l'utilisateur a le temps de s'orienter)
+ *  3. Maximum 1 tuto auto-déclenché par session (pas de bombardement)
+ *  4. Le bouton "?" permet toujours de relancer manuellement
  */
 export function useTutorial(pageKey: string) {
   const [isOpen, setIsOpen] = useState(false);
 
   useEffect(() => {
+    incrementSessionCount();
     try {
-      if (!localStorage.getItem(LS_PREFIX + pageKey)) {
-        // Premier lancement : délai pour laisser la page charger
-        const t = setTimeout(() => setIsOpen(true), 1200);
-        return () => clearTimeout(t);
-      }
+      // Déjà vu → on ne re-montre pas automatiquement
+      if (localStorage.getItem(LS_PREFIX + pageKey)) return;
+
+      // Pas assez de sessions → trop tôt, on laisse explorer
+      const count = parseInt(localStorage.getItem(LS_SESSION_KEY) || "0", 10);
+      if (count < SESSION_THRESHOLD) return;
+
+      // Déjà montré un tuto cette session → pas de bombardement
+      if (sessionStorage.getItem("ks-tuto-shown-session")) return;
+
+      // Afficher après 8 s d'inactivité sur la page
+      const t = setTimeout(() => {
+        setIsOpen(true);
+        try { sessionStorage.setItem("ks-tuto-shown-session", "1"); } catch {}
+      }, AUTO_DELAY_MS);
+      return () => clearTimeout(t);
     } catch {}
   }, [pageKey]);
 

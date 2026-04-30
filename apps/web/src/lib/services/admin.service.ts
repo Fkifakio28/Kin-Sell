@@ -192,6 +192,12 @@ export type BlogAnalytics = {
   categories: Array<{ category: string; count: number }>;
 };
 
+export type BlogGenerateResult = {
+  created: number;
+  ids: string[];
+  source: string;
+};
+
 export type AdminAdOffer = {
   id: string;
   name: string;
@@ -517,6 +523,8 @@ export const admin = {
     tags?: string[]; language?: string; metaTitle?: string; metaDescription?: string; status?: string;
   }) =>
     request<AdminBlogPost>("/admin/blog", { method: "POST", body }),
+  generateBlogAnnouncements: (body?: { count?: number }) =>
+    request<BlogGenerateResult>("/admin/blog/generate-announcements", { method: "POST", body: body ?? {} }),
   updateBlogPost: (id: string, body: Record<string, unknown>) =>
     request<AdminBlogPost>(`/admin/blog/${encodeURIComponent(id)}`, { method: "PATCH", body }),
   deleteBlogPost: (id: string) =>
@@ -727,11 +735,76 @@ export const admin = {
     request<unknown>("/admin/ia/ads/create", { method: "POST", body }),
 
   // ── IA Message: send promo ──
-  iaMessageSend: (body: { recipientIds: string[]; channel: "EMAIL" | "PUSH"; subject: string; body: string; reason?: string }) =>
+  iaMessageSend: (body: { recipientIds: string[]; channel: "EMAIL" | "PUSH" | "INTERNAL"; subject: string; body: string; reason?: string }) =>
     request<{ ok: boolean; sent: number; total: number }>("/admin/ia/messages/send", { method: "POST", body }),
   iaMessageTargetUsers: (params?: { search?: string; role?: string; limit?: number }) =>
     request<{ users: IaTargetUser[] }>("/admin/ia/messages/target-users", { params: params as Record<string, string | number | undefined> }),
 
+  // ── Chantier J5 : Job Analytics Admin ──
+  jobSnapshots: (params?: {
+    country?: string;
+    countryCode?: string;
+    city?: string;
+    category?: string;
+    onlyOverride?: boolean;
+    limit?: number;
+    offset?: number;
+  }) =>
+    request<{ items: AdminJobSnapshot[]; total: number; limit: number; offset: number }>(
+      "/admin/analytics/jobs/snapshots",
+      {
+        params: params
+          ? ({
+              ...params,
+              onlyOverride: params.onlyOverride ? "true" : undefined,
+            } as Record<string, string | number | undefined>)
+          : undefined,
+      },
+    ),
+  upsertJobSnapshot: (body: {
+    snapshotDate?: string;
+    country: string;
+    countryCode?: string | null;
+    city?: string | null;
+    category: string;
+    openJobs: number;
+    applicants: number;
+    avgSalaryUsdCents?: number | null;
+    medianSalaryUsdCents?: number | null;
+    topSkills?: string[];
+    trend7dPercent?: number | null;
+    sourceNotes?: string | null;
+  }) =>
+    request<{ snapshot: AdminJobSnapshot }>("/admin/analytics/jobs/snapshots", {
+      method: "POST",
+      body,
+    }),
+  clearJobSnapshotOverride: (id: string, mode: "unflag" | "delete" = "unflag") =>
+    request<{ snapshot?: AdminJobSnapshot }>(
+      `/admin/analytics/jobs/snapshots/${encodeURIComponent(id)}`,
+      { method: "DELETE", params: { mode } },
+    ),
+  refreshJobSnapshots: () =>
+    request<JobSnapshotRefreshReport>("/admin/analytics/jobs/refresh", { method: "POST" }),
+  jobIngestionRuns: (limit?: number) =>
+    request<{ runs: AdminJobIngestionRun[] }>("/admin/analytics/jobs/ingestion-runs", {
+      params: limit ? { limit } : undefined,
+    }),
+  jobGeminiMetrics: () =>
+    request<JobGeminiMetrics>("/admin/analytics/jobs/gemini-metrics"),
+  resetJobGeminiMetrics: () =>
+    request<{ ok: boolean }>("/admin/analytics/jobs/gemini-metrics/reset", { method: "POST" }),
+
+  // K3 — Market data gaps
+  jobDataGaps: (onlyOpen = true, limit = 30) =>
+    request<{ gaps: AdminJobDataGap[]; total: number }>("/admin/analytics/jobs/data-gaps", {
+      params: { onlyOpen: onlyOpen ? "true" : "false", limit },
+    }),
+  resolveJobDataGap: (id: string) =>
+    request<{ gap: AdminJobDataGap }>(
+      `/admin/analytics/jobs/data-gaps/${encodeURIComponent(id)}/resolve`,
+      { method: "POST" },
+    ),
 };
 
 // ── Admin AI/Subscription types ──
@@ -869,6 +942,11 @@ export type MarketIntelligenceData = {
   competition: Array<{ category: string; count: number; share: number }>;
   supplyDemand: Array<{ category: string; city: string; demandScore: number; supplyScore: number; trend: string; avgPrice: number; sampleSize: number }>;
   opportunities: Array<{ category: string; city: string; demandScore: number; supplyScore: number; opportunityScore: number; avgPrice: number; trend: string }>;
+  externalIntelligence?: {
+    available: boolean;
+    forecasts: Array<{ category: string; demandForecast7d: string; pricingAdjustPercent: number; triggers: string[]; confidence: number }>;
+    sourceAttribution: string[];
+  };
 };
 
 export type CaseStudyData = {
@@ -897,6 +975,20 @@ export type CaseStudyData = {
     demandScore: number;
     supplyScore: number;
     opportunityScore: number;
+  };
+  externalIntelligence?: {
+    available: boolean;
+    confidence: number;
+    fusedOpportunityScore: number | null;
+    demandForecast: { sevenDays: string | null; thirtyDays: string | null };
+    pricingAdjustmentPercent: number | null;
+    externalDemand: string | null;
+    externalTrend: string | null;
+    externalPriceRange: { minUsdCents: number; maxUsdCents: number } | null;
+    seasonalNote: string | null;
+    activeTriggers: Array<{ trigger: string; explanation: string; severity: number; recommendedAction: string }>;
+    sourceAttribution: string[];
+    fusionExplanation: string | null;
   };
   recommendations: string[];
   metadata: {
@@ -940,4 +1032,80 @@ export type IaTargetUser = {
   displayName: string;
   city?: string | null;
   country?: string | null;
+};
+
+// ----------------------------------------------
+// CHANTIER J5 � JOB ANALYTICS ADMIN TYPES
+// ----------------------------------------------
+
+export type AdminJobSnapshot = {
+  id: string;
+  snapshotDate: string;
+  country: string;
+  countryCode: string | null;
+  city: string | null;
+  category: string;
+  openJobs: number;
+  applicants: number;
+  saturationIndex: number;
+  avgSalaryUsdCents: number | null;
+  medianSalaryUsdCents: number | null;
+  topSkills: string[];
+  trend7dPercent: number | null;
+  isManualOverride: boolean;
+  overriddenBy: string | null;
+  overriddenAt: string | null;
+  sourceNotes: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type JobSnapshotRefreshReport = {
+  date: string;
+  zonesProcessed: number;
+  zonesCreated: number;
+  zonesUpdated: number;
+  zonesSkippedOverride: number;
+  externalSignalsUsed: number;
+  durationMs: number;
+  errors: string[];
+};
+
+export type AdminJobIngestionRun = {
+  id: string;
+  sourceId: string;
+  runDate: string;
+  status: string;
+  recordsFetched: number;
+  recordsStored: number;
+  errors: number;
+  errorDetails: string | null;
+  latencyMs: number;
+  startedAt: string;
+  completedAt: string | null;
+  source?: { name: string; type: string };
+};
+
+export type JobGeminiMetrics = {
+  totalCalls: number;
+  cached: number;
+  geminiCalled: number;
+  geminiFailed: number;
+  fallback: number;
+  lastResetAt: string;
+};
+
+export type AdminJobDataGap = {
+  id: string;
+  category: string;
+  countryCode: string | null;
+  country: string;
+  city: string | null;
+  scopeResolved: string;
+  requestCount: number;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  resolvedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
 };

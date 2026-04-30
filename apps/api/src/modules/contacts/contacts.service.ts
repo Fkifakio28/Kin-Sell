@@ -7,7 +7,7 @@
  */
 
 import { prisma } from "../../shared/db/prisma.js";
-import { ContactSource } from "@prisma/client";
+import { ContactSource } from "../../shared/db/prisma-enums.js";
 
 // ── Types ──
 
@@ -52,7 +52,7 @@ export async function importPhoneContacts(userId: string, contacts: ImportPhoneC
     // Tenter le matching avec un user existant
     if (!contact.matchedUserId) {
       const matched = await prisma.user.findFirst({
-        where: { phone: { contains: normalized } },
+        where: { phone: { equals: normalized } },
         select: { id: true },
       });
       if (matched && matched.id !== userId) {
@@ -134,7 +134,7 @@ export async function rematchContacts(userId: string) {
 
     if (c.contactPhone) {
       matchedUser = await prisma.user.findFirst({
-        where: { phone: { contains: c.contactPhone } },
+        where: { phone: { equals: c.contactPhone } },
         select: { id: true },
       });
     }

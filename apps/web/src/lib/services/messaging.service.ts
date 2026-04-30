@@ -59,7 +59,7 @@ export type CallLogEntry = {
   callerUserId: string;
   receiverUserId: string;
   callType: "AUDIO" | "VIDEO";
-  status: "MISSED" | "ANSWERED" | "REJECTED" | "NO_ANSWER";
+  status: "MISSED" | "ANSWERED" | "REJECTED" | "NO_ANSWER" | "CANCELLED";
   startedAt: string;
   answeredAt: string | null;
   endedAt: string | null;
@@ -98,4 +98,18 @@ export const messaging = {
 
   callLogs: (cursor?: string) =>
     request<{ callLogs: CallLogEntry[] }>("/messaging/call-logs", { params: cursor ? { cursor } : {} }),
+
+  /** Étape 3 : valide qu'un appel référencé par URL/push/native est encore actif. */
+  getCallState: (callId: string) =>
+    request<{
+      callId: string;
+      conversationId: string;
+      callerUserId: string;
+      receiverUserId: string;
+      callType: "audio" | "video";
+      status: "RINGING" | "ACCEPTED" | "EXPIRED" | "ENDED" | string;
+      isActive: boolean;
+      expiresAt: number | null;
+      now: number;
+    }>(`/messaging/calls/${encodeURIComponent(callId)}/state`),
 };

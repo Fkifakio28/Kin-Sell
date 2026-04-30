@@ -37,16 +37,46 @@ export async function sendFcmToToken(
 ): Promise<boolean> {
   if (!fcmConfigured) return false;
 
+  const notifType = payload.data?.type ?? "default";
+  const channelId = resolveChannelId(notifType);
+  const isCall = notifType === "call";
+
   try {
+    // ── TOUTES les notifications sont data-only ──
+    // Un message FCM avec un champ `notification` est intercepté par Firebase
+    // quand l'app est en background/tuée : Android affiche sa propre notification
+    // basique et onMessageReceived() n'est JAMAIS appelé.
+    // En data-only, onMessageReceived() est TOUJOURS appelé, même app tuée.
+    // → Résultat : MessagingStyle pour messages, fullScreenIntent pour appels,
+    //   sons personnalisés, groupement, LED — tout passe par notre code natif.
+    const ttl = isCall ? 30000 : 86400000;
+    const apnsSound = isCall ? "ringtone.caf" : "default";
+
     await admin.messaging().send({
       token,
-      notification: { title: payload.title, body: payload.body },
-      data: payload.data ?? {},
+      data: {
+        title: payload.title,
+        body: payload.body,
+        channelId,
+        ...(payload.data ?? {}),
+      },
       android: {
         priority: "high",
-        notification: {
-          sound: "default",
-          channelId: "kin-sell-default",
+        ttl,
+      },
+      apns: {
+        payload: {
+          aps: {
+            alert: { title: payload.title, body: payload.body },
+            sound: apnsSound,
+            badge: 1,
+            "mutable-content": 1,
+            "content-available": 1,
+          },
+        },
+        headers: {
+          "apns-priority": "10",
+          "apns-push-type": "alert",
         },
       },
     });
@@ -62,5 +92,19 @@ export async function sendFcmToToken(
     }
     logger.warn({ err, token: token.slice(0, 20) + "..." }, "[FCM] Envoi échoué");
     return false;
+  }
+}
+
+function resolveChannelId(type: string): string {
+  switch (type) {
+    case "message": return "kin-sell-messages-v4";
+    case "call": return "kin-sell-calls-v4";
+    case "order":
+    case "negotiation":
+    case "stock": return "kin-sell-orders-v4";
+    case "like":
+    case "publication":
+    case "sokin": return "kin-sell-social-v4";
+    default: return "kin-sell-default-v4";
   }
 }

@@ -41,7 +41,7 @@ export const PLAN_CATALOG: PlanCatalogItem[] = [
     scope: "USER",
     monthlyPriceUsdCents: 600,
     analyticsTier: "NONE",
-    features: ["BOOST_PROFILE", "BOOST_LISTINGS", "BASIC_ADS", "BETTER_VISIBILITY", "IA_MERCHANT"]
+    features: ["BOOST_PROFILE", "BOOST_LISTINGS", "BASIC_ADS", "BETTER_VISIBILITY", "IA_MERCHANT", "IA_MERCHANT_AUTO"]
   },
   {
     code: "AUTO",
@@ -49,7 +49,7 @@ export const PLAN_CATALOG: PlanCatalogItem[] = [
     scope: "USER",
     monthlyPriceUsdCents: 1200,
     analyticsTier: "NONE",
-    features: ["BOOST_PROFILE", "BOOST_LISTINGS", "IA_ORDER", "AUTO_REPLY", "SALES_AUTOMATION", "IA_MERCHANT"]
+    features: ["BOOST_PROFILE", "BOOST_LISTINGS", "IA_ORDER", "AUTO_REPLY", "SALES_AUTOMATION", "IA_MERCHANT", "IA_MERCHANT_AUTO"]
   },
   {
     code: "PRO_VENDOR",
@@ -57,7 +57,7 @@ export const PLAN_CATALOG: PlanCatalogItem[] = [
     scope: "USER",
     monthlyPriceUsdCents: 2000,
     analyticsTier: "MEDIUM",
-    features: ["IA_ORDER", "AUTO_REPLY", "SALES_AUTOMATION", "ANALYTICS_MEDIUM", "IA_MERCHANT"]
+    features: ["IA_ORDER", "AUTO_REPLY", "SALES_AUTOMATION", "ANALYTICS_MEDIUM", "IA_MERCHANT", "IA_MERCHANT_AUTO", "MARKET_INTEL_BASIC", "MARKET_INTEL_PREMIUM"]
   },
   {
     code: "STARTER",
@@ -73,7 +73,7 @@ export const PLAN_CATALOG: PlanCatalogItem[] = [
     scope: "BUSINESS",
     monthlyPriceUsdCents: 3000,
     analyticsTier: "MEDIUM",
-    features: ["SHOP", "BASIC_VISIBILITY", "BASIC_ADS", "IA_MERCHANT", "IA_ORDER", "ANALYTICS_MEDIUM"]
+    features: ["SHOP", "BASIC_VISIBILITY", "BASIC_ADS", "IA_MERCHANT", "IA_MERCHANT_AUTO", "IA_ORDER", "ANALYTICS_MEDIUM", "MARKET_INTEL_BASIC"]
   },
   {
     code: "SCALE",
@@ -81,7 +81,7 @@ export const PLAN_CATALOG: PlanCatalogItem[] = [
     scope: "BUSINESS",
     monthlyPriceUsdCents: 5000,
     analyticsTier: "PREMIUM",
-    features: ["SHOP", "BASIC_VISIBILITY", "BASIC_ADS", "IA_MERCHANT", "IA_ORDER", "ANALYTICS_PREMIUM"]
+    features: ["SHOP", "BASIC_VISIBILITY", "BASIC_ADS", "IA_MERCHANT", "IA_MERCHANT_AUTO", "IA_ORDER", "ANALYTICS_PREMIUM", "MARKET_INTEL_BASIC", "MARKET_INTEL_PREMIUM", "ARBITRAGE_ENGINE"]
   }
 ];
 
@@ -91,7 +91,7 @@ export const ADDON_CATALOG: AddonCatalogItem[] = [
     name: "IA marchand",
     priceLabel: "3$/mois",
     scope: "ALL",
-    details: ["Aide négociation", "Suggestion prix", "Contre-offres", "Gratuite sur plan utilisateur FREE"]
+    details: ["Aide négociation", "Suggestion prix", "Contre-offres", "Auto-négociation IA", "Gratuite (conseils) sur plan utilisateur FREE"]
   },
   {
     code: "IA_ORDER",

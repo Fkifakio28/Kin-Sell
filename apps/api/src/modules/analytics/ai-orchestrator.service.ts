@@ -16,7 +16,7 @@
  *   → IA Commande optimise conversion
  */
 
-import { CartStatus } from "@prisma/client";
+import { CartStatus } from "../../shared/db/prisma-enums.js";
 import { prisma } from "../../shared/db/prisma.js";
 
 export type IssueSeverity = "INFO" | "WARNING" | "CRITICAL";

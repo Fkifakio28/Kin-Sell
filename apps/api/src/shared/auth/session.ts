@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
-import { SessionStatus } from "@prisma/client";
+import { SessionStatus } from "../db/prisma-enums.js";
 import type { Response } from "express";
 import { env } from "../../config/env.js";
 import { prisma } from "../db/prisma.js";
@@ -96,7 +96,10 @@ export const createSessionTokens = async (input: {
   };
 };
 
-export const rotateSessionTokens = async (refreshToken: string) => {
+export const rotateSessionTokens = async (
+  refreshToken: string,
+  ctx: { ipAddress?: string; userAgent?: string; deviceId?: string } = {}
+) => {
   const payload = verifyRefreshToken(refreshToken);
   const currentHash = hashValue(refreshToken);
 
@@ -127,11 +130,16 @@ export const rotateSessionTokens = async (refreshToken: string) => {
   }
 
   const newRefreshToken = signRefreshToken(session.id);
+  // À la rotation on rafraîchit lastSeenAt + on met à jour IP/UA si fournis
+  // (permet de détecter un takeover si l'IP change brusquement)
   await prisma.userSession.update({
     where: { id: session.id },
     data: {
       refreshTokenHash: hashValue(newRefreshToken),
-      lastSeenAt: new Date()
+      lastSeenAt: new Date(),
+      ...(ctx.ipAddress ? { ipAddress: ctx.ipAddress } : {}),
+      ...(ctx.userAgent ? { userAgent: ctx.userAgent } : {}),
+      ...(ctx.deviceId ? { deviceId: ctx.deviceId } : {})
     }
   });
 
@@ -180,43 +188,35 @@ const COOKIE_ACCESS  = "kin_access";
 const COOKIE_REFRESH = "kin_refresh";
 const COOKIE_SID     = "kin_sid";
 
+/**
+ * Builds cookie options for cross-origin Android WebView compatibility.
+ * Production: sameSite "none" + secure + domain ".kin-sell.com"
+ *   → cookies are sent in cross-origin requests (kin-sell.com → api.kin-sell.com)
+ * Dev: sameSite "lax" (no domain needed for localhost)
+ */
+function cookieOpts(maxAge: number): import("express").CookieOptions {
+  const isProd = env.NODE_ENV === "production";
+  return {
+    httpOnly: true,
+    secure: isProd,
+    sameSite: isProd ? "none" as const : "lax" as const,
+    path: "/",
+    maxAge,
+    ...(env.COOKIE_DOMAIN ? { domain: env.COOKIE_DOMAIN } : {}),
+  };
+}
+
 export function setAuthCookies(
   res: Response,
   tokens: { accessToken: string; refreshToken: string; sessionId: string },
 ) {
-  const secure = env.NODE_ENV === "production";
-  const sameSite: "lax" = "lax";
-
-  res.cookie(COOKIE_ACCESS, tokens.accessToken, {
-    httpOnly: true,
-    secure,
-    sameSite,
-    path: "/",
-    maxAge: parseDurationMs(env.JWT_EXPIRES_IN),
-  });
-
-  res.cookie(COOKIE_REFRESH, tokens.refreshToken, {
-    httpOnly: true,
-    secure,
-    sameSite,
-    path: "/",
-    maxAge: parseDurationMs(env.REFRESH_TOKEN_EXPIRES_IN),
-  });
-
-  res.cookie(COOKIE_SID, tokens.sessionId, {
-    httpOnly: true,
-    secure,
-    sameSite,
-    path: "/",
-    maxAge: parseDurationMs(env.REFRESH_TOKEN_EXPIRES_IN),
-  });
+  res.cookie(COOKIE_ACCESS, tokens.accessToken, cookieOpts(parseDurationMs(env.JWT_EXPIRES_IN)));
+  res.cookie(COOKIE_REFRESH, tokens.refreshToken, cookieOpts(parseDurationMs(env.REFRESH_TOKEN_EXPIRES_IN)));
+  res.cookie(COOKIE_SID, tokens.sessionId, cookieOpts(parseDurationMs(env.REFRESH_TOKEN_EXPIRES_IN)));
 }
 
 export function clearAuthCookies(res: Response) {
-  const secure = env.NODE_ENV === "production";
-  const sameSite: "lax" = "lax";
-  const opts = { httpOnly: true, secure, sameSite, path: "/" } as const;
-
+  const opts = cookieOpts(0);
   res.clearCookie(COOKIE_ACCESS, opts);
   res.clearCookie(COOKIE_REFRESH, opts);
   res.clearCookie(COOKIE_SID, opts);

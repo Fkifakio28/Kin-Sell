@@ -38,13 +38,16 @@ import {
   getUserSocialState,
 } from "./sokin-social.service.js";
 import { emitToAll } from "../messaging/socket.js";
+import { sendPushToUsers } from "../notifications/push.service.js";
 import { rateLimit, RateLimits } from "../../shared/middleware/rate-limit.middleware.js";
+import { spamGuard } from "../../shared/middleware/spam-guard.middleware.js";
 import { trackEvents, VALID_EVENTS, getAuthorTrackingStats, getBoostStatsForPosts, type SoKinEventType } from "./sokin-tracking.service.js";
 import { scorePost, scoreAndPersist, batchRecalculate, getTopBoostCandidates, getTopSocialPosts, getTopBusinessPosts } from "./sokin-scoring.service.js";
 import { analyzePost, getAuthorTips, getAdminOpportunities, dismissTip, acceptTip, batchAnalyze } from "../ads/sokin-ads-advisor.service.js";
 import { requireSoKinAnalytics, requireSoKinAds, requireSoKinAdmin } from "./sokin-gating.service.js";
 
 const isVideoMediaUrl = (value: string) => /\.(mp4|webm|mov|ogg)(\?.*)?$/i.test(value);
+const isAudioMediaUrl = (value: string) => /\.(mp3)(\?.*)?$/i.test(value);
 
 /**
  * Types de publication qui exigent au moins 1 média
@@ -68,6 +71,13 @@ const createPostSchema = z.object({
     .default([])
     .refine((list) => list.filter((url) => isVideoMediaUrl(url)).length <= 2, {
       message: "Maximum 2 vidéos par publication",
+    })
+    .refine((list) => {
+      const hasVideo = list.some((url) => isVideoMediaUrl(url));
+      const hasAudio = list.some((url) => isAudioMediaUrl(url));
+      return !(hasVideo && hasAudio);
+    }, {
+      message: "Une publication ne peut pas contenir une vidéo et un audio en même temps",
     }),
   location: z.string().max(100).optional(),
   tags: z.array(z.string()).default([]).optional(),
@@ -222,6 +232,7 @@ router.post(
   "/posts",
   requireAuth,
   rateLimit(RateLimits.SOKIN_POST),
+  spamGuard("PUBLISH"),
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     const { postType, subject, text, mediaUrls = [], location, scheduledAt, tags = [], hashtags = [], backgroundStyle } = createPostSchema.parse(req.body);
 
@@ -257,6 +268,27 @@ router.post(
       createdAt: post.createdAt.toISOString(),
       sourceUserId: req.auth!.userId,
     });
+
+    // Notifier les followers de l'auteur (via business follows)
+    const { prisma } = await import("../../shared/db/prisma.js");
+    const businesses = await prisma.businessAccount.findMany({ where: { ownerUserId: req.auth!.userId }, select: { id: true } });
+    if (businesses.length > 0) {
+      const followers = await prisma.businessFollow.findMany({
+        where: { businessId: { in: businesses.map(b => b.id) } },
+        select: { userId: true },
+      });
+      const followerIds = followers.map(f => f.userId).filter(id => id !== req.auth!.userId);
+      if (followerIds.length > 0) {
+        const profile = await prisma.userProfile.findUnique({ where: { userId: req.auth!.userId }, select: { displayName: true } });
+        const name = profile?.displayName ?? "Un utilisateur";
+        sendPushToUsers(followerIds, {
+          title: "Kin-Sell • So-Kin 📢",
+          body: `${name} a publié quelque chose`,
+          tag: `sokin-post-${post.id}`,
+          data: { type: "publication", postId: post.id, url: "/sokin" },
+        }).catch(() => {});
+      }
+    }
 
     res.status(201).json(post);
   })
@@ -319,6 +351,13 @@ const updatePostSchema = z.object({
     .max(5, "Maximum 5 médias par publication")
     .refine((list) => list.filter((url) => isVideoMediaUrl(url)).length <= 2, {
       message: "Maximum 2 vidéos par publication",
+    })
+    .refine((list) => {
+      const hasVideo = list.some((url) => isVideoMediaUrl(url));
+      const hasAudio = list.some((url) => isAudioMediaUrl(url));
+      return !(hasVideo && hasAudio);
+    }, {
+      message: "Une publication ne peut pas contenir une vidéo et un audio en même temps",
     })
     .optional(),
   location: z.string().max(100).nullable().optional(),
@@ -460,6 +499,21 @@ router.post(
       createdAt: repost.createdAt.toISOString(),
       sourceUserId: req.auth!.userId,
     });
+
+    // Notifier l'auteur du post original
+    const { prisma } = await import("../../shared/db/prisma.js");
+    const { sendPushToUser } = await import("../notifications/push.service.js");
+    const originalPost = await prisma.soKinPost.findUnique({ where: { id: req.params.id }, select: { authorId: true } });
+    if (originalPost && originalPost.authorId !== req.auth!.userId) {
+      const profile = await prisma.userProfile.findUnique({ where: { userId: req.auth!.userId }, select: { displayName: true } });
+      const name = profile?.displayName ?? "Quelqu'un";
+      sendPushToUser(originalPost.authorId, {
+        title: "Kin-Sell • So-Kin 🔄",
+        body: `${name} a repartagé votre publication`,
+        tag: `repost-${req.params.id}`,
+        data: { type: "sokin", postId: repost.id, url: "/sokin" },
+      }).catch(() => {});
+    }
 
     res.status(201).json(repost);
   })

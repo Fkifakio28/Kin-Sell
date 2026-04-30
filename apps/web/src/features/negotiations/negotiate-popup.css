@@ -351,6 +351,72 @@
 .neg-suggest-pill:active {
   transform: scale(0.93);
 }
+.neg-suggest-pill--ai {
+  background: rgba(111,88,255,0.22);
+  border-color: rgba(111,88,255,0.5);
+  color: #fff;
+}
+.neg-suggest-pill--ai:hover {
+  background: rgba(111,88,255,0.4);
+}
+
+/* ── IA Marchand — Buyer hint panel ── */
+.neg-ai-panel {
+  margin: 10px 0;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(111,88,255,0.08);
+  border: 1px solid rgba(111,88,255,0.2);
+}
+.neg-ai-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--color-accent, #6f58ff);
+}
+.neg-ai-icon { font-size: 18px; }
+.neg-ai-title { flex: 1; }
+.neg-ai-body { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+.neg-ai-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: var(--color-text-secondary, rgba(255,255,255,0.7));
+}
+.neg-ai-suggest-price {
+  color: #4ade80;
+  font-size: 15px;
+}
+.neg-ai-context {
+  font-size: 12px;
+  opacity: 0.8;
+}
+.neg-ai-insight {
+  font-size: 12px;
+  color: var(--color-text-secondary, rgba(255,255,255,0.65));
+  margin: 0;
+  line-height: 1.4;
+}
+.neg-ai-msg-btn {
+  padding: 6px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(111,88,255,0.3);
+  background: rgba(111,88,255,0.1);
+  color: var(--color-accent, #6f58ff);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s;
+  align-self: flex-start;
+}
+.neg-ai-msg-btn:hover {
+  background: rgba(111,88,255,0.25);
+}
 
 /* ── Savings progress bar ── */
 .neg-savings-bar {

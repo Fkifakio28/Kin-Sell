@@ -1,4 +1,37 @@
 User-agent: *
 Allow: /
+Allow: /explorer
+Allow: /services
+Allow: /forfaits
+Allow: /sokin
+
+# Pages privées / authentifiées
+Disallow: /login
+Disallow: /register
+Disallow: /forgot-password
+Disallow: /auth/
+Disallow: /account
+Disallow: /admin/
+Disallow: /business/dashboard
+Disallow: /messaging
+Disallow: /cart
+Disallow: /suspended
+Disallow: /offline
+Disallow: /sokin/dashboard
+Disallow: /sokin/bookmarks
+
+# Paramètres dynamiques (éviter le contenu dupliqué)
+Disallow: /*?*utm_
+Disallow: /*?*ref=
+
+# Bots autorisés explicitement
+User-agent: Googlebot
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+User-agent: GPTBot
+Allow: /
 
 Sitemap: https://kin-sell.com/sitemap.xml

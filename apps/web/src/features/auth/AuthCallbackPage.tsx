@@ -1,12 +1,43 @@
 import { useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
-import { clearAuthSession } from "../../lib/api-client";
+import { API_BASE, clearAuthSession, request } from "../../lib/api-client";
 import { useLocaleCurrency } from "../../app/providers/LocaleCurrencyProvider";
+
+function logOAuthDebug(stage: string, info?: string) {
+  try {
+    fetch(`${API_BASE}/auth/oauth/debug`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      keepalive: true,
+      body: JSON.stringify({
+        stage,
+        source: "auth-callback",
+        info: info ?? "",
+        url: window.location.href,
+        ua: navigator.userAgent,
+        ts: Date.now(),
+      }),
+    }).catch(() => {});
+  } catch {
+    // ignore debug failures
+  }
+}
+
+function redirectByRole(role: string | null) {
+  if (role === "ADMIN" || role === "SUPER_ADMIN") {
+    window.location.replace("/admin/dashboard");
+  } else if (role === "BUSINESS") {
+    window.location.replace("/business/dashboard");
+  } else {
+    window.location.replace("/account");
+  }
+}
 
 /**
  * Page de callback OAuth.
- * L'API sets httpOnly cookies during the redirect — no tokens in URL anymore.
- * We just read metadata (role, authSuccess) and redirect to the appropriate dashboard.
+ * - Web: l'API set httpOnly cookies pendant le redirect, on lit juste les métadonnées.
+ * - App native: on reçoit un appCode éphémère qu'on échange contre des cookies via POST.
  */
 export function AuthCallbackPage() {
   const [searchParams] = useSearchParams();
@@ -20,23 +51,42 @@ export function AuthCallbackPage() {
     const authSuccess = searchParams.get("authSuccess");
     const role = searchParams.get("role");
     const error = searchParams.get("error");
+    const appCode = searchParams.get("appCode");
+
+    logOAuthDebug("callback-start", `authSuccess=${authSuccess ?? ""}; role=${role ?? ""}; error=${error ?? ""}; hasAppCode=${appCode ? "1" : "0"}`);
 
     // Clear any legacy localStorage tokens
     clearAuthSession();
 
     if (error || !authSuccess) {
+      logOAuthDebug("callback-invalid", error ?? "missing authSuccess");
       window.location.replace("/login");
       return;
     }
 
-    // Full page reload pour que AuthProvider bootstrap avec les cookies httpOnly
-    if (role === "ADMIN" || role === "SUPER_ADMIN") {
-      window.location.replace("/admin/dashboard");
-    } else if (role === "BUSINESS") {
-      window.location.replace("/business/dashboard");
-    } else {
-      window.location.replace("/account");
+    // Native app flow: exchange appCode for httpOnly cookies in the WebView
+    if (appCode) {
+      logOAuthDebug("app-exchange-start", `appCode.length=${appCode.length}`);
+      request<{ ok: boolean; role: string }>("/auth/app/exchange", {
+        method: "POST",
+        body: { appCode },
+        headers: { "Content-Type": "application/json" },
+      })
+        .then((res) => {
+          logOAuthDebug("app-exchange-success", `role=${res.role}`);
+          redirectByRole(res.role);
+        })
+        .catch((err: unknown) => {
+          const message = err instanceof Error ? err.message : "exchange failed";
+          logOAuthDebug("app-exchange-failed", message);
+          window.location.replace("/login");
+        });
+      return;
     }
+
+    // Web flow: cookies already set by the redirect
+    logOAuthDebug("web-redirect", `role=${role ?? ""}`);
+    redirectByRole(role);
   }, [searchParams]);
 
   return (
@@ -45,3 +95,4 @@ export function AuthCallbackPage() {
     </div>
   );
 }
+

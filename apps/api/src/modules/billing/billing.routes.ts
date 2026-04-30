@@ -1,10 +1,11 @@
-import { AddonCode } from "@prisma/client";
+import { AddonCode } from "../../shared/db/prisma-enums.js";
 import { Router } from "express";
 import { z } from "zod";
 import { requireAuth, requireRoles, type AuthenticatedRequest } from "../../shared/auth/auth-middleware.js";
 import { asyncHandler } from "../../shared/utils/async-handler.js";
 import { Role } from "../../types/roles.js";
 import * as billingService from "./billing.service.js";
+import * as appleIap from "./apple-iap.service.js";
 import { prisma } from "../../shared/db/prisma.js";
 import express from "express";
 
@@ -103,9 +104,44 @@ router.get(
 
 // Route confirm-deposit supprimée — plus de virement bancaire
 
+// ── Preview coupon (calcul prix final sans rédemption) ──
+const couponPreviewSchema = z.object({
+  code: z.string().min(3).max(30),
+  planCode: z.string().min(2).max(40),
+  billingCycle: z.enum(["MONTHLY", "ONE_TIME"]).default("MONTHLY"),
+});
+
+router.post(
+  "/coupons/preview",
+  requireAuth,
+  asyncHandler(async (request: AuthenticatedRequest, response) => {
+    const { code, planCode, billingCycle } = couponPreviewSchema.parse(request.body);
+    const { previewCoupon } = await import("../incentives/incentive.service.js");
+    const { getPlanOrThrow } = await import("./billing.catalog.js");
+
+    // Résoudre le scope utilisateur
+    const user = await (await import("../../shared/db/prisma.js")).prisma.user.findUnique({
+      where: { id: request.auth!.userId },
+      select: { role: true },
+    });
+    const scope = user?.role === "BUSINESS" ? "BUSINESS" : "USER";
+    const plan = getPlanOrThrow(planCode, scope as "USER" | "BUSINESS");
+    const originalAmountUsdCents = plan.monthlyPriceUsdCents;
+
+    const result = await previewCoupon(
+      request.auth!.userId,
+      code,
+      originalAmountUsdCents,
+      planCode,
+    );
+    response.json(result);
+  })
+);
+
 const paypalCheckoutSchema = z.object({
   planCode: z.string().min(2).max(40),
   billingCycle: z.enum(["MONTHLY", "ONE_TIME"]).default("MONTHLY"),
+  promoCode: z.string().min(3).max(30).optional(),
 });
 
 router.post(
@@ -147,6 +183,31 @@ router.post(
 // L'activation se fait UNIQUEMENT via :
 //   1. PayPal capture automatique (/paypal/capture)
 //   2. Validation admin (/admin/billing/validate-order)
+//   3. Apple IAP verification (/apple/verify)
 // Voir admin.routes.ts pour l'endpoint admin.
+
+// ── Apple In-App Purchase ──────────────────────────────────────────────────
+// Returns Apple product ID mapping so the iOS app knows which product to request
+router.get("/apple/products", (_req, res) => {
+  res.json(appleIap.getAppleProductIds());
+});
+
+// Verify Apple receipt/transaction and activate subscription
+router.post(
+  "/apple/verify",
+  requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const payload = z.object({
+      receiptData: z.string().optional(),
+      transactionJws: z.string().optional(),
+      productId: z.string().optional(),
+    }).refine(d => d.receiptData || d.transactionJws, {
+      message: "receiptData ou transactionJws requis",
+    }).parse(req.body);
+
+    const result = await appleIap.verifyAndActivateApplePurchase(req.auth!.userId, payload);
+    res.json(result);
+  })
+);
 
 export default router;

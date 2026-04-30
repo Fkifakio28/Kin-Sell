@@ -1,4 +1,4 @@
-import { NegotiationStatus } from "@prisma/client";
+import { NegotiationStatus } from "../../shared/db/prisma-enums.js";
 import { Router } from "express";
 import { z } from "zod";
 import { requireAuth, requireRoles, type AuthenticatedRequest } from "../../shared/auth/auth-middleware.js";
@@ -8,6 +8,12 @@ import { requireNoRestriction } from "../../shared/middleware/trust-guard.middle
 import { Role } from "../../types/roles.js";
 import * as negotiationsService from "./negotiations.service.js";
 import { sendPushToUser } from "../notifications/push.service.js";
+import {
+  emitNegotiationReceived,
+  emitNegotiationCountered,
+  emitNegotiationAccepted,
+  emitNegotiationRefused,
+} from "../notifications/notification.events.js";
 import { emitToUsers, isUserOnline } from "../messaging/socket.js";
 import { requireIa } from "../../shared/billing/subscription-guard.js";
 
@@ -52,6 +58,88 @@ const listSchema = z.object({
 
 const router = Router();
 
+// ═══════════════════════════════════════════════════════
+// BOUTIQUE AUTOMATIQUE — Règles auto-négociation par listing
+// (Placé AVANT les routes /:negotiationId pour éviter les conflits de paramètres)
+// ═══════════════════════════════════════════════════════
+
+const autoRulesSchema = z.object({
+  enabled: z.boolean(),
+  minFloorPercent: z.coerce.number().min(30).max(99),
+  maxAutoDiscountPercent: z.coerce.number().min(1).max(50),
+  preferredCounterPercent: z.coerce.number().min(50).max(99),
+  firmness: z.enum(["FLEXIBLE", "BALANCED", "FIRM"]),
+});
+
+/** GET /negotiations/auto-shop/listings — tous les listings du user avec leurs règles auto */
+router.get(
+  "/auto-shop/listings",
+  requireAuth,
+  requireRoles(Role.USER, Role.BUSINESS),
+  asyncHandler(async (request: AuthenticatedRequest, response) => {
+    const { prisma } = await import("../../shared/db/prisma.js");
+    const listings = await prisma.listing.findMany({
+      where: { ownerUserId: request.auth!.userId, status: "ACTIVE" },
+      select: {
+        id: true,
+        title: true,
+        category: true,
+        priceUsdCents: true,
+        imageUrl: true,
+        isNegotiable: true,
+        autoNegoRules: true,
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    response.json(listings);
+  })
+);
+
+/** PUT /negotiations/auto-shop/listings/:listingId/rules — sauvegarder les règles auto */
+router.put(
+  "/auto-shop/listings/:listingId/rules",
+  requireAuth,
+  requireRoles(Role.USER, Role.BUSINESS),
+  asyncHandler(async (request: AuthenticatedRequest, response) => {
+    const rules = autoRulesSchema.parse(request.body);
+    const { prisma } = await import("../../shared/db/prisma.js");
+
+    // Vérifier ownership
+    const listing = await prisma.listing.findFirst({
+      where: { id: request.params.listingId, ownerUserId: request.auth!.userId },
+      select: { id: true },
+    });
+    if (!listing) {
+      response.status(404).json({ error: "Listing introuvable" });
+      return;
+    }
+
+    const updated = await prisma.listing.update({
+      where: { id: listing.id },
+      data: { autoNegoRules: rules },
+      select: { id: true, title: true, autoNegoRules: true },
+    });
+    response.json(updated);
+  })
+);
+
+/** PUT /negotiations/auto-shop/bulk-rules — appliquer les mêmes règles à tous les listings */
+router.put(
+  "/auto-shop/bulk-rules",
+  requireAuth,
+  requireRoles(Role.USER, Role.BUSINESS),
+  asyncHandler(async (request: AuthenticatedRequest, response) => {
+    const rules = autoRulesSchema.parse(request.body);
+    const { prisma } = await import("../../shared/db/prisma.js");
+
+    const result = await prisma.listing.updateMany({
+      where: { ownerUserId: request.auth!.userId, status: "ACTIVE", isNegotiable: true },
+      data: { autoNegoRules: rules },
+    });
+    response.json({ updated: result.count, rules });
+  })
+);
+
 // ── Créer une négociation (acheteur) ──
 router.post(
   "/",
@@ -62,13 +150,17 @@ router.post(
   asyncHandler(async (request: AuthenticatedRequest, response) => {
     const payload = createSchema.parse(request.body);
     const data = await negotiationsService.createNegotiation(request.auth!.userId, payload);
-    // Push notify seller about new negotiation
-    if (data.sellerUserId && data.sellerUserId !== request.auth!.userId && !isUserOnline(data.sellerUserId)) {
-      void sendPushToUser(data.sellerUserId, {
-        title: "🤝 Nouvelle offre de marchandage",
-        body: `Un acheteur propose un prix pour ${data.listing?.title ?? "votre article"}`,
-        tag: `nego-${data.id}`,
-        data: { type: "negotiation", negotiationId: data.id },
+    // Notif unifiée (BD + Socket + Push + Email) pour le vendeur
+    if (data.sellerUserId && data.sellerUserId !== request.auth!.userId) {
+      const lastOffer = data.offers?.[data.offers.length - 1];
+      void emitNegotiationReceived({
+        negotiationId: data.id,
+        buyerUserId: data.buyerUserId,
+        sellerUserId: data.sellerUserId,
+        listingTitle: data.listing?.title,
+        proposedPriceUsdCents: lastOffer?.priceUsdCents,
+        quantity: data.quantity,
+        message: lastOffer?.message ?? undefined,
       });
     }
     emitNegotiationUpdated(data, "CREATED", request.auth!.userId);
@@ -117,12 +209,16 @@ router.post(
       minBuyers: z.coerce.number().int().min(2).max(50).optional()
     }).parse(request.body);
     const data = await negotiationsService.createBundleNegotiation(request.auth!.userId, payload);
-    if (data.sellerUserId && data.sellerUserId !== request.auth!.userId && !isUserOnline(data.sellerUserId)) {
-      void sendPushToUser(data.sellerUserId, {
-        title: "📦 Offre lot — Marchandage",
-        body: `Un acheteur propose un prix groupé pour ${(data as any).bundle?.items?.length ?? 0} articles`,
-        tag: `nego-bundle-${data.id}`,
-        data: { type: "negotiation", negotiationId: data.id },
+    if (data.sellerUserId && data.sellerUserId !== request.auth!.userId) {
+      const itemsCount = (data as any).bundle?.items?.length ?? 0;
+      const lastOffer = data.offers?.[data.offers.length - 1];
+      void emitNegotiationReceived({
+        negotiationId: data.id,
+        buyerUserId: data.buyerUserId,
+        sellerUserId: data.sellerUserId,
+        listingTitle: `Lot de ${itemsCount} articles`,
+        proposedPriceUsdCents: lastOffer?.priceUsdCents,
+        message: lastOffer?.message ?? undefined,
       });
     }
     emitNegotiationUpdated(data, "BUNDLE_CREATED", request.auth!.userId);
@@ -179,7 +275,7 @@ router.post(
       message: z.string().max(500).optional()
     }).parse(request.body);
     const data = await negotiationsService.joinGroupNegotiation(request.auth!.userId, request.params.groupId, payload);
-    // Push notify seller
+    // Notif unifiée au vendeur (sans email pour cet événement secondaire)
     if (data.sellerUserId && data.sellerUserId !== request.auth!.userId && !isUserOnline(data.sellerUserId)) {
       void sendPushToUser(data.sellerUserId, {
         title: "👥 Nouveau membre — Marchandage groupé",
@@ -210,16 +306,30 @@ router.post(
   asyncHandler(async (request: AuthenticatedRequest, response) => {
     const payload = respondSchema.parse(request.body);
     const data = await negotiationsService.respondToNegotiation(request.auth!.userId, request.params.negotiationId, payload);
-    // Push notify the other party
+    // Notif unifiée (BD + Socket + Push + Email) selon l'action
     const targetUserId = data.buyerUserId === request.auth!.userId ? data.sellerUserId : data.buyerUserId;
-    if (targetUserId && !isUserOnline(targetUserId)) {
-      const actionLabels: Record<string, string> = { ACCEPT: "acceptée ✅", REFUSE: "refusée ❌", COUNTER: "contre-offre 🔄" };
-      void sendPushToUser(targetUserId, {
-        title: "🤝 Marchandage — " + (actionLabels[payload.action] ?? payload.action),
-        body: `Réponse sur ${data.listing?.title ?? "un article"}`,
-        tag: `nego-${data.id}`,
-        data: { type: "negotiation", negotiationId: data.id },
-      });
+    if (targetUserId) {
+      const lastOffer = data.offers?.[data.offers.length - 1];
+      const previousOffer = data.offers && data.offers.length >= 2 ? data.offers[data.offers.length - 2] : undefined;
+      const baseInput = {
+        negotiationId: data.id,
+        buyerUserId: data.buyerUserId,
+        sellerUserId: data.sellerUserId,
+        listingTitle: data.listing?.title,
+        quantity: data.quantity,
+        finalPriceUsdCents: data.finalPriceUsdCents ?? undefined,
+        proposedPriceUsdCents: lastOffer?.priceUsdCents,
+        previousPriceUsdCents: previousOffer?.priceUsdCents,
+        message: lastOffer?.message ?? undefined,
+        reason: payload.message,
+      };
+      if (payload.action === "ACCEPT") {
+        void emitNegotiationAccepted(baseInput);
+      } else if (payload.action === "REFUSE") {
+        void emitNegotiationRefused(baseInput);
+      } else if (payload.action === "COUNTER") {
+        void emitNegotiationCountered({ ...baseInput, recipientUserId: targetUserId });
+      }
     }
     emitNegotiationUpdated(data, "RESPONDED", request.auth!.userId, {
       respondAction: payload.action,
@@ -284,7 +394,7 @@ router.post(
   "/:negotiationId/ai-auto-respond",
   requireAuth,
   requireRoles(Role.USER, Role.BUSINESS),
-  asyncHandler(async (req: AuthenticatedRequest, res, next) => { await requireIa("IA_MERCHANT")(req, res, next); }),
+  asyncHandler(async (req: AuthenticatedRequest, res, next) => { await requireIa("IA_MERCHANT_AUTO")(req, res, next); }),
   asyncHandler(async (request: AuthenticatedRequest, response) => {
     const rulesSchema = z.object({
       enabled: z.boolean().default(true),

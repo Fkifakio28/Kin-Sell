@@ -14,7 +14,7 @@
  * Tout rule-based. Données Prisma temps réel.
  */
 
-import { CartStatus, SubscriptionStatus } from "@prisma/client";
+import { CartStatus, SubscriptionStatus } from "../../shared/db/prisma-enums.js";
 import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
 import { getMarketMedian, computePricePosition, getTrendingCategories, PRICE_THRESHOLD_PERCENT } from "../../shared/market/market-shared.js";
@@ -189,32 +189,51 @@ export async function getBasicInsights(userId: string): Promise<BasicInsights> {
     };
   }
 
-  // Simple recommendations
+  // ── Recommendations personnalisées (basées sur données réelles) ──
   const recommendations: string[] = [];
-  if (activeListings === 0) {
-    recommendations.push("Publiez votre première annonce pour commencer à vendre.");
-  }
-  if (positionStatus === "ABOVE_MARKET") {
-    recommendations.push(`Baissez vos prix de ~${Math.round(diffPercent * 0.5)}% pour rester compétitif.`);
-  }
-  if (positionStatus === "BELOW_MARKET") {
-    recommendations.push(`Vous pouvez monter vos prix de ~${Math.round(Math.abs(diffPercent) * 0.5)}% sans perdre d'acheteurs.`);
-  }
-  if (totalNegotiations > 0 && acceptedNegotiations / totalNegotiations < 0.3) {
-    recommendations.push("Votre taux d'acceptation en négociation est faible. Activez l'IA Marchand pour optimiser.");
-  }
-  recommendations.push(`Publiez vers ${bestHourLabel} pour maximiser la visibilité.`);
+  const revenueDollars = ((orderAgg._sum.totalUsdCents ?? 0) / 100).toFixed(0);
+  const negotiationRate = totalNegotiations > 0 ? Math.round((acceptedNegotiations / totalNegotiations) * 100) : 0;
 
-  // So-Kin recommendations
+  if (activeListings === 0) {
+    recommendations.push("Vous n'avez aucune annonce active. Publiez votre première annonce pour commencer à vendre.");
+  } else if (activeListings < 3) {
+    recommendations.push(`Seulement ${activeListings} annonce${activeListings > 1 ? "s" : ""} active${activeListings > 1 ? "s" : ""}. Publiez au moins 5 annonces pour augmenter vos chances d'être trouvé.`);
+  }
+
+  if (mainCategory && positionStatus === "ABOVE_MARKET") {
+    recommendations.push(`Vos prix en "${mainCategory}" sont ${Math.round(diffPercent)}% au-dessus du marché (médiane ${(marketMedianCents / 100).toFixed(0)}$). Baissez de ~${Math.round(diffPercent * 0.5)}% pour rester compétitif.`);
+  }
+  if (mainCategory && positionStatus === "BELOW_MARKET") {
+    recommendations.push(`Vos prix en "${mainCategory}" sont ${Math.round(Math.abs(diffPercent))}% sous le marché (médiane ${(marketMedianCents / 100).toFixed(0)}$). Vous pouvez monter de ~${Math.round(Math.abs(diffPercent) * 0.5)}% sans perdre d'acheteurs.`);
+  }
+  if (totalNegotiations > 0 && negotiationRate < 30) {
+    recommendations.push(`Taux d'acceptation négociation faible : ${negotiationRate}% (${acceptedNegotiations}/${totalNegotiations}). Activez l'IA Marchand pour optimiser vos contre-offres.`);
+  } else if (totalNegotiations > 0 && negotiationRate >= 60) {
+    recommendations.push(`Excellent taux de négociation : ${negotiationRate}% (${acceptedNegotiations}/${totalNegotiations}). Vos prix de vente sont bien calibrés.`);
+  }
+
+  if (orderAgg._count.id > 0) {
+    recommendations.push(`${orderAgg._count.id} vente${orderAgg._count.id > 1 ? "s" : ""} ce mois pour ${revenueDollars}$. Publiez vers ${bestHourLabel} pour maximiser la visibilité.`);
+  } else {
+    recommendations.push(`Aucune vente ce mois. Publiez vers ${bestHourLabel} — c'est le créneau le plus actif sur la plateforme.`);
+  }
+
+  if (mainCategory && trendingCategories.includes(mainCategory)) {
+    recommendations.push(`"${mainCategory}" est en tendance ! Publiez davantage dans cette catégorie pour capter le trafic.`);
+  } else if (trendingCategories.length > 0 && activeListings > 0) {
+    recommendations.push(`Tendances actuelles : ${trendingCategories.slice(0, 3).join(", ")}. Diversifiez si vous avez des produits dans ces catégories.`);
+  }
+
+  // So-Kin recommendations personnalisées
   if (sokinSummary) {
     if (sokinSummary.avgSocialScore >= 40 && sokinSummary.avgBusinessScore < 20) {
-      recommendations.push("Vos posts So-Kin ont un bon engagement social. Liez-y vos articles pour convertir.");
+      recommendations.push(`Vos ${sokinSummary.postCount} posts So-Kin ont un bon engagement (score social ${sokinSummary.avgSocialScore}/100) mais un faible score business (${sokinSummary.avgBusinessScore}/100). Liez vos articles pour convertir.`);
     }
     if (sokinSummary.totalViews > 100 && sokinSummary.avgBusinessScore >= 30) {
-      recommendations.push("Votre visibilité So-Kin est forte. Un boost pourrait multiplier vos ventes.");
+      recommendations.push(`${sokinSummary.totalViews} vues So-Kin avec un score business de ${sokinSummary.avgBusinessScore}/100. Un boost pourrait multiplier vos ventes.`);
     }
   } else if (activeListings > 0) {
-    recommendations.push("Publiez sur So-Kin pour gagner en visibilité locale.");
+    recommendations.push("Publiez sur So-Kin pour gagner en visibilité locale — les vendeurs actifs y vendent 2× plus.");
   }
 
   return {
@@ -436,22 +455,49 @@ export async function getDeepInsights(userId: string): Promise<DeepInsights> {
     }
   }
 
-  // ── Predictive Suggestions ──
+  // ── Predictive Suggestions personnalisées ──
   const predictions: string[] = [];
+  const totalRevenueDollars = ordersData.filter(o => o.status === "DELIVERED").reduce((s, o) => s + o.totalUsdCents, 0) / 100;
+
   if (cartAbandonmentRate > 60) {
-    predictions.push("Taux d'abandon panier élevé. L'IA Commande peut relancer ces acheteurs automatiquement.");
+    predictions.push(`Taux d'abandon panier de ${cartAbandonmentRate}% (${abandonedCarts}/${totalCarts} paniers). L'IA Commande peut relancer ces ${abandonedCarts} acheteurs automatiquement.`);
+  } else if (cartAbandonmentRate > 30) {
+    predictions.push(`Taux d'abandon panier de ${cartAbandonmentRate}% — acceptable mais peut être réduit avec des relances automatiques.`);
   }
-  if (negoConversionRate < 20) {
-    predictions.push("Peu de négociations se convertissent en ventes. Activez l'IA Marchand pour optimiser vos réponses.");
+
+  if (negoConversionRate < 20 && totalNegotiations > 3) {
+    predictions.push(`Seulement ${negoConversionRate}% de vos ${totalNegotiations} négociations se convertissent en ventes. L'IA Marchand peut optimiser vos réponses et contre-offres.`);
   }
+
   if (buyerRetentionRate > 30) {
-    predictions.push(`${buyerRetentionRate}% de vos acheteurs reviennent — fidélisez-les avec des offres exclusives.`);
+    predictions.push(`${buyerRetentionRate}% de vos acheteurs (${repeatBuyers}/${uniqueBuyers}) reviennent ! Fidélisez-les avec des coupons exclusifs via IA Messenger.`);
+  } else if (uniqueBuyers > 5 && buyerRetentionRate < 10) {
+    predictions.push(`Faible fidélisation : seulement ${buyerRetentionRate}% de retour (${repeatBuyers}/${uniqueBuyers} acheteurs). Des offres de suivi pourraient doubler ce taux.`);
   }
+
   if (categoryBreakdown[0]) {
-    predictions.push(`"${categoryBreakdown[0].category}" génère le plus de revenus. Publiez plus dans cette catégorie.`);
+    const topCat = categoryBreakdown[0];
+    const topCatRevenue = (topCat.revenueCents / 100).toFixed(0);
+    predictions.push(`"${topCat.category}" est votre meilleure catégorie (${topCat.count} ventes, ${topCatRevenue}$). Publiez plus dans cette catégorie pour maximiser vos revenus.`);
+    if (categoryBreakdown[1]) {
+      const secondCat = categoryBreakdown[1];
+      predictions.push(`"${secondCat.category}" est votre 2e catégorie (${secondCat.count} ventes). Diversifier réduit votre dépendance à une seule catégorie.`);
+    }
   }
+
+  if (cityBreakdown[0] && cityBreakdown[0].percent > 60) {
+    predictions.push(`${cityBreakdown[0].percent}% de vos ventes viennent de ${cityBreakdown[0].city}. Explorez d'autres villes via des campagnes ciblées.`);
+  }
+
   if (velocityLabel === "SLOW") {
-    predictions.push("Lancez une campagne publicitaire pour relancer la visibilité. L'IA Ads peut vous guider.");
+    predictions.push(`Votre activité ralentit (score vélocité: ${velocityScore}/100). Lancez une campagne publicitaire pour relancer la visibilité.`);
+  } else if (velocityLabel === "ACCELERATING") {
+    predictions.push(`Croissance en accélération (score: ${velocityScore}/100) ! C'est le moment d'investir dans un forfait supérieur pour maximiser cet élan.`);
+  }
+
+  if (totalRevenueDollars > 0) {
+    const avgOrderValue = completedOrders > 0 ? Math.round(totalRevenueDollars / completedOrders) : 0;
+    predictions.push(`Panier moyen: ${avgOrderValue}$. ${avgOrderValue < 20 ? "Proposez des lots ou bundles pour augmenter le panier moyen." : "Bon panier moyen — maintenez cette gamme de prix."}`);
   }
 
   // ── Automation Triggers ──
@@ -490,14 +536,15 @@ export async function getDeepInsights(userId: string): Promise<DeepInsights> {
   const strengthAreas: string[] = [];
   const improvementAreas: string[] = [];
 
-  if (buyerRetentionRate > 25) strengthAreas.push("Fidélisation acheteurs");
-  if (negoConversionRate > 40) strengthAreas.push("Bon taux de conversion négociation");
-  if (categoryRank > 0 && categoryRank <= 5) strengthAreas.push(`Top ${categoryRank} vendeurs en "${mainCat}"`);
+  if (buyerRetentionRate > 25) strengthAreas.push(`Fidélisation acheteurs (${buyerRetentionRate}% reviennent)`);
+  if (negoConversionRate > 40) strengthAreas.push(`Bon taux négociation (${negoConversionRate}%)`);
+  if (categoryRank > 0 && categoryRank <= 5) strengthAreas.push(`Top ${categoryRank} vendeurs en "${mainCat}" (sur ${totalSellersInCategory})`);
+  if (completedOrders >= 10) strengthAreas.push(`Volume de ventes solide (${completedOrders} ce mois)`);
   if (strengthAreas.length === 0) strengthAreas.push("Présence active sur la plateforme");
 
-  if (activeListings < 3) improvementAreas.push("Augmenter le volume d'annonces actives");
-  if (cartAbandonmentRate > 50) improvementAreas.push("Réduire l'abandon panier");
-  if (negoConversionRate < 20) improvementAreas.push("Améliorer le taux de conversion négociation");
+  if (activeListings < 3) improvementAreas.push(`Volume d'annonces (${activeListings} actives — visez 5+)`);
+  if (cartAbandonmentRate > 50) improvementAreas.push(`Abandon panier élevé (${cartAbandonmentRate}%)`);
+  if (negoConversionRate < 20 && totalNegotiations > 0) improvementAreas.push(`Conversion négociation (${negoConversionRate}% — activez IA Marchand)`);
 
   return {
     tier: "PREMIUM",

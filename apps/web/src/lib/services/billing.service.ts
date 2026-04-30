@@ -50,7 +50,7 @@ export const billing = {
   }>("/billing/catalog"),
   myPlan: () => request<BillingPlanSummary>("/billing/my-plan"),
   // PayPal est le seul moyen de paiement
-  createPaypalCheckout: (body: { planCode: string; billingCycle?: "MONTHLY" | "ONE_TIME" }) =>
+  createPaypalCheckout: (body: { planCode: string; billingCycle?: "MONTHLY" | "ONE_TIME"; promoCode?: string }) =>
     request<{
       orderId: string;
       status: string;
@@ -77,6 +77,29 @@ export const billing = {
   }> }>("/billing/payment-orders"),
   capturePaypalCheckout: (body: { orderId: string }) =>
     request<{ plan: BillingPlanSummary; message: string }>("/billing/paypal/capture", { method: "POST", body }),
+  validateCoupon: (body: { code: string; planCode?: string }) =>
+    request<{
+      couponId: string;
+      code: string;
+      kind: string;
+      discountPercent: number | null;
+      targetScope: string;
+      valid: boolean;
+      reason?: string;
+    }>("/incentives/coupons/validate", { method: "POST", body }),
+  previewCoupon: (body: { code: string; planCode: string; billingCycle?: string }) =>
+    request<{
+      couponId: string;
+      code: string;
+      kind: string;
+      discountPercent: number | null;
+      targetScope: string;
+      valid: boolean;
+      reason?: string;
+      originalAmountUsdCents: number;
+      discountAmountUsdCents: number;
+      finalAmountUsdCents: number;
+    }>("/billing/coupons/preview", { method: "POST", body }),
   // activateOrder supprimé : l'activation se fait uniquement via PayPal capture ou validation admin
   // changePlan et toggleAddon supprimés : routes SUPER_ADMIN uniquement, pas d'usage frontend
 };

@@ -21,15 +21,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   const refreshUser = useCallback(async () => {
-    try {
-      const data = await authApi.me();
-      setUser(data);
-      return data;
-    } catch {
-      clearAuthSession();
-      setUser(null);
-      return null;
+    // Retry 2 fois avec backoff (réseau instable 2G/3G Afrique)
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (attempt > 0) await new Promise(r => setTimeout(r, 1500 * attempt));
+      try {
+        const data = await authApi.me();
+        setUser(data);
+        return data;
+      } catch (err) {
+        // Erreur réseau → retry
+        if (err instanceof TypeError && attempt < 2) continue;
+        if (err instanceof DOMException && err.name === "AbortError" && attempt < 2) continue;
+        // Erreur API (401, etc.) → pas la peine de retry
+        clearAuthSession();
+        setUser(null);
+        return null;
+      }
     }
+    clearAuthSession();
+    setUser(null);
+    return null;
   }, []);
 
   // Bootstrap — httpOnly cookies carry auth. Try /me to check if session is active.

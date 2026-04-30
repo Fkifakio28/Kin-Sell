@@ -1,8 +1,10 @@
 ﻿import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import { Capacitor } from "@capacitor/core";
 import { useAuth } from "../../app/providers/AuthProvider";
 import { useLocaleCurrency } from "../../app/providers/LocaleCurrencyProvider";
 import { billing, type BillingPlanSummary, ApiError } from "../../lib/api-client";
+import { isIAPAvailable, purchasePlan } from "../../utils/iap";
 import { SeoMeta } from "../../components/SeoMeta";
 import {
   parsePricingParams,
@@ -65,7 +67,7 @@ const USER_PLANS: Plan[] = [
     highlight: "Vendez sans limite, sans frais",
     tagline: "Tout ce qu'il faut pour votre première vente",
     ctaText: "Commencer gratuitement",
-    features: ["Publications illimitées", "Messagerie directe acheteur", "IA Marchande incluse", "Conseils IA après publication"],
+    features: ["Publications illimitées", "Messagerie directe acheteur", "IA Marchande incluse", "1 conseil IA offert (1er produit + 1er service)"],
     upgradeHint: "Envie d'être vu ? → BOOST"
   },
   {
@@ -237,9 +239,20 @@ export function PricingPage() {
   const [paymentOrders, setPaymentOrders] = useState<PaymentOrder[]>([]);
   const [latestCheckout, setLatestCheckout] = useState<CheckoutResult | null>(null);
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
+  const [warnMessage, setWarnMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const [pendingPlanCode, setPendingPlanCode] = useState<string | null>(null);
+  const [promoCode, setPromoCode] = useState("");
+  const [promoStatus, setPromoStatus] = useState<{
+    valid: boolean;
+    discountPercent: number | null;
+    reason?: string;
+    originalAmountUsdCents?: number;
+    discountAmountUsdCents?: number;
+    finalAmountUsdCents?: number;
+  } | null>(null);
+  const [promoLoading, setPromoLoading] = useState(false);
 
   const role = user?.role === "BUSINESS" ? "BUSINESS" : user?.role === "USER" ? "USER" : "VISITOR";
 
@@ -251,22 +264,44 @@ export function PricingPage() {
 
   const [activeTab, setActiveTab] = useState<PricingTab>(defaultTab);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
+  const paymentRef = useRef<HTMLElement>(null);
 
-  // ── Deep-link : parse URL et appliquer tab + highlight ──
+  // ── Deep-link : parse URL et appliquer tab + highlight + coupon ──
   const deepLinkApplied = useRef(false);
+  const deepLinkCouponRef = useRef<{ code: string; plan: string | null } | null>(null);
   useEffect(() => {
     if (deepLinkApplied.current) return;
     const dl = parsePricingParams();
-    if (!dl.tab && !dl.highlight && !dl.section) return;
+    if (!dl.tab && !dl.highlight && !dl.section && !dl.coupon && !dl.plan) return;
     deepLinkApplied.current = true;
 
-    // Résoudre le bon tab
-    const targetTab: PricingTab = dl.tab ?? (dl.highlight ? tabForCode(dl.highlight) : defaultTab);
+    // Résoudre le bon tab (priorité : tab explicite > plan > highlight > défaut)
+    const targetTab: PricingTab = dl.tab
+      ?? (dl.plan ? tabForCode(dl.plan) : undefined)
+      ?? (dl.highlight ? tabForCode(dl.highlight) : undefined)
+      ?? defaultTab;
     setActiveTab(targetTab);
+
+    // Pré-remplir plan + coupon (IA Messenger ou conversion Grant)
+    if (dl.plan) {
+      setPendingPlanCode(dl.plan);
+      setTimeout(() => {
+        paymentRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 150);
+    }
+    if (dl.coupon) {
+      setPromoCode(dl.coupon);
+      deepLinkCouponRef.current = { code: dl.coupon, plan: dl.plan ?? null };
+      if (!dl.plan) {
+        setInfoMessage(`🎁 Coupon « ${dl.coupon} » prêt à être appliqué — choisissez un forfait pour bénéficier de la réduction.`);
+      }
+    }
 
     // Highlight + scroll
     if (dl.highlight) {
       highlightElement(`plan-${dl.highlight}`);
+    } else if (dl.plan) {
+      highlightElement(`plan-${dl.plan}`);
     } else if (dl.section === "analytics") {
       highlightElement("plan-analytics-lock");
     }
@@ -326,11 +361,14 @@ export function PricingPage() {
 
     let cancelled = false;
     const capture = async () => {
-      setInfoMessage("Finalisation du paiement PayPal en cours…");
+      setWarnMessage("Finalisation du paiement PayPal en cours…");
+      setInfoMessage(null);
       try {
         const result = await billing.capturePaypalCheckout({ orderId });
         if (!cancelled) {
+          setWarnMessage(null);
           setInfoMessage(result.message || "✅ Paiement PayPal confirmé ! Votre forfait est activé.");
+          setLatestCheckout(null);
           // Reload billing data
           const [planData, ordersData] = await Promise.all([billing.myPlan(), billing.paymentOrders()]);
           if (!cancelled) {
@@ -354,25 +392,92 @@ export function PricingPage() {
       return;
     }
     setPendingPlanCode(planCode);
+    setPromoCode("");
+    setPromoStatus(null);
     setLatestCheckout(null);
     setErrorMessage(null);
     setInfoMessage(null);
+    setWarnMessage(null);
+    // Scroll vers la section paiement après le render
+    setTimeout(() => {
+      paymentRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 100);
   };
+
+  const handleValidatePromo = async () => {
+    if (!promoCode.trim() || !pendingPlanCode) return;
+    setPromoLoading(true);
+    setPromoStatus(null);
+    try {
+      const result = await billing.previewCoupon({ code: promoCode.trim(), planCode: pendingPlanCode });
+      setPromoStatus({
+        valid: result.valid,
+        discountPercent: result.discountPercent,
+        reason: result.reason,
+        originalAmountUsdCents: result.originalAmountUsdCents,
+        discountAmountUsdCents: result.discountAmountUsdCents,
+        finalAmountUsdCents: result.finalAmountUsdCents,
+      });
+    } catch {
+      setPromoStatus({ valid: false, discountPercent: null, reason: "Erreur de validation" });
+    } finally {
+      setPromoLoading(false);
+    }
+  };
+
+  // ── Auto-validation du coupon deep-linké (IA Messenger / MyIncentivesPanel) ──
+  const deepLinkValidatedRef = useRef(false);
+  useEffect(() => {
+    if (deepLinkValidatedRef.current) return;
+    if (!deepLinkCouponRef.current) return;
+    if (!pendingPlanCode || !promoCode.trim()) return;
+    if (promoLoading) return;
+    deepLinkValidatedRef.current = true;
+    void handleValidatePromo();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingPlanCode, promoCode, promoLoading]);
 
   const handlePay = async () => {
     if (!pendingPlanCode) return;
     setErrorMessage(null);
     setInfoMessage(null);
+    setWarnMessage(null);
     setBusyPlanCode(pendingPlanCode);
 
     try {
-      const result = await billing.createPaypalCheckout({ planCode: pendingPlanCode, billingCycle: "MONTHLY" });
+      // iOS native → Apple In-App Purchase
+      if (isIAPAvailable()) {
+        const scope = activeTab === "business" ? "BUSINESS" : "USER";
+        const iapResult = await purchasePlan(scope as "USER" | "BUSINESS", pendingPlanCode);
+        if (iapResult.ok) {
+          setInfoMessage("Achat Apple réussi ! Votre forfait est en cours d'activation…");
+          // Refresh plan after IAP
+          try {
+            const plan = await billing.myPlan();
+            setCurrentPlan(plan);
+          } catch { /* will be refreshed on next load */ }
+          setPendingPlanCode(null);
+        } else {
+          setErrorMessage(iapResult.error);
+        }
+        return;
+      }
+
+      // Web / Android → PayPal
+      const checkoutPayload: { planCode: string; billingCycle: "MONTHLY" | "ONE_TIME"; promoCode?: string } = {
+        planCode: pendingPlanCode,
+        billingCycle: "MONTHLY",
+      };
+      if (promoCode.trim() && promoStatus?.valid) {
+        checkoutPayload.promoCode = promoCode.trim();
+      }
+      const result = await billing.createPaypalCheckout(checkoutPayload);
       setLatestCheckout(result);
       // Redirection vers PayPal
       if (result.paymentUrl) {
         window.open(result.paymentUrl, "_blank", "noopener,noreferrer");
       }
-      setInfoMessage("Redirection vers PayPal en cours\u2026 Votre forfait sera activé automatiquement après paiement.");
+      setWarnMessage("⏳ Paiement en attente — Veuillez finaliser le paiement sur PayPal. Votre forfait ne sera activé qu'après confirmation du paiement.");
 
       const orders = await billing.paymentOrders();
       setPaymentOrders(orders.orders);
@@ -401,7 +506,7 @@ export function PricingPage() {
 
 
   const faqData = [
-    { q: 'Comment fonctionne le paiement ?', a: 'Tous les paiements passent par PayPal. Votre forfait est activé automatiquement dès la confirmation du paiement. Aucune intervention manuelle requise.' },
+    { q: 'Comment fonctionne le paiement ?', a: 'Sur le web et Android, les paiements passent par PayPal. Sur iPhone, les abonnements sont traités via l\'App Store d\'Apple. Votre forfait est activé automatiquement dès la confirmation du paiement.' },
     { q: 'Puis-je changer de forfait à tout moment ?', a: 'Oui. Vous pouvez upgrader à tout moment. Le nouveau forfait prend effet immédiatement après paiement.' },
     { q: 'Qu\'est-ce qu\'un add-on ?', a: 'Un add-on est une fonctionnalité supplémentaire que vous pouvez ajouter à n\'importe quel forfait (ex : Boost Visibilité, IA Commande). Les add-ons sont indépendants du forfait choisi.' },
     { q: 'L\'IA Marchande est-elle vraiment gratuite ?', a: 'Oui. L\'IA Marchande (conseils de prix, aide à la négociation) est incluse dans tous les forfaits, y compris FREE. Aucun coût caché.' },
@@ -413,7 +518,7 @@ export function PricingPage() {
       <SeoMeta
         title="Tarifs et abonnements | Kin-Sell"
         description="Choisissez le plan adapté à vos besoins: FREE, BOOST, AUTO, PRO VENDEUR pour les particuliers; STARTER, BUSINESS, SCALE pour les entreprises."
-        canonical="https://kin-sell.com/pricing"
+        canonical="https://kin-sell.com/forfaits"
       />
 
       {/* ───────────────  HERO  ─────────────── */}
@@ -433,6 +538,7 @@ export function PricingPage() {
 
       {/* ── Alerts ── */}
       {infoMessage ? <div className="pricing-alert pricing-alert--ok">{infoMessage}</div> : null}
+      {warnMessage ? <div className="pricing-alert pricing-alert--warn">{warnMessage}</div> : null}
       {errorMessage ? <div className="pricing-alert pricing-alert--error">{errorMessage}</div> : null}
 
       {/* ───────────────  TOGGLE  ─────────────── */}
@@ -526,18 +632,92 @@ export function PricingPage() {
       {/* ───────────────  PAYMENT FLOW  ─────────────── */}
 
       {pendingPlanCode ? (
-        <section className="pricing-payment">
-          <h2 className="pricing-payment__title">Paiement PayPal — {pendingPlanCode}</h2>
+        <section className="pricing-payment" ref={paymentRef}>
+          <h2 className="pricing-payment__title">
+            {isIAPAvailable() ? "Achat via App Store" : "Paiement PayPal"} — {pendingPlanCode}
+          </h2>
           <p className="pricing-payment__text">
-            Vous serez redirigé vers PayPal pour effectuer le paiement. Votre forfait sera activé automatiquement après confirmation.
+            {isIAPAvailable()
+              ? "Votre achat sera traité via l'App Store d'Apple. Votre forfait sera activé automatiquement."
+              : "Vous serez redirigé vers PayPal pour effectuer le paiement. Votre forfait sera activé automatiquement après confirmation."}
           </p>
+
+          {/* ── Promo code ── */}
+          {!isIAPAvailable() && (
+            <div className="pricing-promo">
+              <label className="pricing-promo__label" htmlFor="promo-code">Code promo</label>
+              <div className="pricing-promo__row">
+                <input
+                  id="promo-code"
+                  className="pricing-promo__input"
+                  type="text"
+                  placeholder="KS-XXXXXXXX"
+                  maxLength={30}
+                  value={promoCode}
+                  onChange={(e) => { setPromoCode(e.target.value.toUpperCase()); setPromoStatus(null); }}
+                />
+                <button
+                  type="button"
+                  className="pricing-promo__btn"
+                  disabled={!promoCode.trim() || promoLoading}
+                  onClick={() => void handleValidatePromo()}
+                >
+                  {promoLoading ? "…" : "Vérifier"}
+                </button>
+              </div>
+              {promoStatus && (
+                <p className={`pricing-promo__msg ${promoStatus.valid ? "pricing-promo__msg--ok" : "pricing-promo__msg--err"}`}>
+                  {promoStatus.valid
+                    ? promoStatus.finalAmountUsdCents != null
+                      ? `✓ -${promoStatus.discountPercent}% → `
+                        + `${(promoStatus.originalAmountUsdCents! / 100).toFixed(2)}$`
+                        + ` → ${(promoStatus.finalAmountUsdCents / 100).toFixed(2)}$`
+                      : `✓ Coupon valide — ${promoStatus.discountPercent}% de réduction`
+                    : `✕ ${
+                        promoStatus.reason === "INVALID_CODE" ? "Code invalide"
+                          : promoStatus.reason === "INVALID_OR_EXPIRED" ? "Code invalide ou expiré"
+                          : promoStatus.reason === "EXPIRED" ? "Code expiré"
+                          : promoStatus.reason === "NOT_YET_ACTIVE" ? "Code pas encore actif"
+                          : promoStatus.reason === "MAX_USES_REACHED" ? "Ce code a atteint sa limite d'utilisation"
+                          : promoStatus.reason === "MAX_USES_PER_USER" ? "Vous avez déjà utilisé ce code"
+                          : promoStatus.reason === "NOT_RECIPIENT" ? "Ce code n'est pas attribué à votre compte"
+                          : promoStatus.reason === "PLAN_NOT_ELIGIBLE" ? "Ce code n'est pas valable pour ce forfait"
+                          : promoStatus.reason === "ADDON_NOT_ELIGIBLE" ? "Ce code n'est pas valable pour ce module"
+                          : promoStatus.reason === "MONTHLY_QUOTA_REACHED" ? "Quota mensuel atteint"
+                          : promoStatus.reason ?? "Code non valide"
+                      }`}
+                </p>
+              )}
+              {promoStatus?.valid && promoStatus.finalAmountUsdCents != null && (
+                <p style={{ fontSize: 13, color: "var(--color-text-2, #c7bedf)", marginTop: 4 }}>
+                  <span style={{ textDecoration: "line-through", opacity: 0.6 }}>
+                    {(promoStatus.originalAmountUsdCents! / 100).toFixed(2)}$
+                  </span>
+                  {" → "}
+                  <span style={{ color: "#4caf50", fontWeight: 700, fontSize: 16 }}>
+                    {(promoStatus.finalAmountUsdCents / 100).toFixed(2)}$
+                  </span>
+                  <span style={{ fontSize: 11, marginLeft: 6, opacity: 0.7 }}>
+                    (économie: {(promoStatus.discountAmountUsdCents! / 100).toFixed(2)}$)
+                  </span>
+                </p>
+              )}
+            </div>
+          )}
+
           <button
             type="button"
             className="pricing-payment__btn"
             disabled={busyPlanCode !== null}
             onClick={() => void handlePay()}
           >
-            {busyPlanCode ? "Traitement…" : "💳 Payer avec PayPal"}
+            {busyPlanCode
+              ? "Traitement…"
+              : isIAPAvailable()
+                ? "🍎 Acheter via App Store"
+                : promoStatus?.valid && promoStatus.finalAmountUsdCents != null
+                  ? `💳 Payer ${(promoStatus.finalAmountUsdCents / 100).toFixed(2)}$ via PayPal (-${promoStatus.discountPercent}%)`
+                  : "💳 Payer avec PayPal"}
           </button>
           <br />
           <button type="button" className="pricing-payment__cancel" onClick={() => setPendingPlanCode(null)}>
@@ -622,7 +802,7 @@ export function PricingPage() {
                 { feat: 'Publications illimitées', vals: ['✅', '✅', '✅', '✅'] },
                 { feat: 'Achat & messagerie', vals: ['✅', '✅', '✅', '✅'] },
                 { feat: 'IA marchande (prix & négo)', vals: ['✅', '✅', '✅', '✅'] },
-                { feat: 'Conseils IA post-publication', vals: ['✅', '✅', '✅', '✅'] },
+                { feat: 'Conseils IA post-publication', vals: ['1 offert', '✅', '✅', '✅'] },
                 { feat: 'Publicité marketplace', vals: ['—', '✅', '✅', '✅'] },
                 { feat: 'IA Commande (suivi & relances)', vals: ['—', '—', '✅', '✅'] },
                 { feat: 'Kin-Sell Analytique', vals: ['—', '—', '—', '✅ Medium'] },
@@ -669,7 +849,7 @@ export function PricingPage() {
                 { feat: 'Profil business vérifiable', vals: ['✅', '✅', '✅'] },
                 { feat: 'IA marchande (prix & négo)', vals: ['✅', '✅', '✅'] },
                 { feat: 'Publicité marketplace', vals: ['✅', '✅', '✅'] },
-                { feat: 'Conseils IA post-publication', vals: ['✅', '✅', '✅'] },
+                { feat: 'Conseils IA post-publication', vals: ['✅ illimité', '✅ illimité', '✅ illimité'] },
                 { feat: 'IA Commande (suivi & relances)', vals: ['—', '✅', '✅'] },
                 { feat: 'Kin-Sell Analytique', vals: ['—', '✅ Medium', '✅ Premium'] },
                 { feat: 'Diagnostic de performance', vals: ['—', '✅', '✅'] },

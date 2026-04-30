@@ -22,6 +22,7 @@
 import { prisma } from "../../shared/db/prisma.js";
 import { runBatchAutoNegotiation } from "../negotiations/negotiation-ai.service.js";
 import { runBatchCartRecovery, runBatchOrderAutoValidation, runBatchPostOrderTracking } from "../orders/order-ai.service.js";
+import { cancelExpiredOrders } from "../orders/orders.service.js";
 import { runAutoAdOptimization } from "../ads/ad-advisor.service.js";
 import { batchCreateWeeklySnapshots } from "../analytics/ai-memory.service.js";
 import { runPeriodicSmartCheck } from "../analytics/ai-trigger.service.js";
@@ -94,6 +95,7 @@ async function runSlowCycle(): Promise<void> {
   await safeRun("IA_ADS recommandations intelligentes", runBatchSmartRecommendations);
   await safeRun("IA_PRICING nudges intelligents", runBatchPricingNudges);
   await safeRun("IA_COMMERCIAL conseiller commercial", runBatchCommercialAdvice);
+  await safeRun("ORDERS auto-cancel 30 jours", cancelExpiredOrders);
 }
 
 /**

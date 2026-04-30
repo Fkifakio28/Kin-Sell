@@ -1,4 +1,4 @@
-import { createBrowserRouter } from "react-router-dom";
+import { createBrowserRouter, Navigate } from "react-router-dom";
 import { lazy } from "react";
 
 /* Lazy-load all pages for code-splitting */
@@ -18,6 +18,8 @@ const OfflinePage = lazy(() => import("../../features/offline/OfflinePage").then
 const UserDashboard = lazy(() => import("../../features/dashboards/UserDashboard").then(m => ({ default: m.UserDashboard })));
 const BusinessDashboard = lazy(() => import("../../features/dashboards/BusinessDashboard").then(m => ({ default: m.BusinessDashboard })));
 const AdminDashboard = lazy(() => import("../../features/dashboards/AdminDashboard").then(m => ({ default: m.AdminDashboard })));
+const MarketIntelPage = lazy(() => import("../../features/market-intel/MarketIntelPage").then(m => ({ default: m.MarketIntelPage })));
+const AdminMarketIntelPage = lazy(() => import("../../features/market-intel/AdminMarketIntelPage").then(m => ({ default: m.AdminMarketIntelPage })));
 const AboutPage = lazy(() => import("../../features/info-pages/AboutPage").then(m => ({ default: m.AboutPage })));
 const TermsPage = lazy(() => import("../../features/info-pages/TermsPage").then(m => ({ default: m.TermsPage })));
 const HowItWorksPage = lazy(() => import("../../features/info-pages/HowItWorksPage").then(m => ({ default: m.HowItWorksPage })));
@@ -30,6 +32,8 @@ const ContactPage = lazy(() => import("../../features/info-pages/ContactPage").t
 const PricingPage = lazy(() => import("../../features/pricing/PricingPage").then(m => ({ default: m.PricingPage })));
 const CartPage = lazy(() => import("../../features/cart/CartPage").then(m => ({ default: m.CartPage })));
 const MessagingPage = lazy(() => import("../../features/messaging/MessagingPage").then(m => ({ default: m.MessagingPage })));
+const ProductDetailPage = lazy(() => import("../../features/product-detail/ProductDetailPage").then(m => ({ default: m.ProductDetailPage })));
+const NotificationsPage = lazy(() => import("../../features/notifications/NotificationsPage").then(m => ({ default: m.NotificationsPage })));
 
 /* Param wrappers */
 import { PublicProfileWrapper, BusinessShopWrapper } from "./ParamWrappers";
@@ -81,17 +85,25 @@ export const router = createBrowserRouter([
           { path: "/faq", element: <FaqPage /> },
           { path: "/contact", element: <ContactPage /> },
           { path: "/forfaits", element: <PricingPage /> },
-          { path: "/plans", element: <PricingPage /> },
-          { path: "/pricing", element: <PricingPage /> },
+          { path: "/plans", element: <Navigate to="/forfaits" replace /> },
+          { path: "/pricing", element: <Navigate to="/forfaits" replace /> },
           { path: "/cart", element: <CartPage /> },
+          { path: "/notifications", element: <AuthGuard><NotificationsPage /></AuthGuard> },
           { path: "/account", element: <RoleGuard allowed="USER"><UserDashboard /></RoleGuard> },
           { path: "/business/dashboard", element: <RoleGuard allowed="BUSINESS"><BusinessDashboard /></RoleGuard> },
           { path: "/admin/dashboard", element: <RoleGuard allowed={["ADMIN", "SUPER_ADMIN"]}><AdminDashboard /></RoleGuard> },
+          { path: "/market-intel", element: <AuthGuard><MarketIntelPage /></AuthGuard> },
+          { path: "/admin/market-intel", element: <RoleGuard allowed={["ADMIN", "SUPER_ADMIN"]}><AdminMarketIntelPage /></RoleGuard> },
 
           { path: "/explorer/shops-online", element: <ExplorerShopsPage /> },
           { path: "/explorer/public-profiles", element: <ExplorerProfilesPage /> },
           { path: "/user/:username", element: <PublicProfileWrapper /> },
           { path: "/business/:slug", element: <BusinessShopWrapper /> },
+
+          /* Page détail produit/article (style Jumia, thème Kin-Sell) */
+          { path: "/listing/:id", element: <ProductDetailPage /> },
+          { path: "/product/:id", element: <ProductDetailPage /> },
+          { path: "/produit/:id", element: <ProductDetailPage /> },
         ],
       },
 

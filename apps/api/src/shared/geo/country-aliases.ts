@@ -28,6 +28,8 @@ export const VALID_COUNTRY_CODES = Object.keys(COUNTRY_ALIASES) as CountryCode[]
 export function resolveCountryTerms(country?: string): string[] {
   if (!country) return [];
   const normalized = country.trim().toUpperCase();
+  // "GLOBAL" = pseudo-pays Kin-sell → aucun filtre pays
+  if (normalized === "GLOBAL") return [];
   const aliases = COUNTRY_ALIASES[normalized] ?? [country.trim()];
   return aliases.filter((term) => term.trim().length > 0);
 }
@@ -39,6 +41,8 @@ export function resolveCountryTerms(country?: string): string[] {
 export function resolveCountryCode(country?: string): CountryCode | undefined {
   if (!country) return undefined;
   const normalized = country.trim().toUpperCase();
+  // "GLOBAL" = pseudo-pays Kin-sell → pas de code pays résolu
+  if (normalized === "GLOBAL") return undefined;
 
   // Direct match on code
   if (COUNTRY_ALIASES[normalized]) {

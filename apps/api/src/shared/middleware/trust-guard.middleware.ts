@@ -6,7 +6,7 @@
  * Call after requireAuth middleware.
  */
 
-import { RestrictionType } from "@prisma/client";
+import { RestrictionType } from "../db/prisma-enums.js";
 import { NextFunction, Request, Response } from "express";
 import type { AuthenticatedRequest } from "../auth/auth-middleware.js";
 import { HttpError } from "../errors/http-error.js";

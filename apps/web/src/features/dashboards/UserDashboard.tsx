@@ -44,7 +44,12 @@ import { AdBanner } from '../../components/AdBanner';
 import { AdsBoostPopup } from '../../components/AdsBoostPopup';
 import { PostPublishAdvisor } from '../../components/PostPublishAdvisor';
 import { PostSaleAdvisor } from '../../components/PostSaleAdvisor';
+import TutorialOverlay, { useTutorial, TutorialRelaunchBtn } from '../../components/TutorialOverlay';
+import { userDashboardSteps, userSalesSteps, userArticlesSteps } from '../../components/tutorial-steps';
 import { AnalyticsCTAPanel } from '../../components/AnalyticsCTAPanel';
+import { FrustrationPanel } from '../../components/FrustrationPanel';
+import { MyIncentivesPanel } from '../../components/MyIncentivesPanel';
+import { DashboardJobAnalytics } from './DashboardJobAnalytics';
 import { SmartUpsellBanner, SmartUpsellCard, PostActionTip } from '../../components/SmartUpsell';
 import { PromoCreator } from '../../components/PromoCreator';
 import { OrderValidationQrModal } from '../../components/OrderValidationQrModal';
@@ -68,8 +73,17 @@ import {
   DashboardAnalyticsInsights,
   DashboardContactsSection,
   DashboardVerificationSection,
+  DashboardNotificationsSection,
+  AutoShopTab,
+  KnowledgeIaPanel,
 } from './sections';
 import { DashboardAdvancedAnalytics } from './sections/DashboardAdvancedAnalytics';
+import { NotificationPreferencesPanel } from '../notifications/NotificationPreferencesPanel';
+import { VariantsEditor, type ProductVariantsValue } from './VariantsEditor';
+import MyBoostsPanel from '../../components/MyBoostsPanel';
+import { LockedOverlay } from '../../components/LockedOverlay';
+import { isRecommendationFree } from '../../shared/utils/recommendation-access';
+import { DataSaverToggle } from '../../components/DataSaverToggle';
 import './dashboard.css';
 
 const PRODUCT_CATEGORIES = LISTING_PRODUCT_CATEGORIES;
@@ -87,6 +101,10 @@ type HubSection =
   | 'public-profile'
   | 'verification'
   | 'analytics'
+  | 'jobs'
+  | 'auto-shop'
+  | 'boosts'
+  | 'incentives'
   | 'kinsell'
   | 'settings';
 
@@ -140,7 +158,7 @@ type SettingsForm = {
   confirmPassword: string;
 };
 
-const SECTION_DEFS: Array<{ key: HubSection; labelKey: string; icon: string }> = [
+const SECTION_DEFS: Array<{ key: HubSection; labelKey: string; icon: string; requires?: 'analytics' | 'auto-shop' | 'boosts' }> = [
   { key: 'overview', labelKey: 'user.overview', icon: '⊞' },
   { key: 'articles', labelKey: 'user.articles', icon: '🧩' },
   { key: 'sales', labelKey: 'user.sellSpace', icon: '📦' },
@@ -148,7 +166,11 @@ const SECTION_DEFS: Array<{ key: HubSection; labelKey: string; icon: string }> =
   { key: 'contacts', labelKey: 'user.myContacts', icon: '🤝' },
   { key: 'public-profile', labelKey: 'user.publicProfile', icon: '👤' },
   { key: 'verification', labelKey: 'user.verification', icon: '✅' },
-  { key: 'analytics', labelKey: 'user.analytics', icon: '📊' },
+  { key: 'analytics', labelKey: 'user.analytics', icon: '📊', requires: 'analytics' },
+  { key: 'jobs', labelKey: 'user.jobs', icon: '💼' },
+  { key: 'auto-shop', labelKey: 'user.autoShop', icon: '🤖', requires: 'auto-shop' },
+  { key: 'boosts', labelKey: 'user.boosts', icon: '🚀', requires: 'boosts' },
+  { key: 'incentives', labelKey: 'user.incentives', icon: '🎁' },
   { key: 'kinsell', labelKey: 'Kin-Sell', icon: '🧠' },
   { key: 'settings', labelKey: 'user.settings', icon: '⚙' },
 ];
@@ -227,14 +249,17 @@ export function UserDashboard() {
   const missing = user ? MISSING_FIELD_KEYS.filter(f => f.check(user)).map(f => t(f.key)) : [];
 
   const initialActionRef = useRef<string | null>(null);
+  const initialTypeRef = useRef<string | null>(null);
   const [activeSection, setActiveSection] = useState<HubSection>(() => {
     const params = new URLSearchParams(window.location.search);
     const urlSection = params.get('section');
     const urlAction = params.get('action');
+    const urlType = params.get('type');
     if (urlSection) {
       // Clean URL without reload
       window.history.replaceState({}, '', window.location.pathname);
       if (urlAction) initialActionRef.current = urlAction;
+      if (urlType) initialTypeRef.current = urlType;
       return urlSection as HubSection;
     }
     const stored = sessionStorage.getItem('ud-section');
@@ -353,6 +378,11 @@ export function UserDashboard() {
   // ── Post-Sale Advisor state ──
   const [saleAdvisorOrderId, setSaleAdvisorOrderId] = useState<string | null>(null);
 
+  // Tutoriels — choisir les steps selon la section active
+  const tutorialOverview = useTutorial('user-dashboard');
+  const tutorialSales = useTutorial('user-sales');
+  const tutorialArticles = useTutorial('user-articles');
+
   // ── Smart Upsell post-action tips ──
   const [showPublishTip, setShowPublishTip] = useState(false);
   const [showPromoTip, setShowPromoTip] = useState(false);
@@ -373,6 +403,9 @@ export function UserDashboard() {
   const [negLoading, setNegLoading] = useState(false);
   const [respondNeg, setRespondNeg] = useState<NegotiationSummary | null>(null);
   const [cancelNegBusyId, setCancelNegBusyId] = useState<string | null>(null);
+
+  // ── Transaction tab (seller & buyer) ──
+  const [txTab, setTxTab] = useState<'active' | 'history'>('active');
   const [expandedBundles, setExpandedBundles] = useState<Record<string, BundleItemSummary[]>>({});
   const [bundleLoading, setBundleLoading] = useState<string | null>(null);
 
@@ -419,10 +452,14 @@ export function UserDashboard() {
   const [editingArticle, setEditingArticle] = useState<MyListing | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
 
-  // Auto-open publish form if navigated with ?action=publish
+  // Auto-open publish form if navigated with ?action=publish&type=PRODUIT|SERVICE
   useEffect(() => {
     if (initialActionRef.current === 'publish') {
       initialActionRef.current = null;
+      if (initialTypeRef.current === 'PRODUIT' || initialTypeRef.current === 'SERVICE') {
+        setArticleForm(prev => ({ ...prev, type: initialTypeRef.current as 'PRODUIT' | 'SERVICE' }));
+        initialTypeRef.current = null;
+      }
       setShowCreateForm(true);
     }
   }, []);
@@ -448,6 +485,7 @@ export function UserDashboard() {
     stockQuantity: '',
     serviceDurationMin: '',
     serviceLocation: '' as '' | 'DOMICILE' | 'SUR_PLACE',
+    variants: null as ProductVariantsValue,
   });
   const [uploadFiles, setUploadFiles] = useState<File[]>([]);
   const [uploadPreviews, setUploadPreviews] = useState<string[]>([]);
@@ -582,32 +620,61 @@ export function UserDashboard() {
   }, [isLoggedIn, user]);
 
   /* ── Kin-Sell Analytique: fetch insights when analytics tab is opened ── */
-  const { hasAnalytics, hasPremiumAnalytics, hasIaMarchand: hasIaMarchandPlan, hasIaOrder: hasIaOrderPlan } = useFeatureGate(activePlan);
+  const {
+    hasAnalytics,
+    hasPremiumAnalytics,
+    hasIaMarchandAuto: hasIaMarchandAutoPlan,
+    hasIaOrder: hasIaOrderPlan,
+  } = useFeatureGate(activePlan);
+
+  // Accès Boost : plan BOOST/AUTO/PRO_VENDOR ou add-on BOOST_VISIBILITY
+  const hasBoostAccess = (() => {
+    if (!activePlan) return false;
+    const code = activePlan.planCode;
+    if (code === 'BOOST' || code === 'AUTO' || code === 'PRO_VENDOR') return true;
+    return activePlan.addOns?.some((a) => a.code === 'BOOST_VISIBILITY' && a.status === 'ACTIVE') ?? false;
+  })();
 
   // F19+F24: When plan changes, clean up localStorage toggles if access lost
-  // NOTE: IA_MERCHANT (auto-nego) is FREE for all users — never wiped here
   useEffect(() => {
     if (!planLoaded) return; // don't wipe toggles before plan is fetched
     if (!hasIaOrderPlan) {
       localStorage.setItem(SK_AI_COMMANDE, 'off');
       setAiCommandeEnabled(false);
     }
-  }, [planLoaded, hasIaOrderPlan]);
+    if (!hasIaMarchandAutoPlan) {
+      localStorage.setItem(SK_AI_AUTO_NEGO, 'off');
+      setAiAutoNegoEnabled(false);
+    }
+  }, [planLoaded, hasIaOrderPlan, hasIaMarchandAutoPlan]);
 
   // F24: Refetch plan every 5 min to detect subscription changes
+  // Pause en arrière-plan pour économiser la batterie (mobile)
   useEffect(() => {
     if (!isLoggedIn) return;
     const refreshPlan = () => {
       billing.myPlan().then((p) => setActivePlan(p)).catch(() => {});
     };
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible') refreshPlan();
+    let interval: ReturnType<typeof setInterval> | null = null;
+    const start = () => {
+      if (interval == null) interval = setInterval(refreshPlan, 5 * 60 * 1000);
     };
-    const interval = setInterval(refreshPlan, 60 * 1000);
+    const stop = () => {
+      if (interval != null) { clearInterval(interval); interval = null; }
+    };
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        refreshPlan();
+        start();
+      } else {
+        stop();
+      }
+    };
+    if (!document.hidden) start();
     window.addEventListener('focus', refreshPlan);
     document.addEventListener('visibilitychange', handleVisibility);
     return () => {
-      clearInterval(interval);
+      stop();
       window.removeEventListener('focus', refreshPlan);
       document.removeEventListener('visibilitychange', handleVisibility);
     };
@@ -616,7 +683,7 @@ export function UserDashboard() {
   /* showAi for NegotiationRespondPopup: free hints always, paid advice when toggled on */
   const showNegAi = aiAdviceEnabled;
   /* auto-negotiate only when plan allows + user toggled on */
-  const autoNegoActive = hasIaMarchandPlan && aiAutoNegoEnabled;
+  const autoNegoActive = hasIaMarchandAutoPlan && aiAutoNegoEnabled;
 
   useEffect(() => {
     if (activeSection !== 'analytics' || !hasAnalytics || basicInsights) return;
@@ -1030,6 +1097,7 @@ export function UserDashboard() {
       locationVisibility: 'CITY_PUBLIC', serviceRadiusKm: '',
       latitude: String(cfg.defaultLat), longitude: String(cfg.defaultLng), imageUrl: '', priceUsdCents: '0', stockQuantity: '',
       serviceDurationMin: '', serviceLocation: '',
+      variants: null,
     });
     setEditingArticle(null);
     setShowCreateForm(false);
@@ -1260,6 +1328,7 @@ export function UserDashboard() {
         stockQuantity: articleForm.stockQuantity !== '' ? Number(articleForm.stockQuantity) : null,
         serviceDurationMin: articleForm.type === 'SERVICE' && articleForm.serviceDurationMin !== '' ? Number(articleForm.serviceDurationMin) : null,
         serviceLocation: articleForm.type === 'SERVICE' && articleForm.serviceLocation !== '' ? articleForm.serviceLocation : null,
+        variants: articleForm.type === 'PRODUIT' ? (articleForm.variants ?? null) : null,
       });
       setSuccessMessage(t('user.articleCreated'));
       resetArticleForm();
@@ -1319,6 +1388,7 @@ export function UserDashboard() {
         stockQuantity: articleForm.stockQuantity !== '' ? Number(articleForm.stockQuantity) : null,
         serviceDurationMin: articleForm.type === 'SERVICE' && articleForm.serviceDurationMin !== '' ? Number(articleForm.serviceDurationMin) : null,
         serviceLocation: articleForm.type === 'SERVICE' && articleForm.serviceLocation !== '' ? articleForm.serviceLocation : null,
+        variants: articleForm.type === 'PRODUIT' ? (articleForm.variants ?? null) : null,
       });
       setSuccessMessage(t('user.modified'));
       resetArticleForm();
@@ -1400,6 +1470,7 @@ export function UserDashboard() {
       stockQuantity: article.stockQuantity !== null ? String(article.stockQuantity) : '',
       serviceDurationMin: article.serviceDurationMin !== null ? String(article.serviceDurationMin) : '',
       serviceLocation: (article.serviceLocation as '' | 'DOMICILE' | 'SUR_PLACE') ?? '',
+      variants: ((article as any).variants ?? null) as ProductVariantsValue,
     });
     setPriceCdf(String(Math.round(article.priceUsdCents / 100 * udGetRate(currency))));
   };
@@ -2053,7 +2124,12 @@ export function UserDashboard() {
         </div>
 
         <nav className="ud-nav" aria-label="Menu utilisateur privé">
-          {SECTION_DEFS.map((section) => (
+          {SECTION_DEFS.map((section) => {
+            const isLocked =
+              (section.requires === 'analytics' && !hasAnalytics) ||
+              (section.requires === 'auto-shop' && !hasIaOrderPlan) ||
+              (section.requires === 'boosts' && !hasBoostAccess);
+            return (
             section.key === 'my-profile-page' ? (
               <Link
                 key={section.key}
@@ -2068,7 +2144,7 @@ export function UserDashboard() {
               <button
                 key={section.key}
                 type="button"
-                className={`ud-nav-item${activeSection === section.key ? ' ud-nav-item--active' : ''}`}
+                className={`ud-nav-item${activeSection === section.key ? ' ud-nav-item--active' : ''}${isLocked ? ' ud-nav-item--locked' : ''}`}
                 onClick={() => {
                   if (section.key === 'messages') {
                     navigate('/messaging');
@@ -2077,12 +2153,15 @@ export function UserDashboard() {
                   setActiveSection(section.key);
                   setMobileSidebarOpen(false);
                 }}
+                title={isLocked ? 'Forfait requis' : undefined}
               >
                 <span className="ud-nav-icon">{section.icon}</span>
                 {!sidebarCollapsed && <span className="ud-nav-label">{t(section.labelKey)}</span>}
+                {isLocked && <span className="ud-nav-lock" aria-label="Forfait requis">🔒</span>}
               </button>
             )
-          ))}
+            );
+          })}
         </nav>
 
         {!sidebarCollapsed && (
@@ -2333,6 +2412,10 @@ export function UserDashboard() {
                   <Link to="/forfaits" className="ud-ov-quick-tile">
                     <span className="ud-ov-quick-icon">⚡</span>
                     <span>{t('user.plans')}</span>
+                  </Link>
+                  <Link to="/market-intel" className="ud-ov-quick-tile">
+                    <span className="ud-ov-quick-icon">🌍</span>
+                    <span>Intelligence marché</span>
                   </Link>
                   <button type="button" className="ud-ov-quick-tile" onClick={() => setActiveSection('settings')}>
                     <span className="ud-ov-quick-icon">⚙</span>
@@ -2668,8 +2751,8 @@ export function UserDashboard() {
                         </p>
                         {article.promoActive && <span className="ud-art-promo-badge">🏷 Promo</span>}
                         {article.type === 'PRODUIT' && (
-                          <p className="ud-art-card-stock">
-                            {t('user.stockLabel')}: {article.stockQuantity !== null ? article.stockQuantity : '∞'}
+                          <p className={`ud-art-card-stock${article.stockQuantity === 0 ? ' ud-art-card-stock--exhausted' : ''}`}>
+                            {article.stockQuantity === 0 ? `⚠️ ${t('biz.outOfStock', 'Rupture de stock')}` : `${t('user.stockLabel')}: ${article.stockQuantity !== null ? article.stockQuantity : '∞'}`}
                           </p>
                         )}
                       </div>
@@ -2748,246 +2831,317 @@ export function UserDashboard() {
               </span>
             </div>
 
-            {/* ── Bloc marchandages reçus ── */}
+            {/* ── Bloc Transactions (fusion Marchandages + Commandes) ── */}
             <div className="ud-commerce-panel">
               <div className="ud-commerce-panel-head">
-                <h3 className="ud-commerce-panel-title">🤝 {t('user.negReceived')}</h3>
-                <span className="ud-ord-stat-chip">{negTotal} total</span>
-                <select
-                  className="ud-neg-filter-select"
-                  value={negFilter}
-                  onChange={(e) => { setNegFilter(e.target.value as NegotiationStatus | ''); setNegPage(1); }}
-                >
-                  <option value="">{t('user.negAllStatuses')}</option>
-                  <option value="PENDING">⏳ {t('order.status.pending')}</option>
-                  <option value="COUNTERED">🔄 {t('negotiation.counter')}</option>
-                  <option value="ACCEPTED">✅ {t('order.status.confirmed')}</option>
-                  <option value="REFUSED">❌ {t('negotiation.refuse')}</option>
-                  <option value="EXPIRED">⏰ {t('negotiation.status.expired')}</option>
-                </select>
+                <h3 className="ud-commerce-panel-title">💼 Transactions</h3>
+                <span className="ud-ord-stat-chip">{negTotal + allSellerOrders.length} total</span>
               </div>
 
-              {negLoading && <div className="ud-loading"><span className="ud-spinner" /><span>{t('user.negLoading')}</span></div>}
-              {!negLoading && negList.length === 0 && (
-                <div className="ud-neg-empty">
-                  <span style={{ fontSize: '2rem' }}>🤝</span>
-                  <p>{t('user.negNoneReceived')}</p>
-                </div>
-              )}
-              {!negLoading && negList.length > 0 && (
-                <div className="ud-neg-grid">
-                  {negList.map((neg) => {
-                    const lastOffer = neg.offers[neg.offers.length - 1];
-                    const canRespond = (neg.status === 'PENDING' || neg.status === 'COUNTERED') && lastOffer && lastOffer.fromUserId !== neg.sellerUserId;
+              {/* Onglets En cours / Historique */}
+              <div className="ud-tx-tabs">
+                <button
+                  type="button"
+                  className={`ud-tx-tab${txTab === 'active' ? ' ud-tx-tab--active' : ''}`}
+                  onClick={() => setTxTab('active')}
+                >
+                  🔄 En cours
+                </button>
+                <button
+                  type="button"
+                  className={`ud-tx-tab${txTab === 'history' ? ' ud-tx-tab--active' : ''}`}
+                  onClick={() => setTxTab('history')}
+                >
+                  📜 Historique
+                </button>
+              </div>
+
+              {/* ── Onglet "En cours" : négos actives + commandes actives ── */}
+              {txTab === 'active' && (
+                <>
+                  {/* Négociations en cours (PENDING / COUNTERED) */}
+                  {negLoading && <div className="ud-loading"><span className="ud-spinner" /><span>{t('user.negLoading')}</span></div>}
+                  {!negLoading && (() => {
+                    const activeNegs = negList.filter((n) => n.status === 'PENDING' || n.status === 'COUNTERED');
+                    const activeOrders = allSellerOrders.filter((o) => o.status !== 'DELIVERED' && o.status !== 'CANCELED');
+                    if (activeNegs.length === 0 && activeOrders.length === 0) {
+                      return (
+                        <div className="ud-neg-empty">
+                          <span style={{ fontSize: '2rem' }}>✨</span>
+                          <p>Aucune transaction en cours</p>
+                        </div>
+                      );
+                    }
                     return (
-                      <div key={neg.id} className={`ud-neg-card glass-card ud-neg-card--${neg.status.toLowerCase()}`}>
-                        <div className="ud-neg-card-header">
-                          {neg.listing?.imageUrl ? (
-                            <img src={resolveMediaUrl(neg.listing.imageUrl)} alt={neg.listing.title} className="ud-neg-img" />
-                          ) : (
-                            <div className="ud-neg-img-placeholder">{neg.listing?.type === 'SERVICE' ? '🛠' : '📦'}</div>
-                          )}
-                          <div className="ud-neg-card-info">
-                            <h4 className="ud-neg-card-title">{neg.listing?.title ?? 'Article'}</h4>
-                            <p className="ud-neg-card-meta">{t('user.buyerLabel')} : {neg.buyer.displayName}</p>
-                            <div className="ud-neg-badges-row">
-                            {neg.bundleId && <span className="ud-neg-type-badge ud-neg-type-badge--bundle">📦 {t('user.lotLabel')}</span>}
-                            <span className={`ud-neg-type-badge ud-neg-type-badge--${neg.type.toLowerCase()}`}>
-                              {neg.type === 'SIMPLE' && `🤝 ${t('user.negSimple')}`}
-                              {neg.type === 'QUANTITY' && `📦 ${t('user.negQuantity')}`}
-                              {neg.type === 'GROUPED' && `👥 ${t('user.negGrouped')}${neg.groupId ? ` (${neg.groupCurrentBuyers ?? 1}/${neg.minBuyers ?? 2})` : ''}`}
-                            </span>
-                            <span className={`ud-neg-status-badge ud-neg-status-badge--${neg.status.toLowerCase()}`}>
-                              {neg.status === 'PENDING' && `⏳ ${t('user.negStatusPending')}`}
-                              {neg.status === 'COUNTERED' && `🔄 ${t('user.negStatusCountered')}`}
-                              {neg.status === 'ACCEPTED' && `✅ ${t('user.negStatusAccepted')}`}
-                              {neg.status === 'REFUSED' && `❌ ${t('user.negStatusRefused')}`}
-                              {neg.status === 'EXPIRED' && `⏰ ${t('user.negStatusExpired')}`}
-                            </span>
+                      <div className="ud-neg-grid">
+                        {/* Négociations actives */}
+                        {activeNegs.map((neg) => {
+                          const offers = Array.isArray(neg.offers) ? neg.offers : [];
+                          const lastOffer = offers.length > 0 ? offers[offers.length - 1] : null;
+                          const canRespond = (neg.status === 'PENDING' || neg.status === 'COUNTERED') && lastOffer && lastOffer.fromUserId !== neg.sellerUserId;
+                          return (
+                            <div key={`neg-${neg.id}`} className={`ud-neg-card glass-card ud-neg-card--${neg.status.toLowerCase()}`}>
+                              <span className="ud-tx-type-label">🤝 Marchandage</span>
+                              <div className="ud-neg-card-header">
+                                {neg.listing?.imageUrl ? (
+                                  <img src={resolveMediaUrl(neg.listing.imageUrl)} alt={neg.listing.title} className="ud-neg-img" />
+                                ) : (
+                                  <div className="ud-neg-img-placeholder">{neg.listing?.type === 'SERVICE' ? '🛠' : '📦'}</div>
+                                )}
+                                <div className="ud-neg-card-info">
+                                  <h4 className="ud-neg-card-title">{neg.listing?.title ?? 'Article'}</h4>
+                                  <p className="ud-neg-card-meta">{t('user.buyerLabel')} : {neg.buyer.displayName}</p>
+                                  <div className="ud-neg-badges-row">
+                                    {neg.bundleId && <span className="ud-neg-type-badge ud-neg-type-badge--bundle">📦 {t('user.lotLabel')}</span>}
+                                    <span className={`ud-neg-type-badge ud-neg-type-badge--${neg.type.toLowerCase()}`}>
+                                      {neg.type === 'SIMPLE' && `🤝 ${t('user.negSimple')}`}
+                                      {neg.type === 'QUANTITY' && `📦 ${t('user.negQuantity')}`}
+                                      {neg.type === 'GROUPED' && `👥 ${t('user.negGrouped')}${neg.groupId ? ` (${neg.groupCurrentBuyers ?? 1}/${neg.minBuyers ?? 2})` : ''}`}
+                                    </span>
+                                    <span className={`ud-neg-status-badge ud-neg-status-badge--${neg.status.toLowerCase()}`}>
+                                      {neg.status === 'PENDING' && `⏳ ${t('user.negStatusPending')}`}
+                                      {neg.status === 'COUNTERED' && `🔄 ${t('user.negStatusCountered')}`}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="ud-neg-card-prices">
+                                <div className="ud-neg-price-row">
+                                  <span>{t('user.catalogPrice')}</span>
+                                  <span className="ud-neg-price-original">{formatMoneyFromUsdCents(neg.originalPriceUsdCents)}</span>
+                                </div>
+                                <div className="ud-neg-price-row">
+                                  <span>{t('user.quantityLabel')}</span>
+                                  <span className="ud-neg-price-current">x{neg.quantity}</span>
+                                </div>
+                                {lastOffer && (
+                                  <div className="ud-neg-price-row">
+                                    <span>{t('user.proposedPrice')}</span>
+                                    <span className="ud-neg-price-current">{formatMoneyFromUsdCents(lastOffer.priceUsdCents)}</span>
+                                  </div>
+                                )}
+                              </div>
+                              {neg.bundleId && (
+                                <div className="ud-neg-bundle-section">
+                                  <button type="button" className="ud-neg-bundle-toggle" onClick={() => toggleBundleExpand(neg.bundleId!)}>
+                                    {bundleLoading === neg.bundleId ? `⏳ ${t('user.bundleLoading')}` : expandedBundles[neg.bundleId] ? `▼ ${t('user.bundleHideLabel')}` : `▶ ${t('user.bundleShowLabel')}`}
+                                  </button>
+                                  {expandedBundles[neg.bundleId] && (
+                                    <div className="ud-neg-bundle-items">
+                                      {expandedBundles[neg.bundleId].map((bi) => (
+                                        <div key={bi.listingId} className="ud-neg-bundle-item">
+                                          {bi.listing?.imageUrl ? (
+                                            <img src={resolveMediaUrl(bi.listing.imageUrl)} alt={bi.listing.title} className="ud-neg-bundle-item-img" />
+                                          ) : (
+                                            <div className="ud-neg-bundle-item-img-ph">{bi.listing?.type === 'SERVICE' ? '🛠' : '📦'}</div>
+                                          )}
+                                          <div className="ud-neg-bundle-item-info">
+                                            <span className="ud-neg-bundle-item-title">{bi.listing?.title ?? 'Article'}</span>
+                                            <span className="ud-neg-bundle-item-detail">x{bi.quantity} — {formatMoneyFromUsdCents((bi.listing?.priceUsdCents ?? 0))}</span>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                              {canRespond && (
+                                <button type="button" className="ud-neg-respond-btn" onClick={() => setRespondNeg(neg)}>
+                                  🤝 {t('user.acceptCounterRefuse')}
+                                </button>
+                              )}
                             </div>
-                          </div>
-                        </div>
-                        <div className="ud-neg-card-prices">
-                          <div className="ud-neg-price-row">
-                            <span>{t('user.catalogPrice')}</span>
-                            <span className="ud-neg-price-original">{formatMoneyFromUsdCents(neg.originalPriceUsdCents)}</span>
-                          </div>
-                          <div className="ud-neg-price-row">
-                            <span>{t('user.quantityLabel')}</span>
-                            <span className="ud-neg-price-current">x{neg.quantity}</span>
-                          </div>
-                          {lastOffer && (
-                            <div className="ud-neg-price-row">
-                              <span>{t('user.proposedPrice')}</span>
-                              <span className="ud-neg-price-current">{formatMoneyFromUsdCents(lastOffer.priceUsdCents)}</span>
-                            </div>
-                          )}
-                        </div>
-                        {neg.bundleId && (
-                          <div className="ud-neg-bundle-section">
-                            <button type="button" className="ud-neg-bundle-toggle" onClick={() => toggleBundleExpand(neg.bundleId!)}>
-                              {bundleLoading === neg.bundleId ? `⏳ ${t('user.bundleLoading')}` : expandedBundles[neg.bundleId] ? `▼ ${t('user.bundleHideLabel')}` : `▶ ${t('user.bundleShowLabel')}`}
-                            </button>
-                            {expandedBundles[neg.bundleId] && (
-                              <div className="ud-neg-bundle-items">
-                                {expandedBundles[neg.bundleId].map((bi) => (
-                                  <div key={bi.listingId} className="ud-neg-bundle-item">
-                                    {bi.listing?.imageUrl ? (
-                                      <img src={resolveMediaUrl(bi.listing.imageUrl)} alt={bi.listing.title} className="ud-neg-bundle-item-img" />
+                          );
+                        })}
+
+                        {/* Commandes en cours */}
+                        {activeOrders.map((order) => {
+                          const firstItem = order.items[0];
+                          return (
+                            <div key={`ord-${order.id}`} className={`ud-neg-card glass-card ud-neg-card--${order.status.toLowerCase()}`}>
+                              <span className="ud-tx-type-label">📦 Commande</span>
+                              <div className="ud-neg-card-header">
+                                {firstItem?.imageUrl ? (
+                                  <img src={resolveMediaUrl(firstItem.imageUrl)} alt={firstItem.title} className="ud-neg-img" />
+                                ) : (
+                                  <div className="ud-neg-img-placeholder">{firstItem?.listingType === 'SERVICE' ? '🛠' : '📦'}</div>
+                                )}
+                                <div className="ud-neg-card-info">
+                                  <h4 className="ud-neg-card-title">#{order.id.slice(0, 8).toUpperCase()}</h4>
+                                  <p className="ud-neg-card-meta">{t('user.buyerLabel')} : {order.buyer.displayName}</p>
+                                  <div className="ud-neg-badges-row">
+                                    <span className={`ud-neg-status-badge ud-neg-status-badge--${order.status.toLowerCase()}`}>
+                                      {order.status === 'PENDING' && `⏳ ${statusLabel(order.status)}`}
+                                      {order.status === 'CONFIRMED' && `✅ ${statusLabel(order.status)}`}
+                                      {order.status === 'PROCESSING' && `⚙️ ${statusLabel(order.status)}`}
+                                      {order.status === 'SHIPPED' && `🚚 ${statusLabel(order.status)}`}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="ud-sord-items">
+                                {order.items.map((item) => (
+                                  <div key={item.id} className="ud-sord-item">
+                                    {item.imageUrl ? (
+                                      <img src={resolveMediaUrl(item.imageUrl)} alt={item.title} className="ud-sord-item-img" />
                                     ) : (
-                                      <div className="ud-neg-bundle-item-img-ph">{bi.listing?.type === 'SERVICE' ? '🛠' : '📦'}</div>
+                                      <div className="ud-sord-item-img-ph">{item.listingType === 'SERVICE' ? '🛠' : '📦'}</div>
                                     )}
-                                    <div className="ud-neg-bundle-item-info">
-                                      <span className="ud-neg-bundle-item-title">{bi.listing?.title ?? 'Article'}</span>
-                                      <span className="ud-neg-bundle-item-detail">x{bi.quantity} — {formatMoneyFromUsdCents((bi.listing?.priceUsdCents ?? 0))}</span>
+                                    <div className="ud-sord-item-info">
+                                      <span className="ud-sord-item-title">{item.title}</span>
+                                      <span className="ud-sord-item-detail">x{item.quantity} — {money(item.lineTotalUsdCents)}</span>
                                     </div>
                                   </div>
                                 ))}
                               </div>
-                            )}
-                          </div>
-                        )}
-                        {canRespond && (
-                          <button type="button" className="ud-neg-respond-btn" onClick={() => setRespondNeg(neg)}>
-                            🤝 {t('user.acceptCounterRefuse')}
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* ── Bloc commandes vendeur ── */}
-            <div className="ud-commerce-panel">
-              <div className="ud-commerce-panel-head">
-                <h3 className="ud-commerce-panel-title">📦 {t('user.sellerOrders')}</h3>
-                <span className="ud-ord-stat-chip">{allSellerOrders.length} total</span>
-                <select
-                  className="ud-neg-filter-select"
-                  value={salesFilter}
-                  onChange={(e) => setSalesFilter(e.target.value as OrderStatus | '')}
-                >
-                  <option value="">{t('user.filterAll')}</option>
-                  <option value="PENDING">⏳ {t('user.filterPending')}</option>
-                  <option value="CONFIRMED">✅ {t('user.filterConfirmed')}</option>
-                  <option value="PROCESSING">⚙️ {t('user.filterProcessing')}</option>
-                  <option value="SHIPPED">🚚 {t('user.filterShipped')}</option>
-                  <option value="DELIVERED">📬 {t('user.filterDelivered')}</option>
-                  <option value="CANCELED">❌ {t('user.filterCanceled')}</option>
-                </select>
-              </div>
-
-              {loadingCommerce && <div className="ud-loading"><span className="ud-spinner" /><span>{t('user.loadingOrders')}</span></div>}
-              {!loadingCommerce && filteredSellerOrders.length === 0 && (
-                <div className="ud-neg-empty">
-                  <span style={{ fontSize: '2rem' }}>📭</span>
-                  <p>{t('user.noSellerOrders')}{salesFilter ? ` ${t('user.withStatus')} "${statusLabel(salesFilter)}"` : ''}.</p>
-                </div>
-              )}
-              {!loadingCommerce && filteredSellerOrders.length > 0 && (
-                <div className="ud-neg-grid">
-                  {filteredSellerOrders.map((order) => {
-                    const firstItem = order.items[0];
-                    return (
-                      <div key={order.id} className={`ud-neg-card glass-card ud-neg-card--${order.status.toLowerCase()}`}>
-                        <div className="ud-neg-card-header">
-                          {firstItem?.imageUrl ? (
-                            <img src={resolveMediaUrl(firstItem.imageUrl)} alt={firstItem.title} className="ud-neg-img" />
-                          ) : (
-                            <div className="ud-neg-img-placeholder">{firstItem?.listingType === 'SERVICE' ? '🛠' : '📦'}</div>
-                          )}
-                          <div className="ud-neg-card-info">
-                            <h4 className="ud-neg-card-title">#{order.id.slice(0, 8).toUpperCase()}</h4>
-                            <p className="ud-neg-card-meta">{t('user.buyerLabel')} : {order.buyer.displayName}</p>
-                            <div className="ud-neg-badges-row">
-                              <span className={`ud-neg-status-badge ud-neg-status-badge--${order.status.toLowerCase()}`}>
-                                {order.status === 'PENDING' && `⏳ ${statusLabel(order.status)}`}
-                                {order.status === 'CONFIRMED' && `✅ ${statusLabel(order.status)}`}
-                                {order.status === 'PROCESSING' && `⚙️ ${statusLabel(order.status)}`}
-                                {order.status === 'SHIPPED' && `🚚 ${statusLabel(order.status)}`}
-                                {order.status === 'DELIVERED' && `📬 ${statusLabel(order.status)}`}
-                                {order.status === 'CANCELED' && `❌ ${statusLabel(order.status)}`}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* ── Articles de la commande ── */}
-                        <div className="ud-sord-items">
-                          {order.items.map((item) => (
-                            <div key={item.id} className="ud-sord-item">
-                              {item.imageUrl ? (
-                                <img src={resolveMediaUrl(item.imageUrl)} alt={item.title} className="ud-sord-item-img" />
-                              ) : (
-                                <div className="ud-sord-item-img-ph">{item.listingType === 'SERVICE' ? '🛠' : '📦'}</div>
-                              )}
-                              <div className="ud-sord-item-info">
-                                <span className="ud-sord-item-title">{item.title}</span>
-                                <span className="ud-sord-item-detail">x{item.quantity} — {money(item.lineTotalUsdCents)}</span>
+                              <div className="ud-neg-card-prices">
+                                <div className="ud-neg-price-row">
+                                  <span>Total</span>
+                                  <span className="ud-neg-price-current">{money(order.totalUsdCents)}</span>
+                                </div>
+                                <div className="ud-neg-price-row">
+                                  <span>Date</span>
+                                  <span className="ud-neg-price-original">{new Date(order.createdAt).toLocaleDateString('fr-FR')}</span>
+                                </div>
+                              </div>
+                              <div className="ud-sord-actions">
+                                <button type="button" className="ud-neg-respond-btn" onClick={() => void handleOrderDetail(order.id)}>
+                                  ℹ️ {t('user.orderDetailLabel')}
+                                </button>
+                                {nextSellerStatuses(order.status).map((status) => (
+                                  <button
+                                    key={status}
+                                    type="button"
+                                    className={`ud-neg-respond-btn${status === 'CANCELED' ? ' ud-sord-action--danger' : ''}`}
+                                    disabled={orderStatusBusyId !== null}
+                                    onClick={() => void handleSellerStatus(order.id, status)}
+                                  >
+                                    {orderStatusBusyId === order.id ? '...' : statusLabel(status)}
+                                  </button>
+                                ))}
+                                {(order.status === 'PROCESSING' || order.status === 'SHIPPED') && (
+                                  <button
+                                    type="button"
+                                    className="ud-neg-respond-btn"
+                                    disabled={validationCodeBusyId === order.id}
+                                    onClick={() => void handleRevealCode(order.id)}
+                                  >
+                                    {validationCodeBusyId === order.id ? '...' : '🔑 QR / Code'}
+                                  </button>
+                                )}
                               </div>
                             </div>
-                          ))}
-                        </div>
-
-                        <div className="ud-neg-card-prices">
-                          <div className="ud-neg-price-row">
-                            <span>Total</span>
-                            <span className="ud-neg-price-current">{money(order.totalUsdCents)}</span>
-                          </div>
-                          <div className="ud-neg-price-row">
-                            <span>{t('user.articlesLabel')}</span>
-                            <span className="ud-neg-price-original">{order.itemsCount} {order.itemsCount > 1 ? t('user.articlesLabel') : t('user.articleLabel')}</span>
-                          </div>
-                          <div className="ud-neg-price-row">
-                            <span>Date</span>
-                            <span className="ud-neg-price-original">{new Date(order.createdAt).toLocaleDateString('fr-FR')}</span>
-                          </div>
-                        </div>
-
-                        <div className="ud-sord-actions">
-                          <button type="button" className="ud-neg-respond-btn" onClick={() => void handleOrderDetail(order.id)}>
-                            ℹ️ {t('user.orderDetailLabel')}
-                          </button>
-                          {nextSellerStatuses(order.status).map((status) => (
-                            <button
-                              key={status}
-                              type="button"
-                              className={`ud-neg-respond-btn${status === 'CANCELED' ? ' ud-sord-action--danger' : ''}`}
-                              disabled={orderStatusBusyId !== null}
-                              onClick={() => void handleSellerStatus(order.id, status)}
-                            >
-                              {orderStatusBusyId === order.id ? '...' : statusLabel(status)}
-                            </button>
-                          ))}
-                          {(order.status === 'PROCESSING' || order.status === 'SHIPPED') && (
-                            <button
-                              type="button"
-                              className="ud-neg-respond-btn"
-                              disabled={validationCodeBusyId === order.id}
-                              onClick={() => void handleRevealCode(order.id)}
-                            >
-                              {validationCodeBusyId === order.id ? '...' : '🔑 QR / Code'}
-                            </button>
-                          )}
-                          {order.status === 'DELIVERED' && !reviewedOrders.has(order.id) && (
-                            <button
-                              type="button"
-                              className="ud-neg-respond-btn"
-                              onClick={() => { setReviewModalOrder({ orderId: order.id }); setReviewRating(5); setReviewText(''); }}
-                            >
-                              ⭐ Avis
-                            </button>
-                          )}
-                          {order.status === 'DELIVERED' && reviewedOrders.has(order.id) && (
-                            <span style={{ fontSize: '.75rem', color: 'var(--color-primary)', padding: '4px 8px' }}>✓ Avis envoyé</span>
-                          )}
-                        </div>
+                          );
+                        })}
                       </div>
                     );
-                  })}
-                </div>
+                  })()}
+                </>
+              )}
+
+              {/* ── Onglet "Historique" : négos terminées + commandes terminées ── */}
+              {txTab === 'history' && (
+                <>
+                  {negLoading && <div className="ud-loading"><span className="ud-spinner" /><span>{t('user.negLoading')}</span></div>}
+                  {!negLoading && (() => {
+                    const doneNegs = negList.filter((n) => n.status === 'ACCEPTED' || n.status === 'REFUSED' || n.status === 'EXPIRED');
+                    const doneOrders = allSellerOrders.filter((o) => o.status === 'DELIVERED' || o.status === 'CANCELED');
+                    if (doneNegs.length === 0 && doneOrders.length === 0) {
+                      return (
+                        <div className="ud-neg-empty">
+                          <span style={{ fontSize: '2rem' }}>📜</span>
+                          <p>Aucun historique de transaction</p>
+                        </div>
+                      );
+                    }
+                    return (
+                      <div className="ud-neg-grid">
+                        {/* Négociations terminées */}
+                        {doneNegs.map((neg) => {
+                          const offers = Array.isArray(neg.offers) ? neg.offers : [];
+                          const lastOffer = offers.length > 0 ? offers[offers.length - 1] : null;
+                          return (
+                            <div key={`neg-${neg.id}`} className={`ud-neg-card glass-card ud-neg-card--${neg.status.toLowerCase()}`}>
+                              <span className="ud-tx-type-label">🤝 Marchandage</span>
+                              <div className="ud-neg-card-header">
+                                {neg.listing?.imageUrl ? (
+                                  <img src={resolveMediaUrl(neg.listing.imageUrl)} alt={neg.listing.title} className="ud-neg-img" />
+                                ) : (
+                                  <div className="ud-neg-img-placeholder">{neg.listing?.type === 'SERVICE' ? '🛠' : '📦'}</div>
+                                )}
+                                <div className="ud-neg-card-info">
+                                  <h4 className="ud-neg-card-title">{neg.listing?.title ?? 'Article'}</h4>
+                                  <p className="ud-neg-card-meta">{t('user.buyerLabel')} : {neg.buyer.displayName}</p>
+                                  <div className="ud-neg-badges-row">
+                                    <span className={`ud-neg-status-badge ud-neg-status-badge--${neg.status.toLowerCase()}`}>
+                                      {neg.status === 'ACCEPTED' && `✅ ${t('user.negStatusAccepted')}`}
+                                      {neg.status === 'REFUSED' && `❌ ${t('user.negStatusRefused')}`}
+                                      {neg.status === 'EXPIRED' && `⏰ ${t('user.negStatusExpired')}`}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="ud-neg-card-prices">
+                                <div className="ud-neg-price-row">
+                                  <span>{t('user.catalogPrice')}</span>
+                                  <span className="ud-neg-price-original">{formatMoneyFromUsdCents(neg.originalPriceUsdCents)}</span>
+                                </div>
+                                {lastOffer && (
+                                  <div className="ud-neg-price-row">
+                                    <span>{t('user.proposedPrice')}</span>
+                                    <span className="ud-neg-price-current">{formatMoneyFromUsdCents(lastOffer.priceUsdCents)}</span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+
+                        {/* Commandes terminées */}
+                        {doneOrders.map((order) => {
+                          const firstItem = order.items[0];
+                          return (
+                            <div key={`ord-${order.id}`} className={`ud-neg-card glass-card ud-neg-card--${order.status.toLowerCase()}`}>
+                              <span className="ud-tx-type-label">📦 Commande</span>
+                              <div className="ud-neg-card-header">
+                                {firstItem?.imageUrl ? (
+                                  <img src={resolveMediaUrl(firstItem.imageUrl)} alt={firstItem.title} className="ud-neg-img" />
+                                ) : (
+                                  <div className="ud-neg-img-placeholder">{firstItem?.listingType === 'SERVICE' ? '🛠' : '📦'}</div>
+                                )}
+                                <div className="ud-neg-card-info">
+                                  <h4 className="ud-neg-card-title">#{order.id.slice(0, 8).toUpperCase()}</h4>
+                                  <p className="ud-neg-card-meta">{t('user.buyerLabel')} : {order.buyer.displayName}</p>
+                                  <div className="ud-neg-badges-row">
+                                    <span className={`ud-neg-status-badge ud-neg-status-badge--${order.status.toLowerCase()}`}>
+                                      {order.status === 'DELIVERED' && `📬 ${statusLabel(order.status)}`}
+                                      {order.status === 'CANCELED' && `❌ ${statusLabel(order.status)}`}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="ud-neg-card-prices">
+                                <div className="ud-neg-price-row">
+                                  <span>Total</span>
+                                  <span className="ud-neg-price-current">{money(order.totalUsdCents)}</span>
+                                </div>
+                                <div className="ud-neg-price-row">
+                                  <span>Date</span>
+                                  <span className="ud-neg-price-original">{new Date(order.createdAt).toLocaleDateString('fr-FR')}</span>
+                                </div>
+                              </div>
+                              <div className="ud-sord-actions">
+                                <button type="button" className="ud-neg-respond-btn" onClick={() => void handleOrderDetail(order.id)}>
+                                  ℹ️ {t('user.orderDetailLabel')}
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                </>
               )}
 
               {/* ── Détail commande sélectionnée ── */}
@@ -3058,127 +3212,277 @@ export function UserDashboard() {
               )}
             </div>
 
-            {/* ── Bloc marchandages envoyés ── */}
+            {/* ── Bloc Transactions acheteur (fusion Marchandages envoyés + Commandes) ── */}
             <div className="ud-commerce-panel">
               <div className="ud-commerce-panel-head">
-                <h3 className="ud-commerce-panel-title">🤝 {t('user.negSent')}</h3>
-                <span className="ud-ord-stat-chip">{negTotal} total</span>
-                <select
-                  className="ud-neg-filter-select"
-                  value={negFilter}
-                  onChange={(e) => { setNegFilter(e.target.value as NegotiationStatus | ''); setNegPage(1); }}
-                >
-                  <option value="">{t('user.negAllStatuses')}</option>
-                  <option value="PENDING">⏳ {t('order.status.pending')}</option>
-                  <option value="COUNTERED">🔄 {t('negotiation.counter')}</option>
-                  <option value="ACCEPTED">✅ {t('order.status.confirmed')}</option>
-                  <option value="REFUSED">❌ {t('negotiation.refuse')}</option>
-                  <option value="EXPIRED">⏰ {t('negotiation.status.expired')}</option>
-                </select>
+                <h3 className="ud-commerce-panel-title">💼 Transactions</h3>
+                <span className="ud-ord-stat-chip">{negTotal + allBuyerOrders.length} total</span>
               </div>
 
-              {negLoading && <div className="ud-loading"><span className="ud-spinner" /><span>{t('user.negLoading')}</span></div>}
-              {!negLoading && negList.length === 0 && (
-                <div className="ud-neg-empty">
-                  <span style={{ fontSize: '2rem' }}>🤝</span>
-                  <p>{t('user.negNoneSent')}</p>
-                </div>
-              )}
-              {!negLoading && negList.length > 0 && (
-                <div className="ud-neg-grid">
-                  {negList.map((neg) => {
-                    const lastOffer = neg.offers[neg.offers.length - 1];
-                    const canRespond = neg.status === 'COUNTERED' && lastOffer && lastOffer.fromUserId !== neg.buyerUserId;
-                    const canCancel = neg.status === 'PENDING' || neg.status === 'COUNTERED';
+              {/* Onglets En cours / Historique */}
+              <div className="ud-tx-tabs">
+                <button
+                  type="button"
+                  className={`ud-tx-tab${txTab === 'active' ? ' ud-tx-tab--active' : ''}`}
+                  onClick={() => setTxTab('active')}
+                >
+                  🔄 En cours
+                </button>
+                <button
+                  type="button"
+                  className={`ud-tx-tab${txTab === 'history' ? ' ud-tx-tab--active' : ''}`}
+                  onClick={() => setTxTab('history')}
+                >
+                  📜 Historique
+                </button>
+              </div>
+
+              {/* ── Onglet "En cours" ── */}
+              {txTab === 'active' && (
+                <>
+                  {negLoading && <div className="ud-loading"><span className="ud-spinner" /><span>{t('user.negLoading')}</span></div>}
+                  {!negLoading && (() => {
+                    const activeNegs = negList.filter((n) => n.status === 'PENDING' || n.status === 'COUNTERED');
+                    const activeOrders = allBuyerOrders.filter((o) => o.status !== 'DELIVERED' && o.status !== 'CANCELED');
+                    if (activeNegs.length === 0 && activeOrders.length === 0) {
+                      return (
+                        <div className="ud-neg-empty">
+                          <span style={{ fontSize: '2rem' }}>✨</span>
+                          <p>Aucune transaction en cours</p>
+                        </div>
+                      );
+                    }
                     return (
-                      <div key={neg.id} className={`ud-neg-card glass-card ud-neg-card--${neg.status.toLowerCase()}`}>
-                        <div className="ud-neg-card-header">
-                          {neg.listing?.imageUrl ? (
-                            <img src={resolveMediaUrl(neg.listing.imageUrl)} alt={neg.listing.title} className="ud-neg-img" loading="lazy" />
-                          ) : (
-                            <div className="ud-neg-img-placeholder">{neg.listing?.type === 'SERVICE' ? '🛠' : '📦'}</div>
-                          )}
-                          <div className="ud-neg-card-info">
-                            <h4 className="ud-neg-card-title">{neg.listing?.title ?? 'Article'}</h4>
-                            <p className="ud-neg-card-meta">{t('user.sellerLabel')} : {neg.seller.displayName}</p>
-                            <div className="ud-neg-badges-row">
-                            {neg.bundleId && <span className="ud-neg-type-badge ud-neg-type-badge--bundle">📦 {t('user.lotLabel')}</span>}
-                            <span className={`ud-neg-type-badge ud-neg-type-badge--${neg.type.toLowerCase()}`}>
-                              {neg.type === 'SIMPLE' && `🤝 ${t('user.negSimple')}`}
-                              {neg.type === 'QUANTITY' && `📦 ${t('user.negQuantity')}`}
-                              {neg.type === 'GROUPED' && `👥 ${t('user.negGrouped')}${neg.groupId ? ` (${neg.groupCurrentBuyers ?? 1}/${neg.minBuyers ?? 2})` : ''}`}
-                            </span>
-                            <span className={`ud-neg-status-badge ud-neg-status-badge--${neg.status.toLowerCase()}`}>
-                              {neg.status === 'PENDING' && `⏳ ${t('user.negStatusPending')}`}
-                              {neg.status === 'COUNTERED' && `🔄 ${t('user.negStatusCounteredReceived')}`}
-                              {neg.status === 'ACCEPTED' && `✅ ${t('user.negStatusAccepted')}`}
-                              {neg.status === 'REFUSED' && `❌ ${t('user.negStatusRefused')}`}
-                              {neg.status === 'EXPIRED' && `⏰ ${t('user.negStatusExpired')}`}
-                            </span>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="ud-neg-card-prices">
-                          <div className="ud-neg-price-row">
-                            <span>{t('user.catalogPrice')}</span>
-                            <span className="ud-neg-price-original">{formatMoneyFromUsdCents(neg.originalPriceUsdCents)}</span>
-                          </div>
-                          <div className="ud-neg-price-row">
-                            <span>{t('user.quantityLabel')}</span>
-                            <span className="ud-neg-price-current">x{neg.quantity}</span>
-                          </div>
-                          {lastOffer && (
-                            <div className="ud-neg-price-row">
-                              <span>{t('user.lastOffer')}</span>
-                              <span className="ud-neg-price-current">{formatMoneyFromUsdCents(lastOffer.priceUsdCents)}</span>
-                            </div>
-                          )}
-                        </div>
-                        {neg.bundleId && (
-                          <div className="ud-neg-bundle-section">
-                            <button type="button" className="ud-neg-bundle-toggle" onClick={() => toggleBundleExpand(neg.bundleId!)}>
-                              {bundleLoading === neg.bundleId ? `⏳ ${t('user.bundleLoading')}` : expandedBundles[neg.bundleId] ? `▼ ${t('user.bundleHideLabel')}` : `▶ ${t('user.bundleShowLabel')}`}
-                            </button>
-                            {expandedBundles[neg.bundleId] && (
-                              <div className="ud-neg-bundle-items">
-                                {expandedBundles[neg.bundleId].map((bi) => (
-                                  <div key={bi.listingId} className="ud-neg-bundle-item">
-                                    {bi.listing?.imageUrl ? (
-                                      <img src={resolveMediaUrl(bi.listing.imageUrl)} alt={bi.listing.title} className="ud-neg-bundle-item-img" />
-                                    ) : (
-                                      <div className="ud-neg-bundle-item-img-ph">{bi.listing?.type === 'SERVICE' ? '🛠' : '📦'}</div>
-                                    )}
-                                    <div className="ud-neg-bundle-item-info">
-                                      <span className="ud-neg-bundle-item-title">{bi.listing?.title ?? 'Article'}</span>
-                                      <span className="ud-neg-bundle-item-detail">x{bi.quantity} — {formatMoneyFromUsdCents((bi.listing?.priceUsdCents ?? 0))}</span>
-                                    </div>
+                      <div className="ud-neg-grid">
+                        {/* Négociations actives */}
+                        {activeNegs.map((neg) => {
+                          const offers = Array.isArray(neg.offers) ? neg.offers : [];
+                          const lastOffer = offers.length > 0 ? offers[offers.length - 1] : null;
+                          const canRespond = neg.status === 'COUNTERED' && lastOffer && lastOffer.fromUserId !== neg.buyerUserId;
+                          const canCancel = neg.status === 'PENDING' || neg.status === 'COUNTERED';
+                          return (
+                            <div key={`neg-${neg.id}`} className={`ud-neg-card glass-card ud-neg-card--${neg.status.toLowerCase()}`}>
+                              <span className="ud-tx-type-label">🤝 Marchandage</span>
+                              <div className="ud-neg-card-header">
+                                {neg.listing?.imageUrl ? (
+                                  <img src={resolveMediaUrl(neg.listing.imageUrl)} alt={neg.listing.title} className="ud-neg-img" loading="lazy" />
+                                ) : (
+                                  <div className="ud-neg-img-placeholder">{neg.listing?.type === 'SERVICE' ? '🛠' : '📦'}</div>
+                                )}
+                                <div className="ud-neg-card-info">
+                                  <h4 className="ud-neg-card-title">{neg.listing?.title ?? 'Article'}</h4>
+                                  <p className="ud-neg-card-meta">{t('user.sellerLabel')} : {neg.seller.displayName}</p>
+                                  <div className="ud-neg-badges-row">
+                                    {neg.bundleId && <span className="ud-neg-type-badge ud-neg-type-badge--bundle">📦 {t('user.lotLabel')}</span>}
+                                    <span className={`ud-neg-type-badge ud-neg-type-badge--${neg.type.toLowerCase()}`}>
+                                      {neg.type === 'SIMPLE' && `🤝 ${t('user.negSimple')}`}
+                                      {neg.type === 'QUANTITY' && `📦 ${t('user.negQuantity')}`}
+                                      {neg.type === 'GROUPED' && `👥 ${t('user.negGrouped')}${neg.groupId ? ` (${neg.groupCurrentBuyers ?? 1}/${neg.minBuyers ?? 2})` : ''}`}
+                                    </span>
+                                    <span className={`ud-neg-status-badge ud-neg-status-badge--${neg.status.toLowerCase()}`}>
+                                      {neg.status === 'PENDING' && `⏳ ${t('user.negStatusPending')}`}
+                                      {neg.status === 'COUNTERED' && `🔄 ${t('user.negStatusCounteredReceived')}`}
+                                    </span>
                                   </div>
-                                ))}
+                                </div>
                               </div>
-                            )}
-                          </div>
-                        )}
-                        <div className="ud-neg-inline-actions">
-                          {canRespond && (
-                            <button type="button" className="ud-neg-respond-btn" onClick={() => setRespondNeg(neg)}>
-                              🤝 {t('user.respondBtn')}
-                            </button>
-                          )}
-                          {canCancel && (
-                            <button
-                              type="button"
-                              className="ud-neg-cancel-btn"
-                              disabled={cancelNegBusyId === neg.id}
-                              onClick={() => void handleCancelNegotiation(neg.id)}
-                            >
-                              {cancelNegBusyId === neg.id ? '...' : `✕ ${t('user.cancelNegBtn')}`}
-                            </button>
-                          )}
-                        </div>
+                              <div className="ud-neg-card-prices">
+                                <div className="ud-neg-price-row">
+                                  <span>{t('user.catalogPrice')}</span>
+                                  <span className="ud-neg-price-original">{formatMoneyFromUsdCents(neg.originalPriceUsdCents)}</span>
+                                </div>
+                                <div className="ud-neg-price-row">
+                                  <span>{t('user.quantityLabel')}</span>
+                                  <span className="ud-neg-price-current">x{neg.quantity}</span>
+                                </div>
+                                {lastOffer && (
+                                  <div className="ud-neg-price-row">
+                                    <span>{t('user.lastOffer')}</span>
+                                    <span className="ud-neg-price-current">{formatMoneyFromUsdCents(lastOffer.priceUsdCents)}</span>
+                                  </div>
+                                )}
+                              </div>
+                              {neg.bundleId && (
+                                <div className="ud-neg-bundle-section">
+                                  <button type="button" className="ud-neg-bundle-toggle" onClick={() => toggleBundleExpand(neg.bundleId!)}>
+                                    {bundleLoading === neg.bundleId ? `⏳ ${t('user.bundleLoading')}` : expandedBundles[neg.bundleId] ? `▼ ${t('user.bundleHideLabel')}` : `▶ ${t('user.bundleShowLabel')}`}
+                                  </button>
+                                  {expandedBundles[neg.bundleId] && (
+                                    <div className="ud-neg-bundle-items">
+                                      {expandedBundles[neg.bundleId].map((bi) => (
+                                        <div key={bi.listingId} className="ud-neg-bundle-item">
+                                          {bi.listing?.imageUrl ? (
+                                            <img src={resolveMediaUrl(bi.listing.imageUrl)} alt={bi.listing.title} className="ud-neg-bundle-item-img" />
+                                          ) : (
+                                            <div className="ud-neg-bundle-item-img-ph">{bi.listing?.type === 'SERVICE' ? '🛠' : '📦'}</div>
+                                          )}
+                                          <div className="ud-neg-bundle-item-info">
+                                            <span className="ud-neg-bundle-item-title">{bi.listing?.title ?? 'Article'}</span>
+                                            <span className="ud-neg-bundle-item-detail">x{bi.quantity} — {formatMoneyFromUsdCents((bi.listing?.priceUsdCents ?? 0))}</span>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                              <div className="ud-neg-inline-actions">
+                                {canRespond && (
+                                  <button type="button" className="ud-neg-respond-btn" onClick={() => setRespondNeg(neg)}>
+                                    🤝 {t('user.respondBtn')}
+                                  </button>
+                                )}
+                                {canCancel && (
+                                  <button
+                                    type="button"
+                                    className="ud-neg-cancel-btn"
+                                    disabled={cancelNegBusyId === neg.id}
+                                    onClick={() => void handleCancelNegotiation(neg.id)}
+                                  >
+                                    {cancelNegBusyId === neg.id ? '...' : `✕ ${t('user.cancelNegBtn')}`}
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+
+                        {/* Commandes actives */}
+                        {activeOrders.map((order) => (
+                          <article key={`ord-${order.id}`} className="ud-ord-card">
+                            <span className="ud-tx-type-label">📦 Commande</span>
+                            <div className="ud-ord-card-header">
+                              <span className="ud-ord-card-id">#{order.id.slice(0, 8).toUpperCase()}</span>
+                              <span className={statusClass(order.status)}>{statusLabel(order.status)}</span>
+                            </div>
+                            <div className="ud-ord-card-body">
+                              <p className="ud-ord-card-amount">{money(order.totalUsdCents)}</p>
+                              <p className="ud-ord-card-meta">{order.itemsCount} {order.itemsCount > 1 ? t('user.articlesLabel') : t('user.articleLabel')} · {new Date(order.createdAt).toLocaleDateString('fr-FR')}</p>
+                              {order.autoExpireAt && (
+                                <p className="ud-ord-expire-deadline">⏳ Expire le {new Date(order.autoExpireAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+                              )}
+                            </div>
+                            <div className="ud-ord-card-actions">
+                              <button type="button" className="ud-ord-action ud-ord-action--detail" title={t('user.orderDetailLabel')} onClick={() => void handleOrderDetail(order.id)}>
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                              </button>
+                              {(order.status === 'PROCESSING' || order.status === 'SHIPPED') && (
+                                <button
+                                  type="button"
+                                  className="ud-ord-action ud-ord-action--confirm"
+                                  title={t('user.confirmReceptionTooltip')}
+                                  onClick={() => {
+                                    setBuyerConfirmOrderId(order.id);
+                                    setBuyerConfirmCode('');
+                                    setBuyerConfirmMode('manual');
+                                    setBuyerConfirmScanMessage(null);
+                                    setBuyerConfirmScanError(null);
+                                  }}
+                                >
+                                  📬 {t('user.confirmReceptionShort')}
+                                </button>
+                              )}
+                            </div>
+                          </article>
+                        ))}
                       </div>
                     );
-                  })}
-                </div>
+                  })()}
+                </>
+              )}
+
+              {/* ── Onglet "Historique" ── */}
+              {txTab === 'history' && (
+                <>
+                  {negLoading && <div className="ud-loading"><span className="ud-spinner" /><span>{t('user.negLoading')}</span></div>}
+                  {!negLoading && (() => {
+                    const doneNegs = negList.filter((n) => n.status === 'ACCEPTED' || n.status === 'REFUSED' || n.status === 'EXPIRED');
+                    const doneOrders = allBuyerOrders.filter((o) => o.status === 'DELIVERED' || o.status === 'CANCELED');
+                    if (doneNegs.length === 0 && doneOrders.length === 0) {
+                      return (
+                        <div className="ud-neg-empty">
+                          <span style={{ fontSize: '2rem' }}>📜</span>
+                          <p>Aucun historique de transaction</p>
+                        </div>
+                      );
+                    }
+                    return (
+                      <div className="ud-neg-grid">
+                        {doneNegs.map((neg) => {
+                          const offers = Array.isArray(neg.offers) ? neg.offers : [];
+                          const lastOffer = offers.length > 0 ? offers[offers.length - 1] : null;
+                          return (
+                            <div key={`neg-${neg.id}`} className={`ud-neg-card glass-card ud-neg-card--${neg.status.toLowerCase()}`}>
+                              <span className="ud-tx-type-label">🤝 Marchandage</span>
+                              <div className="ud-neg-card-header">
+                                {neg.listing?.imageUrl ? (
+                                  <img src={resolveMediaUrl(neg.listing.imageUrl)} alt={neg.listing.title} className="ud-neg-img" />
+                                ) : (
+                                  <div className="ud-neg-img-placeholder">{neg.listing?.type === 'SERVICE' ? '🛠' : '📦'}</div>
+                                )}
+                                <div className="ud-neg-card-info">
+                                  <h4 className="ud-neg-card-title">{neg.listing?.title ?? 'Article'}</h4>
+                                  <p className="ud-neg-card-meta">{t('user.sellerLabel')} : {neg.seller.displayName}</p>
+                                  <div className="ud-neg-badges-row">
+                                    <span className={`ud-neg-status-badge ud-neg-status-badge--${neg.status.toLowerCase()}`}>
+                                      {neg.status === 'ACCEPTED' && `✅ ${t('user.negStatusAccepted')}`}
+                                      {neg.status === 'REFUSED' && `❌ ${t('user.negStatusRefused')}`}
+                                      {neg.status === 'EXPIRED' && `⏰ ${t('user.negStatusExpired')}`}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="ud-neg-card-prices">
+                                <div className="ud-neg-price-row">
+                                  <span>{t('user.catalogPrice')}</span>
+                                  <span className="ud-neg-price-original">{formatMoneyFromUsdCents(neg.originalPriceUsdCents)}</span>
+                                </div>
+                                {lastOffer && (
+                                  <div className="ud-neg-price-row">
+                                    <span>{t('user.lastOffer')}</span>
+                                    <span className="ud-neg-price-current">{formatMoneyFromUsdCents(lastOffer.priceUsdCents)}</span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+
+                        {doneOrders.map((order) => (
+                          <article key={`ord-${order.id}`} className="ud-ord-card">
+                            <span className="ud-tx-type-label">📦 Commande</span>
+                            <div className="ud-ord-card-header">
+                              <span className="ud-ord-card-id">#{order.id.slice(0, 8).toUpperCase()}</span>
+                              <span className={statusClass(order.status)}>{statusLabel(order.status)}</span>
+                            </div>
+                            <div className="ud-ord-card-body">
+                              <p className="ud-ord-card-amount">{money(order.totalUsdCents)}</p>
+                              <p className="ud-ord-card-meta">{order.itemsCount} {order.itemsCount > 1 ? t('user.articlesLabel') : t('user.articleLabel')} · {new Date(order.createdAt).toLocaleDateString('fr-FR')}</p>
+                            </div>
+                            <div className="ud-ord-card-actions">
+                              <button type="button" className="ud-ord-action ud-ord-action--detail" title={t('user.orderDetailLabel')} onClick={() => void handleOrderDetail(order.id)}>
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                              </button>
+                              {order.status === 'DELIVERED' && !reviewedOrders.has(order.id) && (
+                                <button
+                                  type="button"
+                                  className="ud-ord-action ud-ord-action--confirm"
+                                  title="Laisser un avis"
+                                  onClick={() => { setReviewModalOrder({ orderId: order.id }); setReviewRating(5); setReviewText(''); }}
+                                >
+                                  ⭐ Avis
+                                </button>
+                              )}
+                              {order.status === 'DELIVERED' && reviewedOrders.has(order.id) && (
+                                <span style={{ fontSize: '.75rem', color: 'var(--color-primary)', padding: '4px 8px' }}>✓ Avis envoyé</span>
+                              )}
+                            </div>
+                          </article>
+                        ))}
+                      </div>
+                    );
+                  })()}
+                </>
               )}
             </div>
 
@@ -3252,81 +3556,8 @@ export function UserDashboard() {
               ) : null}
             </div>
 
-            {/* ── Bloc commandes acheteur ── */}
+            {/* ── Détail commande sélectionnée ── */}
             <div className="ud-commerce-panel">
-              <div className="ud-commerce-panel-head">
-                <h3 className="ud-commerce-panel-title">📦 {t('user.buyerOrders')}</h3>
-              </div>
-              <div className="ud-ord-filters">
-                {(['' , 'PENDING', 'CONFIRMED', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELED'] as const).map((f) => (
-                  <button
-                    key={f}
-                    type="button"
-                    className={`ud-ord-filter-btn${purchasesFilter === f ? ' active' : ''}`}
-                    onClick={() => setPurchasesFilter(f as OrderStatus | '')}
-                  >
-                    {f === '' ? `🗂 ${t('user.filterAll')}` : f === 'PENDING' ? `⏳ ${t('user.filterPending')}` : f === 'CONFIRMED' ? `✅ ${t('user.filterConfirmed')}` : f === 'PROCESSING' ? `🔧 ${t('user.filterProcessing')}` : f === 'SHIPPED' ? `🚚 ${t('user.filterShipped')}` : f === 'DELIVERED' ? `✔ ${t('user.filterDelivered')}` : `❌ ${t('user.filterCanceled')}`}
-                  </button>
-                ))}
-              </div>
-
-              {loadingCommerce ? null : filteredBuyerOrders.length === 0 ? (
-                <div className="ud-ord-empty">
-                  <span className="ud-ord-empty-icon">📭</span>
-                  <p>{t('user.noOrdersBuyerMsg')}{purchasesFilter ? ` ${t('user.withStatus')} "${statusLabel(purchasesFilter)}"` : ''}.</p>
-                </div>
-              ) : (
-                <div className="ud-ord-grid">
-                  {filteredBuyerOrders.map((order) => (
-                    <article key={order.id} className="ud-ord-card">
-                      <div className="ud-ord-card-header">
-                        <span className="ud-ord-card-id">#{order.id.slice(0, 8).toUpperCase()}</span>
-                        <span className={statusClass(order.status)}>{statusLabel(order.status)}</span>
-                      </div>
-                      <div className="ud-ord-card-body">
-                        <p className="ud-ord-card-amount">{money(order.totalUsdCents)}</p>
-                        <p className="ud-ord-card-meta">{order.itemsCount} {order.itemsCount > 1 ? t('user.articlesLabel') : t('user.articleLabel')} · {new Date(order.createdAt).toLocaleDateString('fr-FR')}</p>
-                      </div>
-                      <div className="ud-ord-card-actions">
-                        <button type="button" className="ud-ord-action ud-ord-action--detail" title={t('user.orderDetailLabel')} onClick={() => void handleOrderDetail(order.id)}>
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-                        </button>
-                        {(order.status === 'PROCESSING' || order.status === 'SHIPPED') && (
-                          <button
-                            type="button"
-                            className="ud-ord-action ud-ord-action--confirm"
-                            title={t('user.confirmReceptionTooltip')}
-                            onClick={() => {
-                              setBuyerConfirmOrderId(order.id);
-                              setBuyerConfirmCode('');
-                              setBuyerConfirmMode('manual');
-                              setBuyerConfirmScanMessage(null);
-                              setBuyerConfirmScanError(null);
-                            }}
-                          >
-                            📬 {t('user.confirmReceptionShort')}
-                          </button>
-                        )}
-                        {order.status === 'DELIVERED' && !reviewedOrders.has(order.id) && (
-                          <button
-                            type="button"
-                            className="ud-ord-action ud-ord-action--confirm"
-                            title="Laisser un avis"
-                            onClick={() => { setReviewModalOrder({ orderId: order.id }); setReviewRating(5); setReviewText(''); }}
-                          >
-                            ⭐ Avis
-                          </button>
-                        )}
-                        {order.status === 'DELIVERED' && reviewedOrders.has(order.id) && (
-                          <span style={{ fontSize: '.75rem', color: 'var(--color-primary)', padding: '4px 8px' }}>✓ Avis envoyé</span>
-                        )}
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              )}
-
-              {/* ── Détail commande sélectionnée ── */}
               {selectedOrder && (
                 <section className="ud-ord-detail">
                   <div className="ud-ord-detail-head">
@@ -4125,6 +4356,11 @@ export function UserDashboard() {
               </p>
             </section>
 
+            {/* ── Mode économie de données ── */}
+            <section className="ud-glass-panel ud-settings-section">
+              <DataSaverToggle />
+            </section>
+
             <form onSubmit={handleSaveSettings}>
               {/* ── Section: Photo & Identité ── */}
               <section className="ud-glass-panel ud-settings-section">
@@ -4353,6 +4589,10 @@ export function UserDashboard() {
               </div>
             </form>
 
+            {/* ── Section: Notifications ── */}
+            <DashboardNotificationsSection t={t} />
+            <NotificationPreferencesPanel />
+
             {/* ── Section: Sécurité ── */}
             <section className="ud-glass-panel ud-settings-section">
               <div className="ud-settings-section-head">
@@ -4371,7 +4611,7 @@ export function UserDashboard() {
             <DashboardAiSettings
               t={t}
               storageKeys={{ advice: SK_AI_ADVICE, autoNego: SK_AI_AUTO_NEGO, commande: SK_AI_COMMANDE }}
-              hasIaMarchandPlan={hasIaMarchandPlan}
+              hasIaMarchandAutoPlan={hasIaMarchandAutoPlan}
               hasIaOrderPlan={hasIaOrderPlan}
               autoNegoActive={autoNegoActive}
               planLoaded={planLoaded}
@@ -4415,16 +4655,69 @@ export function UserDashboard() {
         )}
         {activeSection === 'analytics' && !hasAnalytics && (
           <div className="ud-section animate-fade-in">
-            <section className="ud-glass-panel">
-              <div className="ud-panel-head">
-                <h2 className="ud-panel-title">📊 Kin-Sell Analytique</h2>
-              </div>
-              <p style={{ fontSize: 13, color: 'var(--color-text-secondary, #aaa)', marginBottom: 16, lineHeight: 1.6 }}>
-                Kin-Sell Analytique vous aide à mieux décider, mieux vendre et mieux piloter vos performances.
-                Découvrez les recommandations personnalisées basées sur votre activité.
-              </p>
-              <AnalyticsCTAPanel />
-            </section>
+            <LockedOverlay
+              locked={true}
+              icon="📊"
+              title="Kin-Sell Analytique"
+              message="Accédez aux analyses marché, aux insights personnalisés et aux recommandations IA en activant un forfait avec Analytique."
+              ctaLabel="Activer Analytique"
+              blurPx={6}
+            >
+              <DashboardAnalyticsInsights
+                t={t}
+                basicInsights={basicInsights}
+                deepInsights={deepInsights}
+                analyticsLoading={false}
+                hasAnalytics={true}
+                hasPremiumAnalytics={false}
+                formatMoney={formatMoneyFromUsdCents}
+              />
+            </LockedOverlay>
+            <div style={{ marginTop: 16 }}>
+              <FrustrationPanel accountType="user" />
+            </div>
+          </div>
+        )}
+
+        {/* ═══════════════  BOUTIQUE AUTOMATIQUE  ═══════════════ */}
+        {activeSection === 'auto-shop' && (
+          <LockedOverlay
+            locked={!hasIaOrderPlan}
+            icon="🤖"
+            title="Auto-Shop nécessite l'IA Commande"
+            message="Automatisez vos ventes (marchandage, relances, validation) avec le forfait AUTO ou l'add-on IA Commande."
+            ctaLabel="Activer l'IA Commande"
+          >
+            <AutoShopTab t={t} formatMoney={formatMoneyFromUsdCents} />
+          </LockedOverlay>
+        )}
+
+        {/* ═══════════════  MES BOOSTS  ═══════════════ */}
+        {activeSection === 'boosts' && (
+          <div className="ud-section animate-fade-in">
+            <LockedOverlay
+              locked={!hasBoostAccess}
+              icon="🚀"
+              title="Boosts — forfait requis"
+              message="Boostez vos annonces et votre profil avec le forfait BOOST, AUTO, PRO VENDEUR ou l'add-on Boost Visibilité."
+              ctaLabel="Débloquer les boosts"
+            >
+              <MyBoostsPanel />
+            </LockedOverlay>
+          </div>
+        )}
+
+        {/* ═══════════════  ONGLET MES AVANTAGES IA  ═══════════════ */}
+        {activeSection === 'incentives' && (
+          <div className="ud-section animate-fade-in">
+            <MyIncentivesPanel />
+          </div>
+        )}
+
+        {/* ═══════════════  ONGLET EMPLOI  ═══════════════ */}
+        {activeSection === 'jobs' && (
+          <div className="ud-section animate-fade-in">
+            <DashboardJobAnalytics accountType="user" />
           </div>
         )}
 
@@ -4465,6 +4758,9 @@ export function UserDashboard() {
                 )}
               </div>
 
+              {/* Knowledge IA — settings + conseils */}
+              <KnowledgeIaPanel hasAnalytics={hasAnalytics} />
+
               {/* IA disponibles */}
               <div style={{ marginBottom: 16 }}>
                 <h3 style={{ margin: '0 0 10px', fontSize: 15, color: 'var(--color-text-primary, #fff)' }}>🤖 IA disponibles</h3>
@@ -4472,6 +4768,7 @@ export function UserDashboard() {
                   {[
                     { name: 'IA Marchande', icon: '🤝', desc: 'Aide à la négociation', active: true, locked: false },
                     { name: 'Kin-Sell Analytique', icon: '📊', desc: 'Analyses marché & conseils', active: hasAnalytics, locked: !hasAnalytics },
+                    { name: 'Knowledge IA', icon: '🧠', desc: 'Détecte vos besoins & conseille', active: hasAnalytics, locked: !hasAnalytics },
                     { name: 'IA Commande', icon: '📦', desc: 'Automatisation des ventes', active: aiCommandeEnabled && (activePlan?.features?.includes('IA_ORDER') ?? false), locked: !(activePlan?.features?.includes('IA_ORDER') ?? false) },
                   ].map((ia) => (
                     <div key={ia.name} style={{
@@ -4546,8 +4843,19 @@ export function UserDashboard() {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
 
                     {/* ═══ Backend AI recommendations ═══ */}
-                    {ksRecommendations.map((rec) => (
-                      <div key={rec.id} style={{
+                    {ksRecommendations.map((rec, recIndex) => {
+                      const recoFree = isRecommendationFree(recIndex, user?.id, hasAnalytics);
+                      return (
+                      <LockedOverlay
+                        key={rec.id}
+                        locked={!recoFree}
+                        icon="💡"
+                        title="Recommandation verrouillée"
+                        message="Cette recommandation IA personnalisée est réservée aux forfaits avec Analytique."
+                        ctaLabel="Débloquer toutes les recommandations"
+                        blurPx={4}
+                      >
+                      <div style={{
                         background: 'rgba(111,88,255,0.04)',
                         border: '1px solid rgba(111,88,255,0.1)',
                         borderRadius: 10, padding: 14,
@@ -4589,7 +4897,9 @@ export function UserDashboard() {
                           </span>
                         </div>
                       </div>
-                    ))}
+                      </LockedOverlay>
+                      );
+                    })}
 
                     {/* ═══ Smart IA ADS recommendation ═══ */}
                     <div style={{
@@ -4987,6 +5297,16 @@ export function UserDashboard() {
                     )}
                   </div>
 
+                  {/* ── Variantes (PRODUIT uniquement) ── */}
+                  {articleForm.type === 'PRODUIT' && (
+                    <div className="ud-publish-variants-wrap" style={{ marginTop: 12 }}>
+                      <VariantsEditor
+                        value={articleForm.variants}
+                        onChange={(v) => setArticleForm(p => ({ ...p, variants: v }))}
+                      />
+                    </div>
+                  )}
+
                   {/* ── Champs spécifiques SERVICE ── */}
                   {articleForm.type === 'SERVICE' && (
                     <div className="ud-publish-service-fields">
@@ -5179,6 +5499,26 @@ export function UserDashboard() {
             closeArticlePromo();
           }}
         />
+      )}
+
+      {/* ── Tutoriels interactifs ── */}
+      {activeSection === 'overview' && (
+        <>
+          <TutorialOverlay pageKey="user-dashboard" steps={userDashboardSteps} open={tutorialOverview.isOpen} onClose={tutorialOverview.close} />
+          {!tutorialOverview.isOpen && <TutorialRelaunchBtn reset={tutorialOverview.reset} start={tutorialOverview.start} />}
+        </>
+      )}
+      {activeSection === 'sales' && (
+        <>
+          <TutorialOverlay pageKey="user-sales" steps={userSalesSteps} open={tutorialSales.isOpen} onClose={tutorialSales.close} />
+          {!tutorialSales.isOpen && <TutorialRelaunchBtn reset={tutorialSales.reset} start={tutorialSales.start} />}
+        </>
+      )}
+      {activeSection === 'articles' && (
+        <>
+          <TutorialOverlay pageKey="user-articles" steps={userArticlesSteps} open={tutorialArticles.isOpen} onClose={tutorialArticles.close} />
+          {!tutorialArticles.isOpen && <TutorialRelaunchBtn reset={tutorialArticles.reset} start={tutorialArticles.start} />}
+        </>
       )}
     </div>
   );

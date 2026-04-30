@@ -14,6 +14,8 @@ import type { StructuredLocation } from "../../lib/api-client";
 import { extractValidationCodeFromQrPayload } from "../../utils/order-validation";
 import { SK_AI_ADVICE, SK_AI_COMMANDE } from "../../shared/constants/storage-keys";
 import { useFeatureGate } from "../../shared/hooks/useFeatureGate";
+import TutorialOverlay, { useTutorial, TutorialRelaunchBtn } from '../../components/TutorialOverlay';
+import { cartSteps, cartEmptySteps } from '../../components/tutorial-steps';
 import "./cart.css";
 
 export function CartPage() {
@@ -141,10 +143,12 @@ export function CartPage() {
     try {
       const data = await orders.buyerCart();
       setCart(data);
-    } catch {
+      setError(null);
+    } catch (err) {
       setCart(null);
+      setError(err instanceof ApiError ? ((err.data as { error?: string })?.error ?? t('cart.loadingCart')) : t('cart.loadingCart'));
     }
-  }, []);
+  }, [t]);
 
   /* ── Show negotiate popup if redirected from public profile ── */
   useEffect(() => {
@@ -160,12 +164,14 @@ export function CartPage() {
     try {
       const data = await orders.buyerCart();
       setCart(data);
-    } catch {
+      setError(null);
+    } catch (err) {
       setCart(null);
+      setError(err instanceof ApiError ? ((err.data as { error?: string })?.error ?? t('cart.loadingCart')) : t('cart.loadingCart'));
     } finally {
       setLoading(false);
     }
-  }, [isLoggedIn]);
+  }, [isLoggedIn, t]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -184,9 +190,13 @@ export function CartPage() {
   });
 
   // Fallback polling réduit : 120s au lieu de 30s (socket couvre le temps réel)
+  // A13 audit : pause en background pour économiser la batterie
   useEffect(() => {
     if (!isLoggedIn) return;
-    const poll = setInterval(() => { void loadCart(); }, 120_000);
+    const poll = setInterval(() => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      void loadCart();
+    }, 120_000);
     return () => clearInterval(poll);
   }, [isLoggedIn, loadCart]);
 
@@ -197,7 +207,8 @@ export function CartPage() {
     try {
       const data = await orders.buyerOrders({ limit: 50 });
       const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
-      setBuyerOrders(data.orders.filter((o) => new Date(o.createdAt).getTime() >= thirtyDaysAgo));
+      const ordersList = Array.isArray(data.orders) ? data.orders : [];
+      setBuyerOrders(ordersList.filter((o) => new Date(o.createdAt).getTime() >= thirtyDaysAgo));
     } catch {
       setBuyerOrders([]);
     } finally {
@@ -216,7 +227,8 @@ export function CartPage() {
     try {
       const data = await negotiations.buyerList({ limit: 50 });
       const sixtyDaysAgo = Date.now() - 60 * 24 * 60 * 60 * 1000;
-      setBuyerNegos(data.negotiations.filter((n) => new Date(n.createdAt).getTime() >= sixtyDaysAgo));
+      const negosList = Array.isArray(data.negotiations) ? data.negotiations : [];
+      setBuyerNegos(negosList.filter((n) => new Date(n.createdAt).getTime() >= sixtyDaysAgo));
     } catch {
       setBuyerNegos([]);
     } finally {
@@ -602,14 +614,16 @@ export function CartPage() {
   }, []);
 
   // Check items breakdown: COMMANDE vs MARCHANDAGE
-  const hasNegotiatingItems = cart?.items.some((item) => item.itemState === "MARCHANDAGE") ?? false;
-  const readyItemsCount = cart?.items.filter((item) => item.itemState !== "MARCHANDAGE").length ?? 0;
-  const negotiatingItemsCount = cart?.items.filter((item) => item.itemState === "MARCHANDAGE").length ?? 0;
+  const cartItems = cart?.items ?? [];
+  const hasNegotiatingItems = cartItems.some((item) => item.itemState === "MARCHANDAGE");
+  const tutorial = useTutorial('cart');
+  const readyItemsCount = cartItems.filter((item) => item.itemState !== "MARCHANDAGE").length;
+  const negotiatingItemsCount = cartItems.filter((item) => item.itemState === "MARCHANDAGE").length;
   const allNegotiating = readyItemsCount === 0 && negotiatingItemsCount > 0;
-  const readyItems = cart?.items.filter((item) => item.itemState !== "MARCHANDAGE") ?? [];
+  const readyItems = cartItems.filter((item) => item.itemState !== "MARCHANDAGE");
   const hasProductItems = readyItems.some((item) => item.listing.type === "PRODUIT");
   const hasServiceItems = readyItems.some((item) => item.listing.type === "SERVICE");
-    const items = cart?.items ?? [];
+    const items = cartItems;
     const isEmpty = items.length === 0;
 
     /* ── Group items by seller ── */
@@ -729,6 +743,9 @@ export function CartPage() {
                   <span className="cart-history-card-meta">
                     {order.itemsCount} article{order.itemsCount > 1 ? 's' : ''} · {new Date(order.createdAt).toLocaleDateString('fr-FR')}
                   </span>
+                  {order.autoExpireAt && (
+                    <span className="ud-ord-expire-deadline" style={{ display: 'block', marginTop: '4px' }}>⏳ Expire le {new Date(order.autoExpireAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}</span>
+                  )}
                 </div>
                 <div className="cart-history-card-actions" onClick={(e) => e.stopPropagation()}>
                   {(order.status === 'PROCESSING' || order.status === 'SHIPPED') && (
@@ -750,7 +767,7 @@ export function CartPage() {
 
                 {selectedOrder?.id === order.id && (
                   <div className="cart-history-card-detail">
-                    {order.items.map((item) => (
+                    {(order.items ?? []).map((item) => (
                       <div key={item.id} className="cart-history-item">
                         {item.imageUrl ? (
                           <img src={resolveMediaUrl(item.imageUrl)} alt={item.title} className="cart-history-item-img" />
@@ -865,6 +882,14 @@ export function CartPage() {
                       {item.negotiationStatus === "ACCEPTED" && t("negotiation.status.accepted")}
                       {item.negotiationStatus === "REFUSED" && t("negotiation.status.refused")}
                       {item.negotiationStatus === "EXPIRED" && t("negotiation.status.expired")}
+                    </div>
+                  )}
+
+                  {/* Deadline 24h après refus de négociation */}
+                  {item.negotiationStatus === "REFUSED" && (item as any).refusalDeadline && (
+                    <div className="cart-item-refusal-deadline">
+                      <span>⏰</span>
+                      <span>Commandez au prix original avant : <strong>{new Date((item as any).refusalDeadline).toLocaleString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</strong></span>
                     </div>
                   )}
 
@@ -1015,32 +1040,39 @@ export function CartPage() {
                 </button>
                 {!aiCommandeCollapsed && checkoutAdviceData && (
                   <div className="cart-ai-body cart-ai-body--animated">
-                    {checkoutAdviceData.bundles.length > 0 && (
+                    {(checkoutAdviceData.bundleSuggestions ?? []).length > 0 && (
                       <div className="cart-ai-section">
-                        <strong>📦 Offres groupées</strong>
-                        {checkoutAdviceData.bundles.map((b, i) => (
+                        <strong>📦 Suggestions</strong>
+                        {(checkoutAdviceData.bundleSuggestions ?? []).map((b, i) => (
                           <div key={i} className="cart-ai-bundle">
                             <span>{b.title}</span>
-                            <span className="cart-ai-bundle-save">-{b.discount}% ({formatMoneyFromUsdCents(b.savingsCents)} économisés)</span>
+                            <span className="cart-ai-bundle-save">{formatMoneyFromUsdCents(b.priceUsdCents)} — {b.reason}</span>
                           </div>
                         ))}
                       </div>
                     )}
-                    {checkoutAdviceData.urgency?.active && (
-                      <div className="cart-ai-urgency cart-ai-urgency--pulse">⚡ {checkoutAdviceData.urgency.message}</div>
-                    )}
-                    {checkoutAdviceData.shippingEstimate && (
-                      <div className="cart-ai-section">
-                        <strong>🚚 Livraison estimée</strong>
-                        <p>{checkoutAdviceData.shippingEstimate.minDays}–{checkoutAdviceData.shippingEstimate.maxDays} jours vers {checkoutAdviceData.shippingEstimate.city}</p>
+                    {checkoutAdviceData.discountTrigger?.message && (
+                      <div className={`cart-ai-urgency${checkoutAdviceData.discountTrigger.available ? ' cart-ai-urgency--pulse' : ''}`}>
+                        💰 {checkoutAdviceData.discountTrigger.message}
                       </div>
                     )}
-                    {checkoutAdviceData.tips.length > 0 && (
+                    {(checkoutAdviceData.urgencySignals ?? []).length > 0 && (
                       <div className="cart-ai-section">
-                        <strong>💡 Conseils</strong>
-                        <ul className="cart-ai-tips">
-                          {checkoutAdviceData.tips.map((tip, i) => <li key={i}>{tip}</li>)}
-                        </ul>
+                        {(checkoutAdviceData.urgencySignals ?? []).map((s, i) => (
+                          <div key={i} className="cart-ai-urgency cart-ai-urgency--pulse">⚡ {s.message}</div>
+                        ))}
+                      </div>
+                    )}
+                    {checkoutAdviceData.estimatedDeliveryHours && (
+                      <div className="cart-ai-section">
+                        <strong>🚚 Livraison estimée</strong>
+                        <p>{Math.round(checkoutAdviceData.estimatedDeliveryHours.min / 24)}–{Math.round(checkoutAdviceData.estimatedDeliveryHours.max / 24)} jours</p>
+                      </div>
+                    )}
+                    {checkoutAdviceData.paymentOptimization && (
+                      <div className="cart-ai-section">
+                        <strong>💡 Conseil</strong>
+                        <p>{checkoutAdviceData.paymentOptimization}</p>
                       </div>
                     )}
                   </div>
@@ -1176,7 +1208,7 @@ export function CartPage() {
 
                       {selectedOrder?.id === order.id && (
                         <div className="cart-history-card-detail">
-                          {order.items.map((item) => (
+                          {(order.items ?? []).map((item) => (
                             <div key={item.id} className="cart-history-item">
                               {item.imageUrl ? (
                                 <img src={resolveMediaUrl(item.imageUrl)} alt={item.title} className="cart-history-item-img" />
@@ -1192,6 +1224,7 @@ export function CartPage() {
                           ))}
                           <div className="cart-history-card-dates">
                             <span>Créée : {new Date(order.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                            {order.autoExpireAt && <span className="ud-ord-expire-deadline">⏳ Expire le {new Date(order.autoExpireAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}</span>}
                             {order.deliveredAt && <span>Livrée : {new Date(order.deliveredAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>}
                             {order.canceledAt && <span>Annulée : {new Date(order.canceledAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>}
                           </div>
@@ -1220,7 +1253,8 @@ export function CartPage() {
               ) : (
                 <div className="cart-history-list">
                   {filteredBuyerNegos.map((nego) => {
-                    const lastOffer = nego.offers[nego.offers.length - 1];
+                    const offers = Array.isArray(nego.offers) ? nego.offers : [];
+                    const lastOffer = offers.length > 0 ? offers[offers.length - 1] : null;
                     const isActive = NEGO_ACTIVE_STATUSES.includes(nego.status);
                     return (
                       <div
@@ -1277,8 +1311,15 @@ export function CartPage() {
                         {selectedNego?.id === nego.id && (
                           <div className="cart-history-card-detail">
                             <div className="cart-nego-timeline">
-                              {nego.offers.map((offer, idx) => (
-                                <div key={offer.id} className={`cart-nego-timeline-item ${offer.fromUserId === nego.buyerUserId ? 'cart-nego-timeline--buyer' : 'cart-nego-timeline--seller'}`}>
+                              {offers.length === 0 ? (
+                                <div className="cart-nego-timeline-item cart-nego-timeline--event">
+                                  <div className="cart-nego-timeline-dot" />
+                                  <div className="cart-nego-timeline-content">
+                                    <span className="cart-nego-timeline-date">Historique des offres indisponible pour ce marchandage.</span>
+                                  </div>
+                                </div>
+                              ) : offers.map((offer, idx) => (
+                                <div key={offer.id ?? `${nego.id}-${idx}`} className={`cart-nego-timeline-item ${offer.fromUserId === nego.buyerUserId ? 'cart-nego-timeline--buyer' : 'cart-nego-timeline--seller'}`}>
                                   <div className="cart-nego-timeline-dot" />
                                   <div className="cart-nego-timeline-content">
                                     <div className="cart-nego-timeline-head">
@@ -1436,9 +1477,10 @@ export function CartPage() {
             <label className="cart-checkout-modal-field">
               <span>Mode de paiement</span>
               <select value={checkoutForm.paymentMethod} onChange={(e) => setCheckoutForm((prev) => ({ ...prev, paymentMethod: e.target.value as "PAYPAL" | "CASH_ON_DELIVERY" }))}>
-                <option value="CASH_ON_DELIVERY">Paiement à la livraison</option>
-                <option value="PAYPAL">PayPal</option>
+                <option value="CASH_ON_DELIVERY">💵 Paiement à la livraison</option>
+                <option value="PAYPAL" disabled>PayPal — en cours de configuration</option>
               </select>
+              <span style={{ fontSize: '.78rem', opacity: 0.55, marginTop: 4 }}>D'autres moyens de paiement seront bientôt disponibles.</span>
             </label>
 
             <label className="cart-checkout-modal-field">
@@ -1568,6 +1610,15 @@ export function CartPage() {
           </div>
         </div>
       )}
+
+      {/* ── Tutoriel interactif ── */}
+      <TutorialOverlay
+        pageKey="cart"
+        steps={isEmpty ? cartEmptySteps : cartSteps}
+        open={tutorial.isOpen}
+        onClose={tutorial.close}
+      />
+      {!tutorial.isOpen && <TutorialRelaunchBtn reset={tutorial.reset} start={tutorial.start} />}
     </section>
   );
 }

@@ -1,5 +1,6 @@
 import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
+import { sendPushToUser } from "../notifications/push.service.js";
 
 export const getReviewsForUser = async (targetId: string, limit = 20, offset = 0) => {
   const safeLimit = Math.min(Math.max(1, limit), 50);
@@ -46,9 +47,9 @@ export const getReviewsForUser = async (targetId: string, limit = 20, offset = 0
  * Créer un avis lié à une commande réelle (avis vérifié).
  * Conditions :
  *  - la commande doit être DELIVERED
- *  - l'auteur doit être buyer ou seller de la commande
- *  - la cible doit être l'autre partie
- *  - un seul avis par personne par commande
+ *  - l'auteur doit être l'acheteur de la commande
+ *  - la cible est automatiquement le vendeur
+ *  - un seul avis par acheteur par commande
  */
 export const createOrderReview = async (
   authorId: string,
@@ -64,15 +65,11 @@ export const createOrderReview = async (
   if (!order) throw new HttpError(404, "Commande introuvable.");
   if (order.status !== "DELIVERED") throw new HttpError(400, "Vous ne pouvez laisser un avis que sur une commande livrée.");
 
-  // Déterminer rôle de l'auteur et la cible
-  let targetId: string;
-  if (authorId === order.buyerUserId) {
-    targetId = order.sellerUserId;
-  } else if (authorId === order.sellerUserId) {
-    targetId = order.buyerUserId;
-  } else {
-    throw new HttpError(403, "Vous ne faites pas partie de cette transaction.");
+  // Seul l'acheteur peut laisser un avis
+  if (authorId !== order.buyerUserId) {
+    throw new HttpError(403, "Seul l'acheteur peut laisser un avis.");
   }
+  const targetId = order.sellerUserId;
 
   // Vérifier doublon
   const existing = await prisma.userReview.findUnique({
@@ -90,6 +87,17 @@ export const createOrderReview = async (
       verified: true,
     },
   });
+
+  // Notifier la cible de l'avis
+  const author = await prisma.userProfile.findUnique({ where: { userId: authorId }, select: { displayName: true } });
+  const name = author?.displayName ?? "Un utilisateur";
+  const stars = "⭐".repeat(Math.min(rating, 5));
+  sendPushToUser(targetId, {
+    title: "Kin-Sell • Avis ⭐",
+    body: `${name} vous a donné ${rating}/5 ${stars}`,
+    tag: `review-${review.id}`,
+    data: { type: "order", reviewId: review.id, url: "/account" },
+  }).catch(() => {});
 
   return review;
 };
@@ -123,9 +131,20 @@ export const createReview = async (
     });
   }
 
-  return prisma.userReview.create({
+  const review = await prisma.userReview.create({
     data: { authorId, targetId, rating, text: text ?? null, verified: false },
   });
+
+  const authorProfile = await prisma.userProfile.findUnique({ where: { userId: authorId }, select: { displayName: true } });
+  const name = authorProfile?.displayName ?? "Un utilisateur";
+  sendPushToUser(targetId, {
+    title: "Kin-Sell • Avis ⭐",
+    body: `${name} vous a évalué ${rating}/5`,
+    tag: `review-${review.id}`,
+    data: { type: "order", reviewId: review.id, url: "/account" },
+  }).catch(() => {});
+
+  return review;
 };
 
 /**

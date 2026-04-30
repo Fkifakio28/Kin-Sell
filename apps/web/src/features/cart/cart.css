@@ -923,6 +923,21 @@
   background: rgba(255, 255, 255, 0.04);
 }
 
+/* Deadline 24h après refus de négociation */
+.cart-item-refusal-deadline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(255, 165, 0, 0.12);
+  border: 1px solid rgba(255, 165, 0, 0.3);
+  color: #ffa500;
+  font-size: 12px;
+  font-weight: 500;
+  margin-top: 4px;
+}
+
 /* ── Negotiation action buttons in cart ── */
 .cart-neg-action-btn {
   padding: 4px 10px;

@@ -1,5 +1,5 @@
 import {
-  useEffect, useState, useRef, useCallback, useMemo, type CSSProperties, type FormEvent, type TouchEvent as ReactTouchEvent,
+  useEffect, useState, useRef, useCallback, useMemo, type CSSProperties, type FormEvent, type TouchEvent as ReactTouchEvent, type ReactNode,
 } from "react";
 import { Link, Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../../app/providers/AuthProvider";
@@ -13,16 +13,12 @@ import { useSocket } from "../../hooks/useSocket";
 import { useScrollDirection } from "../../hooks/useScrollDirection";
 import { useLocaleCurrency } from "../../app/providers/LocaleCurrencyProvider";
 import { createOptimizedAudioRecorder, createUploadFile, prepareMediaUrl } from "../../utils/media-upload";
+import { resolveMediaUrl } from "../../lib/api-core";
 import { useGlobalNotification } from "../../app/providers/GlobalNotificationProvider";
 import { getDashboardPath } from "../../utils/role-routing";
-import { playCallSound, stopCallSound, refreshCallSoundIfNeeded } from "../../utils/call-sound";
-import {
-  getRtcConfig, applyCodecPreferences, optimizeSenders, applyVideoProfileToPC,
-  getInitialProfile, getMediaConstraints, type VideoProfile,
-  QUALITY_POOR, QUALITY_FAIR, UPGRADE_STREAK, DOWNGRADE_STREAK,
-  ICE_RESTART_DELAYS, ICE_MAX_ATTEMPTS,
-} from "../../utils/webrtc-config";
-import { useWakeLock } from "../../hooks/useWakeLock";
+import { useCall } from "../../app/providers/CallProvider";
+import AudioCallScreen from "./AudioCallScreen";
+import { PhoneIcon, VideoIcon } from "./call-icons";
 import TutorialOverlay, { useTutorial, TutorialRelaunchBtn } from '../../components/TutorialOverlay';
 import { messagingSteps } from '../../components/tutorial-steps';
 import "./messaging.css";
@@ -143,13 +139,59 @@ function canEditMessage(msg: ChatMessage): boolean {
   return Date.now() - new Date(msg.createdAt).getTime() < 30 * 60 * 1000;
 }
 
+type CallEventData = { source: "call"; callType: "AUDIO" | "VIDEO"; status: string; durationSeconds: number | null };
+
+function parseCallEventFromSystemMessage(msg: ChatMessage): CallEventData | null {
+  if (msg.type !== "SYSTEM" || !msg.content) return null;
+  try {
+    const data = JSON.parse(msg.content);
+    if (data?.source === "call") return data as CallEventData;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/** Produce a short human-readable preview for a call-event SYSTEM message */
+function callEventPreview(msg: ChatMessage, t: (k: string) => string): ReactNode | null {
+  const ce = parseCallEventFromSystemMessage(msg);
+  if (!ce) return null;
+  const Icon = ce.callType === "VIDEO" ? VideoIcon : PhoneIcon;
+  const label =
+    ce.status === "ANSWERED" ? t("msg.callAnswered")
+    : ce.status === "NO_ANSWER" ? t("msg.callNoAnswer")
+    : ce.status === "REJECTED" ? t("msg.callRejected")
+    : ce.status === "CANCELLED" ? t("msg.callCancelled")
+    : t("msg.callNoAnswer");
+  return (
+    <span className="mg-conv-call-preview">
+      <Icon size={14} aria-hidden="true" />
+      <span>{label}</span>
+    </span>
+  );
+}
+
+type ConnectionLike = {
+  effectiveType?: string;
+  saveData?: boolean;
+  addEventListener?: (type: "change", listener: () => void) => void;
+  removeEventListener?: (type: "change", listener: () => void) => void;
+};
+
+function isLowBandwidthConnection(conn?: ConnectionLike): boolean {
+  if (!conn) return false;
+  if (conn.saveData) return true;
+  return conn.effectiveType === "slow-2g" || conn.effectiveType === "2g" || conn.effectiveType === "3g";
+}
+
 /* ═══ Audio Player ═══ */
-function AudioPlayer({ src }: { src: string }) {
+function AudioPlayer({ src, lowBandwidth }: { src: string; lowBandwidth: boolean }) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -157,17 +199,43 @@ function AudioPlayer({ src }: { src: string }) {
     const onTime = () => { setCurrentTime(audio.currentTime); setProgress(audio.duration ? (audio.currentTime / audio.duration) * 100 : 0); };
     const onMeta = () => setDuration(audio.duration);
     const onEnd = () => { setPlaying(false); setProgress(0); setCurrentTime(0); };
+    const onError = () => { setLoadError(true); setPlaying(false); };
+    const onCanPlay = () => { setLoadError(false); };
     audio.addEventListener("timeupdate", onTime);
     audio.addEventListener("loadedmetadata", onMeta);
     audio.addEventListener("ended", onEnd);
-    return () => { audio.removeEventListener("timeupdate", onTime); audio.removeEventListener("loadedmetadata", onMeta); audio.removeEventListener("ended", onEnd); };
-  }, []);
+    audio.addEventListener("error", onError);
+    audio.addEventListener("canplay", onCanPlay);
+    return () => {
+      audio.removeEventListener("timeupdate", onTime);
+      audio.removeEventListener("loadedmetadata", onMeta);
+      audio.removeEventListener("ended", onEnd);
+      audio.removeEventListener("error", onError);
+      audio.removeEventListener("canplay", onCanPlay);
+    };
+  }, [src]);
 
   const toggle = () => {
     const audio = audioRef.current;
     if (!audio) return;
-    if (playing) audio.pause(); else void audio.play();
-    setPlaying(!playing);
+    if (playing) {
+      audio.pause();
+      setPlaying(false);
+      return;
+    }
+    if (audio.preload === "none") {
+      audio.preload = "metadata";
+      audio.load();
+    }
+    void audio.play()
+      .then(() => {
+        setLoadError(false);
+        setPlaying(true);
+      })
+      .catch(() => {
+        setLoadError(true);
+        setPlaying(false);
+      });
   };
 
   const seek = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -179,7 +247,7 @@ function AudioPlayer({ src }: { src: string }) {
 
   return (
     <div className={`mg-audio-player${playing ? " mg-audio-player--playing" : ""}`}>
-      <audio ref={audioRef} src={src} preload="metadata" />
+      <audio ref={audioRef} src={src} preload={lowBandwidth ? "none" : "metadata"} />
       <button className="mg-audio-play-btn" onClick={toggle} type="button">
         {playing ? (
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
@@ -191,7 +259,9 @@ function AudioPlayer({ src }: { src: string }) {
         <div className="mg-audio-progress-bg" onClick={seek}>
           <div className="mg-audio-progress-fill" style={{ width: `${progress}%` }} />
         </div>
-        <span className="mg-audio-time">{formatAudioTime(currentTime)} / {formatAudioTime(duration || 0)}</span>
+        <span className="mg-audio-time">
+          {loadError ? "Chargement audio lent, touchez pour réessayer" : `${formatAudioTime(currentTime)} / ${formatAudioTime(duration || 0)}`}
+        </span>
       </div>
     </div>
   );
@@ -341,35 +411,26 @@ export function MessagingPage() {
   const [selectMode, setSelectMode] = useState(false);
   const [selectedMsgIds, setSelectedMsgIds] = useState<Set<string>>(new Set());
 
-  /* ── Call state ── */
-  const [callState, setCallState] = useState<null | { type: "audio" | "video"; conversationId: string; remoteUserId: string; direction: "incoming" | "outgoing"; status: "ringing" | "connected" | "ended" }>(null);
-
-  // Keep screen awake during active calls (ringing or connected)
-  useWakeLock(callState != null && callState.status !== "ended");
-
-  const [isMuted, setIsMuted] = useState(false);
-  const [isCameraOff, setIsCameraOff] = useState(false);
-  const [isSpeakerOn, setIsSpeakerOn] = useState(true);
-  const [isEarMode, setIsEarMode] = useState(false);
-  const [isSwitchingCamera, setIsSwitchingCamera] = useState(false);
-  const [connectionQuality, setConnectionQuality] = useState<"unknown" | "good" | "fair" | "poor">("unknown");
-  const [qualityMode, setQualityMode] = useState<"auto" | "hd" | "balanced" | "data-saver">("auto");
-  const [appliedVideoProfile, setAppliedVideoProfile] = useState<"hd" | "balanced" | "data-saver">("hd");
-  const [callDuration, setCallDuration] = useState(0);
-  const [showAddPeople, setShowAddPeople] = useState(false);
-  const [inviteQuery, setInviteQuery] = useState("");
-  const callTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
-  const localStreamRef = useRef<MediaStream | null>(null);
-  const remoteStreamRef = useRef<MediaStream | null>(null);
-  const localVideoRef = useRef<HTMLVideoElement>(null);
-  const remoteVideoRef = useRef<HTMLVideoElement>(null);
-  const remoteAudioRef = useRef<HTMLAudioElement>(null);
-  const callQualityTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const localFacingModeRef = useRef<"user" | "environment">("user");
-  const qualityPoorStreakRef = useRef(0);
-  const qualityGoodStreakRef = useRef(0);
-  const iceRestartAttemptRef = useRef(0);
+  /* ── Audio call (système global) ── */
+  const {
+    call: audioCall,
+    callResult: audioCallResult,
+    durationSeconds: audioCallDuration,
+    isMuted,
+    isSpeakerOn,
+    audioRoute,
+    availableAudioRoutes,
+    callMinimized,
+    startCall: audioStartCall,
+    acceptCall: audioAcceptCall,
+    hangup: audioHangup,
+    toggleMute,
+    toggleSpeaker,
+    setRoute: setAudioRoute,
+    injectIncomingCall,
+    minimizeCall,
+    setCallContactName,
+  } = useCall();
 
   /* ── MessageGuard ── */
   const [guardAlert, setGuardAlert] = useState<{ type: "warn" | "block"; message: string } | null>(null);
@@ -378,6 +439,11 @@ export function MessagingPage() {
   /* ── Keyboard offset ── */
   const [keyboardOffset, setKeyboardOffset] = useState(0);
   const lastKeyboardOffsetRef = useRef(0);
+  const [lowBandwidthMode, setLowBandwidthMode] = useState<boolean>(() => {
+    if (typeof navigator === "undefined") return false;
+    const conn = (navigator as unknown as { connection?: ConnectionLike }).connection;
+    return isLowBandwidthConnection(conn);
+  });
 
   /* ── Refs ── */
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -388,12 +454,17 @@ export function MessagingPage() {
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressMsgRef = useRef<ChatMessage | null>(null);
 
-  /* ── Incoming call refs ── */
-  const pendingCallConvIdRef = useRef<string | null>(null);
-  const pendingAutoAcceptRef = useRef(false);
-
   const myId = user?.id ?? "";
   const myRole = user?.role ?? "";
+
+  useEffect(() => {
+    const conn = (navigator as unknown as { connection?: ConnectionLike }).connection;
+    if (!conn) return;
+    const update = () => setLowBandwidthMode(isLowBandwidthConnection(conn));
+    update();
+    conn.addEventListener?.("change", update);
+    return () => conn.removeEventListener?.("change", update);
+  }, []);
 
   // In a DM with admin, non-admin users cannot reply
   const isAdminDM = useMemo(() => {
@@ -408,103 +479,114 @@ export function MessagingPage() {
      Effects
      ════════════════════════════════════════ */
 
+  // Sync contact name to global CallProvider for floating badge
+  useEffect(() => {
+    if (!audioCall) return;
+    const conv = conversations.find((c) => c.id === audioCall.conversationId);
+    if (conv) setCallContactName(getConversationName(conv, myId, t));
+  }, [audioCall?.conversationId, conversations, myId, t, setCallContactName]);
+
   // Messaging active flag
   useEffect(() => {
     setMessagingActive(true);
     return () => setMessagingActive(false);
   }, [setMessagingActive]);
 
-  /* ── Ringtone (WAV files selon connectivité réseau) ── */
-  useEffect(() => {
-    const isRinging = callState?.status === "ringing";
-    if (!isRinging) {
-      stopCallSound();
-      return;
-    }
-    const direction = callState?.direction ?? "outgoing";
-    void playCallSound(direction);
-
-    // Écouter changements réseau en cours de sonnerie
-    const onNetworkChange = () => void refreshCallSoundIfNeeded(direction);
-    window.addEventListener("online", onNetworkChange);
-    window.addEventListener("offline", onNetworkChange);
-
-    return () => {
-      stopCallSound();
-      window.removeEventListener("online", onNetworkChange);
-      window.removeEventListener("offline", onNetworkChange);
-    };
-  }, [callState?.status, callState?.direction]);
-
-  /* ── Vibration on incoming ringing ── */
-  useEffect(() => {
-    const isIncomingRinging = callState?.status === "ringing" && callState.direction === "incoming";
-    if (!isIncomingRinging) {
-      if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") navigator.vibrate(0);
-      return;
-    }
-    if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
-      navigator.vibrate([240, 140, 240]);
-      const id = setInterval(() => navigator.vibrate([240, 140, 240]), 2500);
-      return () => { clearInterval(id); navigator.vibrate(0); };
-    }
-  }, [callState?.status, callState?.direction]);
-
-  /* ── Call duration timer ── */
-  useEffect(() => {
-    if (callState?.status === "connected") {
-      setCallDuration(0);
-      callTimerRef.current = setInterval(() => setCallDuration((t) => t + 1), 1000);
-    } else {
-      if (callTimerRef.current) { clearInterval(callTimerRef.current); callTimerRef.current = null; }
-      setCallDuration(0);
-    }
-    return () => { if (callTimerRef.current) clearInterval(callTimerRef.current); };
-  }, [callState?.status]);
-
-  /* ── Attach media streams ── */
-  useEffect(() => {
-    if (localVideoRef.current && localStreamRef.current) {
-      localVideoRef.current.srcObject = localStreamRef.current;
-      localVideoRef.current.muted = true;
-      void localVideoRef.current.play().catch(() => {});
-    }
-    if (remoteVideoRef.current && remoteStreamRef.current) {
-      remoteVideoRef.current.srcObject = remoteStreamRef.current;
-      remoteVideoRef.current.muted = !isSpeakerOn;
-      void remoteVideoRef.current.play().catch(() => {});
-    }
-    if (remoteAudioRef.current && remoteStreamRef.current) {
-      remoteAudioRef.current.srcObject = remoteStreamRef.current;
-      remoteAudioRef.current.muted = !isSpeakerOn;
-      void remoteAudioRef.current.play().catch(() => {});
-    }
-  }, [callState?.status, callState?.type, isSpeakerOn]);
-
-  /* ── Handle incoming call from URL params ── */
+  /* ── Handle incoming call / conversation from URL params ──
+   * Étape 3 : verrouillage strict.
+   * - Toute injection d'appel via URL exige callId + expiresAt valides.
+   * - Avant d'afficher la sonnerie ou d'auto-accepter, on interroge
+   *   GET /messaging/calls/:callId/state. Sans isActive=true côté serveur,
+   *   on nettoie l'URL et on n'affiche rien.
+   */
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const incomingConvId = params.get("incomingConvId");
     const incomingCallerId = params.get("incomingCallerId");
-    const incomingCallType = params.get("incomingCallType") as "audio" | "video" | null;
+    const incomingCallType = params.get("incomingCallType");
     const callAction = params.get("callAction");
     const convId = params.get("convId");
     const callerId = params.get("callerId");
-    const callType = params.get("callType") as "audio" | "video" | null;
+    const urlCallType = params.get("callType");
+    const urlCallId = params.get("callId");
+    const urlExpiresAtRaw = params.get("expiresAt");
+    const urlExpiresAt = urlExpiresAtRaw ? Number(urlExpiresAtRaw) : NaN;
+    const cleanUrl = () => window.history.replaceState(null, "", "/messaging");
+
+    const validateAndInject = async (
+      ctxConvId: string,
+      ctxCallerId: string,
+      ctxCallType: "audio" | "video",
+      autoAccept: boolean,
+    ) => {
+      // Garde-fous locaux : sans callId/expiresAt valides, on refuse.
+      if (!urlCallId || !Number.isFinite(urlExpiresAt) || urlExpiresAt <= Date.now()) {
+        cleanUrl();
+        return;
+      }
+      try {
+        const state = await messaging.getCallState(urlCallId);
+        if (
+          !state.isActive ||
+          state.status !== "RINGING" ||
+          state.conversationId !== ctxConvId ||
+          state.callerUserId !== ctxCallerId ||
+          state.callType !== ctxCallType
+        ) {
+          cleanUrl();
+          return;
+        }
+        injectIncomingCall(ctxConvId, ctxCallerId, {
+          callId: state.callId,
+          expiresAt: state.expiresAt ?? urlExpiresAt,
+        });
+        if (autoAccept) {
+          // Toujours sur la base de la validation serveur fraîche.
+          setTimeout(() => audioAcceptCall(), 100);
+        }
+      } catch {
+        // Endpoint indisponible / 403 / 404 → on ignore l'URL.
+      } finally {
+        cleanUrl();
+      }
+    };
 
     if (incomingConvId && incomingCallerId) {
-      pendingCallConvIdRef.current = incomingConvId;
-      pendingAutoAcceptRef.current = false;
-      setCallState({ type: incomingCallType === "video" ? "video" : "audio", conversationId: incomingConvId, remoteUserId: incomingCallerId, direction: "incoming", status: "ringing" });
-      window.history.replaceState(null, "", "/messaging");
+      const ct = incomingCallType === "video" ? "video" : "audio";
+      void validateAndInject(incomingConvId, incomingCallerId, ct, false);
     } else if (callAction === "accept" && convId && callerId) {
-      pendingCallConvIdRef.current = convId;
-      pendingAutoAcceptRef.current = true;
-      setCallState({ type: callType === "video" ? "video" : "audio", conversationId: convId, remoteUserId: callerId, direction: "incoming", status: "ringing" });
-      window.history.replaceState(null, "", "/messaging");
+      const ct = urlCallType === "video" ? "video" : "audio";
+      void validateAndInject(convId, callerId, ct, true);
+    } else if (convId) {
+      // Message notification → auto-select conversation
+      const conv = conversations.find((c) => c.id === convId);
+      if (conv) {
+        setActiveConv(conv);
+        cleanUrl();
+      }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [conversations.length, location.search]);
+
+  /* ── Global call accept/reject events (from GlobalNotificationProvider overlay) ── */
+  useEffect(() => {
+    const handleGlobalAccept = () => {
+      if (audioCall?.status === "incoming_ringing") {
+        void audioAcceptCall();
+      }
+    };
+    const handleGlobalReject = () => {
+      if (audioCall?.status === "incoming_ringing") {
+        audioHangup();
+      }
+    };
+    window.addEventListener("ks:incoming-call-accept", handleGlobalAccept);
+    window.addEventListener("ks:incoming-call-reject", handleGlobalReject);
+    return () => {
+      window.removeEventListener("ks:incoming-call-accept", handleGlobalAccept);
+      window.removeEventListener("ks:incoming-call-reject", handleGlobalReject);
+    };
+  }, [audioCall?.status, audioAcceptCall, audioHangup]);
 
   /* ── Load conversations ── */
   useEffect(() => {
@@ -558,13 +640,13 @@ export function MessagingPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoggedIn, loadingConvs, location.search]);
 
-  /* ── Auto-select conversation from URL or pending call ── */
+  /* ── Auto-select conversation from URL or active call ── */
   useEffect(() => {
     if (!conversations.length) return;
-    // Pending call
-    if (pendingCallConvIdRef.current) {
-      const conv = conversations.find((c) => c.id === pendingCallConvIdRef.current);
-      if (conv) { setActiveConv(conv); pendingCallConvIdRef.current = null; }
+    // Active audio call — auto-select its conversation
+    if (audioCall && !activeConv) {
+      const conv = conversations.find((c) => c.id === audioCall.conversationId);
+      if (conv) setActiveConv(conv);
     }
     // URL param
     if (urlConvId && !activeConv) {
@@ -826,348 +908,6 @@ export function MessagingPage() {
   }, [activeConv?.id]);
 
   /* ════════════════════════════════════════
-     WebRTC call socket events
-     ════════════════════════════════════════ */
-
-  useEffect(() => {
-    const handleIncomingCall = (data: { conversationId: string; callerId: string; callType: "audio" | "video" }) => {
-      setCallState({ type: data.callType, conversationId: data.conversationId, remoteUserId: data.callerId, direction: "incoming", status: "ringing" });
-    };
-    const handleCallAccepted = async (data: { conversationId: string; accepterId: string }) => {
-      setCallState((prev) => prev ? { ...prev, status: "connected" } : null);
-      if (peerConnectionRef.current) {
-        const offer = await peerConnectionRef.current.createOffer();
-        await peerConnectionRef.current.setLocalDescription(offer);
-        emit("webrtc:offer", { targetUserId: data.accepterId, sdp: offer });
-      }
-    };
-    const handleCallRejected = () => { cleanupCall(); setCallState(null); };
-    const handleCallEnded = () => { cleanupCall(); setCallState(null); };
-    const handleOffer = async (data: { callerId: string; sdp: RTCSessionDescriptionInit }) => {
-      if (!peerConnectionRef.current) return;
-      await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(data.sdp));
-      const answer = await peerConnectionRef.current.createAnswer();
-      await peerConnectionRef.current.setLocalDescription(answer);
-      emit("webrtc:answer", { targetUserId: data.callerId, sdp: answer });
-    };
-    const handleAnswer = async (data: { answererId: string; sdp: RTCSessionDescriptionInit }) => {
-      if (!peerConnectionRef.current) return;
-      await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(data.sdp));
-    };
-    const handleIceCandidate = async (data: { fromUserId: string; candidate: RTCIceCandidateInit }) => {
-      if (!peerConnectionRef.current) return;
-      await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(data.candidate));
-    };
-
-    on("call:incoming", handleIncomingCall);
-    on("call:accepted", handleCallAccepted as any);
-    on("call:rejected", handleCallRejected as any);
-    on("call:ended", handleCallEnded as any);
-    on("webrtc:offer", handleOffer as any);
-    on("webrtc:answer", handleAnswer as any);
-    on("webrtc:ice-candidate", handleIceCandidate as any);
-    return () => {
-      off("call:incoming", handleIncomingCall);
-      off("call:accepted", handleCallAccepted as any);
-      off("call:rejected", handleCallRejected as any);
-      off("call:ended", handleCallEnded as any);
-      off("webrtc:offer", handleOffer as any);
-      off("webrtc:answer", handleAnswer as any);
-      off("webrtc:ice-candidate", handleIceCandidate as any);
-    };
-  }, [on, off, emit]);
-
-  /* ════════════════════════════════════════
-     WebRTC helpers
-     ════════════════════════════════════════ */
-
-  const createPeerConnection = useCallback((remoteUserId: string) => {
-    const pc = new RTCPeerConnection(getRtcConfig());
-
-    // ICE candidate relay
-    pc.onicecandidate = (event) => {
-      if (event.candidate) emit("webrtc:ice-candidate", { targetUserId: remoteUserId, candidate: event.candidate.toJSON() });
-    };
-
-    // Remote track received
-    pc.ontrack = (event) => {
-      remoteStreamRef.current = event.streams[0];
-      if (remoteVideoRef.current) { remoteVideoRef.current.srcObject = event.streams[0]; void remoteVideoRef.current.play().catch(() => {}); }
-      if (remoteAudioRef.current) { remoteAudioRef.current.srcObject = event.streams[0]; remoteAudioRef.current.muted = !isSpeakerOn; void remoteAudioRef.current.play().catch(() => {}); }
-    };
-
-    // ── ICE reconnection automatique avec backoff exponentiel ──
-    pc.oniceconnectionstatechange = () => {
-      const state = pc.iceConnectionState;
-      if (state === "connected" || state === "completed") {
-        iceRestartAttemptRef.current = 0;
-      }
-      const attemptRestart = () => {
-        if (iceRestartAttemptRef.current >= ICE_MAX_ATTEMPTS) {
-          // Max attempts reached — end the call gracefully
-          if (callStateRef.current) {
-            emit("call:end", { conversationId: callStateRef.current.conversationId, targetUserId: callStateRef.current.remoteUserId });
-          }
-          // Inline cleanup (same as cleanupCall)
-          cleanupCall();
-          setCallState(null);
-          return;
-        }
-        const delay = ICE_RESTART_DELAYS[Math.min(iceRestartAttemptRef.current, ICE_RESTART_DELAYS.length - 1)];
-        setTimeout(() => {
-          if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") return;
-          iceRestartAttemptRef.current++;
-          // Dégrader la qualité après 2 échecs pour aider la reconnexion
-          if (iceRestartAttemptRef.current >= 2 && localStreamRef.current) {
-            void applyVideoProfileToPC(pc, localStreamRef.current, "data-saver");
-            setAppliedVideoProfile("data-saver");
-          }
-          pc.restartIce();
-          pc.createOffer({ iceRestart: true }).then(async (offer) => {
-            await pc.setLocalDescription(offer);
-            emit("webrtc:offer", { targetUserId: remoteUserId, sdp: offer });
-          }).catch(() => {});
-        }, delay);
-      };
-      if (state === "disconnected") attemptRestart();
-      if (state === "failed") attemptRestart();
-    };
-
-    peerConnectionRef.current = pc;
-
-    // ── Codec preferences (VP9 vidéo, Opus audio) ──
-    // Applied after tracks are added
-    return pc;
-  }, [emit, isSpeakerOn]);
-
-  const cleanupCall = useCallback(() => {
-    peerConnectionRef.current?.close();
-    peerConnectionRef.current = null;
-    if (callQualityTimerRef.current) { clearInterval(callQualityTimerRef.current); callQualityTimerRef.current = null; }
-    localStreamRef.current?.getTracks().forEach((t) => t.stop());
-    localStreamRef.current = null;
-    remoteStreamRef.current = null;
-    if (remoteAudioRef.current) remoteAudioRef.current.srcObject = null;
-    setIsMuted(false); setIsCameraOff(false); setIsSpeakerOn(true); setIsEarMode(false);
-    setConnectionQuality("unknown");
-    qualityPoorStreakRef.current = 0; qualityGoodStreakRef.current = 0;
-    iceRestartAttemptRef.current = 0;
-  }, []);
-
-  const applyVideoProfile = useCallback(async (profile: VideoProfile) => {
-    const pc = peerConnectionRef.current;
-    const stream = localStreamRef.current;
-    if (!pc || !stream) return;
-    await applyVideoProfileToPC(pc, stream, profile);
-    setAppliedVideoProfile(profile);
-  }, []);
-
-  const startQualityMonitor = useCallback((pc: RTCPeerConnection) => {
-    if (callQualityTimerRef.current) { clearInterval(callQualityTimerRef.current); callQualityTimerRef.current = null; }
-    const sample = async () => {
-      try {
-        const stats = await pc.getStats();
-        let fps = 0, packetsLost = 0, packetsRecv = 0, rtt = 0;
-        stats.forEach((report) => {
-          if (report.type === "inbound-rtp" && (report as any).kind === "video") { fps = Number((report as any).framesPerSecond ?? fps); packetsLost = Number((report as any).packetsLost ?? packetsLost); packetsRecv = Number((report as any).packetsReceived ?? packetsRecv); }
-          if (report.type === "candidate-pair" && (report as any).state === "succeeded") { rtt = Number((report as any).currentRoundTripTime ?? rtt); }
-        });
-        const total = packetsLost + packetsRecv;
-        const loss = total > 0 ? packetsLost / total : 0;
-
-        if (loss > QUALITY_POOR.lossRate || fps < QUALITY_POOR.minFps || rtt > QUALITY_POOR.maxRtt) {
-          qualityPoorStreakRef.current += 1; qualityGoodStreakRef.current = 0; setConnectionQuality("poor");
-          // Auto-downgrade après série mauvaise qualité
-          if (qualityPoorStreakRef.current >= DOWNGRADE_STREAK && qualityMode === "auto") {
-            const cur = appliedVideoProfile;
-            const next: VideoProfile = cur === "hd" ? "balanced" : "data-saver";
-            if (cur !== next) void applyVideoProfile(next);
-          }
-        } else if (loss > QUALITY_FAIR.lossRate || fps < QUALITY_FAIR.minFps || rtt > QUALITY_FAIR.maxRtt) {
-          qualityPoorStreakRef.current = Math.max(0, qualityPoorStreakRef.current - 1); qualityGoodStreakRef.current = 0; setConnectionQuality("fair");
-        } else {
-          qualityGoodStreakRef.current += 1; qualityPoorStreakRef.current = Math.max(0, qualityPoorStreakRef.current - 1); setConnectionQuality("good");
-          // Auto-upgrade après série bonne qualité
-          if (qualityGoodStreakRef.current >= UPGRADE_STREAK && qualityMode === "auto") {
-            const cur = appliedVideoProfile;
-            const next: VideoProfile = cur === "data-saver" ? "balanced" : cur === "balanced" ? "hd" : "hd";
-            if (cur !== next) void applyVideoProfile(next);
-          }
-        }
-      } catch { setConnectionQuality("unknown"); }
-    };
-    void sample();
-    callQualityTimerRef.current = setInterval(() => void sample(), 2000);
-  }, [qualityMode, appliedVideoProfile, applyVideoProfile]);
-
-  const getCallMedia = useCallback(async (callType: "audio" | "video", facingMode: "user" | "environment" = "user") => {
-    return navigator.mediaDevices.getUserMedia(getMediaConstraints(callType, facingMode));
-  }, []);
-
-  const optimizePeerSenders = useCallback(async (pc: RTCPeerConnection) => {
-    applyCodecPreferences(pc);
-    await optimizeSenders(pc, getInitialProfile());
-  }, []);
-
-  /* ── Auto quality adjustment ── */
-  useEffect(() => {
-    if (!callState || callState.type !== "video" || callState.status !== "connected" || !peerConnectionRef.current) return;
-    const target: "hd" | "balanced" | "data-saver" = qualityMode === "auto" ? (connectionQuality === "poor" ? "data-saver" : connectionQuality === "fair" ? "balanced" : "hd") : qualityMode;
-    if (target === appliedVideoProfile) return;
-    void applyVideoProfile(target);
-  }, [callState?.status, callState?.type, connectionQuality, qualityMode, appliedVideoProfile, applyVideoProfile]);
-
-  const cycleQualityMode = useCallback(() => {
-    setQualityMode((prev) => prev === "auto" ? "hd" : prev === "hd" ? "balanced" : prev === "balanced" ? "data-saver" : "auto");
-  }, []);
-
-  const toggleMute = useCallback(() => {
-    const t = localStreamRef.current?.getAudioTracks()[0];
-    if (t) { t.enabled = !t.enabled; setIsMuted(!t.enabled); }
-  }, []);
-
-  const toggleCamera = useCallback(() => {
-    const t = localStreamRef.current?.getVideoTracks()[0];
-    if (t) { t.enabled = !t.enabled; setIsCameraOff(!t.enabled); }
-  }, []);
-
-  const toggleSpeaker = useCallback(() => {
-    setIsSpeakerOn((prev) => {
-      const next = !prev;
-      if (remoteAudioRef.current) remoteAudioRef.current.muted = !next;
-      if (remoteVideoRef.current) remoteVideoRef.current.muted = !next;
-      return next;
-    });
-  }, []);
-
-  const switchCamera = useCallback(async () => {
-    if (!callState || callState.type !== "video" || !localStreamRef.current || !peerConnectionRef.current) return;
-    const currentTrack = localStreamRef.current.getVideoTracks()[0];
-    if (!currentTrack) return;
-    setIsSwitchingCamera(true);
-    const target: "user" | "environment" = localFacingModeRef.current === "user" ? "environment" : "user";
-    try {
-      const newStream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280, max: 1920 }, height: { ideal: 720, max: 1080 }, frameRate: { ideal: 30, max: 30 }, facingMode: target }, audio: false });
-      const newTrack = newStream.getVideoTracks()[0];
-      if (!newTrack) return;
-      const sender = peerConnectionRef.current.getSenders().find((s) => s.track?.kind === "video");
-      if (sender) await sender.replaceTrack(newTrack);
-      localStreamRef.current.removeTrack(currentTrack); currentTrack.stop(); localStreamRef.current.addTrack(newTrack);
-      if (localVideoRef.current) { localVideoRef.current.srcObject = localStreamRef.current; void localVideoRef.current.play().catch(() => {}); }
-      localFacingModeRef.current = target;
-    } catch { alert(t("msg.cameraSwitchError")); }
-    finally { setIsSwitchingCamera(false); }
-  }, [callState, t]);
-
-  const startCall = useCallback(async (callType: "audio" | "video") => {
-    if (!activeConv || activeConv.isGroup) return;
-    const remoteUserId = getOtherUserId(activeConv, myId);
-    if (!remoteUserId) return;
-    try {
-      localFacingModeRef.current = "user";
-      const stream = await getCallMedia(callType, "user");
-      localStreamRef.current = stream;
-      if (localVideoRef.current) localVideoRef.current.srcObject = stream;
-      const pc = createPeerConnection(remoteUserId);
-      stream.getTracks().forEach((track) => pc.addTrack(track, stream));
-      await optimizePeerSenders(pc);
-      const initProf = getInitialProfile();
-      await applyVideoProfile(initProf);
-      startQualityMonitor(pc);
-      setCallState({ type: callType, conversationId: activeConv.id, remoteUserId, direction: "outgoing", status: "ringing" });
-      emit("call:initiate", { conversationId: activeConv.id, targetUserId: remoteUserId, callType });
-    } catch { alert(t("msg.callMediaAccessError")); }
-  }, [activeConv, myId, createPeerConnection, emit, optimizePeerSenders, getCallMedia, startQualityMonitor, applyVideoProfile, t]);
-
-  const acceptCall = useCallback(async (preferredType?: "audio" | "video") => {
-    if (!callState) return;
-    const acceptedType = preferredType ?? callState.type;
-    try {
-      localFacingModeRef.current = "user";
-      const stream = await getCallMedia(acceptedType, "user");
-      localStreamRef.current = stream;
-      if (localVideoRef.current) localVideoRef.current.srcObject = stream;
-      const pc = createPeerConnection(callState.remoteUserId);
-      stream.getTracks().forEach((track) => pc.addTrack(track, stream));
-      await optimizePeerSenders(pc);
-      const initProf = getInitialProfile();
-      await applyVideoProfile(initProf);
-      startQualityMonitor(pc);
-      emit("call:accept", { conversationId: callState.conversationId, callerId: callState.remoteUserId });
-      setCallState((prev) => prev ? { ...prev, type: acceptedType, status: "connected" } : null);
-    } catch { alert(t("msg.callMediaAccessError")); }
-  }, [callState, createPeerConnection, emit, optimizePeerSenders, getCallMedia, startQualityMonitor, applyVideoProfile, t]);
-
-  const rejectCall = useCallback(() => {
-    if (!callState) return;
-    emit("call:reject", { conversationId: callState.conversationId, callerId: callState.remoteUserId });
-    cleanupCall(); setCallState(null);
-  }, [callState, emit, cleanupCall]);
-
-  const endCall = useCallback(() => {
-    if (!callState) return;
-    emit("call:end", { conversationId: callState.conversationId, targetUserId: callState.remoteUserId });
-    cleanupCall(); setCallState(null);
-  }, [callState, emit, cleanupCall]);
-
-  /* ── beforeunload: nettoyer appel actif si tab fermé ── */
-  const callStateRef = useRef(callState);
-  callStateRef.current = callState;
-  useEffect(() => {
-    const handler = () => {
-      const cs = callStateRef.current;
-      if (cs) {
-        if (cs.status === "connected" || cs.status === "ringing") {
-          emit("call:end", { conversationId: cs.conversationId, targetUserId: cs.remoteUserId });
-        }
-        cleanupCall();
-      }
-    };
-    window.addEventListener("beforeunload", handler);
-    window.addEventListener("pagehide", handler);
-    return () => { window.removeEventListener("beforeunload", handler); window.removeEventListener("pagehide", handler); };
-  }, [emit, cleanupCall]);
-
-  /* ── Réaction au changement réseau en cours d'appel ── */
-  useEffect(() => {
-    if (!callState || callState.status !== "connected" || callState.type !== "video") return;
-    const conn = (navigator as any).connection;
-    if (!conn) return;
-    const handleNetChange = () => {
-      const net = conn.effectiveType as string | undefined;
-      const prof = net === "2g" || net === "slow-2g" ? "data-saver" : net === "3g" ? "balanced" : "hd";
-      void applyVideoProfile(prof);
-    };
-    conn.addEventListener("change", handleNetChange);
-    return () => conn.removeEventListener("change", handleNetChange);
-  }, [callState?.status, callState?.type, applyVideoProfile]);
-
-  /* ── Global call accept/reject events ── */
-  useEffect(() => {
-    const handleGlobalAccept = (event: Event) => {
-      const detail = (event as CustomEvent<{ conversationId?: string; callType?: "audio" | "video" }>).detail;
-      if (!callState || callState.status !== "ringing" || callState.direction !== "incoming") return;
-      if (detail?.conversationId && detail.conversationId !== callState.conversationId) return;
-      void acceptCall(detail?.callType);
-    };
-    const handleGlobalReject = (event: Event) => {
-      const detail = (event as CustomEvent<{ conversationId?: string }>).detail;
-      if (!callState) return;
-      if (detail?.conversationId && detail.conversationId !== callState.conversationId) return;
-      rejectCall();
-    };
-    window.addEventListener("ks:incoming-call-accept", handleGlobalAccept as EventListener);
-    window.addEventListener("ks:incoming-call-reject", handleGlobalReject as EventListener);
-    return () => { window.removeEventListener("ks:incoming-call-accept", handleGlobalAccept as EventListener); window.removeEventListener("ks:incoming-call-reject", handleGlobalReject as EventListener); };
-  }, [acceptCall, rejectCall, callState]);
-
-  useEffect(() => {
-    if (!pendingAutoAcceptRef.current || !callState || callState.status !== "ringing" || callState.direction !== "incoming" || !activeConv || activeConv.id !== callState.conversationId) return;
-    pendingAutoAcceptRef.current = false;
-    void acceptCall();
-  }, [acceptCall, activeConv, callState]);
-
-  /* ════════════════════════════════════════
      Actions / Callbacks
      ════════════════════════════════════════ */
 
@@ -1403,31 +1143,6 @@ export function MessagingPage() {
     if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
   }, []);
 
-  /* ── Invite candidates for call ── */
-  const inviteCandidates = useMemo(() => {
-    const unique = new Map<string, { userId: string; displayName: string; avatarUrl: string | null; username: string | null }>();
-    conversations.forEach((conv) => {
-      if (conv.isGroup) return;
-      const other = getOtherParticipant(conv, myId);
-      if (!other || (callState && other.userId === callState.remoteUserId)) return;
-      if (!unique.has(other.userId)) unique.set(other.userId, { userId: other.userId, displayName: other.user.profile.displayName, avatarUrl: other.user.profile.avatarUrl, username: other.user.profile.username ?? null });
-    });
-    const q = inviteQuery.trim().toLowerCase();
-    const vals = Array.from(unique.values());
-    return q ? vals.filter((u) => u.displayName.toLowerCase().includes(q) || (u.username ?? "").toLowerCase().includes(q)) : vals;
-  }, [conversations, myId, callState, inviteQuery]);
-
-  const invitePersonToCall = useCallback(async (targetUserId: string, displayName: string) => {
-    if (!callState || !user) return;
-    try {
-      const { conversation } = await messaging.createDM(targetUserId);
-      setConversations((prev) => prev.some((c) => c.id === conversation.id) ? prev : [conversation, ...prev]);
-      emit("message:send", { conversationId: conversation.id, type: "TEXT", content: `📞 ${user.profile.displayName} vous invite à rejoindre un appel audio sur Kin-Sell. Ouvrez la messagerie pour rejoindre la conversation.` }, () => {});
-      showGuardAlert("warn", t("msg.inviteSent").replace("{name}", displayName));
-      setShowAddPeople(false); setInviteQuery("");
-    } catch { showGuardAlert("block", t("msg.inviteFailed")); }
-  }, [callState, user, emit, showGuardAlert, t]);
-
   /* ── Open conversation ── */
   const openConversation = useCallback((conv: ConversationSummary) => {
     setActiveConv(conv);
@@ -1464,54 +1179,44 @@ export function MessagingPage() {
   return (
     <div className="mg-shell" style={{ "--mg-kb-offset": `${keyboardOffset}px` } as CSSProperties}>
 
-      {/* ══ Call overlay ══ */}
-      {callState && (callState.status === "connected" || (callState.status === "ringing" && callState.direction === "outgoing")) && (
-        <div className={`mg-call-overlay${isEarMode ? " mg-call-overlay--ear" : ""}`}>
-          <div className="mg-call-screen">
-            <audio ref={remoteAudioRef} autoPlay playsInline />
-            <div className="mg-call-avatar">
-              {(() => {
-                const conv = conversations.find((c) => c.id === callState.conversationId);
-                const avatar = conv ? getConversationAvatar(conv, myId) : null;
-                const name = conv ? getConversationName(conv, myId, t) : "Appel";
-                return avatar ? <img src={avatar} alt="" /> : <span>{initials(name)}</span>;
-              })()}
-            </div>
-            <p className="mg-call-name">{(() => { const conv = conversations.find((c) => c.id === callState.conversationId); return conv ? getConversationName(conv, myId, t) : t("msg.user"); })()}</p>
-            {callState.status === "ringing" && <p className="mg-call-status">{t("msg.callInProgress")}</p>}
-            {callState.status === "connected" && (
-              <>
-                <p className="mg-call-timer">{Math.floor(callDuration / 60).toString().padStart(2, "0")}:{(callDuration % 60).toString().padStart(2, "0")}</p>
-                <span className={`mg-call-quality mg-call-quality--${connectionQuality}`}>
-                  {connectionQuality === "good" ? "Bonne" : connectionQuality === "fair" ? "Moyenne" : connectionQuality === "poor" ? "Faible" : "..."}
-                </span>
-              </>
-            )}
-            <div className="mg-call-controls">
-              <button className={`mg-call-ctrl${isMuted ? " mg-call-ctrl--active" : ""}`} onClick={toggleMute}>
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">{isMuted ? <><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2c0 .76-.13 1.48-.35 2.17"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></> : <><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></>}</svg>
-                <span className="mg-call-ctrl-label">{isMuted ? "Muet" : "Micro"}</span>
-              </button>
-              <button className={`mg-call-ctrl${!isSpeakerOn ? " mg-call-ctrl--active" : ""}`} onClick={toggleSpeaker}>
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">{isSpeakerOn ? <><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></> : <><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></>}</svg>
-                <span className="mg-call-ctrl-label">HP</span>
-              </button>
-              {callState.type === "audio" && (
-                <button className={`mg-call-ctrl${isEarMode ? " mg-call-ctrl--active" : ""}`} onClick={() => setIsEarMode((p) => !p)}>
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9a6 6 0 0 1 12 0c0 7-3 9-6 9s-6-2-6-9z"/><path d="M12 22v-4"/></svg>
-                  <span className="mg-call-ctrl-label">Oreille</span>
-                </button>
-              )}
+      {/* ══ Audio call screen (système global) ══ */}
+      {audioCall && !callMinimized && (() => {
+        const conv = conversations.find((c) => c.id === audioCall.conversationId);
+        const contactName = conv ? getConversationName(conv, myId, t) : t("msg.user");
+        const contactAvatar = conv ? getConversationAvatar(conv, myId) : null;
 
-              <button className="mg-call-ctrl" onClick={() => setShowAddPeople(true)}>
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="17" y1="11" x2="23" y2="11"/></svg>
-                <span className="mg-call-ctrl-label">Ajouter</span>
-              </button>
-              <button className="mg-call-ctrl mg-call-ctrl--hangup" onClick={endCall}>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
-                <span className="mg-call-ctrl-label">Fin</span>
-              </button>
-            </div>
+        return (
+          <AudioCallScreen
+            status={audioCall.status}
+            contactName={contactName}
+            contactAvatarUrl={contactAvatar}
+            direction={audioCall.direction}
+            isMuted={isMuted}
+            isSpeakerOn={isSpeakerOn}
+            audioRoute={audioRoute}
+            availableAudioRoutes={availableAudioRoutes}
+            durationSeconds={audioCallDuration}
+            onToggleMute={toggleMute}
+            onToggleSpeaker={toggleSpeaker}
+            onSetRoute={setAudioRoute}
+            onHangup={audioHangup}
+            onAccept={audioCall.status === "incoming_ringing" ? audioAcceptCall : undefined}
+            onBack={() => minimizeCall()}
+          />
+        );
+      })()}
+
+      {/* ══ Audio call result banner ══ */}
+      {audioCallResult && (
+        <div className={`mg-call-summary${audioCallResult.status !== "ended" ? " mg-call-summary--missed" : ""}`} onClick={() => {}}>
+          <span className="mg-call-summary-icon" aria-hidden="true">
+            <PhoneIcon size={20} />
+          </span>
+          <div className="mg-call-summary-info">
+            <strong>{audioCallResult.status === "ended" ? "Appel terminé" : audioCallResult.status === "unanswered" ? "Pas de réponse" : audioCallResult.status === "declined" ? "Appel refusé" : audioCallResult.status === "cancelled" ? "Appel annulé" : "Appel manqué"}</strong>
+            {audioCallResult.durationSeconds > 0 && (
+              <span>{Math.floor(audioCallResult.durationSeconds / 60).toString().padStart(2, "0")}:{(audioCallResult.durationSeconds % 60).toString().padStart(2, "0")}</span>
+            )}
           </div>
         </div>
       )}
@@ -1555,30 +1260,6 @@ export function MessagingPage() {
                 </button>
               ))}
               {conversations.filter((c) => c.id !== activeConv?.id).length === 0 && <p className="mg-empty-sm">{t("msg.noOtherConversation")}</p>}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ══ Add people modal (call) ══ */}
-      {showAddPeople && callState && (
-        <div className="mg-modal-overlay" onClick={() => setShowAddPeople(false)}>
-          <div className="mg-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="mg-modal-header">
-              <h3>{t("msg.addPeople")}</h3>
-              <button className="mg-modal-close" onClick={() => setShowAddPeople(false)}>✕</button>
-            </div>
-            <div className="mg-modal-search">
-              <input className="mg-search-input" placeholder={t("msg.searchContact")} value={inviteQuery} onChange={(e) => setInviteQuery(e.target.value)} />
-            </div>
-            <div className="mg-modal-list">
-              {inviteCandidates.map((c) => (
-                <button key={c.userId} className="mg-modal-item" onClick={() => void invitePersonToCall(c.userId, c.displayName)}>
-                  <div className="mg-avatar mg-avatar--sm">{c.avatarUrl ? <img src={c.avatarUrl} alt="" /> : initials(c.displayName)}</div>
-                  <span>{c.displayName}</span>
-                </button>
-              ))}
-              {inviteCandidates.length === 0 && <p className="mg-empty-sm">{t("msg.noAvailableContact")}</p>}
             </div>
           </div>
         </div>
@@ -1690,11 +1371,13 @@ export function MessagingPage() {
                           {isMutedConv && "🔇 "}
                           {lastMsg
                             ? lastMsg.isDeleted ? t("msg.deletedMessage")
-                            : lastMsg.type === "IMAGE" ? `📷 ${t("msg.photo")}`
+                            : callEventPreview(lastMsg, t) ?? (
+                              lastMsg.type === "IMAGE" ? `📷 ${t("msg.photo")}`
                             : lastMsg.type === "AUDIO" ? `🎵 ${t("msg.audio")}`
                             : lastMsg.type === "VIDEO" ? `🎬 ${t("msg.video")}`
                             : lastMsg.type === "FILE" ? `📎 ${t("msg.file")}`
                             : (lastMsg.senderId === myId ? `${t("msg.you")}: ` : "") + (lastMsg.content?.slice(0, 45) ?? "")
+                            )
                             : t("msg.newConversationLabel")}
                         </span>
                         {conv.unreadCount > 0 && !isMutedConv && <span className="mg-unread">{conv.unreadCount}</span>}
@@ -1802,7 +1485,7 @@ export function MessagingPage() {
             </div>
             <div className="mg-conv-header-actions">
               {!activeConv.isGroup && (
-                <button className="mg-icon-btn" onClick={() => void startCall("audio")} title={t("msg.audioCall")}>
+                <button className="mg-icon-btn" onClick={() => { if (activeConv && !activeConv.isGroup) { const rid = getOtherUserId(activeConv, myId); if (rid) void audioStartCall(activeConv.id, rid); } }} title={t("msg.audioCall")}>
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
                 </button>
               )}
@@ -1849,6 +1532,21 @@ export function MessagingPage() {
                 const readByOthers = msg.readReceipts.filter((r) => r.userId !== myId);
                 const isSelected = selectedMsgIds.has(msg.id);
                 const pinnedFromMsg = parseSoKinPostRefFromSystemMessage(msg);
+                const callEvent = parseCallEventFromSystemMessage(msg);
+
+                if (callEvent) {
+                  const CIcon = callEvent.callType === "VIDEO" ? VideoIcon : PhoneIcon;
+                  const cDur = callEvent.durationSeconds ? `${Math.floor(callEvent.durationSeconds / 60).toString().padStart(2, "0")}:${(callEvent.durationSeconds % 60).toString().padStart(2, "0")}` : null;
+                  const cLabel = callEvent.status === "ANSWERED" ? `Appel terminé${cDur ? ` • ${cDur}` : ""}` : callEvent.status === "NO_ANSWER" ? "Pas de réponse" : callEvent.status === "REJECTED" ? "Appel refusé" : callEvent.status === "CANCELLED" ? "Appel annulé" : "Appel manqué";
+                  const cMissed = callEvent.status !== "ANSWERED";
+                  return (
+                    <div key={msg.id} className={`mg-call-event${cMissed ? " mg-call-event--missed" : ""}`}>
+                      <span className="mg-call-event-icon" aria-hidden="true"><CIcon size={16} /></span>
+                      <span className="mg-call-event-label">{cLabel}</span>
+                      <span className="mg-call-event-time">{new Date(msg.createdAt).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })}</span>
+                    </div>
+                  );
+                }
 
                 return (
                   <div
@@ -1874,13 +1572,26 @@ export function MessagingPage() {
                       {msg.isDeleted ? (
                         <p className="mg-deleted-text">🚫 {t("msg.deletedMessage")}</p>
                       ) : msg.type === "IMAGE" && msg.mediaUrl ? (
-                        <img src={msg.mediaUrl} alt="Image" className="mg-media-img" onClick={() => window.open(msg.mediaUrl!, "_blank")} />
+                        <img
+                          src={resolveMediaUrl(msg.mediaUrl)}
+                          alt="Image"
+                          className="mg-media-img"
+                          loading="lazy"
+                          decoding="async"
+                          onClick={() => window.open(resolveMediaUrl(msg.mediaUrl), "_blank")}
+                        />
                       ) : msg.type === "AUDIO" && msg.mediaUrl ? (
-                        <AudioPlayer src={msg.mediaUrl} />
+                        <AudioPlayer src={resolveMediaUrl(msg.mediaUrl)} lowBandwidth={lowBandwidthMode} />
                       ) : msg.type === "VIDEO" && msg.mediaUrl ? (
-                        <video controls src={msg.mediaUrl} className="mg-media-video" />
+                        <video
+                          controls
+                          preload={lowBandwidthMode ? "none" : "metadata"}
+                          playsInline
+                          src={resolveMediaUrl(msg.mediaUrl)}
+                          className="mg-media-video"
+                        />
                       ) : msg.type === "FILE" && msg.mediaUrl ? (
-                        <a href={msg.mediaUrl} download={msg.fileName ?? "file"} className="mg-file-link">📎 {msg.fileName ?? t("msg.file")}</a>
+                        <a href={resolveMediaUrl(msg.mediaUrl)} download={msg.fileName ?? "file"} className="mg-file-link">📎 {msg.fileName ?? t("msg.file")}</a>
                       ) : pinnedFromMsg ? (
                         <div className="mg-sokin-pin mg-sokin-pin--inline" aria-label="Annonce So-Kin liée">
                           <div className="mg-sokin-pin-head">

@@ -1,0 +1,119 @@
+﻿<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kin-Sell - Redirection</title>
+  <style>
+    body { background: #120b2b; color: #fff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; text-align: center; }
+    .container { padding: 2rem; max-width: 560px; }
+    .spinner { width: 32px; height: 32px; border: 3px solid rgba(111,88,255,0.3); border-top-color: #6f58ff; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 1rem; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    p { color: #c7bedf; font-size: 1rem; margin: 0 0 1rem; }
+    .actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 0.8rem; }
+    a { display: inline-block; padding: 12px 20px; background: #6f58ff; color: #fff; border-radius: 12px; text-decoration: none; font-weight: 600; font-size: 0.95rem; }
+    a.secondary { background: rgba(255,255,255,0.12); }
+    a:active { background: #5a45e0; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="spinner"></div>
+    <p id="status">Redirection vers Kin-Sell...</p>
+    <div class="actions">
+      <a id="openApp" href="#">Ouvrir Kin-Sell</a>
+      <a id="openIntent" class="secondary" href="#">Forcer ouverture Android</a>
+    </div>
+  </div>
+  <script>
+    (function() {
+      var search = window.location.search || "";
+      var customUrl = "com.kinsell.app://auth/callback" + search;
+      var intentUrl = "intent://auth/callback" + search + "#Intent;scheme=com.kinsell.app;package=com.kinsell.app;end";
+      var httpsAppLink = "https://kin-sell.com/auth/callback" + search;
+      var statusEl = document.getElementById("status");
+      var openApp = document.getElementById("openApp");
+      var openIntent = document.getElementById("openIntent");
+
+      function emit(stage, info) {
+        var payload = {
+          stage: stage,
+          source: "app-redirect",
+          info: info || "",
+          url: window.location.href,
+          ua: navigator.userAgent,
+          ts: Date.now()
+        };
+        try {
+          var body = JSON.stringify(payload);
+          if (navigator.sendBeacon) {
+            navigator.sendBeacon("/api/auth/oauth/debug", new Blob([body], { type: "application/json" }));
+          } else {
+            fetch("/api/auth/oauth/debug", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              credentials: "include",
+              keepalive: true,
+              body: body
+            }).catch(function() {});
+          }
+        } catch (e) {
+          // ignore
+        }
+      }
+
+      openApp.href = intentUrl;
+      openIntent.href = customUrl;
+
+      openApp.addEventListener("click", function() { emit("manual-open-intent", intentUrl); });
+      openIntent.addEventListener("click", function() { emit("manual-open-custom", customUrl); });
+
+      var timers = [];
+      var appOpened = false;
+
+      function cancelTimers() {
+        for (var i = 0; i < timers.length; i++) clearTimeout(timers[i]);
+        timers = [];
+      }
+
+      // Detect when user leaves this page (app opened successfully)
+      document.addEventListener("visibilitychange", function() {
+        if (document.hidden && !appOpened) {
+          appOpened = true;
+          cancelTimers();
+          emit("app-opened", "page hidden - app likely opened");
+        }
+      });
+
+      function jump(url) {
+        if (appOpened) return;
+        try {
+          emit("jump", url);
+          window.location.href = url;
+        } catch (e) {
+          emit("jump-error", String(e && e.message ? e.message : e));
+        }
+      }
+
+      // Sequence: intent URI (most reliable in Chrome Custom Tab) -> custom scheme -> HTTPS App Link
+      emit("loaded", "start sequence");
+      jump(intentUrl);
+
+      timers.push(setTimeout(function() {
+        jump(customUrl);
+      }, 800));
+
+      timers.push(setTimeout(function() {
+        jump(httpsAppLink);
+      }, 1700));
+
+      timers.push(setTimeout(function() {
+        if (!appOpened) {
+          statusEl.textContent = "Si l'application ne s'ouvre pas automatiquement, appuyez sur un bouton.";
+          emit("timeout-manual", "automatic open did not complete in time");
+        }
+      }, 2600));
+    })();
+  </script>
+</body>
+</html>

@@ -6,6 +6,7 @@ import { asyncHandler } from "../../shared/utils/async-handler.js";
 import { rateLimit, RateLimits } from "../../shared/middleware/rate-limit.middleware.js";
 import { scrapeGuard } from "../../shared/middleware/scrape-guard.middleware.js";
 import { requireNoRestriction } from "../../shared/middleware/trust-guard.middleware.js";
+import { spamGuard } from "../../shared/middleware/spam-guard.middleware.js";
 import * as listingsService from "./listings.service.js";
 import * as bulkImportService from "./bulk-import.service.js";
 import { getOrCreateDMConversation, sendMessage } from "../messaging/messaging.service.js";
@@ -18,6 +19,14 @@ const locationVisibilitySchema = z.enum([
   "EXACT_PUBLIC", "DISTRICT_PUBLIC", "CITY_PUBLIC",
   "REGION_PUBLIC", "COUNTRY_PUBLIC", "EXACT_PRIVATE",
 ]);
+
+const variantsSchema = z.object({
+  sizes: z.array(z.string().min(1).max(20)).max(30).optional(),
+  colors: z.array(z.object({
+    name: z.string().min(1).max(30),
+    hex: z.string().regex(/^#[0-9a-fA-F]{3,8}$/, "Couleur hex invalide"),
+  })).max(30).optional(),
+}).nullable().optional();
 
 const createSchema = z.object({
   type: listingTypeSchema,
@@ -42,6 +51,7 @@ const createSchema = z.object({
   serviceDurationMin: z.number().int().min(1).nullable().optional(),
   serviceLocation: z.string().max(40).nullable().optional(),
   isNegotiable: z.boolean().optional(),
+  variants: variantsSchema,
 });
 
 const updateSchema = z.object({
@@ -66,6 +76,7 @@ const updateSchema = z.object({
   serviceDurationMin: z.number().int().min(1).nullable().optional(),
   serviceLocation: z.string().max(40).nullable().optional(),
   isNegotiable: z.boolean().optional(),
+  variants: variantsSchema,
 });
 
 const searchSchema = z.object({
@@ -134,6 +145,22 @@ router.get(
   })
 );
 
+/* ── Public: detail of a single listing (page produit) ── */
+router.get(
+  "/public/:id",
+  scrapeGuard(),
+  rateLimit(RateLimits.PUBLIC_SEARCH),
+  asyncHandler(async (request, response) => {
+    const { id } = request.params;
+    if (!id || id.length < 4) {
+      response.status(400).json({ error: "Identifiant invalide" });
+      return;
+    }
+    const result = await listingsService.getPublicListingDetail(id);
+    response.json(result);
+  })
+);
+
 /* ── Owner: my listings ── */
 router.get(
   "/mine",
@@ -175,6 +202,7 @@ router.post(
   requireRoles(Role.USER, Role.BUSINESS),
   requireNoRestriction("LISTING_LIMIT"),
   rateLimit(RateLimits.LISTING_CREATE),
+  spamGuard("PUBLISH"),
   asyncHandler(async (request: AuthenticatedRequest, response) => {
     const payload = createSchema.parse(request.body);
 

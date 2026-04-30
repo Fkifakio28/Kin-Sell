@@ -11,7 +11,7 @@ type LocaleCurrencyContextValue = {
   setCurrency: (currency: AppCurrency) => void;
   currencySymbol: string;
   currencyUsesDecimals: boolean;
-  t: (key: string) => string;
+  t: (key: string, fallback?: string) => string;
   formatMoneyFromUsdCents: (usdCents: number) => string;
   formatDate: (isoDate: string | Date) => string;
   formatPriceLabelFromUsdCents: (usdCents: number) => string;
@@ -143,7 +143,7 @@ export function LocaleCurrencyProvider({ children }: { children: React.ReactNode
   }, [effectiveCountry, getCountryConfig]);
 
   const value = useMemo<LocaleCurrencyContextValue>(() => {
-    const t = (key: string) => activeDict[key] ?? frDict[key] ?? key;
+    const t = (key: string, fallback?: string) => activeDict[key] ?? frDict[key] ?? fallback ?? key;
 
     const setLanguage = (lang: AppLanguage) => {
       setLanguageState(lang);

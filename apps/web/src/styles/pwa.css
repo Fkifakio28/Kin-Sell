@@ -350,6 +350,12 @@
     overscroll-behavior-y: contain;
   }
 
+  /* Android Capacitor : overlay:false gère déjà l'espace status bar,
+     le padding env() est redondant et crée un double espacement */
+  body.capacitor-android {
+    padding-top: 0;
+  }
+
   /* Désactive la sélection de texte longue-pression (comportement natif) */
   * {
     -webkit-user-select: none;
@@ -396,3 +402,18 @@
 @media all and (display-mode: standalone), all and (-webkit-device-pixel-ratio) and (not (display-mode: browser)) {
   .pwa-install-btn { display: none !important; }
 }
+
+/* ── Android Capacitor: overlay:false gère la status bar nativement,
+   neutraliser tous les env(safe-area-inset-top) redondants ── */
+body.capacitor-android .hm-topbar { padding-top: 0 !important; height: 56px !important; }
+body.capacitor-android .hm-content { padding-top: 58px !important; }
+body.capacitor-android .hm-drawer { padding-top: 0 !important; }
+body.capacitor-android .sk-topbar { padding-top: 8px !important; }
+body.capacitor-android .ex-topbar { padding-top: 0 !important; }
+body.capacitor-android .ex-search-section { padding-top: 16px !important; }
+body.capacitor-android .ex-map-topbar { padding-top: 8px !important; }
+body.capacitor-android .ex-results-list { padding-top: 52px !important; }
+body.capacitor-android .ex-detail-drawer-header { padding-top: 12px !important; }
+body.capacitor-android .mg-conv-header { padding-top: 8px !important; }
+body.capacitor-android .mg-call-overlay { padding-top: 16px !important; }
+body.capacitor-android .mg-header-call-row { top: 12px !important; }

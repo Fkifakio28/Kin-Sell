@@ -15,6 +15,7 @@ import { useScrollRestore } from '../../utils/useScrollRestore';
 import { useAuth } from '../../app/providers/AuthProvider';
 import { useLocaleCurrency } from '../../app/providers/LocaleCurrencyProvider';
 import { useMarketPreference } from '../../app/providers/MarketPreferenceProvider';
+import { useDataSaver, dsLimit, dsInterval } from '../../app/providers/DataSaverProvider';
 import { NegotiatePopup } from '../negotiations/NegotiatePopup';
 import { useLockedCategories, isCategoryLocked } from '../../hooks/useLockedCategories';
 import { AdBanner } from '../../components/AdBanner';
@@ -30,10 +31,12 @@ const MODAL_PAGE_SIZE = 8;
 
 export function ExplorerPageDesktop() {
   const { t, formatPriceLabelFromUsdCents } = useLocaleCurrency();
-  const { effectiveCountry, getCountryConfig } = useMarketPreference();
+  const { effectiveCountry, getCountryConfig, isGlobalScope } = useMarketPreference();
+  const { lowBandwidth } = useDataSaver();
   const lockedCats = useLockedCategories();
   const tutorial = useTutorial('explorer-desktop');
   const defaultCity = getCountryConfig(effectiveCountry).defaultCity;
+  const cityForApi = isGlobalScope ? undefined : defaultCity;
   const [searchParams, setSearchParams] = useSearchParams();
   const urlType = searchParams.get('type');
   const urlCategory = searchParams.get('category');
@@ -333,7 +336,7 @@ export function ExplorerPageDesktop() {
 
     const loadShops = async () => {
       try {
-        const data = await explorerApi.shops({ limit: 4, city: defaultCity, country: effectiveCountry });
+        const data = await explorerApi.shops({ limit: 4, city: cityForApi, country: effectiveCountry });
         setShops(data);
       } catch {
         // silencieux
@@ -342,7 +345,7 @@ export function ExplorerPageDesktop() {
 
     const loadProfiles = async () => {
       try {
-        const data = await explorerApi.profiles({ limit: 4, city: defaultCity, country: effectiveCountry });
+        const data = await explorerApi.profiles({ limit: 4, city: cityForApi, country: effectiveCountry });
         setProfiles(data);
       } catch {
         // silencieux
@@ -357,7 +360,7 @@ export function ExplorerPageDesktop() {
     return () => {
       controller.abort();
     };
-  }, [defaultCity, effectiveCountry]);
+  }, [defaultCity, effectiveCountry, cityForApi]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -380,20 +383,22 @@ export function ExplorerPageDesktop() {
       setIsLoadingArticles(true);
       try {
         const normalizedQuery = debouncedQuery.trim();
+        // Mode économie : limite réduite à 12 par type (au lieu de 24)
+        const limit = dsLimit(24, 12, lowBandwidth);
         const [productsRes, servicesRes] = await Promise.all([
           listingsApi.search({
             type: 'PRODUIT',
             q: normalizedQuery || undefined,
             country: effectiveCountry,
-            city: defaultCity,
-            limit: 24,
+            city: cityForApi,
+            limit,
           }),
           listingsApi.search({
             type: 'SERVICE',
             q: normalizedQuery || undefined,
             country: effectiveCountry,
-            city: defaultCity,
-            limit: 24,
+            city: cityForApi,
+            limit,
           }),
         ]);
 
@@ -407,7 +412,7 @@ export function ExplorerPageDesktop() {
           publisherName: item.owner.displayName,
           publisherType: 'personne',
           publisherLink: item.owner.username ? `/user/${item.owner.username}` : '#',
-          targetPath: item.owner.username ? `/user/${item.owner.username}#${item.id}` : '#',
+          targetPath: `/listing/${item.id}`,
           coverImage: resolveMediaUrl(item.imageUrl) || '/assets/kin-sell/black-man-standing-cafe-with-shopping-bags.jpg',
           media: [],
           ownerId: item.owner.userId,
@@ -420,8 +425,8 @@ export function ExplorerPageDesktop() {
           longitude: item.longitude ?? undefined,
         });
 
-        const products: ExplorerArticlePreview[] = productsRes.results.map(mapToPreview);
-        const services: ExplorerArticlePreview[] = servicesRes.results.map(mapToPreview);
+        const products: ExplorerArticlePreview[] = (productsRes.results ?? []).map(mapToPreview);
+        const services: ExplorerArticlePreview[] = (servicesRes.results ?? []).map(mapToPreview);
 
         const combined = [...products, ...services];
         if (!cancelled) setLiveArticles(combined);
@@ -435,11 +440,15 @@ export function ExplorerPageDesktop() {
 
     void loadArticles();
 
-    // Auto-refresh results every 60s
-    const poll = setInterval(() => { void loadArticles(); }, 60_000);
+    // Polling : 60s en normal, 180s en mode économie ; suspension onglet caché.
+    const intervalMs = dsInterval(60_000, 180_000, lowBandwidth);
+    const poll = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      void loadArticles();
+    }, intervalMs);
 
     return () => { cancelled = true; clearInterval(poll); };
-  }, [formatPriceLabelFromUsdCents, debouncedQuery, effectiveCountry, defaultCity]);
+  }, [formatPriceLabelFromUsdCents, debouncedQuery, effectiveCountry, cityForApi, lowBandwidth]);
 
   return (
     <>
@@ -457,11 +466,20 @@ export function ExplorerPageDesktop() {
         <div className="explorer-hero-inner">
           {/* Hero Image (Left) */}
           <div className="explorer-hero-image">
-            <img
-              src="/assets/kin-sell/black-man-standing-cafe-with-shopping-bags.jpg"
-              alt="Vendeur Kin-Sell présentant des sacs de shopping"
-              className="explorer-hero-photo"
-            />
+            <picture>
+              <source
+                srcSet="/assets/kin-sell/black-man-standing-cafe-with-shopping-bags.webp"
+                type="image/webp"
+              />
+              <img
+                src="/assets/kin-sell/black-man-standing-cafe-with-shopping-bags.jpg"
+                alt="Vendeur Kin-Sell présentant des sacs de shopping"
+                className="explorer-hero-photo"
+                loading="eager"
+                decoding="async"
+                fetchPriority="high"
+              />
+            </picture>
           </div>
 
           {/* Hero Content (Right) */}
@@ -706,7 +724,6 @@ export function ExplorerPageDesktop() {
             )}
           </div>
         </div>
-
         {/* ═══════════════════════════════════════════════
 
             PUBLIC PROFILES SECTION (Creative addition)

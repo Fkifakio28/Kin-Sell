@@ -87,11 +87,11 @@ export function RegisterPage() {
     return () => clearInterval(id);
   }, [otpResendAt]);
 
-  const handleSocialClick = async (provider: "google" | "facebook") => {
+  const handleSocialClick = async (provider: "google" | "facebook" | "apple") => {
     setErrorMessage(null);
-    if (provider === "google") {
+    if (provider === "google" || provider === "apple") {
       const apiBase = import.meta.env.VITE_API_URL ?? "/api";
-      const authUrl = `${apiBase}/auth/google${Capacitor.isNativePlatform() ? "?source=app" : ""}`;
+      const authUrl = `${apiBase}/auth/${provider}${Capacitor.isNativePlatform() ? "?source=app" : ""}`;
       if (Capacitor.isNativePlatform()) {
         await Browser.open({ url: authUrl });
       } else {
@@ -339,7 +339,7 @@ export function RegisterPage() {
 
           <TurnstileWidget onToken={handleTurnstileToken} />
 
-          <button type="submit" className="auth-submit-button" disabled={isSubmitting || isLoading || !acceptedTerms}>
+          <button type="submit" className="auth-submit-button" disabled={isSubmitting || isLoading || !acceptedTerms || !cfToken}>
             {isSubmitting ? t("auth.creating") : t("auth.createAccount")}
           </button>
 

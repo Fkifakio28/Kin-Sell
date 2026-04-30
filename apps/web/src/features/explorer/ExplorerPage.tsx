@@ -11,6 +11,7 @@ import { useScrollRestore } from '../../utils/useScrollRestore';
 import { useAuth } from '../../app/providers/AuthProvider';
 import { useLocaleCurrency } from '../../app/providers/LocaleCurrencyProvider';
 import { useMarketPreference } from '../../app/providers/MarketPreferenceProvider';
+import { useDataSaver, dsLimit, dsInterval } from '../../app/providers/DataSaverProvider';
 import { NegotiatePopup } from '../negotiations/NegotiatePopup';
 import { getUrgencyLabel } from '../../shared/promo/promo-engine';
 import { useLockedCategories, isCategoryLocked } from '../../hooks/useLockedCategories';
@@ -25,8 +26,10 @@ import { ExplorerPageDesktop } from './ExplorerPageDesktop';
 import { RegionLanguageCurrencySelector } from '../../components/RegionLanguageCurrencySelector';
 import NotificationCenter from '../../components/NotificationCenter';
 import { useGlobalNotification } from '../../app/providers/GlobalNotificationProvider';
+import { useNotificationBadge } from '../../hooks/useNotificationBadge';
 import TutorialOverlay, { useTutorial, TutorialRelaunchBtn } from '../../components/TutorialOverlay';
 import { explorerMobileSteps } from '../../components/tutorial-steps';
+import { LongPressPopup, useLongPress, type LongPressArticle } from '../../components/LongPressPopup';
 
 const PREVIEW_PAGE_SIZE = 4;
 const MODAL_PAGE_SIZE = 8;
@@ -160,6 +163,8 @@ function ExBottomNav({ visible, createOpen, onToggleCreate }: {
   const { user } = useAuth();
   const dashPath = getDashboardPath(user?.role);
   const { missedCount } = useGlobalNotification();
+  const { count: bdUnread } = useNotificationBadge();
+  const totalUnread = missedCount + bdUnread;
   const [ncOpen, setNcOpen] = useState(false);
 
   return (
@@ -177,7 +182,7 @@ function ExBottomNav({ visible, createOpen, onToggleCreate }: {
       </button>
       <button className="ex-bnav-item" style={{ position: 'relative' }} onClick={() => setNcOpen(true)} aria-label="Notifications">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-        {missedCount > 0 && <span className="nc-badge">{missedCount}</span>}
+        {totalUnread > 0 && <span className="nc-badge">{totalUnread > 99 ? '99+' : totalUnread}</span>}
         <span>Notifs</span>
       </button>
       <Link to={dashPath} className="ex-bnav-item">
@@ -226,10 +231,62 @@ export function ExplorerPage() {
   return <ExplorerPageMobile />;
 }
 
+/* ─── Article card with long-press for mobile ─── */
+
+function ExArticleCardWithLongPress({
+  article, articleHover, lockedCats, exCardBusy, exCardFb,
+  onNav, onContact, onCart, onNegotiate, onLongPress,
+}: {
+  article: ExplorerArticlePreview;
+  articleHover: ReturnType<typeof useHoverPopup<ArticleHoverData>>;
+  lockedCats: string[];
+  exCardBusy: string | null;
+  exCardFb: { id: string; msg: string } | null;
+  onNav: (path: string) => void;
+  onContact: (a: ExplorerArticlePreview, e: React.MouseEvent) => void;
+  onCart: (id: string, e: React.MouseEvent) => Promise<void>;
+  onNegotiate: (a: ExplorerArticlePreview, e: React.MouseEvent) => void;
+  onLongPress: (a: ExplorerArticlePreview) => void;
+}) {
+  const lp = useLongPress(() => onLongPress(article));
+
+  return (
+    <article className="ex-article-card" id={article.id}
+      {...lp}
+      onMouseEnter={(e) => articleHover.handleMouseEnter({ title: article.title, description: `Annonce: ${article.title}`, price: article.priceLabel, sellerName: article.publisherName }, e)}
+      onMouseLeave={articleHover.handleMouseLeave}
+    >
+      <div className="ex-article-img">
+        <img src={article.coverImage} alt={article.title} loading="lazy" />
+        {article.isBoosted && <span className="ks-sponsored-badge">⚡ Sponsorisé</span>}
+        {article.promoLabel && <span className="ex-article-badge ks-promo-badge">{article.promoLabel}</span>}
+      </div>
+      <div className="ex-article-body">
+        <h4 className="ex-article-title">{article.title}</h4>
+        {article.originalPriceLabel ? (
+          <p className="ex-article-price"><s className="ks-price-old">{article.originalPriceLabel}</s> {article.priceLabel}</p>
+        ) : (
+          <p className="ex-article-price">{article.priceLabel}</p>
+        )}
+        {article.promoExpiresAt && (() => { const u = getUrgencyLabel(article.promoExpiresAt); return u ? <span className="promo-urgency-label">⏰ {u}</span> : null; })()}
+        <p className="ex-article-publisher"><a href={article.publisherLink} onClick={(e) => { e.preventDefault(); e.stopPropagation(); onNav(article.publisherLink); }} style={{ color: 'inherit', textDecoration: 'none' }}>{article.publisherName}</a></p>
+        <div className="ex-article-actions">
+          <button type="button" className="ex-article-act" onClick={() => onNav(article.targetPath)}>Voir</button>
+          <button type="button" className="ex-article-act" title="Contacter" onClick={(e) => void onContact(article, e)}>💬</button>
+          <button type="button" className="ex-article-act" title="Panier" disabled={exCardBusy === article.id} onClick={(e) => void onCart(article.id, e)}>🛒</button>
+          {article.isNegotiable !== false && !isCategoryLocked(lockedCats, article.category) && <button type="button" className="ex-article-act" title="Négocier" onClick={(e) => onNegotiate(article, e)}>🤝</button>}
+        </div>
+        {exCardFb?.id === article.id && <span className="ex-article-fb">{exCardFb.msg}</span>}
+      </div>
+    </article>
+  );
+}
+
 function ExplorerPageMobile() {
   /* Mobile + Tablette → layout actuel inchangé */
   const { t, formatPriceLabelFromUsdCents } = useLocaleCurrency();
   const { effectiveCountry, getCountryConfig } = useMarketPreference();
+  const { lowBandwidth } = useDataSaver();
   const lockedCats = useLockedCategories();
   const tutorial = useTutorial('explorer-mobile');
   const defaultCity = getCountryConfig(effectiveCountry).defaultCity;
@@ -280,6 +337,7 @@ function ExplorerPageMobile() {
   const [exCardFb, setExCardFb] = useState<{ id: string; msg: string } | null>(null);
   const [exCardQty, setExCardQty] = useState<Record<string, number>>({});
   const [isMapView, setIsMapView] = useState(false);
+  const [longPressArticle, setLongPressArticle] = useState<ExplorerArticlePreview | null>(null);
   const getExQty = (id: string) => exCardQty[id] ?? 1;
   const changeExQty = (id: string, delta: number, e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); setExCardQty((prev) => ({ ...prev, [id]: Math.max(1, (prev[id] ?? 1) + delta) })); };
   useScrollRestore();
@@ -400,16 +458,18 @@ function ExplorerPageMobile() {
       setIsLoadingArticles(true);
       try {
         const q = debouncedQuery.trim() || undefined;
+        // Mode économie : limite réduite à 8 par type (au lieu de 24)
+        const limit = dsLimit(24, 8, lowBandwidth);
         const [pRes, sRes] = await Promise.all([
-          listingsApi.search({ type: 'PRODUIT', q, country: effectiveCountry, city: defaultCity, limit: 24 }),
-          listingsApi.search({ type: 'SERVICE', q, country: effectiveCountry, city: defaultCity, limit: 24 }),
+          listingsApi.search({ type: 'PRODUIT', q, country: effectiveCountry, city: defaultCity, limit }),
+          listingsApi.search({ type: 'SERVICE', q, country: effectiveCountry, city: defaultCity, limit }),
         ]);
         const map = (item: (typeof pRes.results)[number]): ExplorerArticlePreview => ({
           id: item.id, title: item.title, priceLabel: formatPriceLabelFromUsdCents(item.promoActive && item.promoPriceUsdCents != null ? item.promoPriceUsdCents : item.priceUsdCents), priceUsdCents: item.priceUsdCents,
           kind: item.type === 'PRODUIT' ? 'product' : 'service', category: normalizeCategoryToId(item.category),
           publisherName: item.owner.displayName, publisherType: 'personne',
           publisherLink: item.owner.username ? `/user/${item.owner.username}` : '#',
-          targetPath: item.owner.username ? `/user/${item.owner.username}#${item.id}` : '#',
+          targetPath: `/listing/${item.id}`,
           coverImage: resolveMediaUrl(item.imageUrl) || '/assets/kin-sell/black-man-standing-cafe-with-shopping-bags.jpg',
           media: [], ownerId: item.owner.userId, isNegotiable: item.isNegotiable !== false,
           isBoosted: !!(item as any).isBoosted,
@@ -418,13 +478,19 @@ function ExplorerPageMobile() {
           promoExpiresAt: item.promoActive ? (item as any).promoExpiresAt ?? null : null,
           latitude: item.latitude ?? undefined, longitude: item.longitude ?? undefined,
         });
-        if (!cancelled) setLiveArticles([...pRes.results.map(map), ...sRes.results.map(map)]);
+        if (!cancelled) setLiveArticles([...(pRes.results ?? []).map(map), ...(sRes.results ?? []).map(map)]);
       } catch { if (!cancelled) setLiveArticles([]); } finally { if (!cancelled) setIsLoadingArticles(false); }
     };
     void load();
-    const poll = setInterval(() => { void load(); }, 60_000);
+    // Mode économie : rafraîchissement toutes 180s au lieu de 60s,
+    // et suspension complète quand l'onglet est en arrière-plan.
+    const intervalMs = dsInterval(60_000, 180_000, lowBandwidth);
+    const poll = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      void load();
+    }, intervalMs);
     return () => { cancelled = true; clearInterval(poll); };
-  }, [formatPriceLabelFromUsdCents, debouncedQuery, effectiveCountry, defaultCity]);
+  }, [formatPriceLabelFromUsdCents, debouncedQuery, effectiveCountry, defaultCity, lowBandwidth]);
 
   /* ── Render ── */
   return (
@@ -477,33 +543,19 @@ function ExplorerPageMobile() {
             <>
               <div className="ex-articles-grid">
                 {previewArticles.map((article) => (
-                  <article key={article.id} className="ex-article-card" id={article.id}
-                    onMouseEnter={(e) => articleHover.handleMouseEnter({ title: article.title, description: `Annonce: ${article.title}`, price: article.priceLabel, sellerName: article.publisherName }, e)}
-                    onMouseLeave={articleHover.handleMouseLeave}
-                  >
-                    <div className="ex-article-img">
-                      <img src={article.coverImage} alt={article.title} loading="lazy" />
-                      {article.isBoosted && <span className="ks-sponsored-badge">⚡ Sponsorisé</span>}
-                      {article.promoLabel && <span className="ex-article-badge ks-promo-badge">{article.promoLabel}</span>}
-                    </div>
-                    <div className="ex-article-body">
-                      <h4 className="ex-article-title">{article.title}</h4>
-                      {article.originalPriceLabel ? (
-                        <p className="ex-article-price"><s className="ks-price-old">{article.originalPriceLabel}</s> {article.priceLabel}</p>
-                      ) : (
-                        <p className="ex-article-price">{article.priceLabel}</p>
-                      )}
-                      {article.promoExpiresAt && (() => { const u = getUrgencyLabel(article.promoExpiresAt); return u ? <span className="promo-urgency-label">⏰ {u}</span> : null; })()}
-                      <p className="ex-article-publisher"><a href={article.publisherLink} onClick={(e) => { e.preventDefault(); e.stopPropagation(); nav(article.publisherLink); }} style={{ color: 'inherit', textDecoration: 'none' }}>{article.publisherName}</a></p>
-                      <div className="ex-article-actions">
-                        <button type="button" className="ex-article-act" onClick={() => nav(article.targetPath)}>Voir</button>
-                        <button type="button" className="ex-article-act" title="Contacter" onClick={(e) => void handleExCardContact(article, e)}>💬</button>
-                        <button type="button" className="ex-article-act" title="Panier" disabled={exCardBusy === article.id} onClick={(e) => void handleExCardCart(article.id, e)}>🛒</button>
-                        {article.isNegotiable !== false && !isCategoryLocked(lockedCats, article.category) && <button type="button" className="ex-article-act" title="Négocier" onClick={(e) => handleExCardNegotiate(article, e)}>🤝</button>}
-                      </div>
-                      {exCardFb?.id === article.id && <span className="ex-article-fb">{exCardFb.msg}</span>}
-                    </div>
-                  </article>
+                  <ExArticleCardWithLongPress
+                    key={article.id}
+                    article={article}
+                    articleHover={articleHover}
+                    lockedCats={lockedCats}
+                    exCardBusy={exCardBusy}
+                    exCardFb={exCardFb}
+                    onNav={nav}
+                    onContact={handleExCardContact}
+                    onCart={handleExCardCart}
+                    onNegotiate={handleExCardNegotiate}
+                    onLongPress={setLongPressArticle}
+                  />
                 ))}
               </div>
               <button className="ex-show-all" onClick={() => setIsAllArticlesOpen(true)}>Tout voir</button>
@@ -640,6 +692,34 @@ function ExplorerPageMobile() {
 
       <ArticleHoverPopup popup={articleHover.popup} />
       <ProfileHoverPopup popup={profileHover.popup} />
+
+      {longPressArticle && (
+        <LongPressPopup
+          article={{
+            id: longPressArticle.id,
+            title: longPressArticle.title,
+            description: null,
+            imageUrl: longPressArticle.coverImage,
+            priceLabel: longPressArticle.priceLabel,
+            originalPriceLabel: longPressArticle.originalPriceLabel,
+            sellerName: longPressArticle.publisherName,
+            type: longPressArticle.kind === 'product' ? 'PRODUIT' : 'SERVICE',
+            isNegotiable: longPressArticle.isNegotiable !== false && !isCategoryLocked(lockedCats, longPressArticle.category),
+          }}
+          onClose={() => setLongPressArticle(null)}
+          onNegotiate={() => {
+            const a = longPressArticle;
+            setLongPressArticle(null);
+            setNegotiateArticle(a);
+          }}
+          onAddToCart={() => {
+            const a = longPressArticle;
+            setLongPressArticle(null);
+            void handleExCardCart(a.id, { preventDefault: () => {}, stopPropagation: () => {} } as React.MouseEvent);
+          }}
+          t={t}
+        />
+      )}
 
       {negotiateArticle && (
         <NegotiatePopup

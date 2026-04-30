@@ -7,6 +7,7 @@ const schema = z.object({
   API_PORT: z.coerce.number().default(4000),
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   CORS_ORIGIN: z.string().default("http://localhost:5173"),
+  COOKIE_DOMAIN: z.string().optional(), // e.g. ".kin-sell.com" — enables cookie sharing across subdomains
   JWT_SECRET: z.string().min(24),
   JWT_EXPIRES_IN: z.string().default("15m"),
   REFRESH_TOKEN_SECRET: z.string().min(24),
@@ -43,6 +44,9 @@ const schema = z.object({
   MPESA_BASE_URL: z.string().default("https://openapi.m-pesa.com/sandbox/ipg/v2/vodacomDRC"),
   MPESA_CALLBACK_URL: z.string().default("http://localhost:4000/mobile-money/webhook/mpesa"),
 
+  // Secret partagé pour vérifier l'authenticité des callbacks webhook Mobile Money
+  MOMO_WEBHOOK_SECRET: z.string().min(16).optional(),
+
   // ── PayPal ──
   PAYPAL_CLIENT_ID: z.string().optional(),
   PAYPAL_CLIENT_SECRET: z.string().optional(),
@@ -63,11 +67,24 @@ const schema = z.object({
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   GOOGLE_CALLBACK_URL: z.string().default("https://api.kin-sell.com/auth/google/callback"),
+
+  // ── Apple OAuth ──
+  APPLE_CLIENT_ID: z.string().optional(),
+  APPLE_TEAM_ID: z.string().optional(),
+  APPLE_KEY_ID: z.string().optional(),
+  APPLE_PRIVATE_KEY: z.string().optional(),
+  APPLE_CALLBACK_URL: z.string().default("https://api.kin-sell.com/auth/apple/callback"),
+
+  // ── Apple In-App Purchase ──
+  APPLE_IAP_SHARED_SECRET: z.string().optional(),
+
   FRONTEND_URL: z.string().default("https://kin-sell.com"),
   MOBILE_APP_AUTH_CALLBACK: z.string().default("com.kinsell.app://auth/callback"),
 
   // ── Cloudflare Turnstile ──
   TURNSTILE_SECRET_KEY: z.string().optional(),
+  TURNSTILE_FAIL_OPEN: z.enum(["true", "false"]).default("false").transform((v) => v === "true"),
+  ALLOW_NATIVE_AUTH_CAPTCHA_FALLBACK: z.enum(["true", "false"]).default("false").transform((v) => v === "true"),
 
   // ── AI Services ──
   OPENAI_API_KEY: z.string().optional(),
@@ -76,6 +93,28 @@ const schema = z.object({
   ENABLE_GEMINI: z.enum(["true", "false"]).default("true").transform(v => v === "true"),
   MAX_AI_ADS_PER_DAY: z.coerce.number().min(0).max(20).default(2),
   AI_MODE: z.enum(["ECONOMY", "STANDARD", "FULL"]).default("ECONOMY"),
+
+  // ── External Intelligence ──
+  MARKET_REFRESH_TIME: z.string().default("00:00"),
+  MARKET_REFRESH_TZ: z.string().default("Africa/Kinshasa"),
+  WORLDBANK_API_URL: z.string().default("https://api.worldbank.org/v2"),
+  FAOSTAT_API_URL: z.string().default("https://www.fao.org/faostat/api/v1"),
+  OPEN_METEO_API_URL: z.string().default("https://api.open-meteo.com/v1"),
+  ECB_DATA_API_URL: z.string().default("https://data-api.ecb.europa.eu/service"),
+  JOOBLE_API_KEY: z.string().optional(),
+  ADZUNA_APP_ID: z.string().optional(),
+  ADZUNA_API_KEY: z.string().optional(),
+  EXTERNAL_INTEL_TIMEOUT_MS: z.coerce.number().default(15000),
+  EXTERNAL_INTEL_RETRY_COUNT: z.coerce.number().default(3),
+
+  // ── Kin-Sell Analytique+ (Market Intelligence) ──
+  ENABLE_MARKET_INTEL: z.enum(["true", "false"]).default("true").transform((v) => v === "true"),
+  MAX_GEMINI_MARKET_CALLS_PER_DAY: z.coerce.number().min(0).max(500).default(50),
+  MARKET_INTEL_USER_AGENT: z.string().default("Kin-Sell-MarketIntel/1.0 (+https://kin-sell.com/bot)"),
+  MARKET_INTEL_FETCH_TIMEOUT_MS: z.coerce.number().default(15000),
+  MARKET_INTEL_FETCH_RETRIES: z.coerce.number().default(2),
+  MARKET_INTEL_FETCH_DELAY_MS: z.coerce.number().default(1500),
+  FRANKFURTER_API_URL: z.string().default("https://api.frankfurter.app"),
 
   // ── Firebase (FCM push) ──
   FIREBASE_PROJECT_ID: z.string().optional(),

@@ -1,0 +1,46 @@
+{
+  "country": "MA",
+  "currency": "MAD",
+  "languages": ["fr", "ar"],
+  "sources": [
+    { "name": "Jumia Maroc",              "baseUrl": "https://www.jumia.ma",              "type": "marketplace", "parser": "jumia",         "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Avito Maroc",              "baseUrl": "https://www.avito.ma",              "type": "marketplace", "parser": "avito",         "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Marjane",                  "baseUrl": "https://www.marjane.ma",            "type": "marketplace", "parser": "generic-price", "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Electroplanet",            "baseUrl": "https://www.electroplanet.ma",      "type": "marketplace", "parser": "generic-price", "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Decathlon Maroc",          "baseUrl": "https://www.decathlon.ma",          "type": "marketplace", "parser": "generic-price", "language": "fr", "trusted": true,  "verified": true },
+    { "name": "IKEA Maroc",               "baseUrl": "https://www.ikea.ma",               "type": "marketplace", "parser": "generic-price", "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Hmall (Hmizate)",          "baseUrl": "https://www.hmall.ma",              "type": "marketplace", "parser": "generic-price", "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Mubawab Immobilier",       "baseUrl": "https://www.mubawab.ma",            "type": "marketplace", "parser": "mubawab",       "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Sarouty",                  "baseUrl": "https://www.sarouty.ma",            "type": "marketplace", "parser": "generic-price", "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Moteur.ma",                "baseUrl": "https://www.moteur.ma",             "type": "marketplace", "parser": "generic-price", "language": "fr", "trusted": true,  "verified": true },
+
+    { "name": "Maroc Annonces",           "baseUrl": "https://www.marocannonces.com",     "type": "classifieds", "parser": "marocannonces", "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Anibis Maroc",             "baseUrl": "https://www.anibis.ma",             "type": "classifieds", "parser": "generic-price", "language": "fr", "trusted": false, "verified": true },
+    { "name": "Expat.com Maroc",          "baseUrl": "https://www.expat.com/en/destination/africa/morocco/", "type": "classifieds", "parser": "expat", "language": "fr", "trusted": true,  "verified": true },
+    { "name": "WafaSalaf Auto Occasion",  "baseUrl": "https://www.wafasalaf.ma",          "type": "classifieds", "parser": "generic-price", "language": "fr", "trusted": true,  "verified": true },
+
+    { "name": "Hespress",                 "baseUrl": "https://www.hespress.com",          "type": "news",        "parser": "news-rss",      "language": "ar", "trusted": true,  "verified": true },
+    { "name": "Le360",                    "baseUrl": "https://fr.le360.ma",               "type": "news",        "parser": "news-rss",      "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Yabiladi",                 "baseUrl": "https://www.yabiladi.com",          "type": "news",        "parser": "news-rss",      "language": "fr", "trusted": true,  "verified": true },
+    { "name": "TelQuel",                  "baseUrl": "https://telquel.ma",                "type": "news",        "parser": "news-rss",      "language": "fr", "trusted": true,  "verified": true },
+    { "name": "L'Economiste",             "baseUrl": "https://www.leconomiste.com",       "type": "news",        "parser": "news-rss",      "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Le Matin",                 "baseUrl": "https://lematin.ma",                "type": "news",        "parser": "news-rss",      "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Medias24",                 "baseUrl": "https://medias24.com",              "type": "news",        "parser": "news-rss",      "language": "fr", "trusted": true,  "verified": true },
+    { "name": "La Vie Eco",               "baseUrl": "https://www.lavieeco.com",          "type": "news",        "parser": "news-rss",      "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Aujourd'hui le Maroc",     "baseUrl": "https://aujourdhui.ma",             "type": "news",        "parser": "news-rss",      "language": "fr", "trusted": true,  "verified": true },
+    { "name": "MAP (Agence)",             "baseUrl": "https://www.mapnews.ma",            "type": "news",        "parser": "news-rss",      "language": "fr", "trusted": true,  "verified": true },
+
+    { "name": "HCP — Haut-Commissariat au Plan", "baseUrl": "https://www.hcp.ma",         "type": "stats",       "parser": "hcp",           "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Bank Al-Maghrib",          "baseUrl": "https://www.bkam.ma",               "type": "stats",       "parser": "generic-stats", "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Ministère Économie & Finances", "baseUrl": "https://www.finances.gov.ma", "type": "stats",       "parser": "generic-stats", "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Office des Changes",       "baseUrl": "https://www.oc.gov.ma",             "type": "stats",       "parser": "generic-stats", "language": "fr", "trusted": true,  "verified": true },
+    { "name": "ONSSA",                    "baseUrl": "https://www.onssa.gov.ma",          "type": "stats",       "parser": "generic-stats", "language": "fr", "trusted": true,  "verified": true },
+
+    { "name": "ReKrute",                  "baseUrl": "https://www.rekrute.com",           "type": "jobs",        "parser": "rekrute",       "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Emploi.ma",                "baseUrl": "https://www.emploi.ma",             "type": "jobs",        "parser": "generic-jobs",  "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Bayt Maroc",               "baseUrl": "https://www.bayt.com/fr/morocco",   "type": "jobs",        "parser": "generic-jobs",  "language": "fr", "trusted": true,  "verified": true },
+    { "name": "ANAPEC",                   "baseUrl": "https://www.anapec.org",            "type": "jobs",        "parser": "generic-jobs",  "language": "fr", "trusted": true,  "verified": true },
+    { "name": "MonCallCenter",            "baseUrl": "https://www.moncallcenter.ma",      "type": "jobs",        "parser": "generic-jobs",  "language": "fr", "trusted": true,  "verified": true },
+    { "name": "LinkedIn Jobs Morocco",    "baseUrl": "https://www.linkedin.com/jobs/search?location=Morocco", "type": "jobs", "parser": "linkedin-jobs", "language": "fr", "trusted": true, "verified": true }
+  ]
+}

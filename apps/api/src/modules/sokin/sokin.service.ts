@@ -9,8 +9,11 @@
 
 import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
+import { sendPushToUser } from "../notifications/push.service.js";
+import { applyBoostRanking, hydrateBoostCampaigns } from "../boost/ranking.service.js";
 
 const isVideoMediaUrl = (value: string) => /\.(mp4|webm|mov|ogg)(\?.*)?$/i.test(value);
+const isAudioMediaUrl = (value: string) => /\.(mp3)(\?.*)?$/i.test(value);
 
 const normalizeMediaUrls = (mediaUrls: string[]): string[] =>
   mediaUrls
@@ -23,8 +26,12 @@ const validatePostMediaUrls = (mediaUrls: string[]) => {
     throw new HttpError(400, "Maximum 5 médias par publication");
   }
   const videoCount = mediaUrls.filter((url) => isVideoMediaUrl(url)).length;
+  const audioCount = mediaUrls.filter((url) => isAudioMediaUrl(url)).length;
   if (videoCount > 2) {
     throw new HttpError(400, "Maximum 2 vidéos par publication");
+  }
+  if (videoCount > 0 && audioCount > 0) {
+    throw new HttpError(400, "Une publication ne peut pas contenir une vidéo et un audio en même temps");
   }
 };
 
@@ -39,6 +46,7 @@ const validatePostContent = (text: string, mediaUrls: string[], backgroundStyle?
 // Résoudre les termes pays pour la recherche
 function resolveCountryTerms(country?: string): string[] {
   if (!country) return [];
+  if (country.trim().toUpperCase() === "GLOBAL") return [];
   const map: Record<string, string[]> = {
     "DRC": ["Congo", "Kinshasa", "RDC", "Katanga"],
     "CD": ["Congo", "Kinshasa", "RDC", "Katanga"],
@@ -299,7 +307,33 @@ export const getPublicFeed = async (
         skip: Math.max(offset, 0),
       });
 
-  return posts;
+  // ── Ranking boost-aware (Phase 4) ─────────────────────────────────────
+  // Respecte: visibility scope (LOCAL/NATIONAL/CROSS_BORDER), cap densité 25%, fairness
+  const campaignMap = await hydrateBoostCampaigns(
+    posts
+      .filter((p) => (p as any).isBoosted && (!p.boostExpiresAt || p.boostExpiresAt > new Date()))
+      .map((p) => ({ id: p.id, isBoosted: true })),
+    "POST",
+  );
+  const rankable = posts.map((p) => ({
+    id: p.id,
+    sellerId: p.authorId,
+    isBoosted: Boolean((p as any).isBoosted) && (!p.boostExpiresAt || p.boostExpiresAt > new Date()),
+    boostCampaignId: (p as any).boostCampaignId ?? null,
+    boostScope: campaignMap.get(p.id)?.scope ?? null,
+    boostTargetCountries: campaignMap.get(p.id)?.targetCountries ?? [],
+    boostBudgetSpent: campaignMap.get(p.id)?.budgetSpentUsdCents ?? 0,
+    boostBudgetTotal: campaignMap.get(p.id)?.budgetUsdCents ?? 0,
+    itemCity: (p as any).author?.profile?.city ?? null,
+    itemCountry: (p as any).author?.profile?.country ?? null,
+    createdAt: p.createdAt,
+    _original: p,
+  }));
+  const ranked = applyBoostRanking(rankable, {
+    viewerCity: city,
+    viewerCountry: country,
+  });
+  return ranked.map((r: any) => r._original);
 };
 
 /**
@@ -378,7 +412,7 @@ export const createPostComment = async (
 ) => {
   const post = await prisma.soKinPost.findUnique({
     where: { id: postId },
-    select: { id: true, status: true },
+    select: { id: true, status: true, authorId: true },
   });
 
   if (!post || post.status === "DELETED") {
@@ -388,7 +422,7 @@ export const createPostComment = async (
   if (parentCommentId) {
     const parent = await prisma.soKinComment.findUnique({
       where: { id: parentCommentId },
-      select: { id: true, postId: true },
+      select: { id: true, postId: true, authorId: true },
     });
     if (!parent || parent.postId !== postId) {
       throw new HttpError(400, "Commentaire parent invalide");
@@ -419,6 +453,33 @@ export const createPostComment = async (
 
     return comment;
   });
+
+  // Notifications push
+  const commenterProfile = await prisma.userProfile.findUnique({ where: { userId }, select: { displayName: true } });
+  const commenterName = commenterProfile?.displayName ?? "Quelqu'un";
+
+  if (parentCommentId) {
+    // Réponse à un commentaire → notifier l'auteur du commentaire parent
+    const parent = await prisma.soKinComment.findUnique({ where: { id: parentCommentId }, select: { authorId: true } });
+    if (parent && parent.authorId !== userId) {
+      sendPushToUser(parent.authorId, {
+        title: "Kin-Sell • So-Kin",
+        body: `${commenterName} a répondu à votre commentaire 💬`,
+        tag: `comment-reply-${parentCommentId}`,
+        data: { type: "publication", postId, url: "/sokin" },
+      }).catch(() => {});
+    }
+  }
+
+  // Notifier l'auteur du post (sauf auto-commentaire)
+  if (post.authorId !== userId) {
+    sendPushToUser(post.authorId, {
+      title: "Kin-Sell • So-Kin",
+      body: `${commenterName} a commenté votre publication 💬`,
+      tag: `comment-${postId}`,
+      data: { type: "publication", postId, url: "/sokin" },
+    }).catch(() => {});
+  }
 
   return created;
 };
@@ -496,29 +557,49 @@ export const updateSoKinPost = async (
  * Reposte une publication existante.
  * Crée un nouveau post lié à l'original via repostOfId
  * et incrémente le compteur shares de l'original.
+ *
+ * ⚠️ Aplatit la chaîne : si on reposte un repost, le nouveau post
+ * pointe directement sur la publication d'origine (pas sur le repost
+ * intermédiaire). De ce fait l'auteur mentionné est toujours l'auteur
+ * original, quelle que soit la profondeur de la chaîne.
  */
 export const repostSoKinPost = async (
   userId: string,
   originalPostId: string,
   comment?: string
 ) => {
-  const original = await prisma.soKinPost.findUnique({
+  const target = await prisma.soKinPost.findUnique({
     where: { id: originalPostId },
-    select: { id: true, status: true, authorId: true },
+    select: { id: true, status: true, authorId: true, repostOfId: true },
   });
 
-  if (!original || original.status !== "ACTIVE") {
+  if (!target || target.status !== "ACTIVE") {
     throw new HttpError(404, "Publication introuvable");
   }
 
-  // Empêcher de reposter son propre post
-  if (original.authorId === userId) {
+  // Aplatir la chaîne : si la cible est un repost, remonter à la source
+  let rootId = target.id;
+  let rootAuthorId = target.authorId;
+  if (target.repostOfId) {
+    const root = await prisma.soKinPost.findUnique({
+      where: { id: target.repostOfId },
+      select: { id: true, status: true, authorId: true },
+    });
+    if (!root || root.status !== "ACTIVE") {
+      throw new HttpError(404, "Publication d'origine introuvable");
+    }
+    rootId = root.id;
+    rootAuthorId = root.authorId;
+  }
+
+  // Empêcher de reposter son propre post (même via un intermédiaire)
+  if (rootAuthorId === userId) {
     throw new HttpError(400, "Vous ne pouvez pas reposter votre propre publication");
   }
 
-  // Empêcher de reposter deux fois le même post
+  // Empêcher de reposter deux fois la même source
   const existing = await prisma.soKinPost.findFirst({
-    where: { authorId: userId, repostOfId: originalPostId, status: { not: "DELETED" } },
+    where: { authorId: userId, repostOfId: rootId, status: { not: "DELETED" } },
   });
   if (existing) {
     throw new HttpError(409, "Vous avez déjà reposté cette publication");
@@ -535,7 +616,7 @@ export const repostSoKinPost = async (
         hashtags: [],
         status: "ACTIVE",
         visibility: "PUBLIC",
-        repostOfId: originalPostId,
+        repostOfId: rootId,
       },
       include: {
         author: { include: { profile: true } },
@@ -545,8 +626,9 @@ export const repostSoKinPost = async (
       },
     });
 
+    // Incrémenter le compteur shares sur la publication d'origine
     await tx.soKinPost.update({
-      where: { id: originalPostId },
+      where: { id: rootId },
       data: { shares: { increment: 1 } },
     });
 

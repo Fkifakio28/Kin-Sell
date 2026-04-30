@@ -15,27 +15,32 @@ type MarketPreferenceContextValue = {
   selectedCountry: MarketCountryCode;
   effectiveCountry: MarketCountryCode;
   selectionMode: MarketSelectionMode;
+  /** True quand effectiveCountry === "GLOBAL" → aucun filtre pays côté API. */
+  isGlobalScope: boolean;
+  /** Code à passer aux endpoints filtrés (undefined si Global). */
+  apiCountryCode: string | undefined;
   setSelectedCountry: (country: MarketCountryCode) => void;
   setSelectionMode: (mode: MarketSelectionMode) => void;
   getCountryConfig: (country?: MarketCountryCode) => MarketCountryConfig;
 };
 
-import { SK_MARKET_COUNTRY, SK_MARKET_SELECTION_MODE } from "../../shared/constants/storage-keys";
+import { SK_MARKET_COUNTRY, SK_MARKET_SELECTION_MODE, SK_MARKET_GLOBAL_DEFAULT_APPLIED } from "../../shared/constants/storage-keys";
 
 const STORAGE_COUNTRY = SK_MARKET_COUNTRY;
 const STORAGE_SELECTION_MODE = SK_MARKET_SELECTION_MODE;
+const STORAGE_GLOBAL_DEFAULT_APPLIED = SK_MARKET_GLOBAL_DEFAULT_APPLIED;
 
 const MarketPreferenceContext = createContext<MarketPreferenceContextValue | null>(null);
 
 function isMarketCountryCode(value: string): value is MarketCountryCode {
-  return ["CD", "GA", "CG", "AO", "CI", "GN", "SN", "MA"].includes(value);
+  return ["GLOBAL", "CD", "GA", "CG", "AO", "CI", "GN", "SN", "MA"].includes(value);
 }
 
 function detectCountryFromBrowser(): MarketCountryCode {
   const fromLang = [navigator.language, ...navigator.languages]
     .filter(Boolean)
     .map((lang) => lang.toUpperCase().split("-").slice(-1)[0])
-    .find((code) => code && isMarketCountryCode(code));
+    .find((code) => code && isMarketCountryCode(code) && code !== "GLOBAL");
 
   if (fromLang && isMarketCountryCode(fromLang)) {
     return fromLang;
@@ -63,7 +68,23 @@ function readSelectedCountry(fallback: MarketCountryCode): MarketCountryCode {
   return isMarketCountryCode(value) ? value : fallback;
 }
 
+/**
+ * Migration douce : à la première exécution post-déploiement, on bascule TOUS les utilisateurs
+ * (nouveaux + déjà connectés avec un localStorage existant) sur "GLOBAL" comme location par défaut.
+ * L'utilisateur peut ensuite choisir un pays particulier pour activer le tri.
+ */
+function applyGlobalDefaultIfNeeded() {
+  if (typeof localStorage === "undefined") return;
+  if (localStorage.getItem(STORAGE_GLOBAL_DEFAULT_APPLIED) === "1") return;
+  localStorage.setItem(STORAGE_COUNTRY, "GLOBAL");
+  localStorage.setItem(STORAGE_SELECTION_MODE, "manual");
+  localStorage.setItem(STORAGE_GLOBAL_DEFAULT_APPLIED, "1");
+}
+
 export function MarketPreferenceProvider({ children }: { children: React.ReactNode }) {
+  // Applique la valeur par défaut "GLOBAL" pour TOUS au premier chargement post-déploiement.
+  applyGlobalDefaultIfNeeded();
+
   const detectedCountry = useMemo(() => detectCountryFromBrowser(), []);
   const [selectionMode, setSelectionModeState] = useState<MarketSelectionMode>(() => readSelectionMode());
   const [selectedCountry, setSelectedCountryState] = useState<MarketCountryCode>(() => readSelectedCountry(detectedCountry));
@@ -88,6 +109,8 @@ export function MarketPreferenceProvider({ children }: { children: React.ReactNo
     };
 
     const effectiveCountry = selectionMode === "manual" ? selectedCountry : detectedCountry;
+    const isGlobalScope = effectiveCountry === "GLOBAL";
+    const apiCountryCode = isGlobalScope ? undefined : effectiveCountry;
 
     return {
       countries: MARKET_COUNTRIES,
@@ -95,6 +118,8 @@ export function MarketPreferenceProvider({ children }: { children: React.ReactNo
       selectedCountry,
       effectiveCountry,
       selectionMode,
+      isGlobalScope,
+      apiCountryCode,
       setSelectedCountry,
       setSelectionMode,
       getCountryConfig: (country?: MarketCountryCode) => getMarketCountry(country ?? effectiveCountry),

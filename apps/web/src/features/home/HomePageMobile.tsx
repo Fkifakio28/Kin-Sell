@@ -42,16 +42,22 @@ import {
 } from "../../hooks/useLockedCategories";
 import { useSocket } from "../../hooks/useSocket";
 import { SoKinToastProvider } from "../../components/feedback/SoKinToast";
-import { AnnounceCard, type MediaItem } from "../sokin/AnnounceCard";
-import { MediaViewer, CommentsDrawer, type CommentProfileState, type MissingPublicProfile } from "../sokin/SoKinShared";
+import { AnnounceCard, type MediaItem, resetFeedAutoPlay } from "../sokin/AnnounceCard";
+import { MediaViewer, CommentsDrawer, type CommentProfileState, type MissingPublicProfile, type ViewerState } from "../sokin/SoKinShared";
 import "../sokin/sokin.css";
 import { InlineSearchResults } from "../../components/InlineSearchResults";
 import { BundlePromoCard } from "../../components/BundlePromoCard";
 import { type PromotionSummary } from "../../lib/api-client";
 import NotificationCenter from "../../components/NotificationCenter";
 import { useGlobalNotification } from "../../app/providers/GlobalNotificationProvider";
+import { useNotificationBadge } from "../../hooks/useNotificationBadge";
 import TutorialOverlay, { useTutorial, TutorialRelaunchBtn } from "../../components/TutorialOverlay";
 import { homeMobileSteps } from "../../components/tutorial-steps";
+import { Capacitor } from "@capacitor/core";
+import { WelcomeOnboarding } from "../onboarding/WelcomeOnboarding";
+import { SK_WELCOME_ONBOARDING_DONE } from "../../shared/constants/storage-keys";
+import { OnboardingHelpFab } from "../../components/OnboardingHelpFab";
+import { LongPressPopup, useLongPress, type LongPressArticle } from "../../components/LongPressPopup";
 import "./home-mobile.css";
 
 /* ────────────── Static data ────────────── */
@@ -244,6 +250,27 @@ function SideDrawer({
           >
             {"\uD83D\uDCDD " + t("publish.publishArticle")}
           </button>
+          {!Capacitor.isNativePlatform() && /android/i.test(navigator.userAgent) && import.meta.env.VITE_ANDROID_APK_URL && (
+            <a
+              href={import.meta.env.VITE_ANDROID_APK_URL}
+              className="hm-drawer-download-btn"
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={onClose}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{marginRight:6,verticalAlign:"middle"}}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Kin-Sell APK v3.0.0
+            </a>
+          )}
+        </div>
+
+        <div className="hm-drawer-quick-links">
+          <Link to="/forfaits" className="hm-drawer-quick-link" onClick={onClose}>
+            💳 {t("nav.plans")}
+          </Link>
+          <Link to="/contact" className="hm-drawer-quick-link" onClick={onClose}>
+            📞 {t("home.contact")}
+          </Link>
         </div>
 
         <div className="hm-drawer-market-prefs">
@@ -350,6 +377,17 @@ function SideDrawer({
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1V9.01a6.32 6.32 0 0 0-.79-.05 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.33-6.34V8.82a8.18 8.18 0 0 0 4.79 1.53V6.88a4.85 4.85 0 0 1-1.02-.19z" />
+              </svg>
+            </a>
+            <a
+              href="https://www.reddit.com/user/Kin-sell/"
+              className="hm-drawer-social-btn"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Reddit"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.385 4.859-7.181 4.859-3.796 0-7.182-2.165-7.182-4.859 0-.191.017-.38.049-.557-.572-.285-1.003-.9-1.003-1.614 0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25 8 13.938 8.561 14.5 9.25 14.5s1.25-.562 1.25-1.25C10.5 12.562 9.939 12 9.25 12zm5.5 0c-.689 0-1.25.562-1.25 1.25 0 .688.561 1.25 1.25 1.25s1.25-.562 1.25-1.25c0-.688-.561-1.25-1.25-1.25zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.527.73-.842 0-1.994-.197-2.527-.73a.326.326 0 0 0-.232-.094z" />
               </svg>
             </a>
           </div>
@@ -511,6 +549,7 @@ function SuggestionsSection({
   countryHint,
   t,
   onArticleTap,
+  onLongPress,
   cartBusyId,
 }: {
   formatMoney: (c: number) => string;
@@ -519,6 +558,7 @@ function SuggestionsSection({
   countryHint?: string;
   t: (k: string) => string;
   onArticleTap: (listing: PublicListing) => void;
+  onLongPress: (listing: PublicListing) => void;
   cartBusyId: string | null;
 }) {
   const [items, setItems] = useState<PublicListing[]>([]);
@@ -529,13 +569,17 @@ function SuggestionsSection({
     (async () => {
       try {
         let results = await listingsApi.latest({ limit: 12, city: cityHint, country: countryHint });
-        // Fallback: country only
-        if (results.length === 0 && countryHint) {
-          results = await listingsApi.latest({ limit: 12, country: countryHint });
+        // Fallback: country only if few results
+        if (results.length < 4 && countryHint) {
+          const more = await listingsApi.latest({ limit: 12, country: countryHint });
+          const ids = new Set(results.map((r) => r.id));
+          results = [...results, ...more.filter((r) => !ids.has(r.id))].slice(0, 12);
         }
-        // Fallback: no geo filter
-        if (results.length === 0) {
-          results = await listingsApi.latest({ limit: 12 });
+        // Fallback: global if still few results
+        if (results.length < 4) {
+          const more = await listingsApi.latest({ limit: 12 });
+          const ids = new Set(results.map((r) => r.id));
+          results = [...results, ...more.filter((r) => !ids.has(r.id))].slice(0, 12);
         }
         if (!cancelled) setItems(results);
       } catch {
@@ -548,8 +592,6 @@ function SuggestionsSection({
       cancelled = true;
     };
   }, [cityHint, countryHint]);
-
-  if (!loading && items.length === 0) return null;
 
   return (
     <section
@@ -564,34 +606,77 @@ function SuggestionsSection({
           ? [1, 2, 3, 4].map((i) => (
               <div key={i} className="hm-card-skeleton hm-card-skeleton--small" />
             ))
+          : items.length === 0
+          ? (
+              <div className="hm-empty">
+                {t("common.noResults")}
+              </div>
+            )
           : items.map((item) => (
-              <button
+              <SuggestionCard
                 key={item.id}
-                className="hm-suggestion-card"
-                onClick={() => onArticleTap(item)}
-                disabled={cartBusyId === item.id}
-              >
-                <div className="hm-suggestion-img">
-                  {item.imageUrl ? (
-                    <img src={resolveMediaUrl(item.imageUrl)} alt={item.title} loading="lazy" />
-                  ) : (
-                    <span className="hm-suggestion-placeholder">
-                      {item.type === "SERVICE" ? "\uD83D\uDEE0\uFE0F" : "\uD83D\uDCE6"}
-                    </span>
-                  )}
-                </div>
-                <p className="hm-suggestion-title">{item.title}</p>
-                <p className="hm-suggestion-price">
-                  {item.promoActive && item.promoPriceUsdCents != null
-                    ? <><s className="ks-price-old">{formatMoney(item.priceUsdCents)}</s> {formatMoney(item.promoPriceUsdCents)}</>
-                    : item.priceUsdCents === 0
-                    ? formatLabel(0)
-                    : formatMoney(item.priceUsdCents)}
-                </p>
-              </button>
+                item={item}
+                onArticleTap={onArticleTap}
+                onLongPress={onLongPress}
+                formatMoney={formatMoney}
+                formatLabel={formatLabel}
+                busy={cartBusyId === item.id}
+              />
             ))}
       </div>
     </section>
+  );
+}
+
+/* ────────────── SuggestionCard with long-press ────────────── */
+
+function SuggestionCard({
+  item,
+  onArticleTap,
+  onLongPress,
+  formatMoney,
+  formatLabel,
+  busy,
+}: {
+  item: PublicListing;
+  onArticleTap: (l: PublicListing) => void;
+  onLongPress: (l: PublicListing) => void;
+  formatMoney: (c: number) => string;
+  formatLabel: (c: number) => string;
+  busy: boolean;
+}) {
+  const lp = useLongPress(
+    () => onLongPress(item),
+    () => onArticleTap(item),
+  );
+
+  return (
+    <div
+      className="hm-suggestion-card"
+      role="button"
+      tabIndex={0}
+      {...lp}
+      onClick={(e) => e.preventDefault()}
+      aria-disabled={busy}
+    >
+      <div className="hm-suggestion-img">
+        {item.imageUrl ? (
+          <img src={resolveMediaUrl(item.imageUrl)} alt={item.title} loading="lazy" />
+        ) : (
+          <span className="hm-suggestion-placeholder">
+            {item.type === "SERVICE" ? "\uD83D\uDEE0\uFE0F" : "\uD83D\uDCE6"}
+          </span>
+        )}
+      </div>
+      <p className="hm-suggestion-title">{item.title}</p>
+      <p className="hm-suggestion-price">
+        {item.promoActive && item.promoPriceUsdCents != null
+          ? <><s className="ks-price-old">{formatMoney(item.priceUsdCents)}</s> {formatMoney(item.promoPriceUsdCents)}</>
+          : item.priceUsdCents === 0
+          ? formatLabel(0)
+          : formatMoney(item.priceUsdCents)}
+      </p>
+    </div>
   );
 }
 
@@ -679,6 +764,7 @@ function ListingsSection({
   t,
   onNegotiate,
   onArticleTap,
+  onLongPress,
   cartBusyId,
   lockedCats,
   cityHint,
@@ -689,6 +775,7 @@ function ListingsSection({
   t: (k: string) => string;
   onNegotiate: (l: PublicListing) => void;
   onArticleTap: (listing: PublicListing) => void;
+  onLongPress: (listing: PublicListing) => void;
   cartBusyId: string | null;
   lockedCats: string[];
   cityHint?: string;
@@ -710,13 +797,17 @@ function ListingsSection({
           city: cityHint,
           country: countryHint,
         });
-        // Fallback: country only (no city)
-        if (results.length === 0 && countryHint) {
-          results = await listingsApi.latest({ type: activeTab, limit: 10, country: countryHint });
+        // Fallback: country only if few results
+        if (results.length < 3 && countryHint) {
+          const more = await listingsApi.latest({ type: activeTab, limit: 10, country: countryHint });
+          const ids = new Set(results.map((r) => r.id));
+          results = [...results, ...more.filter((r) => !ids.has(r.id))].slice(0, 10);
         }
-        // Fallback: no geo filter
-        if (results.length === 0) {
-          results = await listingsApi.latest({ type: activeTab, limit: 10 });
+        // Fallback: global if still few results
+        if (results.length < 3) {
+          const more = await listingsApi.latest({ type: activeTab, limit: 10 });
+          const ids = new Set(results.map((r) => r.id));
+          results = [...results, ...more.filter((r) => !ids.has(r.id))].slice(0, 10);
         }
         if (!cancelled) setListings(results);
       } catch {
@@ -783,6 +874,7 @@ function ListingsSection({
               listing={l}
               onNegotiate={onNegotiate}
               onArticleTap={onArticleTap}
+              onLongPress={onLongPress}
               formatMoney={formatMoney}
               formatLabel={formatLabel}
               t={t}
@@ -800,6 +892,7 @@ function MarketCard({
   listing,
   onNegotiate,
   onArticleTap,
+  onLongPress,
   formatMoney,
   formatLabel,
   t,
@@ -809,18 +902,25 @@ function MarketCard({
   listing: PublicListing;
   onNegotiate: (l: PublicListing) => void;
   onArticleTap: (listing: PublicListing) => void;
+  onLongPress: (listing: PublicListing) => void;
   formatMoney: (c: number) => string;
   formatLabel: (c: number) => string;
   t: (k: string) => string;
   locked: boolean;
   busy: boolean;
 }) {
+  const longPress = useLongPress(
+    () => onLongPress(listing),
+    () => onArticleTap(listing),
+  );
+
   return (
     <article
       className="hm-market-card"
       role="button"
       tabIndex={0}
-      onClick={() => onArticleTap(listing)}
+      {...longPress}
+      onClick={(e) => e.preventDefault()}
       onKeyDown={(e) => {
         if (busy) return;
         if (e.key === "Enter" || e.key === " ") {
@@ -889,6 +989,7 @@ function SoKinFeed({
   countryHint,
   onNegotiate,
   onArticleTap,
+  onLongPress,
   cartBusyId,
   lockedCats,
   formatMoney,
@@ -899,6 +1000,7 @@ function SoKinFeed({
   countryHint: string;
   onNegotiate: (l: PublicListing) => void;
   onArticleTap: (listing: PublicListing) => void;
+  onLongPress: (listing: PublicListing) => void;
   cartBusyId: string | null;
   lockedCats: string[];
   formatMoney: (c: number) => string;
@@ -919,7 +1021,7 @@ function SoKinFeed({
   const touchStart = useRef<{ x: number; y: number } | null>(null);
 
   /* ── So-Kin interaction state ── */
-  const [viewerItem, setViewerItem] = useState<MediaItem | null>(null);
+  const [viewerItem, setViewerItem] = useState<ViewerState | null>(null);
   const [openCommentsPostId, setOpenCommentsPostId] = useState<string | null>(null);
   const [commentsByPost, setCommentsByPost] = useState<Record<string, SoKinApiComment[]>>({});
   const [loadingCommentsPostId, setLoadingCommentsPostId] = useState<string | null>(null);
@@ -1157,6 +1259,7 @@ function SoKinFeed({
               listing={l}
               onNegotiate={onNegotiate}
               onArticleTap={onArticleTap}
+              onLongPress={onLongPress}
               formatMoney={formatMoney}
               formatLabel={formatLabel}
               t={t}
@@ -1178,7 +1281,7 @@ function SoKinFeed({
           post={post}
           t={t}
           isLoggedIn={isLoggedIn}
-          onMediaClick={(item) => setViewerItem(item)}
+          onMediaClick={(items, idx) => setViewerItem({ items, index: idx })}
           isCommentsOpen={openCommentsPostId === post.id}
           onOpenComments={() => handleOpenComments(post.id)}
           onContact={() => void handleSokinContact(post)}
@@ -1236,7 +1339,7 @@ function SoKinFeed({
       </section>
 
       {/* So-Kin overlays */}
-      {viewerItem && <MediaViewer item={viewerItem} onClose={() => setViewerItem(null)} />}
+      {viewerItem && <MediaViewer items={viewerItem.items} startIndex={viewerItem.index} onClose={() => setViewerItem(null)} />}
       <CommentsDrawer
         post={posts.find((p) => p.id === openCommentsPostId) ?? null}
         open={Boolean(openCommentsPostId)}
@@ -1278,6 +1381,8 @@ function BottomNav({
   const navigate = useNavigate();
   const { user } = useAuth();
   const { missedCount } = useGlobalNotification();
+  const { count: bdUnread } = useNotificationBadge();
+  const totalUnread = missedCount + bdUnread;
   const location = window.location.pathname;
 
   const go = (path: string) => {
@@ -1334,7 +1439,7 @@ function BottomNav({
             <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
             <path d="M13.73 21a2 2 0 0 1-3.46 0" />
           </svg>
-          {missedCount > 0 && <span className="nc-badge">{missedCount}</span>}
+          {totalUnread > 0 && <span className="nc-badge">{totalUnread > 99 ? '99+' : totalUnread}</span>}
           <span className="hm-bnav-label">{t("nav.notifications")}</span>
         </button>
         <NotificationCenter open={ncOpen} onClose={() => setNcOpen(false)} />
@@ -1412,9 +1517,16 @@ export function HomePageMobile() {
   const barsVisibleRaw = useScrollDirection();
   const tutorial = useTutorial("home-mobile");
 
+  const [showWelcome, setShowWelcome] = useState(() => !localStorage.getItem(SK_WELCOME_ONBOARDING_DONE));
+
+  // Réinitialiser le flag d'autoplay vidéo à chaque montage de la page home
+  useEffect(() => { resetFeedAutoPlay(); }, []);
+
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [negotiateListing, setNegotiateListing] =
+    useState<PublicListing | null>(null);
+  const [longPressListing, setLongPressListing] =
     useState<PublicListing | null>(null);
   const [buyerCart, setBuyerCart] = useState<CartSummary | null>(null);
   const [cartBusyId, setCartBusyId] = useState<string | null>(null);
@@ -1447,38 +1559,16 @@ export function HomePageMobile() {
   const isAdmin = user?.role === "ADMIN" || user?.role === "SUPER_ADMIN";
 
   const handleArticleTap = useCallback(
-    async (listing: PublicListing) => {
-      if (!isLoggedIn) {
-        void navigate("/login");
-        return;
-      }
-      if (isAdmin) {
-        setCartFeedback(`🔒 ${t("home.adminNoTransact")}`);
-        window.setTimeout(() => setCartFeedback(null), 2200);
-        return;
-      }
-      if (user?.id && listing.owner.userId === user.id) {
-        setCartFeedback(`⚠️ ${t("home.cannotBuyOwn")}`);
-        window.setTimeout(() => setCartFeedback(null), 2200);
-        return;
-      }
-      if (cartBusyId) return;
-
-      setCartBusyId(listing.id);
-      try {
-        const summary = await ordersApi.addCartItem({ listingId: listing.id, quantity: 1 });
-        const freshCart = await ordersApi.buyerCart().catch(() => summary);
-        setBuyerCart(freshCart);
-        setCartFeedback(`✓ ${t("home.addedToCart")}`);
-      } catch {
-        setCartFeedback(`✗ ${t("home.errorGeneric")}`);
-      } finally {
-        setCartBusyId(null);
-        window.setTimeout(() => setCartFeedback(null), 1800);
-      }
+    (listing: PublicListing) => {
+      // Short tap → open product detail page (Jumia-style UX)
+      void navigate(`/listing/${listing.id}`);
     },
-    [cartBusyId, isAdmin, isLoggedIn, navigate, t, user?.id],
+    [navigate],
   );
+
+  const handleLongPress = useCallback((listing: PublicListing) => {
+    setLongPressListing(listing);
+  }, []);
 
   const contentCls =
     "hm-content" + (barsVisible ? "" : " hm-content--expanded");
@@ -1513,6 +1603,7 @@ export function HomePageMobile() {
           countryHint={effectiveCountry}
           t={t}
           onArticleTap={handleArticleTap}
+          onLongPress={handleLongPress}
           cartBusyId={cartBusyId}
         />
         <BundlesSection
@@ -1527,17 +1618,20 @@ export function HomePageMobile() {
           t={t}
           onNegotiate={setNegotiateListing}
           onArticleTap={handleArticleTap}
+          onLongPress={handleLongPress}
           cartBusyId={cartBusyId}
           lockedCats={lockedCats}
           cityHint={defaultCity}
           countryHint={effectiveCountry}
         />
+
         <SoKinFeed
           t={t}
           cityHint={defaultCity}
           countryHint={effectiveCountry}
           onNegotiate={setNegotiateListing}
           onArticleTap={handleArticleTap}
+          onLongPress={handleLongPress}
           cartBusyId={cartBusyId}
           lockedCats={lockedCats}
           formatMoney={formatMoneyFromUsdCents}
@@ -1548,6 +1642,38 @@ export function HomePageMobile() {
       <BottomNav visible={barsVisible} isLoggedIn={isLoggedIn} cartItemsCount={cartItemsCount} t={t} />
 
       {cartFeedback && <div className="hm-cart-feedback" role="status" aria-live="polite">{cartFeedback}</div>}
+
+      {longPressListing && (
+        <LongPressPopup
+          article={{
+            id: longPressListing.id,
+            title: longPressListing.title,
+            description: longPressListing.description,
+            imageUrl: longPressListing.imageUrl,
+            priceLabel: longPressListing.promoActive && longPressListing.promoPriceUsdCents != null
+              ? formatMoneyFromUsdCents(longPressListing.promoPriceUsdCents)
+              : formatMoneyFromUsdCents(longPressListing.priceUsdCents),
+            originalPriceLabel: longPressListing.promoActive && longPressListing.promoPriceUsdCents != null
+              ? formatMoneyFromUsdCents(longPressListing.priceUsdCents)
+              : undefined,
+            sellerName: longPressListing.owner.displayName,
+            type: longPressListing.type,
+            isNegotiable: longPressListing.isNegotiable,
+          }}
+          onClose={() => setLongPressListing(null)}
+          onNegotiate={() => {
+            const listing = longPressListing;
+            setLongPressListing(null);
+            setNegotiateListing(listing);
+          }}
+          onAddToCart={() => {
+            const listing = longPressListing;
+            setLongPressListing(null);
+            void handleArticleTap(listing);
+          }}
+          t={t}
+        />
+      )}
 
       {negotiateListing && (
         <NegotiatePopup
@@ -1562,6 +1688,9 @@ export function HomePageMobile() {
 
       <TutorialOverlay pageKey="home-mobile" steps={homeMobileSteps} open={tutorial.isOpen} onClose={tutorial.close} />
       {!tutorial.isOpen && <TutorialRelaunchBtn reset={tutorial.reset} start={tutorial.start} />}
+      <OnboardingHelpFab />
+
+      {showWelcome && <WelcomeOnboarding onClose={() => setShowWelcome(false)} onStartTutorial={() => { tutorial.reset(); tutorial.start(); }} />}
     </div>
   );
 }

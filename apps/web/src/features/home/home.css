@@ -1515,11 +1515,8 @@
 }
 .h-sokin-real-feed .sk-card {
   border-radius: 10px;
-  margin: 0 -0.65rem;
-  width: calc(100% + 1.3rem);
-}
-.h-sokin-box {
-  overflow: hidden;
+  margin: 0;
+  width: 100%;
 }
 
 /* Slide animation */
@@ -1704,4 +1701,4 @@
   font-size: 0.7rem;
   color: rgba(255, 255, 255, 0.7);
 }
-html[data-theme="light"] .h-bundle-feedback { color: #4a3a8a; }
+

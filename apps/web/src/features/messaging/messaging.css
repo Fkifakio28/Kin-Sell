@@ -1532,36 +1532,144 @@
 }
 
 .mg-call-controls {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 14px;
+  display: grid;
+  grid-template-columns: repeat(3, 64px);
+  gap: 16px;
   justify-content: center;
+  justify-items: center;
 }
 .mg-call-ctrl {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 5px;
-  width: 56px;
-  height: 56px;
+  width: 64px;
+  height: 64px;
   border-radius: 50%;
   border: none;
   background: rgba(255 255 255 / .1);
   color: var(--color-text-primary, #f0eef6);
   cursor: pointer;
   transition: background .15s, transform .15s;
-  padding: 10px 0 0;
+  padding: 0;
 }
 .mg-call-ctrl:disabled { opacity: .5; cursor: not-allowed; }
 .mg-call-ctrl:hover:not(:disabled) { background: rgba(255 255 255 / .18); transform: scale(1.05); }
 .mg-call-ctrl--active { background: rgba(239 68 68 / .25); color: #ef4444; }
-.mg-call-ctrl--hangup { background: #ef4444; color: #fff; }
+.mg-call-ctrl--speaker-on { background: rgba(34 197 94 / .20); color: #22c55e; }
+.mg-call-ctrl--hangup { background: #ef4444; color: #fff; grid-column: 2; }
 .mg-call-ctrl--hangup:hover { background: #dc2626; }
 .mg-call-ctrl-label {
   font-size: 0.58rem;
   font-weight: 600;
   line-height: 1;
   text-align: center;
+}
+
+/* ═══════════════════════════════════════════
+   CALL EVENT BUBBLES (in chat timeline)
+   ═══════════════════════════════════════════ */
+
+.mg-call-event {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 14px;
+  margin: 8px auto;
+  max-width: 280px;
+  background: rgba(111 88 255 / .10);
+  border: 1px solid rgba(111 88 255 / .20);
+  border-radius: 999px;
+  font-size: 0.78rem;
+  color: var(--color-text-primary, #f0eef6);
+}
+.mg-call-event--missed {
+  background: rgba(239 68 68 / .10);
+  border-color: rgba(239 68 68 / .20);
+}
+.mg-call-event-icon {
+  font-size: 0.9rem;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: currentColor;
+}
+
+/* Preview en liste de conversations — appel */
+.mg-conv-call-preview {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  vertical-align: middle;
+}
+.mg-conv-call-preview svg {
+  flex-shrink: 0;
+}
+.mg-call-event-label {
+  font-weight: 600;
+  white-space: nowrap;
+}
+.mg-call-event--missed .mg-call-event-label {
+  color: #ef4444;
+}
+.mg-call-event-time {
+  color: var(--color-text-secondary, #a8a0c0);
+  font-size: 0.7rem;
+  white-space: nowrap;
+}
+
+/* ═══════════════════════════════════════════
+   CALL SUMMARY BANNER (after call ends)
+   ═══════════════════════════════════════════ */
+
+.mg-call-summary {
+  position: fixed;
+  top: calc(12px + env(safe-area-inset-top, 0px));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 20px;
+  background: rgba(34 197 94 / .15);
+  border: 1px solid rgba(34 197 94 / .35);
+  backdrop-filter: blur(16px);
+  border-radius: 14px;
+  cursor: pointer;
+  animation: mg-summary-in .3s ease-out;
+}
+.mg-call-summary--missed {
+  background: rgba(239 68 68 / .15);
+  border-color: rgba(239 68 68 / .35);
+}
+.mg-call-summary-icon {
+  font-size: 1.3rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: currentColor;
+}
+.mg-call-summary-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.mg-call-summary-info strong {
+  font-size: 0.85rem;
+  color: var(--color-text-primary, #f0eef6);
+}
+.mg-call-summary-info span {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary, #a8a0c0);
+  font-variant-numeric: tabular-nums;
+}
+@keyframes mg-summary-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(-20px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
 
 /* ═══════════════════════════════════════════

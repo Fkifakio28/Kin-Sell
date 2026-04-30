@@ -12,8 +12,10 @@ import * as aiTrigger from "./ai-trigger.service.js";
 import * as pricingNudge from "./pricing-nudge.service.js";
 import * as commercialAdvisor from "./commercial-advisor.service.js";
 import { getPostPublishAdvice, type PublishContext } from "../ads/post-publish-advisor.service.js";
+import { resolveFreemiumState, consumeFreeCredit, applyFreemiumGating } from "../ads/post-publish-freemium.service.js";
 import { getPostSaleAdvice } from "../ads/post-sale-advisor.service.js";
 import { evaluateAnalyticsCTAs } from "./analytics-cta.service.js";
+import { getDirectAnswers } from "./direct-answer.engine.js";
 import { getEnrichedAnalytics, getCategoryDemandAnalysis } from "./analytics-external-intelligence.service.js";
 import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
@@ -134,6 +136,8 @@ router.get(
 /**
  * GET /analytics/ai/recommendations
  * Récupère les recommandations actives pour l'utilisateur connecté
+ * Filtre par plan d'abonnement — les recommandations UPGRADE_PLAN sont
+ * adaptées au plan actuel de l'utilisateur.
  * 🔐 Requiert IA_MERCHANT
  */
 router.get(
@@ -142,7 +146,24 @@ router.get(
   asyncHandler(async (req: AuthenticatedRequest, res, next) => { await requireIa("IA_MERCHANT")(req, res, next); }),
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     const recs = await aiTrigger.getActiveRecommendations(req.auth!.userId);
-    res.json(recs);
+    // Filtrer les recommandations selon le plan de l'utilisateur
+    const sub = await prisma.subscription.findFirst({
+      where: { userId: req.auth!.userId, status: "ACTIVE" },
+      select: { planCode: true },
+    });
+    const userPlan = sub?.planCode ?? "FREE";
+    const filtered = recs.filter((r) => {
+      // Si la reco demande un plan spécifique (ex: UPGRADE_PLAN vers AUTO),
+      // ne la montrer que si l'utilisateur n'a pas déjà ce plan ou un supérieur
+      if (r.actionType === "UPGRADE_PLAN" && r.actionData) {
+        try {
+          const meta = typeof r.actionData === "string" ? JSON.parse(r.actionData) : r.actionData;
+          if (meta.targetPlan && meta.targetPlan === userPlan) return false;
+        } catch {}
+      }
+      return true;
+    });
+    res.json(filtered);
   })
 );
 
@@ -274,12 +295,11 @@ router.get(
 /**
  * GET /analytics/ai/post-publish-advice?type=SINGLE|PROMO|BULK&listingId=X&promoCount=N
  * Analyse post-publication : qualité, boost, pub, forfait, analytics, tips contenu
- * 🔐 Requiert IA_MERCHANT
+ * � Ouvert à tous (freemium gating intégré — 1 conseil gratuit par type)
  */
 router.get(
   "/ai/post-publish-advice",
   requireAuth,
-  asyncHandler(async (req: AuthenticatedRequest, res, next) => { await requireIa("IA_MERCHANT")(req, res, next); }),
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     const type = (req.query.type as string) || "SINGLE";
     if (!["SINGLE", "PROMO", "BULK"].includes(type)) {
@@ -290,8 +310,39 @@ router.get(
       listingId: req.query.listingId as string | undefined,
       promoCount: req.query.promoCount ? Number(req.query.promoCount) : undefined,
     };
-    const report = await getPostPublishAdvice(req.auth!.userId, ctx);
-    res.json(report);
+
+    // Résoudre le type du listing pour le gating
+    let listingType: string | null = null;
+    if (ctx.listingId) {
+      const listing = await prisma.listing.findUnique({
+        where: { id: ctx.listingId },
+        select: { type: true },
+      });
+      listingType = listing?.type ?? null;
+    }
+
+    const userId = req.auth!.userId;
+    const report = await getPostPublishAdvice(userId, ctx);
+    const freemiumState = await resolveFreemiumState(userId, ctx, listingType);
+
+    // Consommer le crédit gratuit si PREVIEW mode (1er usage)
+    if (freemiumState.mode === "PREVIEW" && listingType && ctx.listingId) {
+      await consumeFreeCredit(userId, listingType, ctx.listingId);
+      // Mettre à jour l'état après consommation
+      if (listingType === "SERVICE") freemiumState.usedServiceFree = true;
+      else freemiumState.usedProductFree = true;
+    }
+
+    const gatedReport = applyFreemiumGating(
+      report,
+      freemiumState.mode,
+      freemiumState.usedProductFree,
+      freemiumState.usedServiceFree,
+      listingType,
+      freemiumState.planCode
+    );
+
+    res.json(gatedReport);
   })
 );
 
@@ -302,12 +353,11 @@ router.get(
 /**
  * GET /analytics/ai/post-sale-advice?orderId=X
  * Recommandations contextuelles après vente confirmée
- * 🔐 Requiert IA_ORDER
+ * � Gratuit pour tous les vendeurs (outil d'upsell)
  */
 router.get(
   "/ai/post-sale-advice",
   requireAuth,
-  asyncHandler(async (req: AuthenticatedRequest, res, next) => { await requireIa("IA_ORDER")(req, res, next); }),
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     const orderId = req.query.orderId as string;
     if (!orderId) throw new HttpError(400, "orderId est requis");
@@ -331,6 +381,20 @@ router.get(
   asyncHandler(async (req: AuthenticatedRequest, res, next) => { await requireIa("IA_MERCHANT")(req, res, next); }),
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     const report = await evaluateAnalyticsCTAs(req.auth!.userId);
+    res.json(report);
+  })
+);
+
+/**
+ * GET /analytics/direct-answers
+ * 🎯 Réponses droit au but unifiées SELL + JOB + HYBRID (Phase 5)
+ * Accessible à tous les tiers (cap appliqué : FREE=1, MEDIUM=3, PREMIUM=10)
+ */
+router.get(
+  "/direct-answers",
+  requireAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const report = await getDirectAnswers(req.auth!.userId);
     res.json(report);
   })
 );

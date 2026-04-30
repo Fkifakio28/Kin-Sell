@@ -1,4 +1,4 @@
-import { OrderStatus } from "@prisma/client";
+import { OrderStatus } from "../../shared/db/prisma-enums.js";
 import { Router } from "express";
 import { z } from "zod";
 import { requireAuth, requireRoles, type AuthenticatedRequest } from "../../shared/auth/auth-middleware.js";
@@ -7,9 +7,29 @@ import { prisma } from "../../shared/db/prisma.js";
 import { Role } from "../../types/roles.js";
 import * as ordersService from "./orders.service.js";
 import { sendPushToUser } from "../notifications/push.service.js";
+import {
+  emitOrderCreated,
+  emitOrderStatusChanged,
+} from "../notifications/notification.events.js";
 import { emitToUsers, emitToUser, isUserOnline } from "../messaging/socket.js";
 import * as momoService from "../mobile-money/mobile-money.service.js";
 import { requireIa } from "../../shared/billing/subscription-guard.js";
+import { spamGuard } from "../../shared/middleware/spam-guard.middleware.js";
+import { logger } from "../../shared/logger.js";
+
+/**
+ * Défense anti-cache pour les endpoints panier/checkout :
+ * - `Cache-Control: private, no-store` empêche tout proxy/CDN de cacher la réponse
+ * - `Vary: Authorization, Cookie` garantit que même si un intermédiaire ignore no-store,
+ *   il différenciera les réponses par session utilisateur
+ * - `Pragma: no-cache` pour les proxies HTTP/1.0 legacy
+ */
+const noCacheHeaders = (_req: AuthenticatedRequest, res: import("express").Response, next: import("express").NextFunction) => {
+  res.setHeader("Cache-Control", "private, no-store, no-cache, must-revalidate, max-age=0");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Vary", "Authorization, Cookie");
+  next();
+};
 
 const pagingSchema = z.object({
   page: z.coerce.number().min(1).default(1),
@@ -57,17 +77,34 @@ const router = Router();
 
 router.get(
   "/buyer/cart",
+  noCacheHeaders,
   requireAuth,
   asyncHandler(async (request: AuthenticatedRequest, response) => {
-    const data = await ordersService.getBuyerCart(request.auth!.userId);
+    const userId = request.auth!.userId;
+    const data = await ordersService.getBuyerCart(userId);
+    // Audit télémétrie : log userId + cartId + items pour détecter si 2 userIds différents
+    // voient le même cartId (preuve d'une fuite serveur ou proxy cache)
+    logger.info(
+      {
+        userId,
+        cartId: (data as any)?.id,
+        itemsCount: (data as any)?.items?.length ?? 0,
+        listingIds: Array.isArray((data as any)?.items)
+          ? (data as any).items.map((it: any) => it?.listingId).filter(Boolean)
+          : []
+      },
+      "[CART_AUDIT] GET /buyer/cart"
+    );
     response.json(data);
   })
 );
 
 router.post(
   "/buyer/cart/items",
+  noCacheHeaders,
   requireAuth,
   requireRoles(Role.USER, Role.BUSINESS),
+  spamGuard("TRADE"),
   asyncHandler(async (request: AuthenticatedRequest, response) => {
     const payload = addCartItemSchema.parse(request.body);
     const data = await ordersService.addCartItem(request.auth!.userId, payload);
@@ -78,6 +115,7 @@ router.post(
 
 router.patch(
   "/buyer/cart/items/:itemId",
+  noCacheHeaders,
   requireAuth,
   requireRoles(Role.USER, Role.BUSINESS),
   asyncHandler(async (request: AuthenticatedRequest, response) => {
@@ -90,6 +128,7 @@ router.patch(
 
 router.delete(
   "/buyer/cart/items/:itemId",
+  noCacheHeaders,
   requireAuth,
   asyncHandler(async (request: AuthenticatedRequest, response) => {
     const data = await ordersService.removeCartItem(request.auth!.userId, request.params.itemId);
@@ -102,6 +141,7 @@ router.post(
   "/buyer/checkout",
   requireAuth,
   requireRoles(Role.USER, Role.BUSINESS),
+  spamGuard("TRADE"),
   asyncHandler(async (request: AuthenticatedRequest, response) => {
     const payload = checkoutSchema.parse(request.body ?? {});
     const data = await ordersService.checkoutBuyerCart(request.auth!.userId, payload.notes, {
@@ -116,14 +156,15 @@ router.post(
     // Push + Socket notify sellers about new orders
     for (const order of data.orders ?? []) {
       if (order.seller?.userId && order.seller.userId !== request.auth!.userId) {
-        if (!isUserOnline(order.seller.userId)) {
-          void sendPushToUser(order.seller.userId, {
-            title: "🛒 Nouvelle commande !",
-            body: `Vous avez re\u00e7u une nouvelle commande de ${order.itemsCount ?? 1} article(s)`,
-            tag: `order-${order.id}`,
-            data: { type: "order", orderId: order.id },
-          });
-        }
+        // Notif unifiée (BD + push + email + socket-notif)
+        void emitOrderCreated({
+          orderId: order.id,
+          buyerUserId: request.auth!.userId,
+          sellerUserId: order.seller.userId,
+          totalUsdCents: order.totalUsdCents ?? 0,
+          itemsCount: order.itemsCount ?? 1,
+          itemTitle: order.items?.[0]?.title,
+        });
         emitToUser(order.seller.userId, "order:created", {
           type: "ORDER_CREATED",
           orderId: order.id,
@@ -176,14 +217,14 @@ router.post(
 
       // Push + Socket notify sellers
       if (order.seller?.userId && order.seller.userId !== request.auth!.userId) {
-        if (!isUserOnline(order.seller.userId)) {
-          void sendPushToUser(order.seller.userId, {
-            title: "🛒 Nouvelle commande !",
-            body: `Vous avez reçu une nouvelle commande de ${order.itemsCount ?? 1} article(s)`,
-            tag: `order-${order.id}`,
-            data: { type: "order", orderId: order.id },
-          });
-        }
+        void emitOrderCreated({
+          orderId: order.id,
+          buyerUserId: request.auth!.userId,
+          sellerUserId: order.seller.userId,
+          totalUsdCents: order.totalUsdCents ?? 0,
+          itemsCount: order.itemsCount ?? 1,
+          itemTitle: order.items?.[0]?.title,
+        });
         emitToUser(order.seller.userId, "order:created", {
           type: "ORDER_CREATED",
           orderId: order.id,
@@ -246,15 +287,16 @@ router.patch(
   asyncHandler(async (request: AuthenticatedRequest, response) => {
     const payload = updateStatusSchema.parse(request.body);
     const data = await ordersService.updateSellerOrderStatus(request.auth!.userId, request.params.orderId, payload.status);
-    // Push notify buyer about order status change
-    const statusLabels: Record<string, string> = { CONFIRMED: "confirmée", SHIPPED: "expédiée", DELIVERED: "livrée", CANCELED: "annulée" };
-    const label = statusLabels[payload.status] ?? payload.status;
-    if (data.buyer?.userId && data.buyer.userId !== request.auth!.userId && !isUserOnline(data.buyer.userId)) {
-      void sendPushToUser(data.buyer.userId, {
-        title: "📦 Commande " + label,
-        body: `Votre commande #${data.id.slice(-6)} a été ${label}`,
-        tag: `order-${data.id}`,
-        data: { type: "order", orderId: data.id },
+    // Notif unifiée (BD + push + email + socket) acheteur
+    if (data.buyer?.userId && data.buyer.userId !== request.auth!.userId) {
+      void emitOrderStatusChanged({
+        orderId: data.id,
+        buyerUserId: data.buyer.userId,
+        sellerUserId: data.seller.userId,
+        totalUsdCents: data.totalUsdCents ?? 0,
+        itemsCount: data.items?.length ?? 1,
+        itemTitle: data.items?.[0]?.title,
+        status: payload.status as any,
       });
     }
     emitToUsers([data.buyer.userId, data.seller.userId], "order:status-updated", {
@@ -266,7 +308,30 @@ router.patch(
       sourceUserId: request.auth!.userId,
       updatedAt: new Date().toISOString(),
     });
-    response.json(data);
+
+    // ── Notification stock épuisé au vendeur ──
+    const exhausted = (data as any)._exhaustedListings as Array<{ id: string; title: string }> | undefined;
+    if (exhausted && exhausted.length > 0) {
+      const sellerUserId = data.seller.userId;
+      for (const listing of exhausted) {
+        void sendPushToUser(sellerUserId, {
+          title: "⚠️ Stock épuisé",
+          body: `Votre article "${listing.title}" est en rupture de stock`,
+          tag: `stock-exhausted-${listing.id}`,
+          data: { type: "stock", listingId: listing.id },
+        });
+      }
+      emitToUser(sellerUserId, "listing:stock-exhausted", {
+        type: "LISTING_STOCK_EXHAUSTED",
+        listings: exhausted,
+        orderId: data.id,
+        updatedAt: new Date().toISOString(),
+      });
+    }
+
+    // Remove internal field from response
+    const { _exhaustedListings, ...responseData } = data as any;
+    response.json(responseData);
   })
 );
 

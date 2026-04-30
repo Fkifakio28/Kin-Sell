@@ -1,6 +1,9 @@
 import { prisma } from "../../shared/db/prisma.js";
-import { VerificationStatus, type Prisma } from "@prisma/client";
+import { VerificationStatus } from "../../shared/db/prisma-enums.js";
+import type { Prisma } from "@prisma/client";
 import { logger } from "../../shared/logger.js";
+import { sendPushToUser } from "../notifications/push.service.js";
+import { HttpError } from "../../shared/errors/http-error.js";
 
 // ══════════════════════════════════════════════
 // VERIFICATION BADGE SERVICE
@@ -54,38 +57,81 @@ export async function requestVerification(userId: string, accountType: "USER" | 
       ...(accountType === "USER" ? { userId } : { businessId }),
       status: { in: ["PENDING", "VERIFIED", "AI_ELIGIBLE", "PARTIALLY_VERIFIED", "ADMIN_LOCKED_VERIFIED"] },
     },
+    include: { history: true },
   });
 
   if (existing) {
     if (["VERIFIED", "AI_ELIGIBLE", "ADMIN_LOCKED_VERIFIED"].includes(existing.status)) {
-      throw new Error("Votre compte est déjà vérifié ou éligible.");
+      // 409 Conflict — compte déjà vérifié : renvoie la demande existante avec un message clair
+      return {
+        status: "ALREADY_VERIFIED" as const,
+        message: "Votre compte est déjà vérifié.",
+        request: existing,
+      };
     }
     if (existing.status === "PENDING") {
-      throw new Error("Une demande de vérification est déjà en cours.");
+      return {
+        status: "ALREADY_PENDING" as const,
+        message: "Votre demande est encore en cours de traitement.",
+        request: existing,
+      };
+    }
+    if (existing.status === "PARTIALLY_VERIFIED") {
+      return {
+        status: "ALREADY_PENDING" as const,
+        message: "Une évaluation est déjà en cours sur votre compte.",
+        request: existing,
+      };
     }
   }
 
-  const request = await prisma.verificationRequest.create({
-    data: {
-      userId: accountType === "USER" ? userId : null,
-      businessId: accountType === "BUSINESS" ? businessId : null,
-      source: "USER_REQUEST",
-      status: "PENDING",
-      history: {
-        create: {
-          action: "REQUESTED",
-          fromStatus: "UNVERIFIED",
-          toStatus: "PENDING",
-          source: "USER_REQUEST",
-          performedBy: userId,
-          reason: "Demande de vérification soumise par l'utilisateur",
+  try {
+    const request = await prisma.verificationRequest.create({
+      data: {
+        userId: accountType === "USER" ? userId : null,
+        businessId: accountType === "BUSINESS" ? businessId : null,
+        source: "USER_REQUEST",
+        status: "PENDING",
+        history: {
+          create: {
+            action: "REQUESTED",
+            fromStatus: "UNVERIFIED",
+            toStatus: "PENDING",
+            source: "USER_REQUEST",
+            performedBy: userId,
+            reason: "Demande de vérification soumise par l'utilisateur",
+          },
         },
       },
-    },
-    include: { history: true },
-  });
+      include: { history: true },
+    });
 
-  return request;
+    return {
+      status: "CREATED" as const,
+      message: "Demande envoyée.",
+      request,
+    };
+  } catch (err: unknown) {
+    // Race condition : une autre demande a été créée entre le findFirst et le create
+    const code = (err as { code?: string })?.code;
+    if (code === "P2002") {
+      const fallback = await prisma.verificationRequest.findFirst({
+        where: {
+          ...(accountType === "USER" ? { userId } : { businessId }),
+          status: "PENDING",
+        },
+        include: { history: true },
+        orderBy: { createdAt: "desc" },
+      });
+      return {
+        status: "ALREADY_PENDING" as const,
+        message: "Votre demande est encore en cours de traitement.",
+        request: fallback,
+      };
+    }
+    logger.error({ err, userId, accountType, businessId }, "verification.requestVerification failed");
+    throw new HttpError(500, "Impossible de soumettre votre demande pour le moment. Réessayez dans quelques instants.");
+  }
 }
 
 export async function getMyVerificationStatus(userId: string) {
@@ -282,6 +328,28 @@ async function adminAction(
 
     return updatedRequest;
   });
+
+  // Notifier l'utilisateur du changement de statut
+  const notifyUserId = request.userId;
+  if (notifyUserId) {
+    const verificationNotifs: Record<string, { title: string; body: string }> = {
+      VERIFIED: { title: "Kin-Sell • Compte vérifié ✅", body: "Félicitations ! Votre compte a été vérifié." },
+      REJECTED: { title: "Kin-Sell • Vérification refusée ❌", body: "Votre demande de vérification a été refusée." },
+      REVOKED: { title: "Kin-Sell • Badge révoqué ⚠️", body: "Votre badge de vérification a été révoqué." },
+      AI_ELIGIBLE: { title: "Kin-Sell • Éligible 🔍", body: "Vous êtes éligible au badge vérifié !" },
+      ADMIN_LOCKED_VERIFIED: { title: "Kin-Sell • Compte vérifié 🔒", body: "Votre vérification a été verrouillée par un administrateur." },
+      ADMIN_LOCKED_REVOKED: { title: "Kin-Sell • Badge révoqué 🔒", body: "Votre badge a été révoqué et verrouillé." },
+    };
+    const notif = verificationNotifs[newStatus];
+    if (notif) {
+      sendPushToUser(notifyUserId, {
+        title: notif.title,
+        body: notif.body,
+        tag: `verification-${requestId}`,
+        data: { type: "default", url: "/account" },
+      }).catch(() => {});
+    }
+  }
 
   return updated;
 }

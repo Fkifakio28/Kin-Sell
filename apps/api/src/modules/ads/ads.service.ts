@@ -1,6 +1,7 @@
 import { prisma } from '../../shared/db/prisma.js';
 import { resolveCountryCode } from '../../shared/geo/country-aliases.js';
 import { expireBoosts } from './ads-boost.service.js';
+import { logger } from '../../shared/logger.js';
 
 const VALID_PAGES = ['home', 'explorer', 'sokin', 'sokin-market', 'sokin-profiles'];
 
@@ -90,10 +91,22 @@ export const recordImpression = async (id: string): Promise<void> => {
 export const recordClick = async (id: string): Promise<void> => {
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (prisma as any).advertisement.update({
+    const db = prisma as any;
+    const ad = await db.advertisement.update({
       where: { id },
       data: { clicks: { increment: 1 } },
+      select: { userId: true },
     });
+
+    // Emit CPC growth grant to ad owner (gate 1/10 applied inside emitGrowthGrant)
+    if (ad?.userId) {
+      try {
+        const { emitGrowthGrant } = await import("../incentives/incentive.service.js");
+        await emitGrowthGrant(ad.userId, "CPC", { metadata: { adId: id, source: "ad_click" } });
+      } catch (err) {
+        logger.warn({ err, adId: id }, "[Ads] CPC grant emission failed");
+      }
+    }
   } catch { /* ignore */ }
 };
 

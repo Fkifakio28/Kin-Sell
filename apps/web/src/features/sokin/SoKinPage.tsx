@@ -55,6 +55,7 @@ import {
   REPORT_REASONS,
   relTime,
   isVideoUrl,
+  isAudioUrl,
   categorizeMedia,
   IconMessage,
   IconHeart,
@@ -62,9 +63,10 @@ import {
   IconRepost,
   IconBookmark,
   IconMoreHoriz,
+  resetFeedAutoPlay,
 } from './AnnounceCard';
-import { MediaViewer, CommentsDrawer, type CommentProfileState, type MissingPublicProfile } from './SoKinShared';
-import { SOKIN_POST_BACKGROUNDS, DEFAULT_BG_ID } from './sokin-backgrounds';
+import { MediaViewer, CommentsDrawer, type CommentProfileState, type MissingPublicProfile, type ViewerState } from './SoKinShared';
+import { SOKIN_POST_BACKGROUNDS, DEFAULT_BG_ID, resolveBackgroundCss } from './sokin-backgrounds';
 import './sokin.css';
 
 /* ─────────────────────────────────────────────────────── */
@@ -183,6 +185,47 @@ const FEED_TABS: { key: FeedTab; label: string; icon: string; soon?: boolean }[]
   { key: 'ventes',   label: 'Ventes',    icon: '🏷️' },
 ];
 
+const MEDIA_INPUT_ACCEPT = 'image/*,video/*,audio/mpeg,audio/mp3,.mp3';
+
+const isVideoFile = (file: File): boolean => file.type.startsWith('video/');
+
+const isAudioFile = (file: File): boolean => {
+  const mime = file.type.toLowerCase();
+  if (mime === 'audio/mpeg' || mime === 'audio/mp3') return true;
+  return file.name.toLowerCase().endsWith('.mp3');
+};
+
+const getAudioTitleFromValue = (value: string): string => {
+  const source = value.split('?')[0].split('#')[0];
+  const fileName = source.split('/').pop() ?? '';
+  if (!fileName) return '';
+  let decoded = fileName;
+  try {
+    decoded = decodeURIComponent(fileName);
+  } catch {
+    decoded = fileName;
+  }
+  return decoded
+    .replace(/\.mp3$/i, '')
+    .replace(/[-_]+/g, ' ')
+    .replace(/[@#]+/g, ' ')
+    .trim();
+};
+
+const getAudioTitleFallback = (files: File[], existingUrls: string[] = []): string => {
+  const localAudio = files.find((file) => isAudioFile(file));
+  if (localAudio) {
+    return getAudioTitleFromValue(localAudio.name);
+  }
+
+  const remoteAudio = existingUrls.find((url) => isAudioUrl(url));
+  if (remoteAudio) {
+    return getAudioTitleFromValue(remoteAudio);
+  }
+
+  return '';
+};
+
 /* ─────────────────────────────────────────────────────── */
 /* ICÔNES SVG INLINE (locales à SoKinPage)                  */
 /* ─────────────────────────────────────────────────────── */
@@ -219,6 +262,7 @@ function ComposeZone({
             src={resolveMediaUrl(avatarUrl)}
             alt={displayName}
             className="sk-compose-avatar"
+            loading="lazy"
           />
         ) : (
           <span className="sk-compose-avatar sk-compose-avatar--empty" aria-hidden="true">
@@ -424,6 +468,7 @@ function AnnouncesFeed({
   hasMore,
   loading,
   sentinelRef,
+  enableWindowing,
   t,
   isLoggedIn,
   openCommentsPostId,
@@ -450,11 +495,12 @@ function AnnouncesFeed({
   hasMore: boolean;
   loading: boolean;
   sentinelRef: React.RefObject<HTMLDivElement>;
+  enableWindowing?: boolean;
   t: (k: string) => string;
   isLoggedIn: boolean;
   openCommentsPostId: string | null;
   onOpenComments: (postId: string) => void;
-  onMediaClick: (item: MediaItem) => void;
+  onMediaClick: (items: MediaItem[], index: number) => void;
   onContact: (post: SoKinApiFeedPost) => void;
   contactingPostId: string | null;
   immersiveDesktop?: boolean;
@@ -628,9 +674,17 @@ function AnnouncesFeed({
     }
   }
 
+  const renderedItems = enableWindowing
+    ? items.map((item, index) => (
+      <div key={`sk-window-${index}`} className="sk-feed-window-item">
+        {item}
+      </div>
+    ))
+    : items;
+
   return (
     <section className={`sk-feed${immersiveDesktop ? ' sk-feed--immersive' : ''}`} aria-label="Fil d'annonces So-Kin">
-      {items}
+      {renderedItems}
       {hasMore && (
         <div ref={sentinelRef} className="sk-sentinel" aria-hidden="true" />
       )}
@@ -776,18 +830,23 @@ function DesktopStudioComposer({
   const addFiles = (fileList: FileList) => {
     setLocalError(null);
     const current = [...mediaFiles];
-    let videoCount = current.filter((f) => f.type.startsWith('video/')).length;
+    let videoCount = current.filter((f) => isVideoFile(f)).length;
+    let audioCount = current.filter((f) => isAudioFile(f)).length;
     const toAdd: File[] = [];
 
     for (const f of Array.from(fileList)) {
       if (current.length + toAdd.length >= 5) break;
-      if (f.type.startsWith('video/') && videoCount >= 2) continue;
-      if (f.type.startsWith('video/')) videoCount += 1;
+      if ((isVideoFile(f) && audioCount > 0) || (isAudioFile(f) && videoCount > 0)) {
+        continue;
+      }
+      if (isVideoFile(f) && videoCount >= 2) continue;
+      if (isVideoFile(f)) videoCount += 1;
+      if (isAudioFile(f)) audioCount += 1;
       toAdd.push(f);
     }
 
     if (toAdd.length === 0) {
-      setLocalError('Ajout refusé: maximum 5 médias dont 2 vidéos.');
+      setLocalError('Ajout refusé: max 5 médias, 2 vidéos max, et vidéo+audio interdit dans le même post.');
       return;
     }
 
@@ -864,6 +923,12 @@ function DesktopStudioComposer({
       setLocalError('Ajoutez du texte ou au moins 1 média.');
       return;
     }
+    const hasVideo = mediaFiles.some((file) => isVideoFile(file));
+    const hasAudio = mediaFiles.some((file) => isAudioFile(file));
+    if (hasVideo && hasAudio) {
+      setLocalError('Vous ne pouvez pas publier une vidéo et un audio dans le même post.');
+      return;
+    }
     const schedErr = validateDesktopSchedule(scheduledAt);
     if (schedErr) {
       setLocalError(schedErr);
@@ -871,8 +936,10 @@ function DesktopStudioComposer({
       return;
     }
 
+    const finalText = text.trim().length > 0 ? text : getAudioTitleFallback(mediaFiles);
+
     onPublish({
-      text,
+      text: finalText,
       mediaFiles,
       postType,
       subject: subject.trim() || undefined,
@@ -899,7 +966,7 @@ function DesktopStudioComposer({
       <article className="sk-studio-card">
         <header className="sk-studio-profile">
           {avatarUrl ? (
-            <img src={resolveMediaUrl(avatarUrl)} alt={displayName} className="sk-studio-avatar" />
+            <img src={resolveMediaUrl(avatarUrl)} alt={displayName} className="sk-studio-avatar" loading="lazy" />
           ) : (
             <span className="sk-studio-avatar sk-studio-avatar--empty" aria-hidden="true">{(displayName.charAt(0) || '?').toUpperCase()}</span>
           )}
@@ -943,12 +1010,13 @@ function DesktopStudioComposer({
         <p className="sk-studio-question">{typeMeta.icon} {typeMeta.label}</p>
 
         <textarea
-          className="sk-modal-textarea sk-modal-textarea--studio"
+          className={`sk-modal-textarea sk-modal-textarea--studio${showBgSelector ? ' sk-modal-textarea--bg-active' : ''}`}
           placeholder={typeMeta.placeholder}
           value={text}
           maxLength={500}
           onChange={(e) => setText(e.target.value)}
           rows={7}
+          style={showBgSelector ? { background: resolveBackgroundCss(backgroundStyle) } : undefined}
         />
 
         {/* ── Sélecteur de fond (texte seul) ── */}
@@ -979,7 +1047,7 @@ function DesktopStudioComposer({
             ref={fileRef}
             type="file"
             multiple
-            accept="image/*,video/*"
+            accept={MEDIA_INPUT_ACCEPT}
             hidden
             onChange={(e) => {
               if (e.target.files) addFiles(e.target.files);
@@ -991,10 +1059,12 @@ function DesktopStudioComposer({
           <div className="sk-modal-previews">
             {mediaFiles.map((f, i) => (
               <div key={i} className="sk-modal-preview-item">
-                {f.type.startsWith('video/') ? (
+                {isVideoFile(f) ? (
                   <video src={previewUrls[i]} className="sk-modal-preview-thumb" muted playsInline />
+                ) : isAudioFile(f) ? (
+                  <div className="sk-modal-preview-audio" aria-label="Aperçu audio MP3">🎵</div>
                 ) : (
-                  <img src={previewUrls[i]} alt="" className="sk-modal-preview-thumb" />
+                  <img src={previewUrls[i]} alt="" className="sk-modal-preview-thumb" loading="lazy" />
                 )}
               </div>
             ))}
@@ -1032,7 +1102,7 @@ function DesktopStudioComposer({
               <div className="sk-modal-suggestions">
                 {tagSuggestions.map((item) => (
                   <button key={item.key} type="button" className="sk-modal-suggestion-item" onClick={() => addTag(item.handle)}>
-                    {item.avatarUrl ? <img src={resolveMediaUrl(item.avatarUrl)} className="sk-modal-suggestion-avatar" alt="" /> : <span className="sk-modal-suggestion-avatar">👤</span>}
+                    {item.avatarUrl ? <img src={resolveMediaUrl(item.avatarUrl)} className="sk-modal-suggestion-avatar" alt="" loading="lazy" /> : <span className="sk-modal-suggestion-avatar">👤</span>}
                     <span className="sk-modal-suggestion-text">
                       <strong>{item.label}</strong>
                       <span className="sk-modal-suggestion-handle">{item.handle}</span>
@@ -1108,15 +1178,23 @@ function DesktopStudioComposer({
               </button>
             </header>
             {subject.trim() && <p className="sk-create-preview-subject"><strong>{subject}</strong></p>}
-            <p className="sk-create-preview-text">{text || 'Aucun texte saisi.'}</p>
+            {showBgSelector ? (
+              <div className="sk-card-text-only" style={{ background: resolveBackgroundCss(backgroundStyle) }}>
+                <p>{text || 'Aucun texte saisi.'}</p>
+              </div>
+            ) : (
+              <p className="sk-create-preview-text">{text || 'Aucun texte saisi.'}</p>
+            )}
             {previewUrls.length > 0 ? (
               <div className="sk-modal-previews">
                 {previewUrls.map((url, i) => (
                   <div key={i} className="sk-modal-preview-item">
-                    {mediaFiles[i]?.type.startsWith('video/') ? (
+                    {mediaFiles[i] && isVideoFile(mediaFiles[i]) ? (
                       <video src={url} className="sk-modal-preview-thumb" muted playsInline controls={false} />
+                    ) : mediaFiles[i] && isAudioFile(mediaFiles[i]) ? (
+                      <div className="sk-modal-preview-audio" aria-label="Aperçu audio MP3">🎵</div>
                     ) : (
-                      <img src={url} alt="" className="sk-modal-preview-thumb" />
+                      <img src={url} alt="" className="sk-modal-preview-thumb" loading="lazy" />
                     )}
                   </div>
                 ))}
@@ -1208,8 +1286,9 @@ function CreateAnnounceScreen({
   const hasMedia = totalMediaCount > 0;
   const showBgSelector = hasText && !hasMedia;
   const canPublish = hasText || hasMedia;
-  const imageCount = mediaFiles.filter((f) => !f.type.startsWith('video/')).length;
-  const videoCount = mediaFiles.filter((f) => f.type.startsWith('video/')).length;
+  const videoCount = mediaFiles.filter((f) => isVideoFile(f)).length;
+  const audioCount = mediaFiles.filter((f) => isAudioFile(f)).length;
+  const imageCount = Math.max(0, mediaFiles.length - videoCount - audioCount);
   const hasUnsavedInput =
     text.trim().length > 0 ||
     mediaFiles.length > 0 ||
@@ -1243,8 +1322,10 @@ function CreateAnnounceScreen({
   const validateMediaSelection = (files: File[]) => {
     const total = files.length + existingMediaUrls.length;
     if (total > 5) return 'Maximum 5 médias par publication.';
-    const vc = files.filter((f) => f.type.startsWith('video/')).length;
+    const vc = files.filter((f) => isVideoFile(f)).length + existingMediaUrls.filter((url) => isVideoUrl(url)).length;
+    const ac = files.filter((f) => isAudioFile(f)).length + existingMediaUrls.filter((url) => isAudioUrl(url)).length;
     if (vc > 2) return 'Maximum 2 vidéos par publication.';
+    if (vc > 0 && ac > 0) return 'Vous ne pouvez pas publier une vidéo et un audio dans le même post.';
     return null;
   };
 
@@ -1412,9 +1493,15 @@ function CreateAnnounceScreen({
     setLocalError(null);
     const current = [...mediaFiles];
     const existingCount = existingMediaUrls.length;
-    let videoCount = current.filter((f) => f.type.startsWith('video/')).length;
+    let videoCount = current.filter((f) => isVideoFile(f)).length;
+    let audioCount = current.filter((f) => isAudioFile(f)).length;
+    const existingVideoCount = existingMediaUrls.filter((url) => isVideoUrl(url)).length;
+    const existingAudioCount = existingMediaUrls.filter((url) => isAudioUrl(url)).length;
+    videoCount += existingVideoCount;
+    audioCount += existingAudioCount;
     const toAdd: File[] = [];
     let droppedVideos = 0;
+    let droppedMixed = 0;
     let droppedOverflow = 0;
 
     for (const f of Array.from(fileList)) {
@@ -1422,11 +1509,16 @@ function CreateAnnounceScreen({
         droppedOverflow++;
         continue;
       }
-      if (f.type.startsWith('video/') && videoCount >= 2) {
+      if ((isVideoFile(f) && audioCount > 0) || (isAudioFile(f) && videoCount > 0)) {
+        droppedMixed++;
+        continue;
+      }
+      if (isVideoFile(f) && videoCount >= 2) {
         droppedVideos++;
         continue;
       }
-      if (f.type.startsWith('video/')) videoCount++;
+      if (isVideoFile(f)) videoCount++;
+      if (isAudioFile(f)) audioCount++;
       toAdd.push(f);
     }
 
@@ -1436,6 +1528,11 @@ function CreateAnnounceScreen({
 
     if (droppedVideos > 0) {
       setLocalError('Maximum 2 vidéos par annonce.');
+      return;
+    }
+
+    if (droppedMixed > 0) {
+      setLocalError('Vidéo + audio dans le même post n\'est pas autorisé.');
       return;
     }
 
@@ -1612,8 +1709,12 @@ function CreateAnnounceScreen({
       }
     }
 
+    const finalText = text.trim().length > 0
+      ? text
+      : getAudioTitleFallback(mediaFiles, existingMediaUrls);
+
     onPublish({
-      text,
+      text: finalText,
       mediaFiles,
       existingMediaUrls,
       postType,
@@ -1681,7 +1782,7 @@ function CreateAnnounceScreen({
             <article className="sk-studio-card" aria-label="Zone de création de publication">
               <header className="sk-studio-profile">
                 {avatarUrl ? (
-                  <img src={resolveMediaUrl(avatarUrl)} alt={displayName} className="sk-studio-avatar" />
+                  <img src={resolveMediaUrl(avatarUrl)} alt={displayName} className="sk-studio-avatar" loading="lazy" />
                 ) : (
                   <span className="sk-studio-avatar sk-studio-avatar--empty" aria-hidden="true">{(displayName.charAt(0) || '?').toUpperCase()}</span>
                 )}
@@ -1727,7 +1828,7 @@ function CreateAnnounceScreen({
               <div className="sk-studio-text-wrap">
                 <textarea
                   ref={textareaRef}
-                  className="sk-modal-textarea sk-modal-textarea--studio"
+                  className={`sk-modal-textarea sk-modal-textarea--studio${showBgSelector ? ' sk-modal-textarea--bg-active' : ''}`}
                   placeholder={typeMeta.placeholder}
                   value={text}
                   onChange={(e) => {
@@ -1737,6 +1838,7 @@ function CreateAnnounceScreen({
                   rows={7}
                   maxLength={500}
                   autoFocus
+                  style={showBgSelector ? { background: resolveBackgroundCss(backgroundStyle) } : undefined}
                 />
                 <button
                   type="button"
@@ -1796,10 +1898,12 @@ function CreateAnnounceScreen({
               <div className="sk-modal-previews">
                 {existingMediaUrls.map((url, i) => (
                   <div key={`existing-${i}`} className="sk-modal-preview-item">
-                    {/\.(mp4|webm|mov|ogg)(\?.*)?$/i.test(url) ? (
+                    {isVideoUrl(url) ? (
                       <video src={url} className="sk-modal-preview-thumb" muted playsInline />
+                    ) : isAudioUrl(url) ? (
+                      <div className="sk-modal-preview-audio" aria-label="Aperçu audio MP3">🎵</div>
                     ) : (
-                      <img src={url} alt="" className="sk-modal-preview-thumb" />
+                      <img src={url} alt="" className="sk-modal-preview-thumb" loading="lazy" />
                     )}
                     <button
                       type="button"
@@ -1813,10 +1917,12 @@ function CreateAnnounceScreen({
                 ))}
                 {mediaFiles.map((f, i) => (
                   <div key={`new-${i}`} className="sk-modal-preview-item">
-                    {f.type.startsWith('video/') ? (
+                    {isVideoFile(f) ? (
                       <video src={previewUrls[i]} className="sk-modal-preview-thumb" muted playsInline />
+                    ) : isAudioFile(f) ? (
+                      <div className="sk-modal-preview-audio" aria-label="Aperçu audio MP3">🎵</div>
                     ) : (
-                      <img src={previewUrls[i]} alt="" className="sk-modal-preview-thumb" />
+                      <img src={previewUrls[i]} alt="" className="sk-modal-preview-thumb" loading="lazy" />
                     )}
                     <button
                       type="button"
@@ -1833,9 +1939,9 @@ function CreateAnnounceScreen({
 
             <div className="sk-modal-media-row">
               <span className="sk-modal-media-hint">Médias: {totalMediaCount}/5 (optionnel)</span>
-              <span className="sk-modal-media-hint">Jusqu'à 5 médias, dont 2 vidéos max</span>
+              <span className="sk-modal-media-hint">Jusqu'à 5 médias, dont 2 vidéos max (+ MP3)</span>
               <span className="sk-media-counter" aria-live="polite">
-                {imageCount} image{imageCount > 1 ? 's' : ''} / {videoCount} vidéo{videoCount > 1 ? 's' : ''}
+                {imageCount} image{imageCount > 1 ? 's' : ''} / {videoCount} vidéo{videoCount > 1 ? 's' : ''} / {audioCount} audio
               </span>
               <span className="sk-media-counter" aria-live="polite">
                 Détails: {selectedTags.length + selectedArticles.length + (location ? 1 : 0) + (scheduledAt ? 1 : 0)}
@@ -1844,7 +1950,7 @@ function CreateAnnounceScreen({
                 ref={fileRef}
                 type="file"
                 multiple
-                accept="image/*,video/*"
+                accept={MEDIA_INPUT_ACCEPT}
                 hidden
                 onChange={(e) => {
                   if (e.target.files) addFiles(e.target.files);
@@ -1899,7 +2005,7 @@ function CreateAnnounceScreen({
                 <div className="sk-modal-suggestions">
                   {tagSuggestions.map((item) => (
                     <button key={item.key} type="button" className="sk-modal-suggestion-item" onClick={() => addTag(item.handle)}>
-                      {item.avatarUrl ? <img src={resolveMediaUrl(item.avatarUrl)} className="sk-modal-suggestion-avatar" alt="" /> : <span className="sk-modal-suggestion-avatar">👤</span>}
+                      {item.avatarUrl ? <img src={resolveMediaUrl(item.avatarUrl)} className="sk-modal-suggestion-avatar" alt="" loading="lazy" /> : <span className="sk-modal-suggestion-avatar">👤</span>}
                       <span className="sk-modal-suggestion-text">
                         <strong>{item.label}</strong>
                         <span className="sk-modal-suggestion-handle">{item.handle}</span>
@@ -2017,7 +2123,7 @@ function CreateAnnounceScreen({
           <article className="sk-create-preview-card" aria-label="Prévisualisation annonce">
             <header className="sk-studio-profile">
               {avatarUrl ? (
-                <img src={resolveMediaUrl(avatarUrl)} alt={displayName} className="sk-studio-avatar" />
+                <img src={resolveMediaUrl(avatarUrl)} alt={displayName} className="sk-studio-avatar" loading="lazy" />
               ) : (
                 <span className="sk-studio-avatar sk-studio-avatar--empty" aria-hidden="true">{(displayName.charAt(0) || '?').toUpperCase()}</span>
               )}
@@ -2028,15 +2134,23 @@ function CreateAnnounceScreen({
             </header>
             <h3 className="sk-create-preview-title">{typeMeta.icon} {typeMeta.label} — Publication prête</h3>
             {subject.trim() && <p className="sk-create-preview-subject"><strong>{subject}</strong></p>}
-            <p className="sk-create-preview-text">{text.trim() || 'Aucun texte saisi.'}</p>
+            {showBgSelector ? (
+              <div className="sk-card-text-only" style={{ background: resolveBackgroundCss(backgroundStyle) }}>
+                <p>{text.trim() || 'Aucun texte saisi.'}</p>
+              </div>
+            ) : (
+              <p className="sk-create-preview-text">{text.trim() || 'Aucun texte saisi.'}</p>
+            )}
             {mediaFiles.length > 0 ? (
               <div className="sk-modal-previews">
                 {mediaFiles.map((f, i) => (
                   <div key={i} className="sk-modal-preview-item">
-                    {f.type.startsWith('video/') ? (
+                    {isVideoFile(f) ? (
                       <video src={previewUrls[i]} className="sk-modal-preview-thumb" muted playsInline controls={false} />
+                    ) : isAudioFile(f) ? (
+                      <div className="sk-modal-preview-audio" aria-label="Aperçu audio MP3">🎵</div>
                     ) : (
-                      <img src={previewUrls[i]} alt="" className="sk-modal-preview-thumb" />
+                      <img src={previewUrls[i]} alt="" className="sk-modal-preview-thumb" loading="lazy" />
                     )}
                   </div>
                 ))}
@@ -2080,7 +2194,7 @@ function SoKinPageInner() {
   const navigate = useNavigate();
   const { isLoggedIn, user, logout } = useAuth();
   const { t } = useLocaleCurrency();
-  const { effectiveCountry, getCountryConfig } = useMarketPreference();
+  const { effectiveCountry, getCountryConfig, isGlobalScope } = useMarketPreference();
   const { on, off } = useSocket();
   const isMobile = useIsMobile(1023);
   const toast = useSoKinToast();
@@ -2088,10 +2202,14 @@ function SoKinPageInner() {
   // ── State — TOUS les hooks avant tout return conditionnel ──
   const scrollDir = useScrollDirection();
 
+  // Réinitialiser le flag d'autoplay vidéo à chaque montage du feed
+  useEffect(() => { resetFeedAutoPlay(); }, []);
+
   const [posts, setPosts] = useState<SoKinApiFeedPost[]>([]);
   const [loadingFeed, setLoadingFeed] = useState(true);
   const [hasMore, setHasMore] = useState(true);
   const loadingRef = useRef(false);
+  const lastFeedLoadAtRef = useRef(0);
   const offsetRef = useRef(0);
   const sentinelRef = useRef<HTMLDivElement>(null);
 
@@ -2116,7 +2234,7 @@ function SoKinPageInner() {
   const [feedTab, setFeedTab] = useState<FeedTab>('pour-toi');
 
   // Viewer (géré au niveau page : un seul à la fois)
-  const [viewerItem, setViewerItem] = useState<MediaItem | null>(null);
+  const [viewerItem, setViewerItem] = useState<ViewerState | null>(null);
   // Commentaires
   const [openCommentsPostId, setOpenCommentsPostId] = useState<string | null>(null);
   const [commentsByPost, setCommentsByPost] = useState<Record<string, SoKinApiComment[]>>({});
@@ -2153,6 +2271,7 @@ function SoKinPageInner() {
   const [scoringLoading, setScoringLoading] = useState(false);
 
   const city = user?.profile?.city ?? getCountryConfig(effectiveCountry).defaultCity;
+  const cityForApi = isGlobalScope ? undefined : city;
   const country = effectiveCountry;
   const avatarUrl = user?.profile?.avatarUrl ?? '';
   const displayName = user?.profile?.displayName ?? 'Utilisateur';
@@ -2168,11 +2287,12 @@ function SoKinPageInner() {
       if (loadingRef.current) return;
       if (!reset && !hasMore) return;
       loadingRef.current = true;
+      lastFeedLoadAtRef.current = Date.now();
       try {
         const limit = 20;
         const currentOffset = reset ? 0 : offsetRef.current;
         const feedParams: { limit: number; offset: number; city?: string; types?: string[] } = { limit, offset: currentOffset };
-        if (feedTab === 'local') feedParams.city = city;
+        if (feedTab === 'local' && cityForApi) feedParams.city = cityForApi;
         // 'suivis' tab is disabled in UI — no feed branch needed
         if (feedTab === 'ventes') feedParams.types = VENTES_TYPES;
         const data = await sokinApi.publicFeed(feedParams);
@@ -2212,7 +2332,7 @@ function SoKinPageInner() {
         loadingRef.current = false;
       }
     },
-    [hasMore, feedTab, city, isLoggedIn]
+    [hasMore, feedTab, cityForApi, isLoggedIn]
   );
 
   const loadMyPublishedPosts = useCallback(async (tab?: SoKinContentTab) => {
@@ -2338,9 +2458,9 @@ function SoKinPageInner() {
     const loadTrends = async () => {
       try {
         const [trendsData, profilesData, smartData] = await Promise.all([
-          sokinTrends.trending({ city, limit: 8 }).catch(() => ({ topics: [], hashtags: [] })),
-          sokinTrends.suggestedProfiles({ city, limit: 5 }).catch(() => ({ profiles: [] })),
-          sokinTrends.smartFeed({ city }).catch(() => null),
+          sokinTrends.trending({ city: cityForApi, limit: 8 }).catch(() => ({ topics: [], hashtags: [] })),
+          sokinTrends.suggestedProfiles({ city: cityForApi, limit: 5 }).catch(() => ({ profiles: [] })),
+          sokinTrends.smartFeed({ city: cityForApi }).catch(() => null),
         ]);
         if (cancelled) return;
         setTrendingTopics(trendsData.topics ?? []);
@@ -2353,7 +2473,7 @@ function SoKinPageInner() {
     };
     void loadTrends();
     return () => { cancelled = true; };
-  }, [city]);
+  }, [cityForApi]);
 
   // ── Chargement des tips IA Ads (auteur connecté) ──
   useEffect(() => {
@@ -2467,9 +2587,12 @@ function SoKinPageInner() {
     if (!sentinelRef.current || !hasMore) return;
     const obs = new IntersectionObserver(
       ([e]) => {
-        if (e.isIntersecting && !loadingRef.current) void loadFeed();
+        if (!e.isIntersecting || loadingRef.current) return;
+        const now = Date.now();
+        if (now - lastFeedLoadAtRef.current < 900) return;
+        void loadFeed();
       },
-      { rootMargin: '300px' }
+      { rootMargin: '180px' }
     );
     obs.observe(sentinelRef.current);
     return () => obs.disconnect();
@@ -3185,11 +3308,12 @@ function SoKinPageInner() {
               hasMore={hasMore}
               loading={loadingFeed}
               sentinelRef={sentinelRef}
+              enableWindowing={isMobile}
               t={t}
               isLoggedIn={isLoggedIn}
               openCommentsPostId={openCommentsPostId}
               onOpenComments={handleOpenComments}
-              onMediaClick={(item) => setViewerItem(item)}
+              onMediaClick={(items, idx) => setViewerItem({ items, index: idx })}
               onContact={handleContact}
               contactingPostId={contactingPostId}
               currentUserId={user?.id}
@@ -3270,7 +3394,7 @@ function SoKinPageInner() {
                         <article key={post.id} className="sk-mobile-manage-item sk-mobile-manage-item--bookmark">
                           <button type="button" className="sk-mobile-manage-main" onClick={() => { setShowMobileManage(false); void handleOpenPublishedPost(post.id); }}>
                             {post.author?.profile?.avatarUrl && (
-                              <img src={resolveMediaUrl(post.author.profile.avatarUrl)} alt="" className="sk-bookmark-avatar" />
+                              <img src={resolveMediaUrl(post.author.profile.avatarUrl)} alt="" className="sk-bookmark-avatar" loading="lazy" />
                             )}
                             <div className="sk-bookmark-info">
                               <strong>{post.text?.slice(0, 60) || 'Publication sans texte'}</strong>
@@ -3531,11 +3655,12 @@ function SoKinPageInner() {
                 hasMore={hasMore}
                 loading={loadingFeed}
                 sentinelRef={sentinelRef}
+                enableWindowing={false}
                 t={t}
                 isLoggedIn={isLoggedIn}
                 openCommentsPostId={openCommentsPostId}
                 onOpenComments={handleOpenComments}
-                onMediaClick={(item) => setViewerItem(item)}
+                onMediaClick={(items, idx) => setViewerItem({ items, index: idx })}
                 onContact={handleContact}
                 contactingPostId={contactingPostId}
                 immersiveDesktop
@@ -3606,7 +3731,7 @@ function SoKinPageInner() {
                     <div key={profile.userId} className="sk-desktop-suggestion-item">
                       <span className="sk-desktop-suggestion-avatar">
                         {profile.avatarUrl ? (
-                          <img src={profile.avatarUrl} alt="" className="sk-desktop-suggestion-avatar-img" />
+                          <img src={profile.avatarUrl} alt="" className="sk-desktop-suggestion-avatar-img" loading="lazy" />
                         ) : (
                           profile.displayName.charAt(0).toUpperCase()
                         )}
@@ -3711,6 +3836,7 @@ function SoKinPageInner() {
                 <p className="sk-desktop-commercial-line">📦 Boostez votre visibilité sur So-Kin</p>
                 <button type="button" className="sk-desktop-outline" onClick={handleOpenCreate}>Créer un post</button>
               </section>
+
               {/* ── Mon contenu (inline management) ── */}
               {isLoggedIn && (myPublishedPosts.length > 0 || myBookmarks.length > 0) && (
                 <section className="sk-desktop-panel sk-desktop-my-content glass-container" aria-label="Mon contenu">
@@ -3879,14 +4005,15 @@ function SoKinPageInner() {
       )}
 
       {viewerItem && (
-        <MediaViewer item={viewerItem} onClose={() => setViewerItem(null)} />
+        <MediaViewer items={viewerItem.items} startIndex={viewerItem.index} onClose={() => setViewerItem(null)} />
       )}
 
       {/* ═══ MODAL BOOST FLOW ═══ */}
       {boostModalPostId && (
         <BoostFlowModal
-          postId={boostModalPostId}
-          postTitle={boostModalTitle}
+          target="POST"
+          targetId={boostModalPostId}
+          targetTitle={boostModalTitle}
           onClose={() => { setBoostModalPostId(null); setBoostModalTitle(undefined); }}
           onBoosted={() => {}}
         />

@@ -271,3 +271,86 @@
   margin: 0 0 18px;
   line-height: 1.5;
 }
+
+
+/* ------------------------------------------
+   Phase 5 — Additions refonte
+   ------------------------------------------ */
+
+.bf-wallet {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--glass-bg, rgba(35, 24, 72, 0.5));
+  border: 1px solid var(--glass-border, rgba(180, 160, 255, 0.22));
+  font-size: 0.9rem;
+  color: var(--color-text-secondary, #c7bedf);
+  margin-bottom: 12px;
+}
+
+.bf-wallet strong {
+  color: var(--color-text-primary, #fff);
+  font-size: 1rem;
+}
+
+.bf-wallet--low strong {
+  color: var(--color-danger, #F44336);
+}
+
+.bf-hint {
+  font-size: 0.8rem;
+  color: var(--color-text-secondary, #c7bedf);
+  margin: 6px 0 0;
+}
+
+.bf-range {
+  width: 100%;
+  margin: 10px 0 6px;
+  accent-color: var(--color-primary, #6f58ff);
+}
+
+.bf-presets {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+.bf-preset {
+  padding: 6px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--glass-border, rgba(180, 160, 255, 0.22));
+  background: transparent;
+  color: var(--color-text-secondary, #c7bedf);
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: all 0.15s;
+}
+
+.bf-preset:hover {
+  border-color: var(--color-primary, #6f58ff);
+}
+
+.bf-preset--active {
+  background: var(--color-primary, #6f58ff);
+  color: #fff;
+  border-color: var(--color-primary, #6f58ff);
+}
+
+.bf-input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--glass-border, rgba(180, 160, 255, 0.22));
+  background: var(--glass-bg, rgba(35, 24, 72, 0.5));
+  color: var(--color-text-primary, #fff);
+  font-size: 0.9rem;
+  font-family: inherit;
+}
+
+.bf-input:focus {
+  outline: none;
+  border-color: var(--color-primary, #6f58ff);
+}

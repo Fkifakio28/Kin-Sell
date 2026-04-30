@@ -1,10 +1,12 @@
-import { AddonCode, AddonStatus, BillingCycle, PaymentMethod, PaymentOrderStatus, Prisma, SubscriptionScope, SubscriptionStatus } from "@prisma/client";
+import { AddonCode, AddonStatus, BillingCycle, PaymentMethod, PaymentOrderStatus, SubscriptionScope, SubscriptionStatus } from "../../shared/db/prisma-enums.js";
+import type { Prisma } from "@prisma/client";
 import { env } from "../../config/env.js";
 import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
 import { ADDON_CATALOG, getPlanOrThrow, PLAN_CATALOG } from "./billing.catalog.js";
 import * as paypal from "../../shared/payment/paypal.provider.js";
 import { clearSubscriptionCache } from "../../shared/billing/subscription-guard.js";
+import { sendPushToUser } from "../notifications/push.service.js";
 
 type RoleScope = "USER" | "BUSINESS";
 
@@ -525,6 +527,17 @@ async function activateSubscriptionFromOrder(
 
   // Invalidate subscription guard cache after activation
   clearSubscriptionCache();
+
+  // Notifier l'utilisateur de l'activation
+  const notifyUserId = order.userId;
+  if (notifyUserId) {
+    sendPushToUser(notifyUserId, {
+      title: "Kin-Sell • Forfait activé 🎉",
+      body: `Votre forfait ${order.planCode} a été activé avec succès !`,
+      tag: `billing-${order.id}`,
+      data: { type: "default", url: "/account?tab=forfait" },
+    }).catch(() => {});
+  }
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -611,10 +624,62 @@ export const adminActivatePlan = async (payload: {
 
 export const createPaypalCheckout = async (
   userId: string,
-  payload: { planCode: string; billingCycle: "MONTHLY" | "ONE_TIME" }
+  payload: { planCode: string; billingCycle: "MONTHLY" | "ONE_TIME"; promoCode?: string }
 ) => {
   const { scope, businessId } = await resolveContext(userId);
-  const targetPlan = getPlanOrThrow(payload.planCode, scope);
+
+  // ── Garde de scope explicite (défense en profondeur) ──
+  // getPlanOrThrow lève déjà si le plan n'existe pas pour ce scope,
+  // mais on renvoie un HttpError 400 lisible pour le front.
+  const targetPlan = (() => {
+    try {
+      return getPlanOrThrow(payload.planCode, scope);
+    } catch {
+      throw new HttpError(
+        400,
+        scope === "BUSINESS"
+          ? "Ce forfait est réservé aux comptes particuliers. Votre compte est Business — choisissez un forfait Business (STARTER, BUSINESS, SCALE)."
+          : "Ce forfait est réservé aux comptes Business. Votre compte est particulier — choisissez un forfait utilisateur (FREE, BOOST, AUTO, PRO_VENDEUR)."
+      );
+    }
+  })();
+
+  // Sanity check explicite (devrait être redondant)
+  if (targetPlan.scope !== scope) {
+    throw new HttpError(400, `Incohérence de scope : ce forfait est ${targetPlan.scope} mais votre compte est ${scope}.`);
+  }
+
+  let amountUsdCents = targetPlan.monthlyPriceUsdCents;
+  let couponRedemption: { redemptionId: string; discountAmountUsdCents: number; finalAmountUsdCents: number } | null = null;
+  let couponMeta: { couponCode: string; discountPercent: number; discountAmountUsdCents: number; finalAmountUsdCents: number } | null = null;
+
+  // Apply promo code if provided
+  if (payload.promoCode) {
+    const { redeemCoupon } = await import("../incentives/incentive.service.js");
+    couponRedemption = await redeemCoupon(
+      userId,
+      payload.promoCode,
+      amountUsdCents,
+    );
+    couponMeta = {
+      couponCode: payload.promoCode.trim().toUpperCase(),
+      discountPercent: Math.round((couponRedemption.discountAmountUsdCents / amountUsdCents) * 100),
+      discountAmountUsdCents: couponRedemption.discountAmountUsdCents,
+      finalAmountUsdCents: couponRedemption.finalAmountUsdCents,
+    };
+    amountUsdCents = couponRedemption.finalAmountUsdCents;
+
+    // Log explicite pour audit : la réduction est bien appliquée sur le montant PayPal
+    console.info("[billing] PayPal checkout avec coupon", {
+      userId,
+      scope,
+      planCode: targetPlan.code,
+      originalUsdCents: targetPlan.monthlyPriceUsdCents,
+      discountUsdCents: couponRedemption.discountAmountUsdCents,
+      finalUsdCents: amountUsdCents,
+      couponCode: couponMeta.couponCode,
+    });
+  }
 
   const expiresAt = new Date(Date.now() + env.BILLING_TRANSFER_ORDER_TTL_HOURS * 60 * 60 * 1000);
 
@@ -624,7 +689,7 @@ export const createPaypalCheckout = async (
       businessId: scope === "BUSINESS" ? businessId : null,
       targetScope: scope as SubscriptionScope,
       planCode: targetPlan.code,
-      amountUsdCents: targetPlan.monthlyPriceUsdCents,
+      amountUsdCents,
       currency: "USD",
       method: PaymentMethod.PAYPAL,
       status: PaymentOrderStatus.PENDING,
@@ -635,7 +700,15 @@ export const createPaypalCheckout = async (
     }
   });
 
-  const amountUsd = targetPlan.monthlyPriceUsdCents / 100;
+  // Link redemption to order if coupon was applied
+  if (couponRedemption) {
+    await prisma.incentiveCouponRedemption.update({
+      where: { id: couponRedemption.redemptionId },
+      data: { paymentOrderId: order.id },
+    });
+  }
+
+  const amountUsd = amountUsdCents / 100;
   const returnUrl = `${env.CORS_ORIGIN}/forfaits?paid=1&orderId=${order.id}`;
   const cancelUrl = `${env.CORS_ORIGIN}/forfaits?cancelled=1`;
 
@@ -709,6 +782,24 @@ export const capturePaypalPayment = async (userId: string, payload: { orderId: s
       where: { id: order.id },
       data: { status: PaymentOrderStatus.FAILED },
     });
+
+    // Rollback coupon redemption if one was applied to this order
+    const linkedRedemption = await prisma.incentiveCouponRedemption.findFirst({
+      where: { paymentOrderId: order.id, status: "APPLIED" },
+    });
+    if (linkedRedemption) {
+      await prisma.$transaction([
+        prisma.incentiveCouponRedemption.update({
+          where: { id: linkedRedemption.id },
+          data: { status: "ROLLED_BACK" },
+        }),
+        prisma.incentiveCoupon.update({
+          where: { id: linkedRedemption.couponId },
+          data: { usedCount: { decrement: 1 } },
+        }),
+      ]);
+    }
+
     throw new HttpError(400, `Paiement PayPal non finalisé. Statut: ${capture.status}`);
   }
 

@@ -22,14 +22,15 @@ import VisibilitySelector from '../../components/VisibilitySelector';
 import type { StructuredLocation, LocationVisibility } from '../../lib/api-client';
 import { LISTING_PRODUCT_CATEGORIES, LISTING_SERVICE_CATEGORIES } from '../../shared/constants/categories';
 import TutorialOverlay, { useTutorial, TutorialRelaunchBtn } from '../../components/TutorialOverlay';
-import { businessDashboardSteps } from '../../components/tutorial-steps';
+import { businessDashboardStepsV2, businessOrdersSteps, businessProductsSteps, businessServicesSteps } from '../../components/tutorial-steps';
+import { VariantsEditor, type ProductVariantsValue } from './VariantsEditor';
 import './dashboard.css';
 
 type BizSection =
   | 'dashboard' | 'boutique' | 'produits' | 'services'
   | 'commandes' | 'messages' | 'contacts'
-  | 'analytics' | 'verification'
-  | 'kinsell' | 'parametres';
+  | 'analytics' | 'jobs' | 'verification' | 'auto-shop'
+  | 'boosts' | 'incentives' | 'kinsell' | 'parametres';
 
 type AbonnementTier = 'based' | 'medium' | 'premium';
 
@@ -37,12 +38,18 @@ type AbonnementTier = 'based' | 'medium' | 'premium';
 import { USD_TO_CDF_RATE, DEFAULT_CURRENCY_RATES } from '../../shared/constants/currencies';
 import { SK_BIZ_AI_ADVICE, SK_BIZ_AI_AUTO_NEGO, SK_BIZ_AI_COMMANDE } from '../../shared/constants/storage-keys';
 import { useFeatureGate } from '../../shared/hooks/useFeatureGate';
-import { DashboardSecurityBlock, DashboardVerificationSection, DashboardAiSettings } from './sections';
+import { DashboardSecurityBlock, DashboardVerificationSection, DashboardAiSettings, AutoShopTab, KnowledgeIaPanel } from './sections';
 import { AdsBoostPopup } from '../../components/AdsBoostPopup';
 import { PostPublishAdvisor } from '../../components/PostPublishAdvisor';
 import { PostSaleAdvisor } from '../../components/PostSaleAdvisor';
 import { AnalyticsCTAPanel } from '../../components/AnalyticsCTAPanel';
+import { DashboardJobAnalytics } from './DashboardJobAnalytics';
 import { DashboardAdvancedAnalytics } from './sections/DashboardAdvancedAnalytics';
+import MyBoostsPanel from '../../components/MyBoostsPanel';
+import { LockedOverlay } from '../../components/LockedOverlay';
+import { isRecommendationFree } from '../../shared/utils/recommendation-access';
+import { DataSaverToggle } from '../../components/DataSaverToggle';
+import { MyIncentivesPanel } from '../../components/MyIncentivesPanel';
 import { SmartUpsellBanner, SmartUpsellCard, PostActionTip } from '../../components/SmartUpsell';
 import { PromoCreator } from '../../components/PromoCreator';
 import { PromoBulkBar } from '../../components/PromoBulkBar';
@@ -91,6 +98,9 @@ export function BusinessDashboard() {
   const { t, formatMoneyFromUsdCents, formatPriceLabelFromUsdCents, currency, convertToUsdCents } = useLocaleCurrency();
   const { on, off } = useSocket();
   const tutorial = useTutorial('business-dashboard');
+  const tutorialOrders = useTutorial('business-orders');
+  const tutorialProducts = useTutorial('business-products');
+  const tutorialServices = useTutorial('business-services');
   const [activeSection, setActiveSection] = useState<BizSection>(() => {
     const stored = sessionStorage.getItem('ud-section');
     if (stored) {
@@ -224,7 +234,7 @@ export function BusinessDashboard() {
   // ─── Créer / Modifier listing ────────────────────────────
   const [editingArticleId, setEditingArticleId] = useState<string | null>(null);
   const [createMode, setCreateMode] = useState<'produit' | 'service' | null>(null);
-  const [createForm, setCreateForm] = useState({ title: '', category: '', city: 'Kinshasa', priceCdf: '', stock: '', description: '', isNegotiable: true, latitude: -4.3216965, longitude: 15.3124553, country: 'RDC', countryCode: 'CD', region: '', district: '', formattedAddress: '', placeId: '', locationVisibility: 'CITY_PUBLIC' as LocationVisibility, serviceRadiusKm: '' });
+  const [createForm, setCreateForm] = useState({ title: '', category: '', city: 'Kinshasa', priceCdf: '', stock: '', description: '', isNegotiable: true, latitude: -4.3216965, longitude: 15.3124553, country: 'RDC', countryCode: 'CD', region: '', district: '', formattedAddress: '', placeId: '', locationVisibility: 'CITY_PUBLIC' as LocationVisibility, serviceRadiusKm: '', variants: null as ProductVariantsValue });
   const [createBusy, setCreateBusy] = useState(false);
   const [createMsg, setCreateMsg] = useState<string | null>(null);
   const [createStep, setCreateStep] = useState(1);
@@ -282,7 +292,7 @@ export function BusinessDashboard() {
     }
   };
 
-  const navItems: { key: BizSection; labelKey: string; icon: string }[] = [
+  const navItems: { key: BizSection; labelKey: string; icon: string; requires?: 'analytics' | 'auto-shop' | 'boosts' }[] = [
     { key: 'dashboard',    labelKey: 'biz.navDashboard',   icon: '⊞' },
     { key: 'boutique',     labelKey: 'biz.navBoutique',    icon: '🏪' },
     { key: 'produits',     labelKey: 'biz.navProduits',    icon: '📦' },
@@ -290,7 +300,11 @@ export function BusinessDashboard() {
     { key: 'commandes',    labelKey: 'biz.navCommandes',   icon: '🛒' },
     { key: 'messages',     labelKey: 'biz.navMessages',    icon: '💬' },
     { key: 'contacts',     labelKey: 'biz.navContacts',    icon: '🤝' },
-    { key: 'analytics',    labelKey: 'biz.navAnalytics',   icon: '📊' },
+    { key: 'analytics',    labelKey: 'biz.navAnalytics',   icon: '📊', requires: 'analytics' },
+    { key: 'jobs',         labelKey: 'user.jobs',          icon: '💼' },
+    { key: 'auto-shop',    labelKey: 'user.autoShop',      icon: '🤖', requires: 'auto-shop' },
+    { key: 'boosts',       labelKey: 'user.boosts',         icon: '🚀', requires: 'boosts' },
+    { key: 'incentives',   labelKey: 'user.incentives',     icon: '🎁' },
     { key: 'verification', labelKey: 'biz.navVerification', icon: '✅' },
     { key: 'kinsell',      labelKey: 'Kin-Sell',            icon: '🧠' },
     { key: 'parametres',   labelKey: 'biz.navParametres',  icon: '⚙' },
@@ -438,13 +452,25 @@ export function BusinessDashboard() {
   }, [isLoggedIn, user, on, off]);
 
   /* ── AI plan gating for business ── */
-  const { hasAnalytics: bizHasAnalytics, hasPremiumAnalytics: bizHasPremiumAnalytics, hasIaMarchand: bizHasIaMarchandPlan, hasIaOrder: bizHasIaOrderPlan } = useFeatureGate(myPlan, "BUSINESS");
+  const {
+    hasAnalytics: bizHasAnalytics,
+    hasPremiumAnalytics: bizHasPremiumAnalytics,
+    hasIaMarchandAuto: bizHasIaMarchandAutoPlan,
+    hasIaOrder: bizHasIaOrderPlan,
+  } = useFeatureGate(myPlan, "BUSINESS");
+
+  // Accès Boost business : tout plan business non STARTER/BASED, ou add-on BOOST_VISIBILITY
+  const bizHasBoostAccess = (() => {
+    if (!myPlan) return false;
+    const code = (myPlan.planCode || '').toUpperCase();
+    if (code === 'BUSINESS' || code === 'SCALE' || code === 'MEDIUM' || code === 'PREMIUM') return true;
+    return myPlan.addOns?.some((a) => a.code === 'BOOST_VISIBILITY' && a.status === 'ACTIVE') ?? false;
+  })();
 
   // F19+F24: Clean up localStorage toggles if access lost
-  // NOTE: IA_MERCHANT cleanup kept for BUSINESS scope (not free for businesses)
   useEffect(() => {
     if (!planLoaded) return; // don't wipe toggles before plan is fetched
-    if (!bizHasIaMarchandPlan) {
+    if (!bizHasIaMarchandAutoPlan) {
       localStorage.setItem(SK_BIZ_AI_AUTO_NEGO, 'off');
       setBizAiAutoNegoEnabled(false);
     }
@@ -452,7 +478,7 @@ export function BusinessDashboard() {
       localStorage.setItem(SK_BIZ_AI_COMMANDE, 'off');
       setBizAiCommandeEnabled(false);
     }
-  }, [planLoaded, bizHasIaMarchandPlan, bizHasIaOrderPlan]);
+  }, [planLoaded, bizHasIaMarchandAutoPlan, bizHasIaOrderPlan]);
 
   // F24: Refetch plan every 5 min
   useEffect(() => {
@@ -473,7 +499,7 @@ export function BusinessDashboard() {
     };
   }, [business]);
 
-  const bizAutoNegoActive = bizHasIaMarchandPlan && bizAiAutoNegoEnabled;
+  const bizAutoNegoActive = bizHasIaMarchandAutoPlan && bizAiAutoNegoEnabled;
 
   /* ── Kin-Sell Analytique: fetch AI insights for business ── */
 
@@ -683,6 +709,7 @@ export function BusinessDashboard() {
       placeId: (article as any).placeId ?? '',
       locationVisibility: (article as any).locationVisibility ?? 'CITY_PUBLIC',
       serviceRadiusKm: (article as any).serviceRadiusKm?.toString() ?? '',
+      variants: ((article as any).variants ?? null) as ProductVariantsValue,
     });
     setActiveSection(type === 'service' ? 'services' : 'produits');
     setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 100);
@@ -744,6 +771,7 @@ export function BusinessDashboard() {
         serviceRadiusKm: createForm.serviceRadiusKm ? parseInt(createForm.serviceRadiusKm) : undefined,
         imageUrl: mediaUrls[0] || undefined,
         mediaUrls: mediaUrls.length > 0 ? mediaUrls : undefined,
+        variants: createMode === 'produit' ? (createForm.variants ?? null) : null,
       };
       if (editingArticleId) {
         await listings.update(editingArticleId, payload);
@@ -755,7 +783,7 @@ export function BusinessDashboard() {
       setCreateMsg(editingArticleId ? '✓ Article modifié avec succès' : t('biz.listingSuccess'));
       if (!editingArticleId) setShowBizPublishTip(true);
       setEditingArticleId(null);
-      setCreateForm({ title: '', category: '', city: 'Kinshasa', priceCdf: '', stock: '', description: '', isNegotiable: true, latitude: -4.3216965, longitude: 15.3124553, country: 'RDC', countryCode: 'CD', region: '', district: '', formattedAddress: '', placeId: '', locationVisibility: 'CITY_PUBLIC', serviceRadiusKm: '' });
+      setCreateForm({ title: '', category: '', city: 'Kinshasa', priceCdf: '', stock: '', description: '', isNegotiable: true, latitude: -4.3216965, longitude: 15.3124553, country: 'RDC', countryCode: 'CD', region: '', district: '', formattedAddress: '', placeId: '', locationVisibility: 'CITY_PUBLIC', serviceRadiusKm: '', variants: null });
       setCreateMode(null);
       setCreateStep(1);
       createUploadPreviews.forEach(u => URL.revokeObjectURL(u));
@@ -1368,11 +1396,16 @@ export function BusinessDashboard() {
 
         {/* Navigation */}
         <nav className="ud-nav" aria-label={t('biz.navMenu')}>
-          {navItems.map(item => (
+          {navItems.map(item => {
+            const isLocked =
+              (item.requires === 'analytics' && !bizHasAnalytics) ||
+              (item.requires === 'auto-shop' && !bizHasIaOrderPlan) ||
+              (item.requires === 'boosts' && !bizHasBoostAccess);
+            return (
             <button
               key={item.key}
               type="button"
-              className={`ud-nav-item${activeSection === item.key ? ' ud-nav-item--active' : ''}`}
+              className={`ud-nav-item${activeSection === item.key ? ' ud-nav-item--active' : ''}${isLocked ? ' ud-nav-item--locked' : ''}`}
               onClick={() => {
                 if (item.key === 'messages') {
                   navigate('/messaging');
@@ -1381,11 +1414,14 @@ export function BusinessDashboard() {
                 setActiveSection(item.key);
                 setMobileSidebarOpen(false);
               }}
+              title={isLocked ? 'Forfait requis' : undefined}
             >
               <span className="ud-nav-icon">{item.icon}</span>
               {!sidebarCollapsed && <span className="ud-nav-label">{t(item.labelKey)}</span>}
+              {isLocked && <span className="ud-nav-lock" aria-label="Forfait requis">🔒</span>}
             </button>
-          ))}
+            );
+          })}
         </nav>
 
         {/* CTA Upgrade */}
@@ -1395,6 +1431,12 @@ export function BusinessDashboard() {
             <p>{t('biz.premiumDesc')}</p>
             <a href="/forfaits" className="ud-premium-btn bz-upgrade-btn">{t('biz.upgradeBtn')}</a>
           </div>
+        )}
+
+        {!sidebarCollapsed && (
+          <Link to="/market-intel" className="ud-premium-btn bz-upgrade-btn" style={{ display: 'block', textAlign: 'center', marginTop: 8, textDecoration: 'none' }}>
+            🌍 Intelligence marché
+          </Link>
         )}
 
         <div className="ud-drawer-logout">
@@ -1550,8 +1592,8 @@ export function BusinessDashboard() {
                           <strong>{p.title}</strong>
                           <span>{formatMoneyFromUsdCents(p.priceUsdCents)} · {p.category}</span>
                         </div>
-                        <span className={`bz-stock-badge${(p.stockQuantity ?? 99) <= 5 ? ' bz-stock-badge--low' : ''}`}>
-                          {p.stockQuantity != null ? `${p.stockQuantity} ${t('biz.inStock')}` : '∞'}
+                        <span className={`bz-stock-badge${p.stockQuantity === 0 ? ' bz-stock-badge--exhausted' : (p.stockQuantity ?? 99) <= 5 ? ' bz-stock-badge--low' : ''}`}>
+                          {p.stockQuantity === 0 ? t('biz.outOfStock', 'Rupture de stock') : p.stockQuantity != null ? `${p.stockQuantity} ${t('biz.inStock')}` : '∞'}
                         </span>
                       </li>
                     ))}
@@ -1914,6 +1956,14 @@ export function BusinessDashboard() {
                       <span className="ud-publish-field-label">{t('biz.stockLabel')}</span>
                       <input className="ud-input" type="number" min={0} value={createForm.stock} onChange={e => setCreateForm(f => ({ ...f, stock: e.target.value }))} placeholder="∞ (illimité)" />
                     </label>
+                    {createMode === 'produit' && (
+                      <div style={{ marginTop: 12, marginBottom: 12 }}>
+                        <VariantsEditor
+                          value={createForm.variants}
+                          onChange={(v) => setCreateForm(f => ({ ...f, variants: v }))}
+                        />
+                      </div>
+                    )}
                     <label className="ud-publish-field">
                       <span className="ud-publish-field-label">🔒 Visibilité</span>
                       <VisibilitySelector value={createForm.locationVisibility} onChange={(v: LocationVisibility) => setCreateForm(f => ({ ...f, locationVisibility: v }))} />
@@ -2546,6 +2596,12 @@ export function BusinessDashboard() {
                             <span>Date</span>
                             <span className="ud-neg-price-original">{new Date(order.createdAt).toLocaleDateString('fr-FR')}</span>
                           </div>
+                          {order.autoExpireAt && (
+                            <div className="ud-neg-price-row">
+                              <span>⏳ Expire</span>
+                              <span className="ud-ord-expire-deadline">{new Date(order.autoExpireAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
+                            </div>
+                          )}
                         </div>
 
                         {/* Actions vendeur */}
@@ -3108,6 +3164,11 @@ export function BusinessDashboard() {
         {activeSection === 'parametres' && (
           <div className="ud-section animate-fade-in">
 
+            {/* Mode économie de données */}
+            <section className="ud-glass-panel bz-glass-panel" style={{ marginBottom: 16 }}>
+              <DataSaverToggle />
+            </section>
+
             {/* Identité & Coordonnées */}
             <section className="ud-glass-panel bz-glass-panel">
               <h2 className="ud-panel-title">{t('biz.settingsTitle')}</h2>
@@ -3255,7 +3316,7 @@ export function BusinessDashboard() {
             <DashboardAiSettings
               t={t}
               storageKeys={{ advice: SK_BIZ_AI_ADVICE, autoNego: SK_BIZ_AI_AUTO_NEGO, commande: SK_BIZ_AI_COMMANDE }}
-              hasIaMarchandPlan={bizHasIaMarchandPlan}
+              hasIaMarchandAutoPlan={bizHasIaMarchandAutoPlan}
               hasIaOrderPlan={bizHasIaOrderPlan}
               autoNegoActive={bizAiAutoNegoEnabled}
               planLoaded={planLoaded}
@@ -3359,6 +3420,48 @@ export function BusinessDashboard() {
           </div>
         )}
 
+        {/* ═══════════════  BOUTIQUE AUTOMATIQUE (BUSINESS)  ═══════════════ */}
+        {activeSection === 'auto-shop' && (
+          <LockedOverlay
+            locked={!bizHasIaOrderPlan}
+            icon="🤖"
+            title="Auto-Shop nécessite l'IA Commande"
+            message="Automatisez vos ventes (marchandage, relances, validation) avec le forfait BUSINESS / SCALE ou l'add-on IA Commande."
+            ctaLabel="Activer l'IA Commande"
+          >
+            <AutoShopTab t={t} formatMoney={formatMoneyFromUsdCents} />
+          </LockedOverlay>
+        )}
+
+        {/* ═══════════════  MES BOOSTS (BUSINESS)  ═══════════════ */}
+        {activeSection === 'boosts' && (
+          <div className="ud-section animate-fade-in">
+            <LockedOverlay
+              locked={!bizHasBoostAccess}
+              icon="🚀"
+              title="Boosts — forfait requis"
+              message="Boostez votre boutique, vos articles et votre visibilité avec un forfait BUSINESS ou SCALE, ou l'add-on Boost Visibilité."
+              ctaLabel="Débloquer les boosts"
+            >
+              <MyBoostsPanel />
+            </LockedOverlay>
+          </div>
+        )}
+
+        {/* ═══════════════  MES AVANTAGES IA (BUSINESS)  ═══════════════ */}
+        {activeSection === 'incentives' && (
+          <div className="ud-section animate-fade-in">
+            <MyIncentivesPanel />
+          </div>
+        )}
+
+        {/* ═══════════════  ONGLET EMPLOI (BUSINESS)  ═══════════════ */}
+        {activeSection === 'jobs' && (
+          <div className="ud-section animate-fade-in">
+            <DashboardJobAnalytics accountType="business" />
+          </div>
+        )}
+
         {/* ═══════════════  ONGLET KIN-SELL (BUSINESS)  ═══════════════ */}
         {activeSection === 'kinsell' && (
           <div className="ud-section animate-fade-in">
@@ -3394,14 +3497,18 @@ export function BusinessDashboard() {
                 )}
               </div>
 
+              {/* Knowledge IA — settings + conseils */}
+              <KnowledgeIaPanel hasAnalytics={bizHasAnalytics} />
+
               {/* IA disponibles */}
               <div style={{ marginBottom: 16 }}>
                 <h3 style={{ margin: '0 0 10px', fontSize: 15, color: 'var(--color-text-primary, #fff)' }}>🤖 IA disponibles</h3>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 10 }}>
                   {[
-                    { name: 'IA Marchande', icon: '🤝', desc: 'Négociation automatisée', active: bizAiAutoNegoEnabled, locked: !bizHasIaMarchandPlan, key: 'autoNego' as const },
+                    { name: 'IA Marchande', icon: '🤝', desc: 'Négociation automatisée', active: bizAiAutoNegoEnabled, locked: !bizHasIaMarchandAutoPlan, key: 'autoNego' as const },
                     { name: 'IA Ads', icon: '📢', desc: 'Boost articles & boutique', active: bizAiAdviceEnabled, locked: false, key: 'advice' as const },
                     { name: 'Kin-Sell Analytique', icon: '📊', desc: 'Analyses marché avancées', active: bizHasAnalytics, locked: !bizHasAnalytics, key: 'analytics' as const },
+                    { name: 'Knowledge IA', icon: '🧠', desc: 'Détecte vos besoins & conseille', active: bizHasAnalytics, locked: !bizHasAnalytics, key: 'analytics' as const },
                     { name: 'IA Commande', icon: '📦', desc: 'Automatisation des ventes', active: bizAiCommandeEnabled, locked: !bizHasIaOrderPlan, key: 'commande' as const },
                   ].map((ia) => (
                     <div key={ia.name} style={{
@@ -3567,8 +3674,19 @@ export function BusinessDashboard() {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
 
                     {/* Backend AI recommendations */}
-                    {ksRecommendations.map((rec) => (
-                      <div key={rec.id} style={{
+                    {ksRecommendations.map((rec, recIndex) => {
+                      const recoFree = isRecommendationFree(recIndex, user?.id, bizHasAnalytics);
+                      return (
+                      <LockedOverlay
+                        key={rec.id}
+                        locked={!recoFree}
+                        icon="💡"
+                        title="Recommandation verrouillée"
+                        message="Cette recommandation IA personnalisée est réservée aux forfaits avec Analytique."
+                        ctaLabel="Débloquer toutes les recommandations"
+                        blurPx={4}
+                      >
+                      <div style={{
                         background: 'rgba(111,88,255,0.04)',
                         border: '1px solid rgba(111,88,255,0.1)',
                         borderRadius: 10, padding: 14,
@@ -3610,7 +3728,9 @@ export function BusinessDashboard() {
                           </span>
                         </div>
                       </div>
-                    ))}
+                      </LockedOverlay>
+                      );
+                    })}
 
                     {/* Smart IA ADS recommendation */}
                     <div style={{
@@ -3820,8 +3940,22 @@ export function BusinessDashboard() {
         />
       )}
 
-      <TutorialOverlay pageKey="business-dashboard" steps={businessDashboardSteps} open={tutorial.isOpen} onClose={tutorial.close} />
-      {!tutorial.isOpen && <TutorialRelaunchBtn reset={tutorial.reset} start={tutorial.start} />}
+      {activeSection === 'commandes'
+        ? <TutorialOverlay pageKey="business-orders" steps={businessOrdersSteps} open={tutorialOrders.isOpen} onClose={tutorialOrders.close} />
+        : activeSection === 'produits'
+        ? <TutorialOverlay pageKey="business-products" steps={businessProductsSteps} open={tutorialProducts.isOpen} onClose={tutorialProducts.close} />
+        : activeSection === 'services'
+        ? <TutorialOverlay pageKey="business-services" steps={businessServicesSteps} open={tutorialServices.isOpen} onClose={tutorialServices.close} />
+        : <TutorialOverlay pageKey="business-dashboard" steps={businessDashboardStepsV2} open={tutorial.isOpen} onClose={tutorial.close} />
+      }
+      {activeSection === 'commandes'
+        ? !tutorialOrders.isOpen && <TutorialRelaunchBtn reset={tutorialOrders.reset} start={tutorialOrders.start} />
+        : activeSection === 'produits'
+        ? !tutorialProducts.isOpen && <TutorialRelaunchBtn reset={tutorialProducts.reset} start={tutorialProducts.start} />
+        : activeSection === 'services'
+        ? !tutorialServices.isOpen && <TutorialRelaunchBtn reset={tutorialServices.reset} start={tutorialServices.start} />
+        : !tutorial.isOpen && <TutorialRelaunchBtn reset={tutorial.reset} start={tutorial.start} />
+      }
     </div>
   );
 }

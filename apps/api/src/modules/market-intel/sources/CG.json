@@ -1,0 +1,27 @@
+{
+  "country": "CG",
+  "currency": "XAF",
+  "languages": ["fr"],
+  "sources": [
+    { "name": "CoinAfrique Congo",        "baseUrl": "https://www.coinafrique.com/congo-brazzaville", "type": "marketplace", "parser": "coinafrique", "language": "fr", "trusted": true, "verified": true },
+
+    { "name": "Afribaba Congo",           "baseUrl": "https://cg.afribaba.com",           "type": "classifieds", "parser": "afribaba",      "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Expat.com Congo",          "baseUrl": "https://www.expat.com/en/destination/africa/congo/", "type": "classifieds", "parser": "expat", "language": "fr", "trusted": true, "verified": true },
+
+    { "name": "ADIAC-Congo",              "baseUrl": "https://www.adiac-congo.com",       "type": "news",        "parser": "news-rss",      "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Dépêches de Brazzaville",  "baseUrl": "https://www.lesdepechesdebrazzaville.fr", "type": "news",  "parser": "news-rss",      "language": "fr", "trusted": true,  "verified": true },
+    { "name": "VoxCongo",                 "baseUrl": "https://www.voxcongo.com",          "type": "news",        "parser": "news-rss",      "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Starducongo",              "baseUrl": "https://www.starducongo.com",       "type": "news",        "parser": "news-rss",      "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Journal de Brazza",        "baseUrl": "https://www.journaldebrazza.com",   "type": "news",        "parser": "news-rss",      "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Congo-Site",               "baseUrl": "https://www.congo-site.com",        "type": "news",        "parser": "news-rss",      "language": "fr", "trusted": false, "verified": true },
+    { "name": "Agence Info Congo",        "baseUrl": "https://aci-congo.com",             "type": "news",        "parser": "news-rss",      "language": "fr", "trusted": true,  "verified": true },
+
+    { "name": "INS Congo",                "baseUrl": "https://www.ins-congo.cg",          "type": "stats",       "parser": "generic-stats", "language": "fr", "trusted": true,  "verified": true },
+    { "name": "BEAC",                     "baseUrl": "https://www.beac.int",              "type": "stats",       "parser": "beac",          "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Ministère Économie Congo", "baseUrl": "https://www.mefpppi.gouv.cg",       "type": "stats",       "parser": "generic-stats", "language": "fr", "trusted": true,  "verified": true },
+
+    { "name": "Emploi Congo Brazza",      "baseUrl": "https://www.emploi.cg",             "type": "jobs",        "parser": "generic-jobs",  "language": "fr", "trusted": true,  "verified": true },
+    { "name": "AfricaWork Congo",         "baseUrl": "https://www.africawork.com/fr/republique-du-congo", "type": "jobs", "parser": "generic-jobs", "language": "fr", "trusted": true, "verified": true },
+    { "name": "LinkedIn Jobs Congo",      "baseUrl": "https://www.linkedin.com/jobs/search?location=Republic%20of%20the%20Congo", "type": "jobs", "parser": "linkedin-jobs", "language": "fr", "trusted": true, "verified": true }
+  ]
+}

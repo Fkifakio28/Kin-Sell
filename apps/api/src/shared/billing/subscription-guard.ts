@@ -53,7 +53,7 @@
  *     5. Effort estimé : ~30 lignes de code, 3 fichiers.
  */
 
-import { AddonCode, AddonStatus, SubscriptionStatus } from "@prisma/client";
+import { AddonCode, AddonStatus, SubscriptionStatus } from "../db/prisma-enums.js";
 import { prisma } from "../db/prisma.js";
 import { PLAN_CATALOG } from "../../modules/billing/billing.catalog.js";
 import { HttpError } from "../errors/http-error.js";
@@ -62,7 +62,7 @@ import type { AuthenticatedRequest } from "../auth/auth-middleware.js";
 
 // ── Types ──────────────────────────────────────────────────
 
-export type IaFeature = "IA_MERCHANT" | "IA_ORDER";
+export type IaFeature = "IA_MERCHANT" | "IA_MERCHANT_AUTO" | "IA_ORDER";
 export type FeatureOrAddon = IaFeature | AddonCode;
 
 interface SubscriptionAccess {
@@ -191,7 +191,7 @@ export async function assertAddonAccess(userId: string, addonCode: AddonCode): P
  *   await assertFeatureAccess(userId, "IA_MERCHANT");
  *   await assertFeatureAccess(userId, "BOOST_VISIBILITY");
  */
-const IA_FEATURES = new Set<string>(["IA_MERCHANT", "IA_ORDER"]);
+const IA_FEATURES = new Set<string>(["IA_MERCHANT", "IA_MERCHANT_AUTO", "IA_ORDER"]);
 
 export async function assertFeatureAccess(userId: string, code: FeatureOrAddon): Promise<void> {
   if (IA_FEATURES.has(code)) {
@@ -270,6 +270,7 @@ async function _resolveAccess(userId: string, feature: IaFeature): Promise<Subsc
   const businessId = isBusinessScope ? user.businesses[0]?.id : null;
 
   // IA_MERCHANT is FREE for ALL user accounts — always grant access regardless of plan
+  // (advice only — automation requires IA_MERCHANT_AUTO which is NOT free)
   if (!isBusinessScope && feature === "IA_MERCHANT") {
     return { hasAccess: true, planCode: "FREE", source: "FREE_DEFAULT" };
   }
@@ -310,8 +311,10 @@ async function _resolveAccess(userId: string, feature: IaFeature): Promise<Subsc
   }
 
   // 4. Vérifier si un addon actif donne la feature
+  //    IA_MERCHANT addon also grants IA_MERCHANT_AUTO (paying users get full access)
+  const addonFeature = feature === "IA_MERCHANT_AUTO" ? "IA_MERCHANT" : feature;
   const addonMatch = sub.addons.find(
-    (a) => a.addonCode === feature && (a.endsAt === null || a.endsAt > new Date()),
+    (a) => a.addonCode === addonFeature && (a.endsAt === null || a.endsAt > new Date()),
   );
   if (addonMatch) {
     return { hasAccess: true, planCode: sub.planCode, source: "ADDON" };

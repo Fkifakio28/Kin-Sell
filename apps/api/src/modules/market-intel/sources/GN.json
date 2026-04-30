@@ -1,0 +1,29 @@
+{
+  "country": "GN",
+  "currency": "GNF",
+  "languages": ["fr"],
+  "sources": [
+    { "name": "CoinAfrique Guinée",       "baseUrl": "https://www.coinafrique.com/guinee","type": "marketplace", "parser": "coinafrique",   "language": "fr", "trusted": true,  "verified": true },
+
+    { "name": "Afribaba Guinée",          "baseUrl": "https://gn.afribaba.com",           "type": "classifieds", "parser": "afribaba",      "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Expat.com Guinée",         "baseUrl": "https://www.expat.com/en/destination/africa/guinea/", "type": "classifieds", "parser": "expat", "language": "fr", "trusted": true, "verified": true },
+
+    { "name": "Guineematin",              "baseUrl": "https://www.guineematin.com",       "type": "news",        "parser": "news-rss",      "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Mediaguinee",              "baseUrl": "https://mediaguinee.org",           "type": "news",        "parser": "news-rss",      "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Guineenews",               "baseUrl": "https://guineenews.org",            "type": "news",        "parser": "news-rss",      "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Guinee7",                  "baseUrl": "https://guinee7.com",               "type": "news",        "parser": "news-rss",      "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Africaguinee",             "baseUrl": "https://www.africaguinee.com",      "type": "news",        "parser": "news-rss",      "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Le Djely",                 "baseUrl": "https://ledjely.com",               "type": "news",        "parser": "news-rss",      "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Mosaiqueguinee",           "baseUrl": "https://mosaiqueguinee.com",        "type": "news",        "parser": "news-rss",      "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Visionguinee",             "baseUrl": "https://visionguinee.info",         "type": "news",        "parser": "news-rss",      "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Kalenews",                 "baseUrl": "https://kalenews.net",              "type": "news",        "parser": "news-rss",      "language": "fr", "trusted": false, "verified": true },
+
+    { "name": "INS Guinée",               "baseUrl": "https://www.stat-guinee.org",       "type": "stats",       "parser": "generic-stats", "language": "fr", "trusted": true,  "verified": true },
+    { "name": "BCRG (Banque Centrale)",   "baseUrl": "https://www.bcrg-guinee.org",       "type": "stats",       "parser": "generic-stats", "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Ministère Plan Guinée",    "baseUrl": "https://www.mpci.gov.gn",           "type": "stats",       "parser": "generic-stats", "language": "fr", "trusted": true,  "verified": true },
+
+    { "name": "Emploi Guinée",            "baseUrl": "https://www.emploi.gov.gn",         "type": "jobs",        "parser": "generic-jobs",  "language": "fr", "trusted": true,  "verified": true },
+    { "name": "AfricaWork Guinée",        "baseUrl": "https://www.africawork.com/fr/guinee", "type": "jobs",     "parser": "generic-jobs",  "language": "fr", "trusted": true,  "verified": true },
+    { "name": "LinkedIn Jobs Guinée",     "baseUrl": "https://www.linkedin.com/jobs/search?location=Guinea", "type": "jobs", "parser": "linkedin-jobs", "language": "fr", "trusted": true, "verified": true }
+  ]
+}

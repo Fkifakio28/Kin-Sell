@@ -1,4 +1,5 @@
 import "./privacy.css";
+import { SeoMeta } from "../../components/SeoMeta";
 
 /* ── SVG icon helpers ── */
 const IconShield = () => (
@@ -49,22 +50,42 @@ const COLLECTED_DATA = [
   {
     icon: <IconUser />,
     title: "Informations de compte",
-    items: ["Nom et prénom", "Adresse email", "Numéro de téléphone", "Photo de profil (optionnelle)", "Nom de l'entreprise (pour comptes business)"],
+    items: ["Nom et prénom", "Adresse email", "Numéro de téléphone", "Photo de profil (optionnelle)", "Nom de l'entreprise (pour comptes business)", "Date de naissance (optionnelle)"],
   },
   {
     icon: <IconEye />,
     title: "Activité sur la plateforme",
-    items: ["Annonces créées et consultées", "Recherches effectuées", "Catégories visitées", "Biens et services favoris"],
+    items: ["Annonces créées et consultées", "Vues de posts et stories", "Catégories visitées", "Biens et services favoris", "Impressions et clics publicitaires internes"],
   },
   {
     icon: <IconMail />,
     title: "Interactions",
-    items: ["Messages échangés entre utilisateurs", "Négociations et accords", "Avis et signalements", "Demandes de service"],
+    items: ["Messages texte, audio, photo et vidéo", "Négociations et accords", "Avis et signalements", "Commentaires sur les publications"],
   },
   {
     icon: <IconDatabase />,
-    title: "Données de navigation",
-    items: ["Type d'appareil et navigateur", "Pages visitées et durée", "Adresse IP (anonymisée)", "Langue et localisation générale"],
+    title: "Données techniques",
+    items: ["Type d'appareil et navigateur (User-Agent)", "Identifiant de session et d'appareil", "Adresse IP (pour la sécurité anti-fraude)", "Tokens de notifications push (Firebase)"],
+  },
+  {
+    icon: <IconShield />,
+    title: "Localisation",
+    items: ["Position GPS précise (latitude/longitude)", "Ville, pays et région", "Adresse physique (pour livraison et boutiques)"],
+  },
+  {
+    icon: <IconLock />,
+    title: "Données financières",
+    items: ["Historique d'abonnements et de paiements", "Référence Mobile Money (Orange Money, M-Pesa)", "Achats via Apple In-App Purchase ou PayPal", "Coordonnées bancaires pour virements (IBAN/BIC)"],
+  },
+  {
+    icon: <IconBarChart />,
+    title: "Photos, vidéos et audio",
+    items: ["Photos d'annonces et de profil", "Vidéos de présentation", "Messages vocaux et audio", "Contenu de stories et publications SoKin"],
+  },
+  {
+    icon: <IconSliders />,
+    title: "Contacts importés",
+    items: ["Nom et téléphone de vos contacts (optionnel)", "Sources : téléphone, Facebook, Google, saisie manuelle", "Utilisés uniquement pour les suggestions de connexion"],
   },
 ];
 
@@ -103,6 +124,11 @@ const USER_RIGHTS = [
 export function PrivacyPage() {
   return (
     <div className="privacy">
+      <SeoMeta
+        title="Politique de confidentialité | Kin-Sell"
+        description="Découvrez comment Kin-Sell protège vos données personnelles. Politique de confidentialité, collecte de données, droits des utilisateurs."
+        canonical="https://kin-sell.com/privacy"
+      />
       {/* ══════ 1. HERO ══════ */}
       <section className="privacy-hero">
         <div className="privacy-hero-glow" aria-hidden="true" />
@@ -114,7 +140,7 @@ export function PrivacyPage() {
           Chez Kin-Sell, vos données sont un dépôt de confiance. Nous les protégeons avec
           le même sérieux que vous accordez à votre sécurité.
         </p>
-        <p className="privacy-meta">Dernière mise à jour : 27 mars 2026</p>
+        <p className="privacy-meta">Dernière mise à jour : 13 avril 2026</p>
       </section>
 
       {/* ══════ RÉSUMÉ RAPIDE ══════ */}
@@ -349,9 +375,57 @@ export function PrivacyPage() {
         </div>
       </section>
 
-      {/* ══════ 9. COOKIES ══════ */}
+      {/* ══════ 9. SERVICES TIERS ══════ */}
       <section className="privacy-block">
         <div className="privacy-block-number">8</div>
+        <div className="privacy-block-content glass-container">
+          <h2>Services tiers</h2>
+          <p>
+            Pour assurer un fonctionnement fiable et sécurisé, Kin-Sell fait appel à des
+            services tiers strictement encadrés. <strong>Aucun de ces services ne reçoit
+            vos données à des fins publicitaires ou de suivi inter-applications.</strong>
+          </p>
+          <div className="privacy-security-grid">
+            <div className="privacy-security-card glass-card">
+              <IconShield />
+              <h3>Firebase (Google)</h3>
+              <p>Envoi de notifications push via Firebase Cloud Messaging. Seul le token d'appareil est partagé.</p>
+            </div>
+            <div className="privacy-security-card glass-card">
+              <IconLock />
+              <h3>Google / Apple Sign In</h3>
+              <p>Connexion OAuth. Seuls le nom, l'email et l'identifiant du fournisseur sont reçus, à votre initiative.</p>
+            </div>
+            <div className="privacy-security-card glass-card">
+              <IconShield />
+              <h3>PayPal / Apple In-App Purchase</h3>
+              <p>Traitement des paiements. Kin-Sell ne stocke ni vos numéros de carte ni vos identifiants bancaires PayPal.</p>
+            </div>
+            <div className="privacy-security-card glass-card">
+              <IconLock />
+              <h3>Cloudflare Turnstile</h3>
+              <p>Protection anti-bot. Un jeton de vérification est échangé, sans cookies de suivi.</p>
+            </div>
+            <div className="privacy-security-card glass-card">
+              <IconShield />
+              <h3>OpenStreetMap</h3>
+              <p>Géocodage et recherche d'adresses. Les requêtes ne contiennent pas de données personnelles identifiables.</p>
+            </div>
+          </div>
+          <div className="privacy-callout privacy-callout--info">
+            <span className="privacy-callout-icon"><IconInfo /></span>
+            <p>
+              <strong>Aucun suivi inter-applications :</strong> Kin-Sell ne partage aucune
+              donnée avec des réseaux publicitaires tiers et n'utilise aucun SDK de tracking
+              (pas de Google Analytics, Mixpanel, Facebook Pixel, etc.).
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* ══════ 10. COOKIES ══════ */}
+      <section className="privacy-block">
+        <div className="privacy-block-number">9</div>
         <div className="privacy-block-content glass-container">
           <div className="privacy-cookie-header">
             <IconCookie />
@@ -385,9 +459,9 @@ export function PrivacyPage() {
         </div>
       </section>
 
-      {/* ══════ 10. MODIFICATIONS ══════ */}
+      {/* ══════ 11. MODIFICATIONS ══════ */}
       <section className="privacy-block">
-        <div className="privacy-block-number">9</div>
+        <div className="privacy-block-number">10</div>
         <div className="privacy-block-content glass-container">
           <div className="privacy-update-header">
             <IconRefresh />
@@ -405,9 +479,9 @@ export function PrivacyPage() {
         </div>
       </section>
 
-      {/* ══════ 11. CONTACT ══════ */}
+      {/* ══════ 12. CONTACT ══════ */}
       <section className="privacy-block">
-        <div className="privacy-block-number">10</div>
+        <div className="privacy-block-number">11</div>
         <div className="privacy-block-content glass-container">
           <div className="privacy-contact-header">
             <IconMail />

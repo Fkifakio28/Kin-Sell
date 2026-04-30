@@ -1,0 +1,96 @@
+/* ═══════════════════════════════════════════
+   Data Saver toggle (Mode économie de données)
+   ═══════════════════════════════════════════ */
+
+.ks-data-saver {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  color: var(--color-text-primary, #0f172a);
+}
+
+.ks-data-saver__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ks-data-saver__title {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--color-text-primary, #0f172a);
+}
+
+.ks-data-saver__sub {
+  font-size: 0.8rem;
+  color: var(--color-text-secondary, #64748b);
+  margin-top: 2px;
+}
+
+.ks-data-saver__row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.ks-data-saver__opt {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--color-border, rgba(111, 88, 255, 0.2));
+  background: var(--color-bg-soft, rgba(255, 255, 255, 0.04));
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s ease;
+  font: inherit;
+  color: var(--color-text-primary, #0f172a);
+}
+
+.ks-data-saver__opt:hover {
+  border-color: var(--color-primary, #6f58ff);
+  background: rgba(111, 88, 255, 0.08);
+}
+
+.ks-data-saver__opt.is-active {
+  border-color: var(--color-primary, #6f58ff);
+  background: rgba(111, 88, 255, 0.14);
+  box-shadow: 0 0 0 2px rgba(111, 88, 255, 0.25);
+}
+
+.ks-data-saver__opt-label {
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--color-text-primary, #0f172a);
+}
+
+.ks-data-saver__opt-hint {
+  font-size: 0.72rem;
+  color: var(--color-text-secondary, #64748b);
+  opacity: 0.9;
+}
+
+/* Dark theme specific override (glass panels) */
+@media (prefers-color-scheme: dark) {
+  .ks-data-saver__opt {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: rgba(255, 255, 255, 0.12);
+  }
+  .ks-data-saver__opt:hover {
+    background: rgba(111, 88, 255, 0.14);
+    border-color: rgba(111, 88, 255, 0.5);
+  }
+  .ks-data-saver__opt.is-active {
+    background: rgba(111, 88, 255, 0.22);
+    border-color: rgba(111, 88, 255, 0.7);
+  }
+}
+
+/* Mobile — pile verticale pour éviter la coupure */
+@media (max-width: 480px) {
+  .ks-data-saver__row {
+    grid-template-columns: 1fr;
+  }
+}

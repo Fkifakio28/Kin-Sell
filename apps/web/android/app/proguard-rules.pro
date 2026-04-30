@@ -5,17 +5,50 @@
 # For more details, see
 #   http://developer.android.com/guide/developing/tools/proguard.html
 
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
+# ── Capacitor ──
+-keep class com.getcapacitor.** { *; }
+-keep @com.getcapacitor.annotation.CapacitorPlugin class * { *; }
+-keepclassmembers class * {
+    @com.getcapacitor.PluginMethod <methods>;
+}
+-dontwarn com.getcapacitor.**
 
-# Uncomment this to preserve the line number information for
-# debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
+# ── Kin-Sell native plugins ──
+-keep class com.kinsell.app.** { *; }
+-keepclassmembers class com.kinsell.app.** { *; }
 
-# If you keep the line number information, uncomment this to
-# hide the original source file name.
-#-renamesourcefileattribute SourceFile
+# ── Firebase / FCM ──
+-keep class com.google.firebase.** { *; }
+-keep class com.google.android.gms.** { *; }
+-dontwarn com.google.firebase.**
+-dontwarn com.google.android.gms.**
+
+# ── Cordova plugins (purchase) ──
+-keep class org.apache.cordova.** { *; }
+-keep class cordova.plugin.** { *; }
+-keep class com.android.billingclient.** { *; }
+-dontwarn org.apache.cordova.**
+-dontwarn com.android.billingclient.**
+
+# ── WebView JS interface ──
+-keepclassmembers class * {
+    @android.webkit.JavascriptInterface <methods>;
+}
+
+# ── Services & Receivers (instanciés par reflection par Android) ──
+-keep public class * extends android.app.Service
+-keep public class * extends android.content.BroadcastReceiver
+-keep public class * extends android.app.Activity
+
+# ── JSON / data classes utilisées par FCM payloads ──
+-keepclassmembers class * implements java.io.Serializable {
+    static final long serialVersionUID;
+    !static !transient <fields>;
+}
+
+# ── Annotations utilisées en runtime ──
+-keepattributes *Annotation*, Signature, InnerClasses, EnclosingMethod
+
+# Keep line numbers for crash reports
+-keepattributes SourceFile,LineNumberTable
+-renamesourcefileattribute SourceFile

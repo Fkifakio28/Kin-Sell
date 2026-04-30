@@ -4,8 +4,10 @@ import { requireAuth, type AuthenticatedRequest } from "../../shared/auth/auth-m
 import { asyncHandler } from "../../shared/utils/async-handler.js";
 import { rateLimit, RateLimits } from "../../shared/middleware/rate-limit.middleware.js";
 import { requireNoRestriction } from "../../shared/middleware/trust-guard.middleware.js";
+import { spamGuard } from "../../shared/middleware/spam-guard.middleware.js";
 import * as messagingService from "./messaging.service.js";
 import * as callLogService from "./call-log.service.js";
+import { resolveCallStateForUser } from "./call-state.js";
 
 const router = Router();
 
@@ -80,6 +82,7 @@ router.post(
   requireAuth,
   requireNoRestriction("MESSAGE_LIMIT"),
   rateLimit(RateLimits.MESSAGE),
+  spamGuard("MESSAGE"),
   asyncHandler(async (req, res) => {
     const { userId } = (req as AuthenticatedRequest).auth!;
     const conversationId = req.params.id;
@@ -148,6 +151,39 @@ router.get(
     const cursor = typeof req.query.cursor === "string" ? req.query.cursor : undefined;
     const logs = await callLogService.getUserCallLogs(userId, cursor);
     res.json({ callLogs: logs });
+  })
+);
+
+/* ── GET /messaging/calls/:callId/state ──
+ * Étape 3 : permet aux clients (web, push, native) de valider qu'un appel
+ * référencé par une notif/URL/FCM est bien actif côté serveur avant
+ * d'afficher la sonnerie. Réservé aux participants. */
+router.get(
+  "/calls/:callId/state",
+  requireAuth,
+  rateLimit(RateLimits.CALL_STATE),
+  asyncHandler(async (req, res) => {
+    const { userId } = (req as AuthenticatedRequest).auth!;
+    const callId = String(req.params.callId || "");
+    // Lookup persisté chargé seulement si l'entry mémoire est absente —
+    // résolu après pour rester pur, mais pratique d'avoir tout en amont.
+    const log = callId && callId.length <= 64 ? await callLogService.getCallLogById(callId) : null;
+    const result = resolveCallStateForUser(callId, userId, log);
+    switch (result.kind) {
+      case "invalid":
+        res.status(400).json({ error: "callId_invalid" });
+        return;
+      case "forbidden":
+        res.status(403).json({ error: "not_participant" });
+        return;
+      case "not_found":
+        res.status(404).json({ error: "call_not_found", isActive: false, now: result.now });
+        return;
+      case "live":
+      case "log":
+        res.json({ ...result.payload, now: result.now });
+        return;
+    }
   })
 );
 

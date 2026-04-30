@@ -14,6 +14,7 @@
 
 import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
+import { logger } from "../../shared/logger.js";
 import { getMarketDemand } from "../../shared/market/market-shared.js";
 import {
   getMarketEnrichment,
@@ -25,6 +26,8 @@ import {
   clearSubscriptionCache,
 } from "../../shared/billing/subscription-guard.js";
 import { sendPushToUser } from "../notifications/push.service.js";
+import { getExternalPriceIntel, getBlendedInsight } from "../knowledge-base/knowledge-base.service.js";
+import { getFusedIntelligence } from "../external-intel/external-intelligence-fusion.service.js";
 
 // ─────────────────────────────────────────────
 // Types
@@ -516,6 +519,62 @@ export async function getBuyerNegotiationHint(
     };
   } catch { /* enrichment non critique */ }
 
+  // ── Knowledge Base enrichissement (best-effort) ──
+  try {
+    const blended = await getBlendedInsight(listing.category, "CD", listing.city ?? undefined);
+    if (blended && blended.confidence > 40) {
+      // Ajuster les seuils avec les données KB
+      const kbPriceRatio = listing.priceUsdCents > 0
+        ? blended.blendedPrice / listing.priceUsdCents
+        : 1;
+      // Si le prix KB est nettement inférieur, l'acheteur peut être plus agressif
+      if (kbPriceRatio < 0.85) {
+        adaptiveMaxDiscount = Math.min(40, adaptiveMaxDiscount + 5);
+        adaptiveFloor = Math.max(55, adaptiveFloor - 5);
+      }
+      // Si le prix KB est supérieur, le vendeur est déjà compétitif
+      if (kbPriceRatio > 1.1) {
+        adaptiveMaxDiscount = Math.max(10, adaptiveMaxDiscount - 5);
+        adaptiveFloor = Math.min(85, adaptiveFloor + 5);
+      }
+      // Enrichir l'insight avec le facteur saisonnier
+      if (blended.seasonalFactor > 1.1 && enrichmentData) {
+        enrichmentData.externalInsight =
+          (enrichmentData.externalInsight ?? "") +
+          ` 📅 Période de forte demande saisonnière (×${blended.seasonalFactor.toFixed(1)}).`;
+      }
+    }
+  } catch { /* KB non critique */ }
+
+  // ── External Intelligence fusion (best-effort) ──
+  try {
+    const fused = await getFusedIntelligence(listing.category, "CD", listing.city ?? undefined);
+    if (fused.confidence > 30) {
+      // Ajuster seuils selon score d'opportunité
+      if (fused.opportunityScore > 70) {
+        // Marché chaud = vendeur en position de force
+        adaptiveMaxDiscount = Math.max(10, adaptiveMaxDiscount - 3);
+        adaptiveFloor = Math.min(85, adaptiveFloor + 3);
+      } else if (fused.opportunityScore < 30) {
+        // Marché froid = acheteur peut négocier plus
+        adaptiveMaxDiscount = Math.min(35, adaptiveMaxDiscount + 3);
+        adaptiveFloor = Math.max(60, adaptiveFloor - 3);
+      }
+      // Ajuster selon pricingAdjustment
+      if (fused.pricingAdjustmentPercent > 5) {
+        adaptiveFloor = Math.min(90, adaptiveFloor + 2);
+      } else if (fused.pricingAdjustmentPercent < -5) {
+        adaptiveFloor = Math.max(55, adaptiveFloor - 2);
+      }
+      // Enrichir insight avec triggers actifs
+      if (fused.activeTriggers.length > 0 && enrichmentData) {
+        const triggerSummary = fused.activeTriggers.map((t) => t.explanation).join(" | ");
+        enrichmentData.externalInsight =
+          (enrichmentData.externalInsight ?? "") + ` 🌍 ${triggerSummary}`;
+      }
+    }
+  } catch { /* external intel non critique */ }
+
   const originalPrice = listing.priceUsdCents;
   const suggestedDiscount = Math.min(avgDiscountPercent, adaptiveMaxDiscount);
   const suggestedOfferUsdCents = Math.round(originalPrice * (1 - suggestedDiscount / 100));
@@ -532,8 +591,12 @@ export async function getBuyerNegotiationHint(
   }
 
   // Message suggéré — adapté au contexte marché
+  // Si l'acheteur n'a pas encore saisi de prix, on utilise le prix suggéré par l'IA
+  // pour éviter l'affichage "0.00$" dans le message.
+  const effectivePriceForMessage =
+    proposedPriceUsdCents > 0 ? proposedPriceUsdCents : suggestedOfferUsdCents;
   const discount = Math.round(
-    ((originalPrice - proposedPriceUsdCents) / originalPrice) * 100
+    ((originalPrice - effectivePriceForMessage) / originalPrice) * 100
   );
   let messageSuggestion: string;
   const isHotMarket = enrichmentData && enrichmentData.marketHeatScore > 60;
@@ -541,16 +604,16 @@ export async function getBuyerNegotiationHint(
 
   if (discount <= 5) {
     messageSuggestion = isHotMarket
-      ? `Bonjour, cet article m'intéresse beaucoup. Je propose ${(proposedPriceUsdCents / 100).toFixed(2)}$ — prêt à finaliser immédiatement.`
-      : `Bonjour, je suis très intéressé par cet article. Seriez-vous d'accord pour ${(proposedPriceUsdCents / 100).toFixed(2)}$ ? Je suis prêt à conclure rapidement.`;
+      ? `Bonjour, cet article m'intéresse beaucoup. Je propose ${(effectivePriceForMessage / 100).toFixed(2)}$ — prêt à finaliser immédiatement.`
+      : `Bonjour, je suis très intéressé par cet article. Seriez-vous d'accord pour ${(effectivePriceForMessage / 100).toFixed(2)}$ ? Je suis prêt à conclure rapidement.`;
   } else if (discount <= 15) {
     messageSuggestion = isFlexible
-      ? `Bonjour, les prix dans cette catégorie semblent flexibles. Je propose ${(proposedPriceUsdCents / 100).toFixed(2)}$ — c'est un prix juste pour les deux parties.`
-      : `Bonjour, je vous propose ${(proposedPriceUsdCents / 100).toFixed(2)}$ pour cet article. Votre prix est raisonnable mais j'ai quelques contraintes budgétaires.`;
+      ? `Bonjour, les prix dans cette catégorie semblent flexibles. Je propose ${(effectivePriceForMessage / 100).toFixed(2)}$ — c'est un prix juste pour les deux parties.`
+      : `Bonjour, je vous propose ${(effectivePriceForMessage / 100).toFixed(2)}$ pour cet article. Votre prix est raisonnable mais j'ai quelques contraintes budgétaires.`;
   } else {
     messageSuggestion = isHotMarket
-      ? `Bonjour, malgré la forte demande, je propose ${(proposedPriceUsdCents / 100).toFixed(2)}$. Acheteur sérieux, paiement rapide garanti.`
-      : `Bonjour, je vous propose ${(proposedPriceUsdCents / 100).toFixed(2)}$. Je suis sérieux et disponible pour conclure rapidement si vous acceptez.`;
+      ? `Bonjour, malgré la forte demande, je propose ${(effectivePriceForMessage / 100).toFixed(2)}$. Acheteur sérieux, paiement rapide garanti.`
+      : `Bonjour, je vous propose ${(effectivePriceForMessage / 100).toFixed(2)}$. Je suis sérieux et disponible pour conclure rapidement si vous acceptez.`;
   }
 
   // Insight contextuel — enrichi avec données marché
@@ -866,7 +929,7 @@ export async function runBatchAutoNegotiation(): Promise<BatchAutoResult> {
       expiresAt: { gt: new Date() },
     },
     include: {
-      listing: { select: { priceUsdCents: true, stockQuantity: true, category: true, isNegotiable: true } },
+      listing: { select: { priceUsdCents: true, stockQuantity: true, category: true, isNegotiable: true, autoNegoRules: true } },
       offers: { orderBy: { createdAt: "desc" }, take: 1 },
       seller: { select: { id: true, trustScore: true } },
       buyer: { select: { id: true, trustScore: true, _count: { select: { buyerOrders: true } } } },
@@ -874,15 +937,23 @@ export async function runBatchAutoNegotiation(): Promise<BatchAutoResult> {
     take: 100,
   });
 
-  // Récupérer la config IA Marchand
+  // Récupérer la config IA Marchand (kill-switch admin global).
+  // Si le record n'existe pas encore (prod sans seed), on continue avec les defaults
+  // au lieu de silently skip tout le batch — sinon la boutique auto ne fonctionne jamais.
   const agentConfig = await prisma.aiAgent.findFirst({
-    where: { name: "IA_MARCHAND", enabled: true },
+    where: { name: "IA_MARCHAND" },
   });
-  if (!agentConfig) return result;
+  if (agentConfig && agentConfig.enabled === false) {
+    logger.warn("[IA_MARCHAND] Agent désactivé par l'admin — batch auto-négociation skippé");
+    return result;
+  }
 
-  const config = (agentConfig.config ?? {}) as Record<string, unknown>;
+  const config = (agentConfig?.config ?? {}) as Record<string, unknown>;
   const autoEnabled = config.autoNegotiationEnabled !== false;
-  if (!autoEnabled) return result;
+  if (!autoEnabled) {
+    logger.warn("[IA_MARCHAND] autoNegotiationEnabled=false — batch auto-négociation skippé");
+    return result;
+  }
 
   // Réinitialiser le cache abonnements pour ce cycle batch
   clearSubscriptionCache();
@@ -903,12 +974,42 @@ export async function runBatchAutoNegotiation(): Promise<BatchAutoResult> {
   for (const nego of pendingNegos) {
     if (!nego.listing.isNegotiable) continue;
 
-    // ── Vérifier que le vendeur a accès IA_MERCHANT (plan ou addon) ──
-    if (!(await checkIaAccessOrLog(nego.sellerUserId, "IA_MERCHANT", "runBatchAutoNegotiation"))) continue;
+    // ── Vérifier que le vendeur a accès IA_MERCHANT_AUTO (plan payant ou addon) ──
+    if (!(await checkIaAccessOrLog(nego.sellerUserId, "IA_MERCHANT_AUTO", "runBatchAutoNegotiation"))) continue;
 
     try {
-      // Ajustement dynamique des règles selon le contexte
-      const dynamicRules = { ...defaultRules };
+      // ── Règles per-listing configurées par l'utilisateur (Boutique Auto) ──
+      // Si user a désactivé explicitement l'auto pour ce listing → skip
+      // Sinon on merge ses règles avec les defaults globaux
+      const listingRules = (nego.listing as any).autoNegoRules as {
+        enabled?: boolean;
+        minFloorPercent?: number;
+        maxAutoDiscountPercent?: number;
+        preferredCounterPercent?: number;
+        firmness?: "FLEXIBLE" | "BALANCED" | "FIRM";
+      } | null | undefined;
+
+      if (listingRules && listingRules.enabled === false) {
+        continue; // user a explicitement désactivé la boutique auto pour cet article
+      }
+
+      const dynamicRules: AutoNegotiationRules = {
+        enabled: true,
+        minFloorPercent: listingRules?.minFloorPercent ?? defaultRules.minFloorPercent,
+        maxAutoDiscountPercent: listingRules?.maxAutoDiscountPercent ?? defaultRules.maxAutoDiscountPercent,
+        preferredCounterPercent: listingRules?.preferredCounterPercent ?? defaultRules.preferredCounterPercent,
+        prioritizeSpeed: defaultRules.prioritizeSpeed,
+        stockUrgencyBoost: defaultRules.stockUrgencyBoost,
+      };
+
+      // Firmness configurée par l'user → ajuste les seuils
+      if (listingRules?.firmness === "FIRM") {
+        dynamicRules.maxAutoDiscountPercent = Math.max(5, dynamicRules.maxAutoDiscountPercent - 5);
+        dynamicRules.preferredCounterPercent = Math.min(98, dynamicRules.preferredCounterPercent + 3);
+      } else if (listingRules?.firmness === "FLEXIBLE") {
+        dynamicRules.maxAutoDiscountPercent = Math.min(40, dynamicRules.maxAutoDiscountPercent + 5);
+        dynamicRules.preferredCounterPercent = Math.max(70, dynamicRules.preferredCounterPercent - 3);
+      }
 
       // ── Enrichissement marché adaptatif ──
       let catEnrichment = enrichmentCache.get(nego.listing.category);

@@ -121,6 +121,14 @@ export const homeMobileSteps: TutorialStep[] = [
     placement: "top",
   },
   {
+    id: "hm-longpress",
+    selector: ".hm-market-card",
+    title: "Appui long — détails rapides",
+    description:
+      "Maintenez votre doigt appuyé sur une carte pour afficher la description complète, le prix et les boutons Marchander / Ajouter au panier.",
+    placement: "auto",
+  },
+  {
     id: "hm-create",
     selector: ".hm-bnav-create",
     title: "Publier une annonce",
@@ -173,6 +181,14 @@ export const explorerMobileSteps: TutorialStep[] = [
     title: "Carte article",
     description:
       "Photo, prix et vendeur en un coup d'œil. Ajoutez au panier ou négociez directement.",
+    placement: "auto",
+  },
+  {
+    id: "exm-longpress",
+    selector: ".ex-article-card",
+    title: "Appui long — détails rapides",
+    description:
+      "Maintenez appuyé sur un article pour voir sa description complète et accéder aux boutons Marchander et Ajouter au panier.",
     placement: "auto",
   },
   {
@@ -361,6 +377,429 @@ export const adminDashboardSteps: TutorialStep[] = [
     title: "Table des utilisateurs",
     description:
       "Liste paginée de tous les comptes. Actions : voir, suspendre, modifier le rôle.",
+    placement: "top",
+  },
+];
+
+/* ═══════════════════════════════════════════════════════
+   USER DASHBOARD — Vue d'ensemble
+   ═══════════════════════════════════════════════════════ */
+
+export const userDashboardSteps: TutorialStep[] = [
+  {
+    id: "ud-nav",
+    selector: ".ud-nav",
+    title: "Menu privé",
+    description:
+      "Naviguez entre vos espaces. La section active est surlignée et vos actions clés sont au bouton violet.",
+    placement: "right",
+  },
+  {
+    id: "ud-profile",
+    selector: ".ud-profile-card",
+    title: "Profil & rôle",
+    description:
+      "Vérifiez votre identité et votre rôle. Le halo doré vous aide à repérer les zones importantes.",
+    placement: "right",
+  },
+  {
+    id: "ud-kpi",
+    selector: ".ud-ov-kpi-row",
+    title: "Indicateurs rapides",
+    description:
+      "Ventes, achats, panier, articles. Touchez une carte pour aller directement à la section.",
+    placement: "bottom",
+  },
+  {
+    id: "ud-account",
+    selector: ".ud-ov-card--account",
+    title: "Mon compte Kin‑Sell",
+    description:
+      "Plan, ID et taux de complétion. La barre violette montre votre progression.",
+    placement: "bottom",
+  },
+  {
+    id: "ud-quick",
+    selector: ".ud-ov-quick-grid",
+    title: "Actions rapides",
+    description:
+      "Publier, messagerie, panier et explorer en un clic. Les boutons principaux sont violets.",
+    placement: "top",
+  },
+  {
+    id: "ud-history",
+    selector: ".ud-ov-table",
+    title: "Historique récent",
+    description:
+      "Cliquez une ligne pour ouvrir le détail d'une transaction.",
+    placement: "top",
+  },
+  {
+    id: "ud-completion",
+    selector: ".ud-ov-completion",
+    title: "Compléter le profil",
+    description:
+      "Plus la barre violette est pleine, plus votre profil inspire confiance.",
+    placement: "top",
+  },
+];
+
+/* ═══════════════════════════════════════════════════════
+   USER — Espace de Vente
+   ═══════════════════════════════════════════════════════ */
+
+export const userSalesSteps: TutorialStep[] = [
+  {
+    id: "us-topbar",
+    selector: ".ud-ord-topbar",
+    title: "Espace de vente",
+    description:
+      "Vue globale des commandes. Les badges colorés indiquent l'état (en cours, livré, annulé).",
+    placement: "bottom",
+  },
+  {
+    id: "us-tabs",
+    selector: ".ud-tx-tabs",
+    title: "En cours / Historique",
+    description:
+      "Basculez entre vos transactions actives et l'historique.",
+    placement: "bottom",
+  },
+  {
+    id: "us-card",
+    selector: ".ud-neg-card",
+    title: "Carte transaction",
+    description:
+      "Chaque carte représente une négociation ou une commande. Les infos clés sont regroupées ici.",
+    placement: "top",
+  },
+  {
+    id: "us-actions",
+    selector: ".ud-sord-actions",
+    title: "Actions vendeur",
+    description:
+      "Passez à l'étape suivante, ouvrez le détail ou générez le QR/Code. Le bouton violet est prioritaire.",
+    placement: "top",
+  },
+];
+
+/* ═══════════════════════════════════════════════════════
+   BUSINESS DASHBOARD V2 — Complet
+   ═══════════════════════════════════════════════════════ */
+
+export const businessDashboardStepsV2: TutorialStep[] = [
+  {
+    id: "bz-nav",
+    selector: ".ud-nav",
+    title: "Menu Business",
+    description:
+      "Chaque section gère un aspect de votre boutique. Le violet indique l'action principale.",
+    placement: "right",
+  },
+  {
+    id: "bz-kpis",
+    selector: ".ud-stats-row",
+    title: "KPIs essentiels",
+    description:
+      "Revenus, ventes du mois, commandes actives et panier moyen.",
+    placement: "bottom",
+  },
+  {
+    id: "bz-orders",
+    selector: ".ud-panel--transactions",
+    title: "Commandes récentes",
+    description:
+      "Accédez aux détails et aux statuts. Cliquez « Voir tout » pour gérer.",
+    placement: "top",
+  },
+  {
+    id: "bz-analytics",
+    selector: ".bz-analytics-mini",
+    title: "Mini‑analytics",
+    description:
+      "Aperçu rapide des articles actifs, clients et commandes.",
+    placement: "top",
+  },
+  {
+    id: "bz-products",
+    selector: ".bz-product-list",
+    title: "Produits clés",
+    description:
+      "Liste de vos articles visibles. Stock faible signalé.",
+    placement: "top",
+  },
+  {
+    id: "bz-actions",
+    selector: ".ud-actions-grid",
+    title: "Actions rapides",
+    description:
+      "Publier un produit, un service, ou gérer les commandes.",
+    placement: "bottom",
+  },
+];
+
+/* ═══════════════════════════════════════════════════════
+   BUSINESS — Commandes
+   ═══════════════════════════════════════════════════════ */
+
+export const businessOrdersSteps: TutorialStep[] = [
+  {
+    id: "bo-topbar",
+    selector: ".ud-ord-topbar",
+    title: "Gestion des commandes",
+    description:
+      "Vue d'ensemble des statuts. Les badges colorés indiquent le progrès.",
+    placement: "bottom",
+  },
+  {
+    id: "bo-panel",
+    selector: ".ud-commerce-panel",
+    title: "Liste des commandes",
+    description:
+      "Chaque carte correspond à une commande client.",
+    placement: "top",
+  },
+  {
+    id: "bo-filter",
+    selector: ".ud-neg-filter-select",
+    title: "Filtrer par statut",
+    description:
+      "Affinez pour traiter plus vite les commandes urgentes.",
+    placement: "bottom",
+  },
+  {
+    id: "bo-card",
+    selector: ".ud-neg-card",
+    title: "Carte commande",
+    description:
+      "Détails client, produits et montant.",
+    placement: "top",
+  },
+  {
+    id: "bo-actions",
+    selector: ".ud-sord-actions",
+    title: "Actions vendeur",
+    description:
+      "Passez à l'étape suivante ou partagez le QR/Code.",
+    placement: "top",
+  },
+];
+
+/* ═══════════════════════════════════════════════════════
+   PANIER — Rempli
+   ═══════════════════════════════════════════════════════ */
+
+export const cartSteps: TutorialStep[] = [
+  {
+    id: "cart-hero",
+    selector: ".cart-hero",
+    title: "Votre panier",
+    description:
+      "Tout ce que vous avez sélectionné est ici.",
+    placement: "bottom",
+  },
+  {
+    id: "cart-summary",
+    selector: ".cart-summary-row",
+    title: "Résumé",
+    description:
+      "Nombre d'articles et total. Le badge violet attire l'œil.",
+    placement: "bottom",
+  },
+  {
+    id: "cart-seller",
+    selector: ".cart-seller-header",
+    title: "Groupé par vendeur",
+    description:
+      "Les articles sont regroupés par boutique pour simplifier la livraison.",
+    placement: "bottom",
+  },
+  {
+    id: "cart-item",
+    selector: ".cart-item",
+    title: "Carte article",
+    description:
+      "Produit, prix, état du marchandage. Le contour doré indique l'élément actif.",
+    placement: "top",
+  },
+  {
+    id: "cart-qty",
+    selector: ".cart-qty-group",
+    title: "Quantité",
+    description:
+      "Utilisez + et − pour ajuster la quantité.",
+    placement: "top",
+  },
+  {
+    id: "cart-checkout",
+    selector: ".cart-checkout",
+    title: "Validation",
+    description:
+      "Vérifiez le total et cliquez sur le bouton violet pour valider.",
+    placement: "left",
+  },
+];
+
+/* ═══════════════════════════════════════════════════════
+   PANIER — Vide
+   ═══════════════════════════════════════════════════════ */
+
+export const cartEmptySteps: TutorialStep[] = [
+  {
+    id: "cart-empty",
+    selector: ".cart-empty",
+    title: "Panier vide",
+    description:
+      "Ajoutez des articles depuis l'Explorer ou So‑Kin.",
+    placement: "bottom",
+  },
+  {
+    id: "cart-actions",
+    selector: ".cart-actions-row",
+    title: "Explorer maintenant",
+    description:
+      "Le bouton violet vous ramène vers les annonces.",
+    placement: "bottom",
+  },
+];
+
+/* -------------------------------------------------------
+   USER � Articles (espace de vente : publication & gestion)
+   ------------------------------------------------------- */
+
+export const userArticlesSteps: TutorialStep[] = [
+  {
+    id: "ua-topbar",
+    selector: ".ud-art-topbar",
+    title: "Votre espace de vente",
+    description:
+      "C'est ici que vous g�rez tout ce que vous vendez : produits et services. En un coup d'�il, vous voyez le nombre d'articles actifs, inactifs et archiv�s.",
+    placement: "bottom",
+  },
+  {
+    id: "ua-stats",
+    selector: ".ud-art-stats-inline",
+    title: "Statistiques rapides",
+    description:
+      "Les chips color�s vous indiquent combien de vos annonces sont visibles (vert) vs hors-ligne. Un article INACTIF n'appara�t plus aux acheteurs.",
+    placement: "bottom",
+  },
+  {
+    id: "ua-publish",
+    selector: ".ud-art-publish-btn",
+    title: "Publier un article",
+    description:
+      "Cliquez sur + pour cr�er une nouvelle annonce en quelques �tapes : titre, cat�gorie, prix, photos et localisation. C'est gratuit !",
+    placement: "left",
+  },
+  {
+    id: "ua-filters",
+    selector: ".ud-art-filters",
+    title: "Filtrer vos articles",
+    description:
+      "Affichez uniquement les actifs, inactifs, archiv�s ou en promo pour retrouver rapidement un article � modifier.",
+    placement: "bottom",
+  },
+  {
+    id: "ua-list",
+    selector: ".ud-art-list",
+    title: "Liste de vos annonces",
+    description:
+      "Chaque ligne est un article : image, titre, type, prix et statut. Les actions rapides sont � droite pour modifier, promouvoir ou d�sactiver.",
+    placement: "top",
+  },
+];
+
+/* -------------------------------------------------------
+   BUSINESS � Produits (catalogue)
+   ------------------------------------------------------- */
+
+export const businessProductsSteps: TutorialStep[] = [
+  {
+    id: "bp-topbar",
+    selector: ".bz-art-topbar",
+    title: "Catalogue produits",
+    description:
+      "Votre espace de vente produits. Stock, statut et prix sont g�r�s ici. Les acheteurs voient uniquement les produits ACTIFS.",
+    placement: "bottom",
+  },
+  {
+    id: "bp-stats",
+    selector: ".bz-art-stats-inline",
+    title: "Compteurs du catalogue",
+    description:
+      "Actifs / inactifs / archiv�s. Pensez � r�activer vos articles hors-ligne pour qu'ils reviennent dans les r�sultats.",
+    placement: "bottom",
+  },
+  {
+    id: "bp-publish",
+    selector: ".bz-art-publish-btn",
+    title: "Ajouter un produit",
+    description:
+      "Cr�ez un nouveau produit en 3 �tapes (infos, prix/stock, m�dias) ou importez-en plusieurs � la fois via CSV / JSON / XML.",
+    placement: "left",
+  },
+  {
+    id: "bp-filters",
+    selector: ".bz-art-filters",
+    title: "Filtres catalogue",
+    description:
+      "Filtrez par statut ou affichez uniquement vos produits en PROMO pour ajuster vos campagnes en un clic.",
+    placement: "bottom",
+  },
+  {
+    id: "bp-grid",
+    selector: ".bz-art-grid",
+    title: "Vos produits",
+    description:
+      "Chaque carte affiche visuel, statut, prix et stock. Cliquez pour �diter, d�sactiver, archiver ou lancer une promo.",
+    placement: "top",
+  },
+];
+
+/* -------------------------------------------------------
+   BUSINESS � Services
+   ------------------------------------------------------- */
+
+export const businessServicesSteps: TutorialStep[] = [
+  {
+    id: "bs-topbar",
+    selector: ".bz-art-topbar",
+    title: "Vos services",
+    description:
+      "L'espace d�di� � vos prestations. D�finissez une description claire, une zone d'intervention et votre tarif pour �tre trouv� par les clients.",
+    placement: "bottom",
+  },
+  {
+    id: "bs-stats",
+    selector: ".bz-art-stats-inline",
+    title: "Visibilit� de vos services",
+    description:
+      "Nombre de services actifs, en pause ou archiv�s. Un service ACTIF appara�t dans l'Explorer et sur votre vitrine.",
+    placement: "bottom",
+  },
+  {
+    id: "bs-publish",
+    selector: ".bz-art-publish-btn",
+    title: "Proposer un service",
+    description:
+      "Cliquez pour cr�er un nouveau service. Titre clair, cat�gorie pr�cise et description d�taill�e = plus de contacts.",
+    placement: "left",
+  },
+  {
+    id: "bs-filters",
+    selector: ".bz-art-filters",
+    title: "Filtrer par statut",
+    description:
+      "Affichez uniquement les services actifs pour vous concentrer sur ce qui est visible aupr�s des clients.",
+    placement: "bottom",
+  },
+  {
+    id: "bs-grid",
+    selector: ".bz-art-grid",
+    title: "Votre grille de services",
+    description:
+      "Chaque carte = un service. �ditez, d�sactivez ou boostez directement depuis la carte pour gagner du temps.",
     placement: "top",
   },
 ];

@@ -2,6 +2,8 @@ import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
 import { hashPassword, verifyPassword } from "../../shared/auth/password.js";
 import * as messagingService from "../messaging/messaging.service.js";
+import { sendPushToUser, sendPushToUsers } from "../notifications/push.service.js";
+import { env } from "../../config/env.js";
 
 // ── Admin Level → Default Permissions mapping ──
 const LEVEL_PERMISSIONS: Record<string, string[]> = {
@@ -355,6 +357,180 @@ function generateSlug(title: string): string {
     .slice(0, 80) + "-" + Date.now().toString(36);
 }
 
+type GeneratedAnnouncement = {
+  title: string;
+  excerpt: string;
+  content: string;
+  category: string;
+  tags: string[];
+  mediaKind: "image" | "video" | "gif";
+};
+
+const FALLBACK_ANNOUNCEMENTS: GeneratedAnnouncement[] = [
+  { title: "Kin-Sell 2026: notre ambition de connecter les peuples", excerpt: "Une vision claire: commerce local, confiance et inclusion numerique.", content: "Kin-Sell est ne avec une mission simple: relier les communautes, les talents et les marches. Notre ambition 2026 renforce cette direction avec une plateforme plus rapide, plus sure et plus humaine, pensee pour Kinshasa puis l'Afrique francophone.", category: "annonce", tags: ["vision", "ambition", "kinshasa"], mediaKind: "image" },
+  { title: "So-Kin evolue: plus de portee pour vos publications", excerpt: "Nouvelles optimisations de diffusion et d'engagement.", content: "Nous ameliorons la visibilite des publications utiles et locales grace a des signaux de pertinence plus precis. Objectif: donner plus de chances aux createurs et commercants qui apportent une vraie valeur a la communaute.", category: "technologie", tags: ["sokin", "engagement", "algorithme"], mediaKind: "image" },
+  { title: "Live Appel: une experience audio/video plus fluide", excerpt: "Stabilite reseau et meilleure qualite d'appel dans les conditions reelles.", content: "Le moteur d'appel live beneficie de plusieurs ameliorations: gestion des variations reseau, meilleure reprise apres coupure et latence reduite. Ces avancees renforcent l'experience de vente, de support et de negociation en direct.", category: "technologie", tags: ["webrtc", "appel", "live"], mediaKind: "video" },
+  { title: "Sessions multiples: rester connecte sur plusieurs appareils", excerpt: "Continuite d'usage entre mobile et web.", content: "Kin-Sell prepare un mode session multiple pour une continuite parfaite entre vos appareils. Vous pourrez suivre vos echanges, vos notifications et votre activite business sans interruption.", category: "actualites", tags: ["session", "mobile", "web"], mediaKind: "gif" },
+  { title: "Presence intelligente: savoir qui est disponible", excerpt: "Une presence temps reel plus fiable pour la messagerie.", content: "Le systeme de presence est optimise pour refleter en temps reel la disponibilite des utilisateurs. Cette evolution reduit les frictions dans les discussions commerciales et ameliore le taux de reponse.", category: "technologie", tags: ["presence", "messagerie", "temps-reel"], mediaKind: "image" },
+  { title: "Objectif iOS: une experience native alignee Android", excerpt: "Parite fonctionnelle progressive entre plateformes.", content: "Notre feuille de route iOS vise une experience complete: notifications avancees, appels integres et performance mobile optimisee. Kin-Sell veut offrir la meme qualite d'usage a toute la communaute.", category: "annonce", tags: ["ios", "mobile", "roadmap"], mediaKind: "image" },
+  { title: "APK renforce: notifications riches et appels plein ecran", excerpt: "La version Android monte en puissance.", content: "Sur Android APK, Kin-Sell propose des notifications riches par type d'evenement et des appels entrants visibles meme ecran verrouille. Ces ameliorations rapprochent l'experience des meilleurs standards de messagerie.", category: "technologie", tags: ["apk", "notifications", "calls"], mediaKind: "video" },
+  { title: "Deploiement VPS: scalabilite et resilience", excerpt: "Une architecture plus robuste pour la croissance.", content: "Le socle de deploiement VPS a ete consolide pour mieux absorber les pics d'activite. Nous investissons dans la resilience, l'observabilite et l'automatisation pour garantir un service fiable 24/7.", category: "technologie", tags: ["vps", "deploy", "infra"], mediaKind: "image" },
+  { title: "Le debut de Kin-Sell: construire avec la communaute", excerpt: "Des bases solides nees du terrain.", content: "Depuis les debuts, Kin-Sell evolue au contact des besoins reels des vendeurs, acheteurs et entrepreneurs. Chaque iteration traduit un retour concret de la communaute.", category: "actualites", tags: ["histoire", "communaute", "produit"], mediaKind: "gif" },
+  { title: "Futures technologies: IA d'assistance commerciale", excerpt: "Plus d'aide, moins de friction dans le parcours vendeur.", content: "Nous preparons des assistants IA capables d'orienter la redaction d'annonces, d'ameliorer les visuels et de recommander des actions de croissance. L'objectif reste le meme: augmenter la reussite des utilisateurs.", category: "technologie", tags: ["ia", "assistant", "commerce"], mediaKind: "image" },
+  { title: "Kin-Sell Blog: un pont entre produit et utilisateurs", excerpt: "Transparence sur les evolutions en cours.", content: "Le blog devient un canal strategique pour partager nos priorites, nos deploiements et nos ambitions. Nous voulons expliquer ce que nous construisons et pourquoi.", category: "annonce", tags: ["blog", "transparence", "produit"], mediaKind: "image" },
+  { title: "Negociation augmentee: decisions plus rapides", excerpt: "Des outils plus clairs pour conclure efficacement.", content: "Les evolutions en cours sur la negociation visent a reduire les hesitations et accelerer les accords. Des parcours plus explicites et des signaux contextuels faciliteront les decisions des deux parties.", category: "business", tags: ["negociation", "conversion", "ux"], mediaKind: "video" },
+  { title: "Securite et confiance: priorite absolue", excerpt: "Renforcement continu des garde-fous anti-abus.", content: "Nous continuons a investir dans la securite: detection d'abus, controle de contenu et alertes intelligentes. La confiance reste la condition numero un d'un marche durable.", category: "technologie", tags: ["securite", "trust", "moderation"], mediaKind: "image" },
+  { title: "Explorer local: mieux connecter les offres de proximite", excerpt: "Plus de visibilite pour les opportunites autour de vous.", content: "L'explorer local evolue pour mieux faire remonter les annonces pertinentes pres de l'utilisateur. Cette direction soutient l'economie de proximite et les echanges plus rapides.", category: "business", tags: ["explorer", "local", "map"], mediaKind: "gif" },
+  { title: "Kin-Sell demain: commerce, contenu et collaboration", excerpt: "Une plateforme unifiee pour creer, vendre et grandir.", content: "Notre vision a moyen terme unit marketplace, social commerce et collaboration en temps reel. Kin-Sell veut devenir l'espace ou l'on decouvre, echange, construit et prospere ensemble.", category: "annonce", tags: ["futur", "ecosysteme", "croissance"], mediaKind: "image" },
+];
+
+const VIDEO_LIBRARY = [
+  "https://cdn.coverr.co/videos/coverr-programming-on-a-laptop-1579/1080p.mp4",
+  "https://cdn.coverr.co/videos/coverr-typing-on-a-laptop-1579/1080p.mp4",
+  "https://cdn.coverr.co/videos/coverr-city-lights-at-night-1565/1080p.mp4",
+  "https://cdn.coverr.co/videos/coverr-african-city-traffic-1583/1080p.mp4",
+  "https://cdn.coverr.co/videos/coverr-team-working-on-project-1577/1080p.mp4",
+];
+
+const GIF_LIBRARY = [
+  "https://media.giphy.com/media/3o7TKsQ8UQ7V6z0mYw/giphy.gif",
+  "https://media.giphy.com/media/l0MYt5jPR6QX5pnqM/giphy.gif",
+  "https://media.giphy.com/media/26tn33aiTi1jkl6H6/giphy.gif",
+  "https://media.giphy.com/media/3o6Zt481isNVuQI1l6/giphy.gif",
+  "https://media.giphy.com/media/xT9IgzoKnwFNmISR8I/giphy.gif",
+];
+
+function imageUrlFor(index: number, title: string) {
+  const seed = encodeURIComponent(`${title}-${index}`);
+  return `https://picsum.photos/seed/${seed}/1400/900`;
+}
+
+function mediaPayloadFor(post: GeneratedAnnouncement, index: number) {
+  if (post.mediaKind === "video") {
+    return {
+      coverImage: imageUrlFor(index, post.title),
+      mediaUrl: VIDEO_LIBRARY[index % VIDEO_LIBRARY.length],
+      mediaType: "video",
+      gifUrl: null as string | null,
+    };
+  }
+  if (post.mediaKind === "gif") {
+    return {
+      coverImage: imageUrlFor(index, post.title),
+      mediaUrl: null as string | null,
+      mediaType: null as string | null,
+      gifUrl: GIF_LIBRARY[index % GIF_LIBRARY.length],
+    };
+  }
+  return {
+    coverImage: imageUrlFor(index, post.title),
+    mediaUrl: null as string | null,
+    mediaType: null as string | null,
+    gifUrl: null as string | null,
+  };
+}
+
+async function generateAnnouncementsWithGemini(count: number): Promise<GeneratedAnnouncement[]> {
+  const apiKey = env.GEMINI_API_KEY;
+  if (!apiKey) {
+    return FALLBACK_ANNOUNCEMENTS.slice(0, count);
+  }
+
+  const prompt = [
+    "Tu es redacteur produit de Kin-Sell.",
+    `Genere exactement ${count} annonces blog en francais.`,
+    "Themes obligatoires: technologie, evolution, ambitions, deploiements, debuts, futur, live appel, salons, sessions multiples, presence, iOS, APK, espoir de connecter les peuples.",
+    "Retourne uniquement un JSON Array valide.",
+    "Chaque objet doit respecter ce format:",
+    "{ title, excerpt, content, category, tags, mediaKind }",
+    "Contraintes:",
+    "- mediaKind doit etre image, video ou gif",
+    "- tags: tableau de 3 a 5 tags",
+    "- content entre 60 et 140 mots",
+    "- ton inspirant, concret, oriente produit",
+  ].join("\n");
+
+  try {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: prompt }] }] }),
+      },
+    );
+
+    if (!response.ok) {
+      return FALLBACK_ANNOUNCEMENTS.slice(0, count);
+    }
+
+    const data: any = await response.json();
+    const text = data?.candidates?.[0]?.content?.parts?.map((p: any) => p?.text ?? "").join("\n") ?? "";
+    const start = text.indexOf("[");
+    const end = text.lastIndexOf("]");
+    if (start < 0 || end < 0 || end <= start) {
+      return FALLBACK_ANNOUNCEMENTS.slice(0, count);
+    }
+
+    const parsed = JSON.parse(text.slice(start, end + 1));
+    if (!Array.isArray(parsed)) {
+      return FALLBACK_ANNOUNCEMENTS.slice(0, count);
+    }
+
+    const normalized: GeneratedAnnouncement[] = parsed
+      .slice(0, count)
+      .map((item: any, idx: number) => ({
+        title: typeof item?.title === "string" && item.title.trim() ? item.title.trim() : FALLBACK_ANNOUNCEMENTS[idx % FALLBACK_ANNOUNCEMENTS.length].title,
+        excerpt: typeof item?.excerpt === "string" && item.excerpt.trim() ? item.excerpt.trim() : FALLBACK_ANNOUNCEMENTS[idx % FALLBACK_ANNOUNCEMENTS.length].excerpt,
+        content: typeof item?.content === "string" && item.content.trim() ? item.content.trim() : FALLBACK_ANNOUNCEMENTS[idx % FALLBACK_ANNOUNCEMENTS.length].content,
+        category: typeof item?.category === "string" && item.category.trim() ? item.category.trim().toLowerCase() : "annonce",
+        tags: Array.isArray(item?.tags) ? item.tags.map((t: unknown) => String(t).trim()).filter(Boolean).slice(0, 5) : FALLBACK_ANNOUNCEMENTS[idx % FALLBACK_ANNOUNCEMENTS.length].tags,
+        mediaKind: item?.mediaKind === "video" || item?.mediaKind === "gif" ? item.mediaKind : "image",
+      }));
+
+    if (normalized.length < count) {
+      const needed = count - normalized.length;
+      return [...normalized, ...FALLBACK_ANNOUNCEMENTS.slice(0, needed)];
+    }
+    return normalized;
+  } catch {
+    return FALLBACK_ANNOUNCEMENTS.slice(0, count);
+  }
+}
+
+export async function generateBlogAnnouncementsFromGemini(authorId: string, count = 15) {
+  const safeCount = Math.min(Math.max(count, 1), 30);
+  const drafts = await generateAnnouncementsWithGemini(safeCount);
+  const createdIds: string[] = [];
+
+  for (let i = 0; i < drafts.length; i += 1) {
+    const item = drafts[i];
+    const media = mediaPayloadFor(item, i);
+    const created = await createBlogPost(authorId, {
+      title: item.title,
+      content: item.content,
+      excerpt: item.excerpt,
+      coverImage: media.coverImage,
+      mediaUrl: media.mediaUrl ?? undefined,
+      mediaType: media.mediaType ?? undefined,
+      gifUrl: media.gifUrl ?? undefined,
+      category: item.category,
+      tags: item.tags,
+      language: "fr",
+      status: "PUBLISHED",
+      metaTitle: item.title,
+      metaDescription: item.excerpt,
+    });
+    createdIds.push(created.id);
+  }
+
+  return {
+    created: createdIds.length,
+    ids: createdIds,
+    source: env.GEMINI_API_KEY ? "gemini+fallback" : "fallback",
+  };
+}
+
 export const listBlogPosts = async (params: {
   page?: number; limit?: number; status?: string;
   category?: string; search?: string; language?: string;
@@ -483,6 +659,21 @@ export const createBlogPost = async (authorId: string, data: {
       publishedAt: data.status === "PUBLISHED" ? new Date() : undefined,
     },
   });
+
+  // Notifier tous les utilisateurs si l'article est publié
+  if (data.status === "PUBLISHED") {
+    const allUsers = await prisma.user.findMany({ select: { id: true } });
+    const userIds = allUsers.map(u => u.id);
+    if (userIds.length > 0) {
+      sendPushToUsers(userIds, {
+        title: "Kin-Sell • Blog 📰",
+        body: data.title,
+        tag: `blog-${post.id}`,
+        data: { type: "default", slug: post.slug, url: `/blog/${post.slug}` },
+      }).catch(() => {});
+    }
+  }
+
   return post;
 };
 
@@ -527,6 +718,21 @@ export const updateBlogPost = async (postId: string, data: {
     where: { id: postId },
     data: updateData as any,
   });
+
+  // Notifier si l'article vient d'être publié (première publication)
+  if (data.status === "PUBLISHED") {
+    const allUsers = await prisma.user.findMany({ select: { id: true } });
+    const userIds = allUsers.map(u => u.id);
+    if (userIds.length > 0) {
+      sendPushToUsers(userIds, {
+        title: "Kin-Sell • Blog 📰",
+        body: post.title,
+        tag: `blog-${post.id}`,
+        data: { type: "default", slug: post.slug, url: `/blog/${post.slug}` },
+      }).catch(() => {});
+    }
+  }
+
   return post;
 };
 
@@ -1504,6 +1710,24 @@ export const adminChangeListingStatus = async (listingId: string, status: string
       entityId: listingId,
     },
   });
+
+  // Notifier le propriétaire de l'annonce
+  if (listing.ownerUserId) {
+    const statusLabels: Record<string, { title: string; body: string }> = {
+      DELETED: { title: "Kin-Sell • Annonce supprimée 🚫", body: "Votre annonce a été retirée par un administrateur." },
+      INACTIVE: { title: "Kin-Sell • Annonce désactivée ⚠️", body: "Votre annonce a été désactivée par un modérateur." },
+      ACTIVE: { title: "Kin-Sell • Annonce réactivée ✅", body: "Votre annonce a été réactivée." },
+    };
+    const notif = statusLabels[status];
+    if (notif) {
+      sendPushToUser(listing.ownerUserId, {
+        title: notif.title,
+        body: notif.body,
+        tag: `listing-mod-${listingId}`,
+        data: { type: "default", url: "/account?tab=listings" },
+      }).catch(() => {});
+    }
+  }
 
   return updated;
 };

@@ -10,7 +10,7 @@ import {
   toggleContactFavorite,
   deleteContact,
 } from "./contacts.service.js";
-import { ContactSource } from "@prisma/client";
+import { ContactSource } from "../../shared/db/prisma-enums.js";
 
 const router = Router();
 

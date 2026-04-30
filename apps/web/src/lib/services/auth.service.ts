@@ -102,6 +102,15 @@ export const auth = {
     placeId?: string;
     locationVisibility?: LocationVisibility;
   }) => mutate<AccountUser>("/account/profile/complete", { method: "PATCH", body }, ["/account/me", "/users/me"]),
+  updatePreferences: (body: {
+    locale?: "fr" | "en" | "ln" | "ar";
+    localeManual?: boolean;
+    currency?: "CDF" | "USD" | "EUR" | "XAF" | "AOA" | "XOF" | "GNF" | "MAD";
+    countryCode?: "CD" | "GA" | "CG" | "AO" | "CI" | "GN" | "SN" | "MA" | null;
+    marketScope?: "KIN_SELL" | "COUNTRY";
+    theme?: "dark" | "light";
+    onlineStatusVisible?: boolean;
+  }) => mutate<AccountUser>("/account/preferences", { method: "PATCH", body }, ["/account/me", "/users/me"]),
   sessions: () => request<{ sessions: Array<{
     id: string;
     deviceId?: string;

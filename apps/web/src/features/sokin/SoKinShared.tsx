@@ -4,13 +4,14 @@
  * Extraits pour être réutilisés dans SoKinPage et HomePage.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   resolveMediaUrl,
   type SoKinApiFeedPost,
   type SoKinApiComment,
 } from '../../lib/api-client';
 import type { MediaItem } from './AnnounceCard';
+import { useSokinSound, setSokinSoundPref } from './sokin-sound';
 
 /* ─────────────────────────────────────────────────────── */
 /* ICÔNES                                                   */
@@ -25,13 +26,32 @@ export function IconSend() {
 }
 
 /* ─────────────────────────────────────────────────────── */
-/* MEDIA VIEWER — popup simple (1 média à la fois)         */
+/* MEDIA VIEWER — slider multi-média (swipe + flèches)     */
 /* ─────────────────────────────────────────────────────── */
 
-export function MediaViewer({ item, onClose }: { item: MediaItem; onClose: () => void }) {
+export type ViewerState = { items: MediaItem[]; index: number };
+
+export function MediaViewer({ items, startIndex, onClose }: { items: MediaItem[]; startIndex: number; onClose: () => void }) {
+  const [currentIndex, setCurrentIndex] = useState(startIndex);
+  const touchStartX = useRef(0);
+  const touchDeltaX = useRef(0);
+  const isDragging = useRef(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [soundEnabled] = useSokinSound();
+
+  const item = items[currentIndex];
+  const hasPrev = currentIndex > 0;
+  const hasNext = currentIndex < items.length - 1;
+  const multi = items.length > 1;
+
+  const goPrev = useCallback(() => setCurrentIndex((i) => Math.max(0, i - 1)), []);
+  const goNext = useCallback(() => setCurrentIndex((i) => Math.min(items.length - 1, i + 1)), [items.length]);
+
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
+      if (e.key === 'ArrowLeft') goPrev();
+      if (e.key === 'ArrowRight') goNext();
     };
     document.addEventListener('keydown', handleKey);
     document.body.style.overflow = 'hidden';
@@ -39,7 +59,94 @@ export function MediaViewer({ item, onClose }: { item: MediaItem; onClose: () =>
       document.removeEventListener('keydown', handleKey);
       document.body.style.overflow = '';
     };
+  }, [onClose, goPrev, goNext]);
+
+  /* ── Android back button: ferme le viewer au lieu de naviguer ── */
+  useEffect(() => {
+    window.history.pushState({ skViewer: true }, '');
+    const onPopState = () => { onClose(); };
+    window.addEventListener('popstate', onPopState);
+    return () => {
+      window.removeEventListener('popstate', onPopState);
+      // Si on démonte sans popstate (fermeture par ✕ ou overlay), retirer l'entrée
+      if (window.history.state?.skViewer) window.history.back();
+    };
   }, [onClose]);
+
+  /* ── Touch / swipe (horizontal pour navigation, vertical pour fermer) ── */
+  const touchStartY = useRef(0);
+  const touchDeltaY = useRef(0);
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+    touchDeltaX.current = 0;
+    touchDeltaY.current = 0;
+    isDragging.current = true;
+  }, []);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (!isDragging.current) return;
+    touchDeltaX.current = e.touches[0].clientX - touchStartX.current;
+    touchDeltaY.current = e.touches[0].clientY - touchStartY.current;
+  }, []);
+
+  const handleTouchEnd = useCallback(() => {
+    if (!isDragging.current) return;
+    isDragging.current = false;
+    const threshold = 50;
+    // Swipe vertical vers le bas → fermer le viewer
+    if (touchDeltaY.current > 100 && Math.abs(touchDeltaY.current) > Math.abs(touchDeltaX.current)) {
+      onClose();
+      return;
+    }
+    if (touchDeltaX.current < -threshold) goNext();
+    else if (touchDeltaX.current > threshold) goPrev();
+    touchDeltaX.current = 0;
+    touchDeltaY.current = 0;
+  }, [goNext, goPrev, onClose]);
+
+  const renderMedia = (mi: MediaItem) => {
+    if (mi.type === 'video') {
+      return (
+        <video
+          src={resolveMediaUrl(mi.url)}
+          controls
+          autoPlay
+          playsInline
+          muted={!soundEnabled}
+          className="sk-viewer-media"
+          ref={(el) => {
+            if (!el) return;
+            // Appliquer la préférence son et fallback muté si le navigateur
+            // bloque l'autoplay avec son (surtout iOS/Safari).
+            try { el.muted = !soundEnabled; } catch { /* ignore */ }
+            const p = el.play();
+            if (p && typeof p.catch === 'function') {
+              p.catch(() => {
+                try {
+                  el.muted = true;
+                  setSokinSoundPref(false);
+                  const r = el.play();
+                  if (r && typeof r.catch === 'function') r.catch(() => undefined);
+                } catch { /* ignore */ }
+              });
+            }
+          }}
+        />
+      );
+    }
+    if (mi.type === 'audio') {
+      return (
+        <audio
+          src={resolveMediaUrl(mi.url)}
+          controls
+          autoPlay
+          className="sk-viewer-audio"
+        />
+      );
+    }
+    return <img src={resolveMediaUrl(mi.url)} alt="" className="sk-viewer-media" loading="lazy" />;
+  };
 
   return (
     <div
@@ -49,31 +156,49 @@ export function MediaViewer({ item, onClose }: { item: MediaItem; onClose: () =>
       aria-modal="true"
       aria-label="Média en plein écran"
     >
-      <button
-        type="button"
-        className="sk-viewer-close"
-        onClick={onClose}
-        aria-label="Fermer le media"
+      <button type="button" className="sk-viewer-close" onClick={onClose} aria-label="Fermer le media">✕</button>
+
+      {/* Counter */}
+      {multi && <span className="sk-viewer-counter">{currentIndex + 1} / {items.length}</span>}
+
+      {/* Arrows */}
+      {multi && hasPrev && (
+        <button type="button" className="sk-viewer-arrow sk-viewer-arrow--left" onClick={(e) => { e.stopPropagation(); goPrev(); }} aria-label="Précédent">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+      )}
+      {multi && hasNext && (
+        <button type="button" className="sk-viewer-arrow sk-viewer-arrow--right" onClick={(e) => { e.stopPropagation(); goNext(); }} aria-label="Suivant">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+      )}
+
+      {/* Media content */}
+      <div
+        ref={containerRef}
+        className="sk-viewer-content"
+        onClick={(e) => e.stopPropagation()}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
       >
-        ✕
-      </button>
-      <div className="sk-viewer-content" onClick={(e) => e.stopPropagation()}>
-        {item.type === 'video' ? (
-          <video
-            src={resolveMediaUrl(item.url)}
-            controls
-            autoPlay
-            playsInline
-            className="sk-viewer-media"
-          />
-        ) : (
-          <img
-            src={resolveMediaUrl(item.url)}
-            alt=""
-            className="sk-viewer-media"
-          />
-        )}
+        {renderMedia(item)}
       </div>
+
+      {/* Dots */}
+      {multi && (
+        <div className="sk-viewer-dots" onClick={(e) => e.stopPropagation()}>
+          {items.map((_, i) => (
+            <button
+              key={i}
+              type="button"
+              className={`sk-viewer-dot${i === currentIndex ? ' sk-viewer-dot--active' : ''}`}
+              onClick={() => setCurrentIndex(i)}
+              aria-label={`Média ${i + 1}`}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -150,7 +275,7 @@ export function CommentsDrawer({
       <article key={comment.id} className={`sk-comment-item${isReply ? ' sk-comment-item--reply' : ''}`}>
         <div className="sk-comment-avatar-wrap">
           {avatar ? (
-            <img src={resolveMediaUrl(avatar)} alt={name} className="sk-comment-avatar" />
+            <img src={resolveMediaUrl(avatar)} alt={name} className="sk-comment-avatar" loading="lazy" />
           ) : (
             <span className="sk-comment-avatar sk-comment-avatar--empty" aria-hidden="true">{name.charAt(0).toUpperCase()}</span>
           )}
@@ -243,7 +368,7 @@ export function CommentsDrawer({
         <section className="sk-missing-profile" aria-label="Profil public non disponible">
           <div className="sk-missing-profile-box">
             {profileState.profile.avatarUrl ? (
-              <img src={resolveMediaUrl(profileState.profile.avatarUrl)} alt={profileState.profile.displayName} className="sk-missing-profile-avatar" />
+              <img src={resolveMediaUrl(profileState.profile.avatarUrl)} alt={profileState.profile.displayName} className="sk-missing-profile-avatar" loading="lazy" />
             ) : (
               <span className="sk-missing-profile-avatar sk-missing-profile-avatar--empty" aria-hidden="true">{profileState.profile.displayName.charAt(0).toUpperCase()}</span>
             )}

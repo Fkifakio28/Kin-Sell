@@ -10,6 +10,7 @@
 
 import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
+import { sendPushToUser } from "../notifications/push.service.js";
 import type { SoKinReactionType, SoKinReportReason } from "@prisma/client";
 
 // ═══════════════════════════════════════════
@@ -32,7 +33,7 @@ export const toggleReaction = async (
 
   const post = await prisma.soKinPost.findUnique({
     where: { id: postId },
-    select: { id: true, status: true },
+    select: { id: true, status: true, authorId: true },
   });
   if (!post || post.status === "DELETED") {
     throw new HttpError(404, "Publication introuvable");
@@ -70,6 +71,19 @@ export const toggleReaction = async (
       where: { id: postId },
       data: { likes: { increment: 1 } },
     });
+
+    // Notifier l'auteur du post (sauf auto-réaction)
+    if (post!.authorId && post!.authorId !== userId) {
+      const reactor = await prisma.userProfile.findUnique({ where: { userId }, select: { displayName: true } });
+      const name = reactor?.displayName ?? "Quelqu'un";
+      sendPushToUser(post!.authorId, {
+        title: "Kin-Sell • So-Kin",
+        body: `${name} a réagi à votre publication ${type === "LIKE" ? "👍" : type === "LOVE" ? "❤️" : type === "HAHA" ? "😂" : type === "WOW" ? "😮" : type === "SAD" ? "😢" : "😡"}`,
+        tag: `reaction-${postId}`,
+        data: { type: "like", postId, url: "/sokin" },
+      }).catch(() => {});
+    }
+
     return { action: "added", reaction: created };
   }
 };

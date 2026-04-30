@@ -1,5 +1,6 @@
 import { API_BASE } from "../lib/api-core";
 import { Capacitor } from "@capacitor/core";
+// @ts-ignore — native-only module, types may not exist on server
 import { PushNotifications } from "@capacitor/push-notifications";
 
 const SW_URL = "/sw.js";
@@ -25,11 +26,26 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
 }
 
 async function fetchVapidPublicKey(): Promise<string | null> {
+  // P3 #29 : cache local TTL 24h — la clé VAPID change rarement, éviter
+  // un round-trip réseau à chaque subscribeToPush().
+  try {
+    const raw = localStorage.getItem("ks_vapid_cache");
+    if (raw) {
+      const parsed = JSON.parse(raw) as { key: string; ts: number };
+      if (parsed.key && typeof parsed.ts === "number" && Date.now() - parsed.ts < 24 * 60 * 60 * 1000) {
+        return parsed.key;
+      }
+    }
+  } catch { /* ignore */ }
   try {
     const res = await fetch(`${API_BASE}/notifications/vapid-public-key`, { credentials: "include" });
     if (!res.ok) return null;
     const data = (await res.json()) as { publicKey?: string | null };
-    return data?.publicKey ?? null;
+    const key = data?.publicKey ?? null;
+    if (key) {
+      try { localStorage.setItem("ks_vapid_cache", JSON.stringify({ key, ts: Date.now() })); } catch { /* ignore */ }
+    }
+    return key;
   } catch {
     return null;
   }
@@ -40,12 +56,21 @@ async function sendSubscriptionToServer(subscription: PushSubscription): Promise
     subscription: subscription.toJSON(),
     userAgent: isBrowser() ? navigator.userAgent : undefined,
   };
-  await fetch(`${API_BASE}/notifications/push/subscribe`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify(payload),
-  }).catch(() => {});
+  // B5 audit : log l'erreur plutôt que silence complet pour diagnostiquer
+  // les échecs d'enregistrement push en production.
+  try {
+    const res = await fetch(`${API_BASE}/notifications/push/subscribe`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      console.warn("[Push] Subscribe failed:", res.status, res.statusText);
+    }
+  } catch (e) {
+    console.warn("[Push] Subscribe network error:", e);
+  }
 }
 
 async function sendUnsubscribeToServer(endpoint: string | null): Promise<void> {
@@ -73,8 +98,14 @@ export async function registerServiceWorker(): Promise<ServiceWorkerRegistration
   if (!isPushSupported()) return null;
   try {
     const existing = await navigator.serviceWorker.getRegistration();
-    if (existing) return existing;
-    return await navigator.serviceWorker.register(SW_URL, { scope: "/" });
+    const reg = existing ?? await navigator.serviceWorker.register(SW_URL, { scope: "/" });
+    // Fournir API_BASE au SW pour que pushsubscriptionchange puisse renvoyer
+    // la nouvelle subscription au backend sans passer par un onglet ouvert.
+    try {
+      const controller = reg.active || reg.waiting || reg.installing;
+      controller?.postMessage({ type: "set-api-base", apiBase: API_BASE });
+    } catch { /* ignore */ }
+    return reg;
   } catch {
     return null;
   }
@@ -145,16 +176,133 @@ export function onServiceWorkerMessage(
 }
 
 /* ══════════════════════════════════════════════════
-   Native Capacitor Push (FCM) — Android
+   Native Capacitor Push (FCM / APNs) — Android & iOS
    ══════════════════════════════════════════════════ */
 
 async function sendFcmTokenToServer(token: string): Promise<void> {
-  await fetch(`${API_BASE}/notifications/fcm/register`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify({ token, platform: "android" }),
-  }).catch(() => {});
+  const platform = Capacitor.getPlatform(); // "android" | "ios"
+  // A15 audit : throttle retry à 1h pour éviter le flood si le serveur est
+  // durablement indisponible. On ne renvoie pas le même token en boucle.
+  try {
+    const lastAttemptRaw = localStorage.getItem("ks_pending_fcm_last_attempt");
+    const lastToken = localStorage.getItem("ks_pending_fcm_token");
+    if (lastAttemptRaw && lastToken === token) {
+      const lastAttempt = parseInt(lastAttemptRaw, 10);
+      if (!Number.isNaN(lastAttempt) && Date.now() - lastAttempt < 60 * 60 * 1000) {
+        console.log("[FCM] Token retry throttled (< 1h since last attempt)");
+        return;
+      }
+    }
+  } catch { /* ignore */ }
+  try {
+    const res = await fetch(`${API_BASE}/notifications/fcm/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ token, platform }),
+    });
+    if (res.ok) {
+      console.log("[FCM] Token registered on server");
+      // Clear pending token on success
+      try {
+        localStorage.removeItem("ks_pending_fcm_token");
+        localStorage.removeItem("ks_pending_fcm_last_attempt");
+      } catch { /* ignore */ }
+      // Mémoriser le token actif pour pouvoir le désenregistrer au logout
+      try { localStorage.setItem("ks_active_fcm_token", token); } catch { /* ignore */ }
+    } else {
+      console.warn("[FCM] Server rejected token registration:", res.status);
+      // Save for retry on next launch
+      try {
+        localStorage.setItem("ks_pending_fcm_token", token);
+        localStorage.setItem("ks_pending_fcm_last_attempt", String(Date.now()));
+      } catch { /* ignore */ }
+    }
+  } catch (err) {
+    console.warn("[FCM] Failed to send token to server:", err);
+    // Save for retry on next launch
+    try {
+      localStorage.setItem("ks_pending_fcm_token", token);
+      localStorage.setItem("ks_pending_fcm_last_attempt", String(Date.now()));
+    } catch { /* ignore */ }
+  }
+}
+
+/** Supprime le token FCM actif du serveur (à appeler au logout). */
+export async function unregisterActiveFcmToken(): Promise<void> {
+  let token: string | null = null;
+  try { token = localStorage.getItem("ks_active_fcm_token"); } catch { /* ignore */ }
+  // A8 audit : appeler TOUJOURS /fcm/unregister-all côté serveur au logout
+  // pour supprimer tous les tokens de cet utilisateur (défense en profondeur
+  // si un token précédent est resté enregistré côté serveur sans l'être
+  // dans le localStorage de ce device).
+  try {
+    await fetch(`${API_BASE}/notifications/fcm/unregister-all`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+    });
+  } catch { /* ignore */ }
+  // Aussi appeler /fcm/unregister avec le token précis si connu (pour backward-compat)
+  if (token) {
+    try {
+      await fetch(`${API_BASE}/notifications/fcm/unregister`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ token }),
+      });
+    } catch { /* ignore */ }
+  }
+  try { localStorage.removeItem("ks_active_fcm_token"); } catch { /* ignore */ }
+  try { localStorage.removeItem("ks_pending_fcm_token"); } catch { /* ignore */ }
+}
+
+/**
+ * Listen for pending FCM tokens flushed from native (SharedPreferences).
+ * When KinSellMessagingService.onNewToken() fires in background, the token
+ * is saved and pushed to JS via ks:fcm-token when MainActivity resumes.
+ */
+export function listenForPendingFcmToken(): () => void {
+  if (!isNativeApp()) return () => {};
+  const handler = (e: Event) => {
+    const token = (e as CustomEvent<{ token: string }>).detail?.token;
+    if (token) {
+      console.log("[FCM] Received pending token from native side");
+      void sendFcmTokenToServer(token);
+    }
+  };
+  window.addEventListener("ks:fcm-token", handler);
+
+  // Also retry any previously failed token registration
+  try {
+    const pendingToken = localStorage.getItem("ks_pending_fcm_token");
+    if (pendingToken) {
+      console.log("[FCM] Retrying previously failed token registration");
+      void sendFcmTokenToServer(pendingToken);
+    }
+  } catch {}
+
+  // P1 #17 : retry aussi au retour du réseau / reconnexion socket. Si le
+  // serveur était down au premier enregistrement, on ne peut pas compter
+  // uniquement sur le prochain onNewToken (qui est rare).
+  const retryPending = () => {
+    try {
+      const pending = localStorage.getItem("ks_pending_fcm_token");
+      if (pending) {
+        console.log("[FCM] Retry pending token after socket/network event");
+        void sendFcmTokenToServer(pending);
+      }
+    } catch {}
+  };
+  window.addEventListener("ks:socket-reconnected", retryPending);
+  window.addEventListener("online", retryPending);
+
+  return () => {
+    window.removeEventListener("ks:fcm-token", handler);
+    window.removeEventListener("ks:socket-reconnected", retryPending);
+    window.removeEventListener("online", retryPending);
+  };
 }
 
 /**
@@ -173,19 +321,21 @@ export async function initNativePush(
     }
     if (permStatus.receive !== "granted") return null;
 
-    await PushNotifications.register();
-
-    const regListener = await PushNotifications.addListener("registration", (token) => {
+    // IMPORTANT: attach listeners BEFORE register() to avoid race condition
+    const regListener = await PushNotifications.addListener("registration", (token: any) => {
+      console.log("[FCM] Token received, sending to server...");
       void sendFcmTokenToServer(token.value);
     });
 
-    const regErrorListener = await PushNotifications.addListener("registrationError", (err) => {
+    const regErrorListener = await PushNotifications.addListener("registrationError", (err: any) => {
       console.warn("[FCM] Registration error:", err);
     });
 
+    await PushNotifications.register();
+
     const receivedListener = await PushNotifications.addListener(
       "pushNotificationReceived",
-      (notification) => {
+      (notification: any) => {
         // Notification received while app is in foreground
         if (onNotification && notification.data) {
           onNotification(notification.data as Record<string, string>);
@@ -195,15 +345,32 @@ export async function initNativePush(
 
     const actionListener = await PushNotifications.addListener(
       "pushNotificationActionPerformed",
-      (action) => {
-        // User tapped the notification (app was in background)
+      (action: any) => {
+        // User tapped the notification — navigate via SPA (no page reload)
         const data = action.notification.data as Record<string, string> | undefined;
-        if (data?.url) {
-          window.location.href = data.url;
-        } else if (data?.type === "message") {
-          window.location.href = "/messaging";
-        } else if (data?.type === "order") {
-          window.location.href = "/account?tab=commandes";
+        let targetUrl = data?.url || "";
+        if (!targetUrl) {
+          if (data?.type === "message") targetUrl = "/messaging";
+          else if (data?.type === "order" || data?.type === "negotiation") targetUrl = "/account?tab=commandes";
+          else if (data?.type === "sokin" || data?.type === "publication") targetUrl = "/sokin";
+          else if (data?.type === "PROMO" || data?.type === "promo" || data?.type === "COUPON" || data?.type === "coupon") {
+            if (data?.couponCode) {
+              const params = new URLSearchParams();
+              params.set("coupon", data.couponCode);
+              if (data?.planCode) params.set("plan", data.planCode);
+              targetUrl = `/forfaits?${params.toString()}`;
+            } else {
+              targetUrl = "/account?section=incentives";
+            }
+          }
+          else if (data?.type === "GRANT" || data?.type === "grant") targetUrl = "/account?section=incentives";
+        }
+        if (targetUrl) {
+          const current = `${window.location.pathname}${window.location.search}`;
+          if (current !== targetUrl) {
+            window.history.pushState({}, "", targetUrl);
+            window.dispatchEvent(new PopStateEvent("popstate"));
+          }
         }
       },
     );

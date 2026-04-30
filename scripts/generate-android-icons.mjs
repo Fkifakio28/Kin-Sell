@@ -10,6 +10,7 @@ import { join } from "path";
 
 const RES = "apps/web/android/app/src/main/res";
 const SRC_LOGO = "apps/web/public/assets/kin-sell/pwa-512.png";
+const SRC_MONO = "apps/web/public/assets/kin-sell/logo-mono.png";
 const BRAND_BG = "#120B2B";
 const BRAND_VIOLET = "#6f58ff";
 
@@ -107,21 +108,22 @@ async function generateLauncherIcons() {
 async function generateNotificationIcon() {
   console.log("── Notification small icon ──");
 
-  // Créer une icône monochrome blanche : silhouette de panier simplifié
-  // Android exige : blanc (#FFFFFF) sur transparent, pas de couleur
+  // Utiliser le logo monochrome blanc fourni (blanc sur transparent)
   for (const [folder, size] of Object.entries(NOTIFICATION_SIZES)) {
     const dir = join(RES, folder);
     ensureDir(dir);
 
-    // Dessiner un panier d'achat simplifié en SVG monochrome
-    const cartSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="white">
-      <path d="M7 18c-1.1 0-1.99.9-1.99 2S5.9 22 7 22s2-.9 2-2-.9-2-2-2zM1 2v2h2l3.6 7.59-1.35 2.45c-.16.28-.25.61-.25.96 0 1.1.9 2 2 2h12v-2H7.42c-.14 0-.25-.11-.25-.25l.03-.12.9-1.63h7.45c.75 0 1.41-.41 1.75-1.03l3.58-6.49c.08-.14.12-.31.12-.48 0-.55-.45-1-1-1H5.21l-.94-2H1zm16 16c-1.1 0-1.99.9-1.99 2s.89 2 1.99 2 2-.9 2-2-.9-2-2-2z"/>
-    </svg>`;
-
-    await sharp(Buffer.from(cartSvg))
-      .resize(size, size)
+    await sharp(SRC_MONO)
+      .resize(size, size, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
       .png()
       .toFile(join(dir, "ic_notification.png"));
+
+    // Aussi générer splash_icon.png (icône au centre du splash screen)
+    const splashIconSize = Math.round(size * 2);
+    await sharp(SRC_LOGO)
+      .resize(splashIconSize, splashIconSize, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
+      .png()
+      .toFile(join(dir, "splash_icon.png"));
 
     console.log(`  ✓ ${folder} (${size}px)`);
   }
@@ -153,11 +155,41 @@ async function generateSplashScreens() {
   }
 }
 
+async function generateWebIcons() {
+  console.log("── Web PWA / Favicon icons ──");
+  const WEB = "apps/web/public";
+  const KS = join(WEB, "assets/kin-sell");
+
+  const PWA_SIZES = [72, 96, 128, 144, 152, 192, 384];
+  for (const size of PWA_SIZES) {
+    await sharp(SRC_LOGO)
+      .resize(size, size, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
+      .png()
+      .toFile(join(KS, `pwa-${size}.png`));
+    console.log(`  ✓ pwa-${size}.png`);
+  }
+
+  // favicon-32
+  await sharp(SRC_LOGO)
+    .resize(32, 32, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    .png()
+    .toFile(join(WEB, "favicon-32.png"));
+  console.log("  ✓ favicon-32.png");
+
+  // apple-touch-icon (180×180)
+  await sharp(SRC_LOGO)
+    .resize(180, 180, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    .png()
+    .toFile(join(WEB, "apple-touch-icon.png"));
+  console.log("  ✓ apple-touch-icon.png");
+}
+
 async function main() {
   console.log("🚀 Génération des assets Android Kin-Sell\n");
   await generateLauncherIcons();
   await generateNotificationIcon();
   await generateSplashScreens();
+  await generateWebIcons();
   console.log("\n✅ Terminé !");
 }
 

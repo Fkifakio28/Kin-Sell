@@ -2,13 +2,15 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './explorer.css';
 import { explorer as explorerApi, type ExplorerProfileApi } from '../../lib/api-client';
+import { resolveMediaUrl } from '../../lib/api-core';
 import { useMarketPreference } from '../../app/providers/MarketPreferenceProvider';
 import { useHoverPopup, ProfileHoverPopup, type ProfileHoverData } from '../../components/HoverPopup';
 import { useScrollRestore } from '../../utils/useScrollRestore';
+import { SeoMeta } from '../../components/SeoMeta';
 
 export function ExplorerProfilesPage() {
   const navigate = useNavigate();
-  const { effectiveCountry, getCountryConfig } = useMarketPreference();
+  const { effectiveCountry, getCountryConfig, isGlobalScope } = useMarketPreference();
   const defaultCity = getCountryConfig(effectiveCountry).defaultCity;
   const [profiles, setProfiles] = useState<ExplorerProfileApi[]>([]);
   const [loading, setLoading] = useState(true);
@@ -19,7 +21,7 @@ export function ExplorerProfilesPage() {
     let cancelled = false;
     const load = async () => {
       try {
-        const data = await explorerApi.profiles({ limit: 50, city: defaultCity, country: effectiveCountry });
+        const data = await explorerApi.profiles({ limit: 50, city: isGlobalScope ? undefined : defaultCity, country: effectiveCountry });
         if (!cancelled) setProfiles(data);
       } catch {
         // silencieux
@@ -29,10 +31,15 @@ export function ExplorerProfilesPage() {
     };
     load();
     return () => { cancelled = true; };
-  }, [defaultCity, effectiveCountry]);
+  }, [defaultCity, effectiveCountry, isGlobalScope]);
 
   return (
     <section className="explorer-directory-shell animate-fade-in">
+      <SeoMeta
+        title="Profils publics | Kin-Sell"
+        description="Consultez les vendeurs et prestataires actifs sur Kin-Sell. Trouvez le bon profil pour vos achats à Kinshasa."
+        canonical="https://kin-sell.com/explorer/public-profiles"
+      />
       <div className="explorer-directory-hero">
         <p className="explorer-hero-label">👥 Profils publics</p>
         <h1 className="explorer-directory-title">Tous les profils publics disponibles</h1>
@@ -56,12 +63,12 @@ export function ExplorerProfilesPage() {
         <div className="explorer-directory-grid explorer-directory-grid--profiles">
           {profiles.map((profile) => (
             <div role="button" key={profile.id} onClick={() => navigate(profile.username ? `/user/${profile.username}` : '#')} className="explorer-dir-card explorer-dir-card--profile"
-              onMouseEnter={(e) => profileHover.handleMouseEnter({ avatarUrl: profile.avatarUrl, name: profile.displayName, username: profile.username, kinId: null, publicPageUrl: profile.username ? `/user/${profile.username}` : null }, e)}
+              onMouseEnter={(e) => profileHover.handleMouseEnter({ avatarUrl: resolveMediaUrl(profile.avatarUrl), name: profile.displayName, username: profile.username, kinId: null, publicPageUrl: profile.username ? `/user/${profile.username}` : null }, e)}
               onMouseLeave={profileHover.handleMouseLeave}
             >
               <div className="explorer-dir-card-avatar">
                 {profile.avatarUrl ? (
-                  <img src={profile.avatarUrl} alt={profile.displayName} />
+                  <img src={resolveMediaUrl(profile.avatarUrl)} alt={profile.displayName} loading="lazy" decoding="async" />
                 ) : (
                   <div className="explorer-dir-card-avatar--placeholder">👤</div>
                 )}

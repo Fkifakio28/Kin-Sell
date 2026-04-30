@@ -1,6 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { io, type Socket } from "socket.io-client";
+import { App as CapacitorApp } from "@capacitor/app";
+import { Capacitor } from "@capacitor/core";
 import { useAuth } from "./AuthProvider";
+import { refreshSession } from "../../lib/api-core";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:4000";
 
@@ -21,6 +24,16 @@ export function SocketProvider({ children }: { children: ReactNode }) {
   const socketRef = useRef<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
 
+  const emitAppState = useCallback((state: "active" | "background", visibility?: "visible" | "hidden") => {
+    const socket = socketRef.current;
+    if (!socket) return;
+    socket.emit("app:state", {
+      state,
+      visibility: visibility ?? (typeof document !== "undefined" && document.visibilityState === "hidden" ? "hidden" : "visible"),
+      platform: Capacitor.getPlatform(),
+    });
+  }, []);
+
   /* ── Connect / disconnect based on auth ── */
   useEffect(() => {
     if (!isLoggedIn) {
@@ -31,23 +44,38 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     }
 
     // httpOnly cookies are sent automatically with the WebSocket handshake
+    // Adapter le WebSocket au type de connexion (économie de data en Afrique)
+    const conn = (navigator as any).connection;
+    const isSlow = conn?.saveData || conn?.effectiveType === '2g' || conn?.effectiveType === 'slow-2g';
+
     const socket = io(API_BASE, {
       path: "/ws",
       reconnection: true,
-      reconnectionAttempts: 20,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 10000,
-      randomizationFactor: 0.15,
-      // Send cookies for httpOnly auth (withCredentials is runtime-supported)
+      // P0 #6 : une messagerie ne doit JAMAIS abandonner la reconnexion.
+      // Même après 50 tentatives échouées, on continue (appels/messages critiques).
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: isSlow ? 2000 : 800,
+      // A6 audit : réduire de 30s/15s → 10s/5s. Avec délais plus courts, on
+      // détecte plus vite le retour du réseau sans pilonner le serveur.
+      // Le randomizationFactor 0.3 évite le thundering herd.
+      reconnectionDelayMax: isSlow ? 10000 : 5000,
+      randomizationFactor: 0.3,
+      // Handshake timeout : 25s sur réseaux lents (2G latency), 20s sinon.
+      timeout: isSlow ? 25000 : 20000,
       ...(({ withCredentials: true }) as any),
     });
 
     socketRef.current = socket;
     let wasConnectedBefore = false;
+    // P1 #13 : defense in depth — nettoyer avant d'attacher, et removeAllListeners
+    // au cleanup pour éviter les doublons si le provider est remonté rapidement.
+    socket.off("connect");
+    socket.off("disconnect");
     socket.on("connect", () => {
       const isReconnect = wasConnectedBefore;
       wasConnectedBefore = true;
       setIsConnected(true);
+      emitAppState("active");
       if (isReconnect) {
         window.dispatchEvent(new CustomEvent("ks:socket-reconnected"));
       }
@@ -55,11 +83,12 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     socket.on("disconnect", () => setIsConnected(false));
 
     return () => {
+      try { socket.removeAllListeners(); } catch {}
       socket.disconnect();
       socketRef.current = null;
       setIsConnected(false);
     };
-  }, [isLoggedIn]);
+  }, [isLoggedIn, emitAppState]);
 
 
   /* ── Reconnexion réseau (offline → online) ── */
@@ -72,8 +101,10 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("online", handleOnline);
   }, [isLoggedIn]);
 
-  /* ── Disconnect propre sur fermeture d'onglet ── */
+  /* ── Disconnect propre sur fermeture d'onglet (web seulement) ── */
   useEffect(() => {
+    // Sur native, ne PAS déconnecter sur pagehide — le socket passe en grace period serveur
+    if (Capacitor.isNativePlatform()) return;
     const handler = () => { socketRef.current?.disconnect(); };
     window.addEventListener("beforeunload", handler);
     window.addEventListener("pagehide", handler);
@@ -82,6 +113,111 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       window.removeEventListener("pagehide", handler);
     };
   }, []);
+
+  /* ── Web visibility → signaler foreground/background + forcer reconnect au retour ── */
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (Capacitor.isNativePlatform()) return;
+      const s = socketRef.current;
+      if (document.visibilityState === "visible") {
+        // Au retour d'onglet : si le socket est mort silencieusement pendant
+        // la mise en veille (transport killed par le navigateur), forcer
+        // la reconnexion immédiatement pour restaurer les notifs temps réel.
+        if (s && s.disconnected) {
+          try { s.connect(); } catch { /* ignore */ }
+        }
+        emitAppState("active", "visible");
+      } else {
+        emitAppState("background", "hidden");
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, [emitAppState]);
+
+  /* ── Heartbeat de santé (web) : détection zombie via paquets reçus ── */
+  // P1.5 C : Socket.IO peut rester 'connected' côté client alors que le transport
+  // est mort silencieusement (proxy killed, NAT reset, OS suspend). On track
+  // le timestamp du dernier paquet reçu via engine.io ; si > 45s sans le
+  // moindre ping/pong/data alors que l'onglet est visible, on force un
+  // disconnect/reconnect pour casser le zombie.
+  const lastPacketRef = useRef<number>(Date.now());
+  useEffect(() => {
+    if (Capacitor.isNativePlatform()) return;
+    const s = socketRef.current;
+    if (!s) return;
+    const engine = (s.io as unknown as { engine?: { on: (e: string, h: () => void) => void; off: (e: string, h: () => void) => void } })?.engine;
+    if (!engine) return;
+    const markFresh = () => { lastPacketRef.current = Date.now(); };
+    engine.on("packet", markFresh);
+    engine.on("packetCreate", markFresh);
+    return () => {
+      try { engine.off("packet", markFresh); } catch { /* ignore */ }
+      try { engine.off("packetCreate", markFresh); } catch { /* ignore */ }
+    };
+  }, [isConnected]);
+
+  useEffect(() => {
+    if (Capacitor.isNativePlatform()) return;
+    const interval = setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      const s = socketRef.current;
+      if (!s) return;
+      if (s.disconnected) {
+        try { s.connect(); } catch { /* ignore */ }
+        return;
+      }
+      // Zombie detection : aucun paquet (ni ping serveur ni data) depuis 45s
+      // alors que le ping engine.io natif est configuré à 25s côté serveur.
+      const silent = Date.now() - lastPacketRef.current;
+      if (silent > 45_000) {
+        console.warn(`[Socket] Zombie détecté (${silent}ms sans paquet) - reconnect forcé`);
+        try { s.disconnect(); } catch { /* ignore */ }
+        setTimeout(() => { try { s.connect(); } catch { /* ignore */ } }, 200);
+        lastPacketRef.current = Date.now();
+      }
+    }, 15_000);
+    return () => clearInterval(interval);
+  }, []);
+
+  /* ── Capacitor appStateChange : reconnexion au retour du background ── */
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    const listener = CapacitorApp.addListener("appStateChange", ({ isActive }) => {
+      const s = socketRef.current;
+      if (!s) return;
+      if (!isActive) {
+        emitAppState("background", "hidden");
+        return;
+      }
+      if (isActive) {
+        // App revenue au premier plan → rafraîchir le token AVANT de reconnecter
+        // L'accès token (15min TTL) a probablement expiré pendant le background
+        void refreshSession().then(() => {
+          if (s.disconnected) {
+            s.connect();
+          } else {
+            emitAppState("active", "visible");
+          }
+          // Dispatcher ks:app-resumed APRÈS un court délai pour que le socket ait le temps
+          // de se connecter et que les listeners de call:incoming soient actifs
+          setTimeout(() => {
+            window.dispatchEvent(new CustomEvent("ks:app-resumed"));
+          }, 500);
+        }).catch(() => {
+          // Token refresh a échoué — tenter quand même la reconnexion socket
+          // (le serveur refusera peut-être, mais au moins on essaie)
+          if (s.disconnected) s.connect();
+          else emitAppState("active", "visible");
+          setTimeout(() => {
+            window.dispatchEvent(new CustomEvent("ks:app-resumed"));
+          }, 500);
+        });
+      }
+    });
+    return () => { listener.then(l => l.remove()); };
+  }, [isLoggedIn, emitAppState]);
 
   /* ── Stable helpers ── */
   const emit = useCallback(

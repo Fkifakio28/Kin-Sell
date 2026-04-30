@@ -5,16 +5,27 @@
    Affiché uniquement sur ≤ 768px via useIsMobile().
    ============================================================ */
 
+/* ── SHELL WRAPPER ────────────────────────────────────────── */
+.msh-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
 /* ── TOP BAR ──────────────────────────────────────────────── */
 .msh-topbar {
-  position: sticky;
+  position: fixed;
   top: 0;
+  left: 0;
+  right: 0;
   z-index: 200;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 8px;
-  height: 54px;
+  padding: 0 6px;
+  padding-top: env(safe-area-inset-top, 0px);
+  height: calc(44px + env(safe-area-inset-top, 0px));
   background: var(--glass-bg);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
@@ -28,8 +39,8 @@
 
 .msh-topbar-back,
 .msh-topbar-cart {
-  width: 40px;
-  height: 40px;
+  width: 34px;
+  height: 34px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -62,13 +73,13 @@
 }
 
 .msh-topbar-logo-img {
-  height: 26px;
+  height: 22px;
   width: auto;
   object-fit: contain;
 }
 
 .msh-topbar-logo-text {
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 800;
   color: var(--color-text-primary);
   letter-spacing: -0.02em;
@@ -78,19 +89,18 @@
 .msh-content {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior-y: contain;
+  padding-top: calc(44px + env(safe-area-inset-top, 0px));
 }
 
 /* Messaging needs a strict viewport box between top bar and bottom nav */
 .msh-content--messaging {
   position: fixed;
-  top: calc(54px + env(safe-area-inset-top, 0px));
+  top: calc(44px + env(safe-area-inset-top, 0px));
   right: 0;
   bottom: calc(64px + env(safe-area-inset-bottom, 0px));
   left: 0;
   overflow: hidden;
+  flex: none;
 }
 
 /* ── SPACER (pour le bottom nav fixe) ────────────────────── */

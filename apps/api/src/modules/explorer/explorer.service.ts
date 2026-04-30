@@ -34,7 +34,9 @@ export const getExplorerAds = async (_city?: string, _country?: string) => {
 };
 
 export const getFeaturedShops = async (limit = 4, city?: string, country?: string) => {
-  const countryTerms = resolveCountryTerms(country);
+  const isGlobal = country?.toUpperCase() === "GLOBAL";
+  const countryTerms = isGlobal ? [] : resolveCountryTerms(country);
+  const cityFilter = isGlobal ? undefined : city;
 
   const baseWhere = { active: true };
 
@@ -72,14 +74,14 @@ export const getFeaturedShops = async (limit = 4, city?: string, country?: strin
 
   // Essai 1: avec filtre ville + pays
   let shops = await prisma.businessShop.findMany({
-    where: { ...baseWhere, ...countryWhere, ...(city ? { city: { contains: city, mode: "insensitive" as const } } : {}) },
+    where: { ...baseWhere, ...countryWhere, ...(cityFilter ? { city: { contains: cityFilter, mode: "insensitive" as const } } : {}) },
     take: limit,
     orderBy: { business: { listings: { _count: "desc" } } },
     include: includeOpts,
   });
 
   // Fallback: sans filtre ville, mais garde le pays
-  if (shops.length === 0 && city) {
+  if (shops.length === 0 && cityFilter) {
     shops = await prisma.businessShop.findMany({
       where: { ...baseWhere, ...countryWhere },
       take: limit,
@@ -103,7 +105,9 @@ export const getFeaturedShops = async (limit = 4, city?: string, country?: strin
 };
 
 export const getFeaturedProfiles = async (limit = 4, city?: string, country?: string) => {
-  const countryTerms = resolveCountryTerms(country);
+  const isGlobal = country?.toUpperCase() === "GLOBAL";
+  const countryTerms = isGlobal ? [] : resolveCountryTerms(country);
+  const cityFilter = isGlobal ? undefined : city;
 
   const baseWhere = {
     username: { not: null },
@@ -139,14 +143,14 @@ export const getFeaturedProfiles = async (limit = 4, city?: string, country?: st
 
   // Essai 1: avec filtre ville + pays
   let profiles = await prisma.userProfile.findMany({
-    where: { ...baseWhere, ...countryWhere, ...(city ? { city: { contains: city, mode: "insensitive" as const } } : {}) },
+    where: { ...baseWhere, ...countryWhere, ...(cityFilter ? { city: { contains: cityFilter, mode: "insensitive" as const } } : {}) },
     take: limit,
     orderBy: { user: { listings: { _count: "desc" } } },
     select: selectFields,
   });
 
   // Fallback: sans filtre ville, mais garde le pays
-  if (profiles.length === 0 && city) {
+  if (profiles.length === 0 && cityFilter) {
     profiles = await prisma.userProfile.findMany({
       where: { ...baseWhere, ...countryWhere },
       take: limit,

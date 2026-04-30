@@ -29,6 +29,7 @@ import {
   type ScoredInsight,
   type ConfidenceScore,
 } from "./confidence-score.service.js";
+import { getFusedIntelligence } from "../external-intel/external-intelligence-fusion.service.js";
 
 // ── Types ──────────────────────────────────────────────────
 
@@ -42,6 +43,9 @@ export interface EnrichedCategoryInsight {
   seasonalNote: string | null;
   competitorDensity: "LOW" | "MEDIUM" | "HIGH" | "UNKNOWN";
   insight: string;
+  fusedOpportunityScore?: number;
+  fusedTriggers?: string[];
+  fusedPricingAdjustment?: number;
 }
 
 export interface RegionalDemandInsight {
@@ -152,6 +156,16 @@ export async function getEnrichedAnalytics(
       insight: externalSignal?.data.insight ?? `${cat.count} annonces dans ${cat.category}`,
     };
 
+    // Enrich with fusion intelligence (best-effort)
+    try {
+      const fused = await getFusedIntelligence(cat.category, "CD", city);
+      if (fused.confidence > 20) {
+        enriched.fusedOpportunityScore = fused.opportunityScore;
+        enriched.fusedTriggers = fused.activeTriggers.map((t) => t.trigger);
+        enriched.fusedPricingAdjustment = fused.pricingAdjustmentPercent;
+      }
+    } catch { /* fusion non critique */ }
+
     enrichedCategories.push(withScore(enriched, hybridScore));
   }
 
@@ -221,18 +235,27 @@ export async function getCategoryDemandAnalysis(
   const internalScore = scoreInternal(internalCount, category);
   const externalScore = externalContext?.signals[0]?.score ?? scoreInferred("Pas de données externes", 0);
 
-  return withScore(
-    {
-      category,
-      internalCount,
-      internalAvgPriceCents: avgPriceCents,
-      externalDemand: signal?.demandLevel ?? "UNKNOWN",
-      externalTrend: signal?.trend ?? "UNKNOWN",
-      externalPriceRange: signal?.priceRange ?? null,
-      seasonalNote: signal?.seasonalNote ?? null,
-      competitorDensity: signal?.competitorDensity ?? "UNKNOWN",
-      insight: signal?.insight ?? `${internalCount} annonces "${category}" à ${city}`,
-    },
-    scoreHybrid(internalScore, externalScore),
-  );
+  const enriched: EnrichedCategoryInsight = {
+    category,
+    internalCount,
+    internalAvgPriceCents: avgPriceCents,
+    externalDemand: signal?.demandLevel ?? "UNKNOWN",
+    externalTrend: signal?.trend ?? "UNKNOWN",
+    externalPriceRange: signal?.priceRange ?? null,
+    seasonalNote: signal?.seasonalNote ?? null,
+    competitorDensity: signal?.competitorDensity ?? "UNKNOWN",
+    insight: signal?.insight ?? `${internalCount} annonces "${category}" à ${city}`,
+  };
+
+  // Enrich with fusion intelligence (best-effort)
+  try {
+    const fused = await getFusedIntelligence(category, "CD", city);
+    if (fused.confidence > 20) {
+      enriched.fusedOpportunityScore = fused.opportunityScore;
+      enriched.fusedTriggers = fused.activeTriggers.map((t) => t.trigger);
+      enriched.fusedPricingAdjustment = fused.pricingAdjustmentPercent;
+    }
+  } catch { /* fusion non critique */ }
+
+  return withScore(enriched, scoreHybrid(internalScore, externalScore));
 }

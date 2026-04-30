@@ -118,10 +118,6 @@ export const sokin = {
     }),
   createComment: (id: string, body: { content: string; parentCommentId?: string }) =>
     mutate<{ comment: SoKinApiComment }>(`/sokin/posts/${encodeURIComponent(id)}/comments`, { method: 'POST', body }, [`/sokin/posts/${encodeURIComponent(id)}/comments`, `/sokin/posts/${encodeURIComponent(id)}`]),
-  publicUsers: (params?: { city?: string; search?: string; country?: string }) =>
-    request<{ users: SoKinPublicUser[] }>('/sokin/users', {
-      params: params as Record<string, string | undefined>,
-    }),
 
   // ── Interactions sociales ──
 
@@ -167,19 +163,50 @@ export const sokin = {
 export type PublicBlogPost = {
   id: string;
   title: string;
+  slug: string;
   content: string;
   excerpt: string | null;
   coverImage: string | null;
   mediaUrl: string | null;
   mediaType: string | null;
+  gifUrl: string | null;
+  category: string;
+  tags: string[];
   publishedAt: string | null;
   createdAt: string;
   author: string;
+  views: number;
+  likes: number;
+  dislikes: number;
+  shares: number;
 };
+
+export type BlogReaction = "like" | "dislike" | null;
 
 export const blog = {
   publicPosts: (params?: { page?: number; limit?: number }) =>
     request<{ total: number; page: number; totalPages: number; posts: PublicBlogPost[] }>("/blog", {
       params: params as Record<string, string | number | undefined>,
     }),
+
+  myReactions: (postIds: string[]) =>
+    mutate<{ reactions: Record<string, BlogReaction> }>(
+      "/blog/reactions/my",
+      { method: "POST", body: { postIds } },
+      []
+    ),
+
+  react: (slug: string, reaction: "like" | "dislike" | "clear") =>
+    mutate<{ likes: number; dislikes: number; myReaction: BlogReaction }>(
+      `/blog/${encodeURIComponent(slug)}/react`,
+      { method: "POST", body: { reaction } },
+      ["/blog"]
+    ),
+
+  share: (slug: string) =>
+    mutate<{ shares: number }>(
+      `/blog/${encodeURIComponent(slug)}/share`,
+      { method: "POST" },
+      ["/blog"]
+    ),
 };

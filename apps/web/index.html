@@ -1,15 +1,28 @@
 <!doctype html>
-<html lang="fr">
+<html lang="fr" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 
     <!-- ── SEO de base ── -->
-    <title>Kin-Sell — Le marché africain</title>
-    <meta name="description" content="Achetez, vendez et découvrez des offres partout en Afrique. Produits, services, boutiques en ligne et profils publics avec recherche géolocalisée sur Kin-Sell." />
-    <meta name="robots" content="index, follow" />
+    <title>Kin-Sell — Marketplace Afrique | Achetez et Vendez en ligne</title>
+    <meta name="description" content="Kin-Sell, la marketplace africaine. Achetez, vendez et découvrez produits, services et boutiques en ligne partout en Afrique. Livraison, annonces So-Kin et recherche géolocalisée." />
+    <meta name="keywords" content="marketplace afrique, acheter vendre en ligne, e-commerce afrique, boutique en ligne, Kin-Sell, services livraison, annonces, Congo, RDC, Kinshasa" />
+    <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1" />
     <link rel="canonical" href="https://kin-sell.com/" />
-    <meta name="theme-color" content="#6f58ff" />
+    <meta name="theme-color" content="#120B2B" />
+    <meta name="color-scheme" content="dark only" />
+    <script>
+      // Dark-only hard lock (applied before app bootstrap to avoid any flash/legacy light preference)
+      (function () {
+        try {
+          document.documentElement.setAttribute("data-theme", "dark");
+          document.documentElement.style.colorScheme = "dark";
+          localStorage.setItem("kin-sell.theme", "dark");
+          localStorage.removeItem("theme");
+        } catch {}
+      })();
+    </script>
 
     <!-- ── Favicon ── -->
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
@@ -20,22 +33,84 @@
     <!-- ── Open Graph (partage sur réseaux sociaux) ── -->
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Kin-Sell" />
-    <meta property="og:title" content="Kin-Sell — Le marché africain" />
-    <meta property="og:description" content="Le marché digital pour l'Afrique. Produits, services, boutiques en ligne." />
+    <meta property="og:title" content="Kin-Sell — Marketplace Afrique | Achetez et Vendez en ligne" />
+    <meta property="og:description" content="La marketplace digitale pour l'Afrique. Produits, services, boutiques en ligne, livraison et annonces So-Kin." />
     <meta property="og:image" content="/assets/kin-sell/pwa-512.png" />
+    <meta property="og:url" content="https://kin-sell.com/" />
+    <meta property="og:locale" content="fr_FR" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Kin-Sell" />
-    <meta name="twitter:description" content="Le marché digital pour l'Afrique." />
+    <meta name="twitter:title" content="Kin-Sell — Marketplace Afrique" />
+    <meta name="twitter:description" content="La marketplace digitale pour l'Afrique. Achetez, vendez, découvrez." />
+
+    <!-- ── JSON-LD Structured Data ── -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      "name": "Kin-Sell",
+      "alternateName": "Kin-Sell Marketplace",
+      "url": "https://kin-sell.com",
+      "description": "Marketplace africaine : achetez, vendez et découvrez produits, services et boutiques en ligne partout en Afrique.",
+      "potentialAction": {
+        "@type": "SearchAction",
+        "target": "https://kin-sell.com/explorer?q={search_term_string}",
+        "query-input": "required name=search_term_string"
+      },
+      "publisher": {
+        "@type": "Organization",
+        "name": "Kin-Sell",
+        "url": "https://kin-sell.com",
+        "logo": {
+          "@type": "ImageObject",
+          "url": "https://kin-sell.com/assets/kin-sell/pwa-512.png"
+        },
+        "sameAs": []
+      }
+    }
+    </script>
 
     <!-- ── Performance — préconnexion API ── -->
     <link rel="preconnect" href="https://api.kin-sell.com" crossorigin />
     <link rel="dns-prefetch" href="//api.kin-sell.com" />
 
-    <!-- ── Cloudflare Turnstile ── -->
-    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
+    <!-- ── Cloudflare Turnstile — chargé dynamiquement par TurnstileWidget.tsx ── -->
+    <link rel="preconnect" href="https://challenges.cloudflare.com" crossorigin />
+    <link rel="dns-prefetch" href="//challenges.cloudflare.com" />
+
+    <!-- ── CSS critique inline — éviter écran blanc sur 2G/3G ── -->
+    <style>
+      html, body { margin: 0; padding: 0; background: #120B2B; color: #f0eef6; font-family: system-ui, -apple-system, sans-serif; }
+      #root { min-height: 100vh; min-height: 100dvh; }
+      .ks-page-loader { display: flex; align-items: center; justify-content: center; min-height: 80vh; color: rgba(255,255,255,0.6); font-size: 0.9rem; }
+    </style>
   </head>
   <body>
     <div id="root"></div>
+    <noscript>
+      <div style="max-width:800px;margin:0 auto;padding:2rem;font-family:system-ui,sans-serif;color:#e0e0e0;background:#120b2b">
+        <h1>Kin-Sell — Marketplace Afrique</h1>
+        <p>Achetez, vendez et découvrez produits, services et boutiques en ligne partout en Afrique. Livraison, annonces So-Kin et recherche géolocalisée à Kinshasa et en RDC.</p>
+        <nav>
+          <ul>
+            <li><a href="/">Accueil</a></li>
+            <li><a href="/explorer">Explorer — Boutiques et services</a></li>
+            <li><a href="/explorer/shops-online">Boutiques en ligne</a></li>
+            <li><a href="/explorer/public-profiles">Profils publics</a></li>
+            <li><a href="/sokin">So-Kin — Annonces</a></li>
+            <li><a href="/forfaits">Tarifs et abonnements</a></li>
+            <li><a href="/about">À propos de Kin-Sell</a></li>
+            <li><a href="/how-it-works">Comment ça marche</a></li>
+            <li><a href="/guide">Guide de sécurité</a></li>
+            <li><a href="/faq">Questions fréquentes</a></li>
+            <li><a href="/contact">Contactez-nous</a></li>
+            <li><a href="/blog">Blog</a></li>
+            <li><a href="/privacy">Politique de confidentialité</a></li>
+            <li><a href="/legal">Mentions légales</a></li>
+            <li><a href="/terms">Conditions d'utilisation</a></li>
+          </ul>
+        </nav>
+      </div>
+    </noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

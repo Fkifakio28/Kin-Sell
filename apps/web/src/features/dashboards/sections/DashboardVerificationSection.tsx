@@ -30,6 +30,7 @@ export function DashboardVerificationSection({ t, userId, businessId, accountTyp
   const [loading, setLoading] = useState(true);
   const [requesting, setRequesting] = useState(false);
   const [error, setError] = useState('');
+  const [info, setInfo] = useState('');
 
   const load = useCallback(async () => {
     try {
@@ -55,10 +56,18 @@ export function DashboardVerificationSection({ t, userId, businessId, accountTyp
     try {
       setRequesting(true);
       setError('');
-      await verification.requestVerification(accountType, businessId);
+      setInfo('');
+      const result: any = await verification.requestVerification(accountType, businessId);
+      const msg = result?.message
+        || (result?.status === 'CREATED' ? 'Demande envoyée.'
+          : result?.status === 'ALREADY_PENDING' ? 'Votre demande est encore en cours de traitement.'
+          : result?.status === 'ALREADY_VERIFIED' ? 'Votre compte est déjà vérifié.'
+          : 'Demande envoyée.');
+      setInfo(msg);
       await load();
     } catch (err: any) {
-      setError(err?.message || 'Erreur lors de la demande.');
+      const serverMsg = err?.data?.error || err?.data?.message;
+      setError(serverMsg || 'Impossible de soumettre votre demande pour le moment. Réessayez dans quelques instants.');
     } finally {
       setRequesting(false);
     }
@@ -91,6 +100,12 @@ export function DashboardVerificationSection({ t, userId, businessId, accountTyp
       {error && (
         <div style={{ background: 'rgba(217,83,79,0.15)', border: '1px solid rgba(217,83,79,0.3)', borderRadius: 12, padding: '10px 16px', marginBottom: 16, color: '#ff6b6b' }}>
           {error}
+        </div>
+      )}
+
+      {info && (
+        <div style={{ background: 'rgba(92,184,92,0.12)', border: '1px solid rgba(92,184,92,0.3)', borderRadius: 12, padding: '10px 16px', marginBottom: 16, color: '#5cb85c' }}>
+          {info}
         </div>
       )}
 

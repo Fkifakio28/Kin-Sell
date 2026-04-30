@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { commercialAdvisor, type CommercialRecommendation } from "../lib/services/ai.service";
+import { useVisibleInterval } from "./useVisibleInterval";
 
 /**
  * Hook pour afficher des recommandations commerciales contextuelles.
@@ -24,9 +25,10 @@ export function useCommercialAdvice() {
 
   useEffect(() => {
     void fetchAdvice();
-    const interval = setInterval(() => void fetchAdvice(), 15 * 60 * 1000);
-    return () => clearInterval(interval);
   }, [fetchAdvice]);
+
+  // Re-fetch toutes les 15 min, en pause quand l'app est en arrière-plan
+  useVisibleInterval(() => { void fetchAdvice(); }, 15 * 60 * 1000);
 
   const dismiss = useCallback((productCode: string) => {
     setDismissed((prev) => new Set(prev).add(productCode));

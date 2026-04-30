@@ -1,0 +1,37 @@
+{
+  "country": "AO",
+  "currency": "AOA",
+  "languages": ["pt"],
+  "sources": [
+    { "name": "Jumia Angola",             "baseUrl": "https://www.jumia.co.ao",           "type": "marketplace", "parser": "jumia",         "language": "pt", "trusted": true,  "verified": true },
+    { "name": "Kitanda",                  "baseUrl": "https://www.kitanda.ao",            "type": "marketplace", "parser": "generic-price", "language": "pt", "trusted": true,  "verified": true },
+    { "name": "Hugo Delivery Luanda",     "baseUrl": "https://www.hugo.delivery",         "type": "marketplace", "parser": "generic-price", "language": "pt", "trusted": true,  "verified": true },
+    { "name": "Candando",                 "baseUrl": "https://www.candando.com",          "type": "marketplace", "parser": "generic-price", "language": "pt", "trusted": true,  "verified": true },
+
+    { "name": "BuscaNet Angola",          "baseUrl": "https://www.buscanet.ao",           "type": "classifieds", "parser": "generic-price", "language": "pt", "trusted": false, "verified": true },
+    { "name": "Expat.com Angola",         "baseUrl": "https://www.expat.com/en/destination/africa/angola/", "type": "classifieds", "parser": "expat", "language": "pt", "trusted": true, "verified": true },
+    { "name": "Ananga Classificados",     "baseUrl": "https://www.ananga.com",            "type": "classifieds", "parser": "generic-price", "language": "pt", "trusted": false, "verified": true },
+
+    { "name": "Jornal de Angola",         "baseUrl": "https://www.jornaldeangola.ao",     "type": "news",        "parser": "news-rss",      "language": "pt", "trusted": true,  "verified": true },
+    { "name": "ANGOP (Agência Angola)",   "baseUrl": "https://www.angop.ao",              "type": "news",        "parser": "news-rss",      "language": "pt", "trusted": true,  "verified": true },
+    { "name": "Novo Jornal",              "baseUrl": "https://www.novojornal.co.ao",      "type": "news",        "parser": "news-rss",      "language": "pt", "trusted": true,  "verified": true },
+    { "name": "Expansão",                 "baseUrl": "https://expansao.co.ao",            "type": "news",        "parser": "news-rss",      "language": "pt", "trusted": true,  "verified": true },
+    { "name": "Rede Angola",              "baseUrl": "https://www.redeangola.info",       "type": "news",        "parser": "news-rss",      "language": "pt", "trusted": true,  "verified": true },
+    { "name": "VerAngola",                "baseUrl": "https://www.verangola.net",         "type": "news",        "parser": "news-rss",      "language": "pt", "trusted": true,  "verified": true },
+    { "name": "Mercado (Semanário)",      "baseUrl": "https://mercado.co.ao",             "type": "news",        "parser": "news-rss",      "language": "pt", "trusted": true,  "verified": true },
+    { "name": "O País",                   "baseUrl": "https://www.opais.co.ao",           "type": "news",        "parser": "news-rss",      "language": "pt", "trusted": true,  "verified": true },
+    { "name": "Angonotícias",             "baseUrl": "https://www.angonoticias.com",      "type": "news",        "parser": "news-rss",      "language": "pt", "trusted": true,  "verified": true },
+    { "name": "Valor Económico Angola",   "baseUrl": "https://valoreconomico.co.ao",      "type": "news",        "parser": "news-rss",      "language": "pt", "trusted": true,  "verified": true },
+
+    { "name": "INE Angola",               "baseUrl": "https://www.ine.gov.ao",            "type": "stats",       "parser": "generic-stats", "language": "pt", "trusted": true,  "verified": true },
+    { "name": "Banco Nacional de Angola", "baseUrl": "https://www.bna.ao",                "type": "stats",       "parser": "bna",           "language": "pt", "trusted": true,  "verified": true },
+    { "name": "Ministério Finanças AO",   "baseUrl": "https://www.minfin.gov.ao",         "type": "stats",       "parser": "generic-stats", "language": "pt", "trusted": true,  "verified": true },
+    { "name": "Ministério Economia AO",   "baseUrl": "https://www.mep.gov.ao",            "type": "stats",       "parser": "generic-stats", "language": "pt", "trusted": true,  "verified": true },
+
+    { "name": "Empregos Angola",          "baseUrl": "https://www.empregosangola.com",    "type": "jobs",        "parser": "generic-jobs",  "language": "pt", "trusted": true,  "verified": true },
+    { "name": "Bantu Jobs",               "baseUrl": "https://www.bantujobs.com",         "type": "jobs",        "parser": "generic-jobs",  "language": "pt", "trusted": true,  "verified": true },
+    { "name": "Novo Emprego Angola",      "baseUrl": "https://www.novoempregoangola.com", "type": "jobs",        "parser": "generic-jobs",  "language": "pt", "trusted": true,  "verified": true },
+    { "name": "AfricaWork Angola",        "baseUrl": "https://www.africawork.com/pt/angola", "type": "jobs",     "parser": "generic-jobs",  "language": "pt", "trusted": true,  "verified": true },
+    { "name": "LinkedIn Jobs Angola",     "baseUrl": "https://www.linkedin.com/jobs/search?location=Angola", "type": "jobs", "parser": "linkedin-jobs", "language": "pt", "trusted": true, "verified": true }
+  ]
+}

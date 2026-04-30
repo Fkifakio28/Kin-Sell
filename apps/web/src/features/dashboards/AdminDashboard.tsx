@@ -3,10 +3,12 @@ import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../app/providers/AuthProvider';
 import { getDashboardPath } from '../../utils/role-routing';
 import { useLocaleCurrency } from '../../app/providers/LocaleCurrencyProvider';
+import { API_BASE } from '../../lib/api-client';
 import {
   admin,
   invalidateCache,
   resolveMediaUrl,
+  request,
   type AdminStats,
   type AdminUser,
   type AdminUserDetail,
@@ -50,6 +52,10 @@ import {
 } from '../../lib/api-client';
 import AdminVerificationPanel from './AdminVerificationPanel';
 import AdminAnalyticsPanel from './AdminAnalyticsPanel';
+import AdminIncentivesPanel from './AdminIncentivesPanel';
+import { MarketIntelPage } from '../market-intel/MarketIntelPage';
+import { AdminMarketIntelPage } from '../market-intel/AdminMarketIntelPage';
+import AdminBoostKpiPanel from './AdminBoostKpiPanel';
 import { DashboardMessaging } from './DashboardMessaging';
 import TutorialOverlay, { useTutorial, TutorialRelaunchBtn } from '../../components/TutorialOverlay';
 import { adminDashboardSteps } from '../../components/tutorial-steps';
@@ -62,8 +68,11 @@ type AdminSection =
   | 'reports' | 'feed' | 'donations' | 'ads' | 'advertisements' | 'listings' | 'negotiation-rules'
   | 'security' | 'antifraud' | 'security-ai' | 'ai-management'
   | 'rankings' | 'admins' | 'currency' | 'audit'
-  | 'settings' | 'messaging' | 'appeals' | 'subscriptions' | 'verification'
-  | 'ia-analytique' | 'ia-marchande' | 'ia-commande' | 'ia-ads' | 'ia-message';
+  | 'settings' | 'messaging' | 'appeals' | 'subscriptions' | 'verification' | 'incentives'
+  | 'ia-analytique' | 'ia-marchande' | 'ia-commande' | 'ia-ads' | 'ia-message'
+  | 'boost-kpi'
+  | 'app-version'
+  | 'market-intel' | 'market-intel-admin';
 
 type ModalType =
   | null | 'user-detail' | 'user-role' | 'user-message' | 'user-suspend'
@@ -96,7 +105,7 @@ const SECTION_DEFS: Array<{
 }> = [
   { key: 'dashboard',     label: 'Dashboard',          icon: '📊', permission: 'DASHBOARD',     group: 'Général' },
   { key: 'users',         label: 'Utilisateurs',       icon: '👥', permission: 'USERS',         group: 'Général' },
-  { key: 'blog',          label: 'Kin-Sell Blog',      icon: '📰', permission: 'BLOG',          group: 'Général' },
+  { key: 'blog',          label: 'Annonces Blog IA',   icon: '📰', permission: 'BLOG',          group: 'Général' },
   { key: 'transactions',  label: 'Transactions',       icon: '💳', permission: 'TRANSACTIONS',  group: 'Général' },
   { key: 'reports',       label: 'Signalements',       icon: '🚨', permission: 'REPORTS',       group: 'Général' },
   { key: 'feed',          label: "Fil d'actualité",    icon: '📢', permission: 'FEED',          group: 'Contenu' },
@@ -114,17 +123,24 @@ const SECTION_DEFS: Array<{
   { key: 'currency',      label: 'Devis',              icon: '💱', permission: 'CURRENCY',      group: 'Outils' },
   { key: 'audit',         label: "Journal d'audit",    icon: '📋', permission: 'AUDIT',         group: 'Outils' },
   { key: 'appeals',       label: 'Appels',             icon: '📩', permission: 'USERS',         group: 'Général' },
+  { key: 'app-version',   label: 'App Mobile',         icon: '📱', permission: 'SETTINGS',      group: 'Système' },
   { key: 'settings',      label: 'Paramètres',         icon: '⚙️', permission: 'SETTINGS',      group: 'Système' },
   { key: 'messaging',     label: 'Messagerie',         icon: '💬', permission: 'MESSAGING',     group: 'Système' },
   { key: 'subscriptions',  label: 'Abonnements & IA',   icon: '💳', permission: 'SUBSCRIPTIONS', group: 'Outils' },
   { key: 'verification',   label: 'Vérifications',      icon: '✅', permission: 'VERIFICATION',  group: 'Outils' },
+  { key: 'incentives',      label: 'Coupons & Incentives', icon: '🎟️', permission: 'SUBSCRIPTIONS', group: 'Outils' },
 
   // Intelligence Artificielle
   { key: 'ia-analytique',  label: 'Kin-Sell Analytique', icon: '📈', permission: 'AI_MANAGEMENT', group: 'Intelligence Artificielle' },
   { key: 'ia-marchande',   label: 'IA Marchande',       icon: '🏷️', permission: 'AI_MANAGEMENT', group: 'Intelligence Artificielle' },
   { key: 'ia-commande',    label: 'IA de Commande',     icon: '🤖', permission: 'AI_MANAGEMENT', group: 'Intelligence Artificielle' },
   { key: 'ia-ads',         label: 'IA ADS',             icon: '📣', permission: 'ADS',           group: 'Intelligence Artificielle' },
+  { key: 'boost-kpi',      label: 'Boost KPI',          icon: '🚀', permission: 'ADS',           group: 'Intelligence Artificielle' },
   { key: 'ia-message',     label: 'IA Message',         icon: '📨', permission: 'AI_MANAGEMENT', group: 'Intelligence Artificielle' },
+
+  // Market Intel (Kin-Sell Analytique+)
+  { key: 'market-intel',       label: 'Intelligence marché',    icon: '🌍', permission: 'DASHBOARD',     group: 'Market Intel' },
+  { key: 'market-intel-admin', label: 'Market Intel (admin)',    icon: '🛠️', permission: 'AI_MANAGEMENT', group: 'Market Intel' },
 ];
 
 function roleBadgeClass(role: string) {
@@ -158,7 +174,7 @@ export function AdminDashboard() {
     if (typeof window !== 'undefined') {
       const urlSection = new URLSearchParams(window.location.search).get('section');
       if (urlSection === 'messages') return 'messaging';
-      if (urlSection && ALL_SECTIONS.includes(urlSection as any)) return urlSection as AdminSection;
+      if (urlSection && SECTION_DEFS.some(s => s.key === urlSection)) return urlSection as AdminSection;
     }
     const stored = sessionStorage.getItem('ud-section');
     if (stored) {
@@ -330,6 +346,12 @@ export function AdminDashboard() {
 
   // Settings
   const [siteSettings, setSiteSettings] = useState<Record<string, string>>({});
+
+  // App Version
+  const [appVersionInfo, setAppVersionInfo] = useState<{ version: string | null; build: number | null; apkUrl: string | null; forceUpdate: boolean; releaseNotes: string | null } | null>(null);
+  const [appVersionForm, setAppVersionForm] = useState({ version: '', build: 1, apkUrl: '', forceUpdate: false, releaseNotes: '' });
+  const [appVersionSaving, setAppVersionSaving] = useState(false);
+  const [appVersionMsg, setAppVersionMsg] = useState<string | null>(null);
 
   // Feed (So-Kin)
   const [feedPosts, setFeedPosts] = useState<AdminFeedPost[]>([]);
@@ -549,6 +571,14 @@ export function AdminDashboard() {
           setSiteSettings(res);
           break;
         }
+        case 'app-version': {
+          const av = await request<{ version: string | null; build: number | null; apkUrl: string | null; forceUpdate: boolean; releaseNotes: string | null }>('/app-version/android');
+          setAppVersionInfo(av);
+          if (av.version) {
+            setAppVersionForm({ version: av.version ?? '', build: av.build ?? 1, apkUrl: av.apkUrl ?? '', forceUpdate: av.forceUpdate, releaseNotes: av.releaseNotes ?? '' });
+          }
+          break;
+        }
         case 'security': {
           const dash = await admin.securityDashboard();
           setSecDashboard(dash);
@@ -755,12 +785,31 @@ export function AdminDashboard() {
     } catch (e: any) { setError(e?.message); } finally { setBusy(false); }
   };
 
+  const handleGenerateBlogAnnouncements = async () => {
+    if (!isSuperAdmin) {
+      setError('Action réservée au super admin');
+      return;
+    }
+    if (!confirm('Générer automatiquement 15 annonces publiées pour le blog ?')) return;
+    setBusy(true);
+    try {
+      const result = await admin.generateBlogAnnouncements({ count: 15 });
+      invalidateCache('/admin/blog');
+      await loadSectionData();
+      setSuccess(`${result.created} annonces générées (${result.source})`);
+    } catch (e: any) {
+      setError(e?.message ?? 'Impossible de générer les annonces');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const handleUploadBlogMedia = async (file: File, field: 'coverImage' | 'mediaUrl' | 'gifUrl') => {
     setBlogUploadBusy(true);
     try {
       const formData = new FormData();
       formData.append('files', file);
-      const res = await fetch(`${import.meta.env.VITE_API_URL || ''}/uploads`, {
+      const res = await fetch(`${API_BASE}/uploads`, {
         method: 'POST',
         credentials: 'include',
         body: formData,
@@ -1180,7 +1229,12 @@ export function AdminDashboard() {
 
       <div className="ad-panel-head">
         <h3 className="ad-panel-title">Kin-Sell Blog — {blogTotal} article{blogTotal > 1 ? 's' : ''}</h3>
-        <button className="ad-btn ad-btn--primary" onClick={() => { resetBlogForm(); setModal('blog-edit'); }}>+ Nouvel article</button>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {isSuperAdmin && (
+            <button className="ad-btn" onClick={handleGenerateBlogAnnouncements} disabled={busy}>✨ Générer 15 annonces IA</button>
+          )}
+          <button className="ad-btn ad-btn--primary" onClick={() => { resetBlogForm(); setModal('blog-edit'); }}>+ Nouvel article</button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -2374,6 +2428,136 @@ export function AdminDashboard() {
     </>
   );
 
+  /* ── App Version (Mobile) ── */
+  const handleAppVersionSave = async () => {
+    setAppVersionSaving(true);
+    setAppVersionMsg(null);
+    try {
+      await request('/app-version/android', { method: 'PUT', body: JSON.stringify(appVersionForm), headers: { 'Content-Type': 'application/json' } });
+      const av = await request<{ version: string | null; build: number | null; apkUrl: string | null; forceUpdate: boolean; releaseNotes: string | null }>('/app-version/android');
+      setAppVersionInfo(av);
+      setAppVersionMsg('✅ Version mise à jour avec succès');
+    } catch (e: any) {
+      setAppVersionMsg('❌ ' + (e.message ?? 'Erreur'));
+    } finally {
+      setAppVersionSaving(false);
+    }
+  };
+
+  const renderAppVersion = () => (
+    <div className="ad-section-panel">
+      <div className="ad-section-head">
+        <h2 className="ad-section-title">📱 App Mobile — Version Android</h2>
+      </div>
+
+      {/* Current version info */}
+      <div className="ad-settings-grid">
+        <div className="ad-settings-box">
+          <h3 className="ad-settings-box-title">📊 Version actuelle configurée</h3>
+          {appVersionInfo ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span className={`ad-status-dot ${appVersionInfo.version ? 'ad-status-dot--green' : 'ad-status-dot--amber'}`} />
+                <span style={{ fontSize: 14, fontWeight: 600 }}>
+                  {appVersionInfo.version ? `v${appVersionInfo.version} (build ${appVersionInfo.build})` : 'Non configurée'}
+                </span>
+              </div>
+              {appVersionInfo.apkUrl && (
+                <div style={{ fontSize: 12, color: 'var(--ad-text-2)' }}>
+                  APK : <a href={appVersionInfo.apkUrl} target="_blank" rel="noreferrer" style={{ color: 'var(--ad-accent)' }}>{appVersionInfo.apkUrl.slice(0, 60)}…</a>
+                </div>
+              )}
+              <div style={{ fontSize: 12, color: 'var(--ad-text-3)' }}>
+                Mise à jour obligatoire : {appVersionInfo.forceUpdate ? '🔴 Oui' : '🟢 Non'}
+              </div>
+              {appVersionInfo.releaseNotes && (
+                <div style={{ fontSize: 12, color: 'var(--ad-text-3)', whiteSpace: 'pre-wrap' }}>
+                  📝 {appVersionInfo.releaseNotes}
+                </div>
+              )}
+              <button
+                className="ad-btn"
+                style={{ marginTop: 8, width: 'fit-content' }}
+                onClick={() => loadSectionData()}
+                disabled={busy}
+              >
+                🔄 Vérifier le statut
+              </button>
+            </div>
+          ) : (
+            <div style={{ fontSize: 13, color: 'var(--ad-text-3)' }}>Chargement…</div>
+          )}
+        </div>
+
+        <div className="ad-settings-box">
+          <h3 className="ad-settings-box-title">✏️ Configurer la version</h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <label style={{ fontSize: 12, color: 'var(--ad-text-2)' }}>
+              Version (ex: 1.2.0)
+              <input
+                className="ad-search"
+                style={{ display: 'block', marginTop: 4, width: '100%' }}
+                value={appVersionForm.version}
+                onChange={e => setAppVersionForm(f => ({ ...f, version: e.target.value }))}
+                placeholder="1.0.0"
+              />
+            </label>
+            <label style={{ fontSize: 12, color: 'var(--ad-text-2)' }}>
+              Build number
+              <input
+                className="ad-search"
+                type="number"
+                style={{ display: 'block', marginTop: 4, width: '100%' }}
+                value={appVersionForm.build}
+                onChange={e => setAppVersionForm(f => ({ ...f, build: Number(e.target.value) }))}
+                min={1}
+              />
+            </label>
+            <label style={{ fontSize: 12, color: 'var(--ad-text-2)' }}>
+              Lien APK
+              <input
+                className="ad-search"
+                style={{ display: 'block', marginTop: 4, width: '100%' }}
+                value={appVersionForm.apkUrl}
+                onChange={e => setAppVersionForm(f => ({ ...f, apkUrl: e.target.value }))}
+                placeholder="https://..."
+              />
+            </label>
+            <label style={{ fontSize: 12, color: 'var(--ad-text-2)', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input
+                type="checkbox"
+                checked={appVersionForm.forceUpdate}
+                onChange={e => setAppVersionForm(f => ({ ...f, forceUpdate: e.target.checked }))}
+              />
+              Mise à jour obligatoire (bloquante)
+            </label>
+            <label style={{ fontSize: 12, color: 'var(--ad-text-2)' }}>
+              Notes de version
+              <textarea
+                className="ad-search"
+                style={{ display: 'block', marginTop: 4, width: '100%', minHeight: 60, resize: 'vertical' }}
+                value={appVersionForm.releaseNotes}
+                onChange={e => setAppVersionForm(f => ({ ...f, releaseNotes: e.target.value }))}
+                placeholder="Nouveautés de cette version…"
+              />
+            </label>
+            <button
+              className="ad-btn ad-btn--primary"
+              onClick={handleAppVersionSave}
+              disabled={appVersionSaving || !appVersionForm.version || !appVersionForm.apkUrl}
+              style={{ width: 'fit-content' }}
+            >
+              {appVersionSaving ? '⏳ Sauvegarde…' : '💾 Sauvegarder'}
+            </button>
+            {appVersionMsg && (
+              <div style={{ fontSize: 13, marginTop: 4 }}>{appVersionMsg}</div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
   const renderSettings = () => (
     <div className="ad-settings-grid">
       {isSuperAdmin && (
@@ -3476,6 +3660,12 @@ export function AdminDashboard() {
 
   const renderVerification = () => <AdminVerificationPanel />;
 
+  // ═══════════════════════════  INCENTIVES ADMIN  ═══════════════════════════
+
+  const renderIncentives = () => <AdminIncentivesPanel />;
+  const renderMarketIntel = () => <MarketIntelPage />;
+  const renderMarketIntelAdmin = () => <AdminMarketIntelPage />;
+
   // ═══════════════════════════════════════════════
   // IA TABS — 5 sections Intelligence Artificielle
   // ═══════════════════════════════════════════════
@@ -3498,12 +3688,38 @@ export function AdminDashboard() {
 
   // IA Message — send promo form
   const [iaMsgFormOpen, setIaMsgFormOpen] = useState(false);
-  const [iaMsgForm, setIaMsgForm] = useState({ channel: 'EMAIL' as 'EMAIL' | 'PUSH', subject: '', body: '', reason: 'PROMO_MANUAL' });
+  const [iaMsgForm, setIaMsgForm] = useState({ channel: 'EMAIL' as 'EMAIL' | 'PUSH' | 'INTERNAL', subject: '', body: '', reason: 'PROMO_MANUAL' });
   const [iaMsgTargetSearch, setIaMsgTargetSearch] = useState('');
   const [iaMsgTargetUsers, setIaMsgTargetUsers] = useState<IaTargetUser[]>([]);
   const [iaMsgSelected, setIaMsgSelected] = useState<string[]>([]);
   const [iaMsgSending, setIaMsgSending] = useState(false);
   const [iaMsgResult, setIaMsgResult] = useState<string | null>(null);
+
+  // IA Message — création de coupon intégrée
+  const [iaMsgWithCoupon, setIaMsgWithCoupon] = useState(false);
+  const [iaMsgCouponPercent, setIaMsgCouponPercent] = useState(20);
+  const [iaMsgCouponMaxUses, setIaMsgCouponMaxUses] = useState(100);
+  const [iaMsgCouponExpiresAt, setIaMsgCouponExpiresAt] = useState('');
+  const [iaMsgCreatedCoupon, setIaMsgCreatedCoupon] = useState<string | null>(null);
+  const [iaMsgCouponScope, setIaMsgCouponScope] = useState<'ALL_PLANS' | 'USER_PLANS' | 'BUSINESS_PLANS' | 'ALL_ADDONS' | 'SPECIFIC'>('ALL_PLANS');
+  const [iaMsgCouponPlans, setIaMsgCouponPlans] = useState<string[]>([]);
+  const [iaMsgCouponAddons, setIaMsgCouponAddons] = useState<string[]>([]);
+  const IA_MSG_ALL_PLANS = [
+    { code: 'FREE', label: 'FREE (Utilisateur)', scope: 'USER' },
+    { code: 'BOOST', label: 'BOOST (Utilisateur)', scope: 'USER' },
+    { code: 'AUTO', label: 'AUTO (Utilisateur)', scope: 'USER' },
+    { code: 'PRO_VENDOR', label: 'PRO VENDEUR (Utilisateur)', scope: 'USER' },
+    { code: 'STARTER', label: 'STARTER (Business)', scope: 'BUSINESS' },
+    { code: 'BUSINESS', label: 'BUSINESS (Business)', scope: 'BUSINESS' },
+    { code: 'SCALE', label: 'SCALE (Business)', scope: 'BUSINESS' },
+  ];
+  const IA_MSG_ALL_ADDONS = ['IA_MERCHANT', 'IA_ORDER', 'BOOST_VISIBILITY', 'ADS_PACK', 'ADS_PREMIUM'];
+
+  // IA Message — filters & sorting
+  const [iaMsgFilterChannel, setIaMsgFilterChannel] = useState<'all' | 'EMAIL' | 'PUSH' | 'INTERNAL'>('all');
+  const [iaMsgFilterReason, setIaMsgFilterReason] = useState<'all' | string>('all');
+  const [iaMsgFilterStatus, setIaMsgFilterStatus] = useState<'all' | 'delivered' | 'failed'>('all');
+  const [iaMsgSortBy, setIaMsgSortBy] = useState<'date-desc' | 'date-asc' | 'channel' | 'reason'>('date-desc');
 
   const isMsgSelected = (id: string) => iaMsgSelected.includes(id);
   const isMsgSendDisabled = () => iaMsgSending || !iaMsgForm.subject || !iaMsgForm.body || iaMsgSelected.length === 0;
@@ -3512,7 +3728,7 @@ export function AdminDashboard() {
     setIaLoading(true);
     setIaData(null);
     try {
-      const res = await fetch(`${(import.meta as any).env?.VITE_API_URL ?? '/api'}/admin/ia/${endpoint}`, {
+      const res = await fetch(`${API_BASE}/admin/ia/${endpoint}`, {
         credentials: 'include',
       });
       if (res.ok) setIaData(await res.json());
@@ -3894,6 +4110,8 @@ export function AdminDashboard() {
     );
   };
 
+  const renderBoostKpi = () => <AdminBoostKpiPanel />;
+
   const renderIaMessage = () => {
     const d = iaData as any;
     return (
@@ -3954,9 +4172,10 @@ export function AdminDashboard() {
 
                   {/* Canal + Raison */}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
-                    <select value={iaMsgForm.channel} onChange={e => setIaMsgForm(f => ({ ...f, channel: e.target.value as 'EMAIL' | 'PUSH' }))} style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid var(--ad-border)', fontSize: 12, color: 'var(--ad-text-1)', background: 'var(--ad-surface)' }}>
+                    <select value={iaMsgForm.channel} onChange={e => setIaMsgForm(f => ({ ...f, channel: e.target.value as 'EMAIL' | 'PUSH' | 'INTERNAL' }))} style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid var(--ad-border)', fontSize: 12, color: 'var(--ad-text-1)', background: 'var(--ad-surface)' }}>
                       <option value="EMAIL">📧 Email</option>
                       <option value="PUSH">🔔 Notification Push</option>
+                      <option value="INTERNAL">💬 Message Interne</option>
                     </select>
                     <select value={iaMsgForm.reason} onChange={e => setIaMsgForm(f => ({ ...f, reason: e.target.value }))} style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid var(--ad-border)', fontSize: 12, color: 'var(--ad-text-1)', background: 'var(--ad-surface)' }}>
                       <option value="PROMO_MANUAL">📣 Promo manuelle</option>
@@ -3971,6 +4190,82 @@ export function AdminDashboard() {
 
                   {/* Corps */}
                   <textarea placeholder="Contenu du message *" value={iaMsgForm.body} onChange={e => setIaMsgForm(f => ({ ...f, body: e.target.value }))} rows={4} style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--ad-border)', fontSize: 12, color: 'var(--ad-text-1)', background: 'var(--ad-surface)', resize: 'vertical', marginBottom: 12 }} />
+
+                  {/* ═══ Code promo intégré ═══ */}
+                  <div style={{ marginBottom: 14, padding: '12px 14px', borderRadius: 10, border: `1px solid ${iaMsgWithCoupon ? 'rgba(111,88,255,0.4)' : 'var(--ad-border)'}`, background: iaMsgWithCoupon ? 'rgba(111,88,255,0.06)' : 'transparent' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none' }}>
+                      <input type="checkbox" checked={iaMsgWithCoupon} onChange={e => { setIaMsgWithCoupon(e.target.checked); setIaMsgCreatedCoupon(null); setIaMsgCouponScope('ALL_PLANS'); setIaMsgCouponPlans([]); setIaMsgCouponAddons([]); }} style={{ accentColor: '#6f58ff', width: 15, height: 15 }} />
+                      <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--ad-text-1)' }}>🎟️ Créer et joindre un code promo</span>
+                    </label>
+                    {iaMsgWithCoupon && (
+                      <div style={{ marginTop: 12 }}>
+                        {/* Ligne 1 : % + Max uses + Expire */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 10 }}>
+                          <label style={{ fontSize: 11, color: 'var(--ad-text-3)' }}>
+                            Réduction (%)
+                            <input type="number" min={1} max={100} value={iaMsgCouponPercent} onChange={e => setIaMsgCouponPercent(Math.min(100, Math.max(1, Number(e.target.value))))} style={{ display: 'block', width: '100%', marginTop: 4, padding: '7px 10px', borderRadius: 8, border: '1px solid var(--ad-border)', fontSize: 13, fontWeight: 700, color: '#6f58ff', background: 'var(--ad-surface)' }} />
+                          </label>
+                          <label style={{ fontSize: 11, color: 'var(--ad-text-3)' }}>
+                            Max utilisations
+                            <input type="number" min={1} max={100000} value={iaMsgCouponMaxUses} onChange={e => setIaMsgCouponMaxUses(Math.max(1, Number(e.target.value)))} style={{ display: 'block', width: '100%', marginTop: 4, padding: '7px 10px', borderRadius: 8, border: '1px solid var(--ad-border)', fontSize: 13, color: 'var(--ad-text-1)', background: 'var(--ad-surface)' }} />
+                          </label>
+                          <label style={{ fontSize: 11, color: 'var(--ad-text-3)' }}>
+                            Expire le *
+                            <input type="datetime-local" value={iaMsgCouponExpiresAt} onChange={e => setIaMsgCouponExpiresAt(e.target.value)} style={{ display: 'block', width: '100%', marginTop: 4, padding: '7px 10px', borderRadius: 8, border: '1px solid var(--ad-border)', fontSize: 12, color: 'var(--ad-text-1)', background: 'var(--ad-surface)' }} />
+                          </label>
+                        </div>
+                        {/* Scope cible */}
+                        <label style={{ fontSize: 11, color: 'var(--ad-text-3)', display: 'block', marginBottom: 6 }}>
+                          Applicable sur
+                          <select value={iaMsgCouponScope} onChange={e => { setIaMsgCouponScope(e.target.value as typeof iaMsgCouponScope); setIaMsgCouponPlans([]); setIaMsgCouponAddons([]); }} style={{ display: 'block', width: '100%', marginTop: 4, padding: '7px 10px', borderRadius: 8, border: '1px solid var(--ad-border)', fontSize: 12, color: 'var(--ad-text-1)', background: 'var(--ad-surface)' }}>
+                            <option value="ALL_PLANS">🌐 Tous les forfaits</option>
+                            <option value="USER_PLANS">👤 Forfaits Utilisateur uniquement</option>
+                            <option value="BUSINESS_PLANS">🏢 Forfaits Business uniquement</option>
+                            <option value="ALL_ADDONS">🔌 Tous les add-ons</option>
+                            <option value="SPECIFIC">🎯 Forfaits / Add-ons spécifiques</option>
+                          </select>
+                        </label>
+                        {/* Sélection spécifique forfaits */}
+                        {iaMsgCouponScope === 'SPECIFIC' && (
+                          <div style={{ marginBottom: 8 }}>
+                            <div style={{ fontSize: 11, color: 'var(--ad-text-3)', marginBottom: 4 }}>Forfaits concernés :</div>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                              {IA_MSG_ALL_PLANS.map(p => {
+                                const sel = iaMsgCouponPlans.includes(p.code);
+                                return (
+                                  <label key={p.code + p.scope} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--ad-text-1)', cursor: 'pointer', padding: '4px 8px', borderRadius: 6, background: sel ? 'rgba(111,88,255,0.18)' : 'rgba(255,255,255,0.04)', border: `1px solid ${sel ? '#6f58ff' : 'var(--ad-border)'}` }}>
+                                    <input type="checkbox" checked={sel} onChange={() => setIaMsgCouponPlans(prev => sel ? prev.filter(x => x !== p.code) : [...prev, p.code])} style={{ accentColor: '#6f58ff' }} />
+                                    {p.label}
+                                  </label>
+                                );
+                              })}
+                            </div>
+                            <div style={{ fontSize: 11, color: 'var(--ad-text-3)', marginBottom: 4 }}>Add-ons concernés :</div>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                              {IA_MSG_ALL_ADDONS.map(a => {
+                                const sel = iaMsgCouponAddons.includes(a);
+                                return (
+                                  <label key={a} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--ad-text-1)', cursor: 'pointer', padding: '4px 8px', borderRadius: 6, background: sel ? 'rgba(78,205,196,0.15)' : 'rgba(255,255,255,0.04)', border: `1px solid ${sel ? '#4ecdc4' : 'var(--ad-border)'}` }}>
+                                    <input type="checkbox" checked={sel} onChange={() => setIaMsgCouponAddons(prev => sel ? prev.filter(x => x !== a) : [...prev, a])} style={{ accentColor: '#4ecdc4' }} />
+                                    {a.replace(/_/g, ' ')}
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                        <p style={{ fontSize: 11, color: 'var(--ad-text-3)', margin: '8px 0 0' }}>
+                          💡 Le code promo sera créé automatiquement et inséré dans le message. Les destinataires pourront l&apos;utiliser lors du paiement.
+                        </p>
+                        {iaMsgCreatedCoupon && (
+                          <div style={{ marginTop: 8, padding: '8px 12px', borderRadius: 8, background: 'rgba(76,175,80,0.1)', border: '1px solid rgba(76,175,80,0.3)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ fontSize: 12, color: '#4caf50', fontWeight: 600 }}>✓ Code créé :</span>
+                            <code style={{ fontSize: 14, fontWeight: 700, color: '#6f58ff', letterSpacing: 1 }}>{iaMsgCreatedCoupon}</code>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
 
                   {/* Sélection des destinataires */}
                   <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ad-text-1)', marginBottom: 8 }}>🎯 Destinataires ({iaMsgSelected.length} sélectionnés)</div>
@@ -4004,21 +4299,56 @@ export function AdminDashboard() {
 
                   {/* Actions */}
                   <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                    <button disabled={isMsgSendDisabled()} onClick={async () => {
+                    <button disabled={isMsgSendDisabled() || (iaMsgWithCoupon && !iaMsgCouponExpiresAt)} onClick={async () => {
                       setIaMsgSending(true);
                       setIaMsgResult(null);
+                      setIaMsgCreatedCoupon(null);
                       try {
-                        await admin.iaMessageSend({ recipientIds: iaMsgSelected, channel: iaMsgForm.channel, subject: iaMsgForm.subject, body: iaMsgForm.body, reason: iaMsgForm.reason });
-                        setIaMsgResult(`✅ Message envoyé à ${iaMsgSelected.length} destinataire(s)`);
+                        let finalBody = iaMsgForm.body;
+                        // Créer le coupon en premier si activé
+                        if (iaMsgWithCoupon) {
+                          const isAddonScope = iaMsgCouponScope === 'ALL_ADDONS' || (iaMsgCouponScope === 'SPECIFIC' && iaMsgCouponAddons.length > 0 && iaMsgCouponPlans.length === 0);
+                          const coupon = await request<{ code: string }>('/incentives/admin/coupons', {
+                            method: 'POST',
+                            body: {
+                              kind: isAddonScope ? 'ADDON_DISCOUNT' : 'PLAN_DISCOUNT',
+                              discountPercent: iaMsgCouponPercent,
+                              targetScope: iaMsgCouponScope,
+                              targetPlanCodes: iaMsgCouponScope === 'SPECIFIC' ? iaMsgCouponPlans : [],
+                              targetAddonCodes: iaMsgCouponScope === 'SPECIFIC' ? iaMsgCouponAddons : [],
+                              maxUses: iaMsgCouponMaxUses,
+                              maxUsesPerUser: 1,
+                              expiresAt: new Date(iaMsgCouponExpiresAt).toISOString(),
+                              status: 'ACTIVE',
+                              segment: 'STANDARD',
+                            },
+                          });
+                          setIaMsgCreatedCoupon(coupon.code);
+                          const scopeLabel = iaMsgCouponScope === 'ALL_PLANS' ? 'tous les forfaits'
+                            : iaMsgCouponScope === 'USER_PLANS' ? 'forfaits Utilisateur'
+                            : iaMsgCouponScope === 'BUSINESS_PLANS' ? 'forfaits Business'
+                            : iaMsgCouponScope === 'ALL_ADDONS' ? 'tous les add-ons'
+                            : [...iaMsgCouponPlans, ...iaMsgCouponAddons].join(', ');
+                          finalBody = `${finalBody}\n\n🎟️ Code promo : ${coupon.code} (-${iaMsgCouponPercent}% sur ${scopeLabel})\nValable jusqu'au ${new Date(iaMsgCouponExpiresAt).toLocaleDateString('fr-FR')}`;
+                        }
+                        await admin.iaMessageSend({ recipientIds: iaMsgSelected, channel: iaMsgForm.channel, subject: iaMsgForm.subject, body: finalBody, reason: iaMsgForm.reason });
+                        setIaMsgResult(`✅ Message envoyé à ${iaMsgSelected.length} destinataire(s)${iaMsgWithCoupon ? ` avec le code promo ${iaMsgCreatedCoupon ?? ''}` : ''}`);
                         setIaMsgForm({ channel: 'EMAIL', subject: '', body: '', reason: 'PROMO_MANUAL' });
                         setIaMsgSelected([]);
                         setIaMsgTargetUsers([]);
                         setIaMsgTargetSearch('');
+                        setIaMsgWithCoupon(false);
+                        setIaMsgCouponPercent(20);
+                        setIaMsgCouponMaxUses(100);
+                        setIaMsgCouponExpiresAt('');
+                        setIaMsgCouponScope('ALL_PLANS');
+                        setIaMsgCouponPlans([]);
+                        setIaMsgCouponAddons([]);
                         await loadIaData('messages');
-                      } catch { setIaMsgResult('❌ Erreur lors de l\'envoi'); }
+                      } catch (e: any) { setIaMsgResult(`❌ ${e?.message ?? 'Erreur lors de l\'envoi'}`); }
                       setIaMsgSending(false);
-                    }} className="ad-btn ad-btn--accent" style={{ fontSize: 12, padding: '8px 18px', opacity: isMsgSendDisabled() ? 0.4 : 1 }}>
-                      {iaMsgSending ? '⏳ Envoi…' : '🚀 Envoyer'}
+                    }} className="ad-btn ad-btn--accent" style={{ fontSize: 12, padding: '8px 18px', opacity: (isMsgSendDisabled() || (iaMsgWithCoupon && !iaMsgCouponExpiresAt)) ? 0.4 : 1 }}>
+                      {iaMsgSending ? '⏳ Envoi…' : `🚀 Envoyer${iaMsgWithCoupon ? ' + créer coupon' : ''}`}
                     </button>
                     {iaMsgResult && <span style={{ fontSize: 12, color: iaMsgResult.startsWith('✅') ? 'var(--ad-green)' : 'var(--ad-red)' }}>{iaMsgResult}</span>}
                   </div>
@@ -4027,22 +4357,101 @@ export function AdminDashboard() {
             </div>
 
             {/* Messages récents */}
-            <h3 style={{ fontSize: 15, marginBottom: 8 }}>📋 Messages récents</h3>
+            <h3 style={{ fontSize: 15, marginBottom: 12 }}>📋 Messages récents</h3>
+            
+            {/* Filtres & Tri */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10, marginBottom: 16 }}>
+              <div>
+                <label style={{ fontSize: 11, color: 'var(--ad-text-3)', display: 'block', marginBottom: 4 }}>Canal</label>
+                <select value={iaMsgFilterChannel} onChange={e => setIaMsgFilterChannel(e.target.value as any)} style={{ width: '100%', padding: '6px 10px', borderRadius: 6, border: '1px solid var(--ad-border)', fontSize: 12, color: 'var(--ad-text-1)', background: 'var(--ad-surface)' }}>
+                  <option value="all">📌 Tous les canaux</option>
+                  <option value="EMAIL">📧 Email</option>
+                  <option value="PUSH">🔔 Push</option>
+                  <option value="INTERNAL">💬 Interne</option>
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: 11, color: 'var(--ad-text-3)', display: 'block', marginBottom: 4 }}>Raison d&apos;envoi</label>
+                <select value={iaMsgFilterReason} onChange={e => setIaMsgFilterReason(e.target.value)} style={{ width: '100%', padding: '6px 10px', borderRadius: 6, border: '1px solid var(--ad-border)', fontSize: 12, color: 'var(--ad-text-1)', background: 'var(--ad-surface)' }}>
+                  <option value="all">🎯 Toutes les raisons</option>
+                  {(() => {
+                    const reasons = new Set<string>();
+                    (d.recentMessages ?? []).forEach((m: any) => {
+                      if (typeof m.reason === 'string') reasons.add(m.reason);
+                    });
+                    return Array.from(reasons).map((r: string) => (
+                      <option key={r} value={r}>{r.replace(/_/g, ' ')}</option>
+                    ));
+                  })()}
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: 11, color: 'var(--ad-text-3)', display: 'block', marginBottom: 4 }}>Statut</label>
+                <select value={iaMsgFilterStatus} onChange={e => setIaMsgFilterStatus(e.target.value as any)} style={{ width: '100%', padding: '6px 10px', borderRadius: 6, border: '1px solid var(--ad-border)', fontSize: 12, color: 'var(--ad-text-1)', background: 'var(--ad-surface)' }}>
+                  <option value="all">✓ Tous les statuts</option>
+                  <option value="delivered">✓ Délivrés</option>
+                  <option value="failed">✗ Échoués</option>
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: 11, color: 'var(--ad-text-3)', display: 'block', marginBottom: 4 }}>Tri</label>
+                <select value={iaMsgSortBy} onChange={e => setIaMsgSortBy(e.target.value as any)} style={{ width: '100%', padding: '6px 10px', borderRadius: 6, border: '1px solid var(--ad-border)', fontSize: 12, color: 'var(--ad-text-1)', background: 'var(--ad-surface)' }}>
+                  <option value="date-desc">📅 Plus récent en premier</option>
+                  <option value="date-asc">📅 Plus ancien en premier</option>
+                  <option value="channel">📊 Par canal</option>
+                  <option value="reason">🎯 Par raison</option>
+                </select>
+              </div>
+            </div>
+
             <div className="ad-table-wrap">
               <table className="ad-table">
-                <thead><tr><th>Canal</th><th>Destinataire</th><th>Sujet</th><th>Raison</th><th>Statut</th><th>Date</th></tr></thead>
+                <thead><tr><th>Canal</th><th>Destinataire</th><th>Sujet</th><th>Raison</th><th>Code Promo</th><th>Statut</th><th>Date</th></tr></thead>
                 <tbody>
-                  {(d.recentMessages ?? []).map((m: any) => (
-                    <tr key={m.id}>
-                      <td><span className={`ad-badge ${m.channel === 'EMAIL' ? 'ad-badge--pending' : 'ad-badge--active'}`}>{m.channel}</span></td>
-                      <td>{m.recipientName}</td>
-                      <td style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.subject}</td>
-                      <td style={{ fontSize: 11 }}>{m.reason.replace(/_/g, ' ')}</td>
-                      <td><span className={`ad-badge ${m.delivered ? 'ad-badge--active' : 'ad-badge--danger'}`}>{m.delivered ? '✓ Délivré' : '✗ Échoué'}</span></td>
-                      <td style={{ fontSize: 11 }}>{new Date(m.sentAt).toLocaleDateString('fr-FR')} {new Date(m.sentAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</td>
-                    </tr>
-                  ))}
-                  {(d.recentMessages ?? []).length === 0 && <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--ad-text-3)' }}>Aucun message promotionnel envoyé</td></tr>}
+                  {(() => {
+                    let filtered = (d.recentMessages ?? []) as any[];
+                    
+                    // Apply filters
+                    if (iaMsgFilterChannel !== 'all') {
+                      filtered = filtered.filter(m => m.channel === iaMsgFilterChannel);
+                    }
+                    if (iaMsgFilterReason !== 'all') {
+                      filtered = filtered.filter(m => m.reason === iaMsgFilterReason);
+                    }
+                    if (iaMsgFilterStatus !== 'all') {
+                      filtered = filtered.filter(m => m.delivered === (iaMsgFilterStatus === 'delivered'));
+                    }
+                    
+                    // Apply sorting
+                    if (iaMsgSortBy === 'date-asc') {
+                      filtered = [...filtered].sort((a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime());
+                    } else if (iaMsgSortBy === 'channel') {
+                      filtered = [...filtered].sort((a, b) => a.channel.localeCompare(b.channel));
+                    } else if (iaMsgSortBy === 'reason') {
+                      filtered = [...filtered].sort((a, b) => a.reason.localeCompare(b.reason));
+                    } else {
+                      filtered = [...filtered].sort((a, b) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime());
+                    }
+                    
+                    return filtered.map((m: any) => (
+                      <tr key={m.id}>
+                        <td><span className={`ad-badge ${m.channel === 'EMAIL' ? 'ad-badge--pending' : m.channel === 'PUSH' ? 'ad-badge--active' : 'ad-badge--info'}`}>{m.channel}</span></td>
+                        <td><div style={{ fontSize: 12 }}>{m.recipientName}</div><div style={{ fontSize: 11, color: 'var(--ad-text-3)' }}>{m.recipientEmail}</div></td>
+                        <td style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.subject}</td>
+                        <td style={{ fontSize: 11 }}>{m.reason.replace(/_/g, ' ')}</td>
+                        <td><code style={{ fontSize: 11, background: 'rgba(111,88,255,0.1)', padding: '2px 6px', borderRadius: 4, color: '#6f58ff' }}>{m.promoCode ? m.promoCode : '—'}</code></td>
+                        <td><span className={`ad-badge ${m.delivered ? 'ad-badge--active' : 'ad-badge--danger'}`}>{m.delivered ? '✓ Délivré' : '✗ Échoué'}</span></td>
+                        <td style={{ fontSize: 11 }}>{new Date(m.sentAt).toLocaleDateString('fr-FR')} {new Date(m.sentAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</td>
+                      </tr>
+                    ));
+                  })()}
+                  {(() => {
+                    let filtered = (d.recentMessages ?? []) as any[];
+                    if (iaMsgFilterChannel !== 'all') filtered = filtered.filter(m => m.channel === iaMsgFilterChannel);
+                    if (iaMsgFilterReason !== 'all') filtered = filtered.filter(m => m.reason === iaMsgFilterReason);
+                    if (iaMsgFilterStatus !== 'all') filtered = filtered.filter(m => m.delivered === (iaMsgFilterStatus === 'delivered'));
+                    return filtered.length === 0 ? <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--ad-text-3)' }}>Aucun message ne correspond aux filtres</td></tr> : null;
+                  })()}
                 </tbody>
               </table>
             </div>
@@ -4075,14 +4484,19 @@ export function AdminDashboard() {
       case 'currency': return renderCurrency();
       case 'audit': return renderAudit();
       case 'settings': return renderSettings();
+      case 'app-version': return renderAppVersion();
       case 'messaging': return renderMessaging();
       case 'subscriptions': return renderSubscriptions();
       case 'verification': return renderVerification();
+      case 'incentives': return renderIncentives();
+      case 'market-intel': return renderMarketIntel();
+      case 'market-intel-admin': return renderMarketIntelAdmin();
       case 'ia-analytique': return renderIaAnalytique();
       case 'ia-marchande': return renderIaMarchande();
       case 'ia-commande': return renderIaCommande();
       case 'ia-ads': return renderIaAds();
       case 'ia-message': return renderIaMessage();
+      case 'boost-kpi': return renderBoostKpi();
       default: return null;
     }
   };

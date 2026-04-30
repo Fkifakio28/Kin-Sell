@@ -13,7 +13,13 @@ const prisma = new PrismaClient();
 
 const OLD_EMAIL = "fkifakio28@gmail.com";
 const NEW_EMAIL = "admin@kin-sell.com";
-const NEW_PASSWORD = "8765123490@28A28a28@";
+const NEW_PASSWORD = process.env.ADMIN_PASSWORD;
+
+if (!NEW_PASSWORD || NEW_PASSWORD.length < 12) {
+  console.error("ERREUR: Variable d'environnement ADMIN_PASSWORD requise (min 12 caractères).");
+  console.error("Usage: ADMIN_PASSWORD='VotreMotDePasse' node scripts/swap-admin.mjs");
+  process.exit(1);
+}
 
 async function main() {
   // 1. Delete old account and all related data

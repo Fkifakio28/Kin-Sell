@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { blog, type PublicBlogPost } from "../../lib/api-client";
+import { resolveMediaUrl } from "../../lib/api-core";
 import { SeoMeta } from "../../components/SeoMeta";
+import { useAuth } from "../../app/providers/AuthProvider";
 import "./blog.css";
 
 function formatDate(value: string | null, fallback: string): string {
@@ -12,7 +14,10 @@ function formatDate(value: string | null, fallback: string): string {
 }
 
 export function BlogPage() {
+  const { isLoggedIn } = useAuth();
   const [posts, setPosts] = useState<PublicBlogPost[]>([]);
+  const [myReactions, setMyReactions] = useState<Record<string, "like" | "dislike" | null>>({});
+  const [actionBusy, setActionBusy] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -20,8 +25,13 @@ export function BlogPage() {
     const load = async () => {
       try {
         const data = await blog.publicPosts({ limit: 12 });
+        const posts = Array.isArray(data.posts) ? data.posts : [];
         if (!cancelled) {
-          setPosts(data.posts);
+          setPosts(posts);
+          if (isLoggedIn && posts.length > 0) {
+            const reactionState = await blog.myReactions(posts.map((p) => p.id));
+            if (!cancelled) setMyReactions(reactionState.reactions);
+          }
         }
       } catch {
         if (!cancelled) {
@@ -38,7 +48,42 @@ export function BlogPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isLoggedIn]);
+
+  const reactToPost = async (post: PublicBlogPost, reaction: "like" | "dislike") => {
+    if (!isLoggedIn || actionBusy) return;
+    setActionBusy(`${post.id}:${reaction}`);
+    try {
+      const current = myReactions[post.id] ?? null;
+      const next = current === reaction ? "clear" : reaction;
+      const res = await blog.react(post.slug, next);
+      setPosts((prev) => prev.map((p) => (
+        p.id === post.id ? { ...p, likes: res.likes, dislikes: res.dislikes } : p
+      )));
+      setMyReactions((prev) => ({ ...prev, [post.id]: res.myReaction }));
+    } finally {
+      setActionBusy(null);
+    }
+  };
+
+  const sharePost = async (post: PublicBlogPost) => {
+    if (actionBusy) return;
+    setActionBusy(`${post.id}:share`);
+    try {
+      const shareUrl = `https://kin-sell.com/blog#${post.slug}`;
+      if (navigator.share) {
+        await navigator.share({ title: post.title, text: post.excerpt ?? post.title, url: shareUrl });
+      } else if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(shareUrl);
+      }
+      const res = await blog.share(post.slug);
+      setPosts((prev) => prev.map((p) => (p.id === post.id ? { ...p, shares: res.shares } : p)));
+    } catch {
+      // Aucun blocage UI si le partage est annulé.
+    } finally {
+      setActionBusy(null);
+    }
+  };
 
   return (
     <div className="blog">
@@ -67,6 +112,15 @@ export function BlogPage() {
         <section className="blog-grid">
           {posts.map((post) => (
             <article key={post.id} className="glass-card blog-card">
+              {post.coverImage && (
+                <img className="blog-card-cover" src={resolveMediaUrl(post.coverImage)} alt={post.title} loading="lazy" decoding="async" />
+              )}
+              {post.mediaUrl && post.mediaType === "video" && (
+                <video className="blog-card-video" controls preload="metadata" src={resolveMediaUrl(post.mediaUrl)} />
+              )}
+              {post.gifUrl && (
+                <img className="blog-card-gif" src={resolveMediaUrl(post.gifUrl)} alt={`GIF ${post.title}`} loading="lazy" decoding="async" />
+              )}
               <div>
                 <span className="blog-card-meta">
                   {post.author} · {formatDate(post.publishedAt, post.createdAt)}
@@ -79,6 +133,35 @@ export function BlogPage() {
               <p className="blog-card-content">
                 {post.content}
               </p>
+              <div className="blog-card-actions">
+                <button
+                  type="button"
+                  className={`blog-action-btn ${myReactions[post.id] === "like" ? "is-active" : ""}`}
+                  onClick={() => reactToPost(post, "like")}
+                  disabled={!isLoggedIn || actionBusy === `${post.id}:like`}
+                  title={isLoggedIn ? "J'aime" : "Connectez-vous pour réagir"}
+                >
+                  👍 {post.likes}
+                </button>
+                <button
+                  type="button"
+                  className={`blog-action-btn ${myReactions[post.id] === "dislike" ? "is-active" : ""}`}
+                  onClick={() => reactToPost(post, "dislike")}
+                  disabled={!isLoggedIn || actionBusy === `${post.id}:dislike`}
+                  title={isLoggedIn ? "Je n'aime pas" : "Connectez-vous pour réagir"}
+                >
+                  👎 {post.dislikes}
+                </button>
+                <button
+                  type="button"
+                  className="blog-action-btn"
+                  onClick={() => sharePost(post)}
+                  disabled={actionBusy === `${post.id}:share`}
+                  title="Partager"
+                >
+                  ↗️ {post.shares}
+                </button>
+              </div>
             </article>
           ))}
         </section>

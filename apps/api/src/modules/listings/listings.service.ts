@@ -1,10 +1,11 @@
-import { ListingStatus, PromotionStatus, PromotionDiffusion, PromotionType } from "@prisma/client";
+import { ListingStatus, PromotionStatus, PromotionDiffusion, PromotionType } from "../../shared/db/prisma-enums.js";
 import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
 import { Role } from "../../types/roles.js";
 import { normalizeImageInput, normalizeImageInputs } from "../../shared/utils/media-storage.js";
 import { resolveCountryCode, resolveCountryTerms, getSameRegionCountries } from "../../shared/geo/country-aliases.js";
 import { resolvePromoStatus } from "../../shared/promo/promo-engine.js";
+import { applyBoostRanking, hydrateBoostCampaigns } from "../boost/ranking.service.js";
 
 /** Optimized include for listing search — only fields needed for cards */
 const listingSearchInclude = {
@@ -42,6 +43,7 @@ export type CreateListingInput = {
   serviceDurationMin?: number | null;
   serviceLocation?: string | null;
   isNegotiable?: boolean;
+  variants?: { sizes?: string[]; colors?: { name: string; hex: string }[] } | null;
 };
 
 export type UpdateListingInput = {
@@ -66,6 +68,7 @@ export type UpdateListingInput = {
   serviceDurationMin?: number | null;
   serviceLocation?: string | null;
   isNegotiable?: boolean;
+  variants?: { sizes?: string[]; colors?: { name: string; hex: string }[] } | null;
 };
 
 export type SearchListingsInput = {
@@ -94,9 +97,9 @@ const toRad = (value: number) => (value * Math.PI) / 180;
 
 /**
  * Check if a boosted listing should display as boosted for the current viewer.
- * Rules:
- * - LOCAL: only if viewer's city matches the listing's city
- * - NATIONAL: only if viewer's country matches the listing's country
+ * Rules (strict — correction bug P1.6) :
+ * - LOCAL: only if viewer's city matches the listing's city (false si viewer anonyme)
+ * - NATIONAL: only if viewer's country matches the listing's country (false si viewer anonyme)
  * - CROSS_BORDER: only if viewer's country is in boostTargetCountries
  * - null/undefined scope → backward compat: always boosted if active
  */
@@ -112,17 +115,20 @@ function isBoostVisibleToViewer(
   // No scope set → backward compat: always visible as boosted
   if (!scope) return true;
 
+  const vCity = viewerCity?.toLowerCase().trim();
+  const vCountry = viewerCountry?.toLowerCase().trim();
+
   switch (scope) {
     case "LOCAL":
-      if (!viewerCity) return true; // No viewer context → show
-      return row.city.toLowerCase() === viewerCity.toLowerCase();
+      if (!vCity) return false; // strict: viewer anonyme ne voit pas les boosts locaux
+      return row.city.toLowerCase() === vCity;
     case "NATIONAL":
-      if (!viewerCountry) return true;
-      return (row.country ?? "").toLowerCase() === viewerCountry.toLowerCase();
+      if (!vCountry) return false;
+      return (row.country ?? "").toLowerCase() === vCountry;
     case "CROSS_BORDER": {
-      if (!viewerCountry) return true;
+      if (!vCountry) return false;
       const targets = row.boostTargetCountries ?? [];
-      return targets.some((t) => t.toLowerCase() === viewerCountry.toLowerCase());
+      return targets.some((t) => t.toLowerCase() === vCountry);
     }
     default:
       return true;
@@ -198,6 +204,7 @@ export const createListing = async (userId: string, payload: CreateListingInput)
         serviceDurationMin: payload.serviceDurationMin ?? null,
         serviceLocation: payload.serviceLocation ?? null,
         isNegotiable: user.role === Role.USER ? true : (payload.isNegotiable ?? true),
+        variants: (payload.type === "PRODUIT" ? (payload.variants ?? null) : null) as any,
         ownerUserId: userId,
         businessId
       }
@@ -533,15 +540,19 @@ export const activateScheduledPromos = async () => {
     include: { items: { select: { listingId: true, promoPriceUsdCents: true } } },
   });
 
+  if (scheduled.length === 0) return { activated: 0 };
+
   let activated = 0;
-  for (const promo of scheduled) {
-    await prisma.$transaction(async (tx) => {
+  // Batch : une seule transaction pour toutes les promos
+  await prisma.$transaction(async (tx) => {
+    for (const promo of scheduled) {
       await tx.promotion.update({
         where: { id: promo.id },
         data: { status: PromotionStatus.ACTIVE },
       });
 
-      if (promo.promoType === "ITEM") {
+      if (promo.promoType === "ITEM" && promo.items.length > 0) {
+        // Batch update par promo
         for (const item of promo.items) {
           if (item.promoPriceUsdCents != null) {
             await tx.listing.update({
@@ -556,9 +567,9 @@ export const activateScheduledPromos = async () => {
           }
         }
       }
-    });
-    activated++;
-  }
+      activated++;
+    }
+  });
   return { activated };
 };
 
@@ -573,29 +584,35 @@ export const expireEndedPromos = async () => {
     include: { items: { select: { listingId: true } } },
   });
 
-  let expiredCount = 0;
-  for (const promo of expired) {
-    await prisma.$transaction(async (tx) => {
-      await tx.promotion.update({
-        where: { id: promo.id },
-        data: { status: PromotionStatus.EXPIRED },
-      });
+  if (expired.length === 0) return { expired: 0 };
 
+  let expiredCount = 0;
+  // Batch : une seule transaction pour toutes les expirations
+  await prisma.$transaction(async (tx) => {
+    const allPromoIds = expired.map((p) => p.id);
+    await tx.promotion.updateMany({
+      where: { id: { in: allPromoIds } },
+      data: { status: PromotionStatus.EXPIRED },
+    });
+
+    for (const promo of expired) {
       if (promo.promoType === "ITEM") {
         const listingIds = promo.items.map((i) => i.listingId);
-        await tx.listing.updateMany({
-          where: { id: { in: listingIds }, promotionId: promo.id },
-          data: {
-            promoActive: false,
-            promoPriceUsdCents: null,
-            promoExpiresAt: null,
-            promotionId: null,
-          },
-        });
+        if (listingIds.length > 0) {
+          await tx.listing.updateMany({
+            where: { id: { in: listingIds }, promotionId: promo.id },
+            data: {
+              promoActive: false,
+              promoPriceUsdCents: null,
+              promoExpiresAt: null,
+              promotionId: null,
+            },
+          });
+        }
       }
-    });
-    expiredCount++;
-  }
+      expiredCount++;
+    }
+  });
   return { expired: expiredCount };
 };
 
@@ -700,6 +717,7 @@ export const updateListing = async (userId: string, listingId: string, payload: 
       ...(payload.serviceDurationMin !== undefined && { serviceDurationMin: payload.serviceDurationMin }),
       ...(payload.serviceLocation !== undefined && { serviceLocation: payload.serviceLocation }),
       ...(payload.isNegotiable !== undefined && { isNegotiable: payload.isNegotiable }),
+      ...(payload.variants !== undefined && { variants: existing.type === "PRODUIT" ? (payload.variants as any) : null }),
     },
   });
 
@@ -781,12 +799,16 @@ export const searchListings = async (input: SearchListingsInput) => {
   const discoveryMode = input.discoveryMode ?? "local_first";
 
   // ── Résolution du code pays ──
-  const resolvedCode = input.countryCode?.toUpperCase()
-    ?? resolveCountryCode(input.country)
-    ?? undefined;
+  // "GLOBAL" = pseudo-pays Kin-Sell → ignorer tout filtre pays + ville
+  const isGlobal =
+    input.countryCode?.toUpperCase() === "GLOBAL" || input.country?.toUpperCase() === "GLOBAL";
+  const resolvedCode = isGlobal
+    ? undefined
+    : (input.countryCode?.toUpperCase() ?? resolveCountryCode(input.country) ?? undefined);
 
   // ── Country-aware filtering (utilise Listing.countryCode si disponible) ──
-  const countryTerms = resolveCountryTerms(input.country);
+  const countryTerms = isGlobal ? [] : resolveCountryTerms(input.country);
+  const cityFilter = isGlobal ? undefined : input.city;
   const andClauses: Record<string, unknown>[] = [];
 
   if (resolvedCode && discoveryMode !== "all") {
@@ -812,7 +834,7 @@ export const searchListings = async (input: SearchListingsInput) => {
     where: {
       isPublished: true,
       type: input.type,
-      ...(input.city ? { city: { contains: input.city, mode: "insensitive" as const } } : {}),
+      ...(cityFilter ? { city: { contains: cityFilter, mode: "insensitive" as const } } : {}),
       ...(andClauses.length > 0 ? { AND: andClauses } : {}),
       OR: input.q
         ? [
@@ -828,7 +850,7 @@ export const searchListings = async (input: SearchListingsInput) => {
   });
 
   // Fallback: sans filtre ville si aucun résultat
-  if (rows.length === 0 && input.city) {
+  if (rows.length === 0 && cityFilter) {
     rows = await prisma.listing.findMany({
       where: {
         isPublished: true,
@@ -982,13 +1004,32 @@ export const searchListings = async (input: SearchListingsInput) => {
     }
   }
 
-  // Tri : articles boostés en tête, puis par distance ou date
-  enriched.sort((a, b) => {
-    const aBoosted = a.isBoosted ? 1 : 0;
-    const bBoosted = b.isBoosted ? 1 : 0;
-    if (aBoosted !== bBoosted) return bBoosted - aBoosted;
-    if (byCoordinates) return (a.distanceKm ?? 0) - (b.distanceKm ?? 0);
-    return 0;
+  // Ranking unifié : score = relevance*0.4 + boost*0.3 + freshness*0.15 + quality*0.1 + geoMatch*0.05
+  // + cap densité 25% + fairness (pas 2 vendeurs consécutifs)
+  const campaignMap = await hydrateBoostCampaigns(
+    enriched.filter((e) => e.isBoosted).map((e) => ({ id: e.id, isBoosted: true })),
+    "LISTING",
+  );
+  const rankable = enriched.map((e) => {
+    const camp = campaignMap.get(e.id);
+    return {
+      ...e,
+      sellerId: e.owner.userId,
+      boostScope: camp?.scope ?? null,
+      boostTargetCountries: camp?.targetCountries ?? [],
+      boostBudgetSpent: camp?.budgetSpentUsdCents ?? 0,
+      boostBudgetTotal: camp?.budgetUsdCents ?? 0,
+      itemCity: e.city,
+      itemCountry: null,
+    };
+  });
+  const ranked = applyBoostRanking(rankable as any, {
+    viewerCity: input.city,
+    viewerCountry: input.country,
+  });
+  const finalResults = ranked.map((r: any) => {
+    const { sellerId, boostScope, boostTargetCountries, boostBudgetSpent, boostBudgetTotal, itemCity, itemCountry, ...rest } = r;
+    return rest;
   });
 
   return {
@@ -1001,14 +1042,85 @@ export const searchListings = async (input: SearchListingsInput) => {
       : null,
     fallbackLevel,
     total: enriched.length,
-    results: enriched
+    results: finalResults
+  };
+};
+
+/* ── Public detail of a single listing (no auth, page produit) ── */
+export const getPublicListingDetail = async (listingId: string) => {
+  const listing = await prisma.listing.findFirst({
+    where: { id: listingId, isPublished: true, status: ListingStatus.ACTIVE },
+    include: {
+      ownerUser: { include: { profile: true } },
+      business: true,
+    },
+  });
+  if (!listing) throw new HttpError(404, "Article introuvable");
+
+  // Similar listings (same category, exclude current) — up to 8
+  const similar = await prisma.listing.findMany({
+    where: {
+      isPublished: true,
+      status: ListingStatus.ACTIVE,
+      category: listing.category,
+      id: { not: listing.id },
+    },
+    include: { ownerUser: { include: { profile: true } } },
+    orderBy: { createdAt: "desc" },
+    take: 8,
+  });
+
+  const mapSimple = (row: typeof listing) => ({
+    id: row.id,
+    type: row.type,
+    title: row.title,
+    description: row.description,
+    category: row.category,
+    city: row.city,
+    country: row.country,
+    imageUrl: row.imageUrl,
+    mediaUrls: (row as any).mediaUrls ?? [],
+    priceUsdCents: row.priceUsdCents,
+    isNegotiable: row.isNegotiable,
+    promoActive: row.promoActive,
+    promoPriceUsdCents: row.promoPriceUsdCents,
+    promoExpiresAt: row.promoExpiresAt,
+    stockQuantity: row.stockQuantity,
+    serviceDurationMin: row.serviceDurationMin,
+    serviceLocation: row.serviceLocation,
+    viewCount: row.viewCount,
+    variants: (row as any).variants ?? null,
+    createdAt: row.createdAt,
+    owner: {
+      userId: row.ownerUserId,
+      displayName: row.ownerUser.profile?.displayName ?? "Utilisateur Kin-Sell",
+      username: row.ownerUser.profile?.username ?? null,
+      avatarUrl: row.ownerUser.profile?.avatarUrl ?? null,
+      city: row.ownerUser.profile?.city ?? null,
+      country: row.ownerUser.profile?.country ?? null,
+    },
+    business: row.business ? {
+      id: row.business.id,
+      slug: (row.business as any).slug ?? null,
+      publicName: (row.business as any).publicName ?? null,
+    } : null,
+  });
+
+  return {
+    listing: mapSimple(listing),
+    similar: similar.map((r) => mapSimple(r as typeof listing)),
   };
 };
 
 /* ── Latest published listings (public, no auth) ── */
 export const latestListings = async (input: { type?: ListingType; city?: string; country?: string; countryCode?: string; limit: number }) => {
-  const resolvedCode = input.countryCode?.toUpperCase() ?? resolveCountryCode(input.country) ?? undefined;
-  const countryTerms = resolveCountryTerms(input.country);
+  // "GLOBAL" = pseudo-pays Kin-sell → ignorer tout filtre pays
+  const isGlobal =
+    input.countryCode?.toUpperCase() === "GLOBAL" || input.country?.toUpperCase() === "GLOBAL";
+  const resolvedCode = isGlobal
+    ? undefined
+    : (input.countryCode?.toUpperCase() ?? resolveCountryCode(input.country) ?? undefined);
+  const countryTerms = isGlobal ? [] : resolveCountryTerms(input.country);
   const andClauses: Record<string, unknown>[] = [];
 
   if (resolvedCode) {

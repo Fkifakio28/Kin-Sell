@@ -1,0 +1,168 @@
+/* PermissionsOnboarding — Glassmorphism + thème Kin-Sell */
+
+.perm-onb {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-background, #120b2b);
+  padding: 20px;
+}
+
+.perm-onb-card {
+  width: 100%;
+  max-width: 400px;
+  background: rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 24px;
+  padding: 40px 28px 32px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  animation: perm-fade-in 0.35s ease-out;
+}
+
+@keyframes perm-fade-in {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Icon ── */
+.perm-onb-icon,
+.perm-onb-step-icon {
+  font-size: 3.5rem;
+  margin-bottom: 16px;
+  filter: drop-shadow(0 0 20px rgba(111, 88, 255, 0.4));
+}
+
+/* ── Title ── */
+.perm-onb-title {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: #fff;
+  margin: 0 0 12px;
+  line-height: 1.3;
+}
+
+/* ── Description ── */
+.perm-onb-desc {
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.65);
+  line-height: 1.5;
+  margin: 0 0 24px;
+  max-width: 320px;
+}
+
+/* ── Permission list (intro) ── */
+.perm-onb-list {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 28px;
+}
+
+.perm-onb-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  font-size: 0.88rem;
+  color: rgba(255, 255, 255, 0.85);
+  text-align: left;
+}
+
+.perm-onb-item-icon {
+  font-size: 1.3rem;
+  flex-shrink: 0;
+}
+
+/* ── Buttons ── */
+.perm-onb-btn-primary {
+  width: 100%;
+  padding: 14px 24px;
+  border: none;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #6f58ff, #a78bfa);
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  margin-bottom: 12px;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.perm-onb-btn-primary:active {
+  transform: scale(0.97);
+  box-shadow: 0 0 24px rgba(111, 88, 255, 0.5);
+}
+
+.perm-onb-btn-secondary {
+  width: 100%;
+  padding: 12px 24px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.88rem;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.perm-onb-btn-secondary:active {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* ── Warning ── */
+.perm-onb-warn {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px 14px;
+  background: rgba(248, 113, 113, 0.1);
+  border: 1px solid rgba(248, 113, 113, 0.2);
+  border-radius: 12px;
+  font-size: 0.82rem;
+  color: #f87171;
+  text-align: left;
+  margin-bottom: 20px;
+  width: 100%;
+  line-height: 1.4;
+}
+
+/* ── Progress dots ── */
+.perm-onb-dots {
+  display: flex;
+  gap: 8px;
+  margin-top: 24px;
+}
+
+.perm-onb-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+  transition: all 0.3s;
+}
+
+.perm-onb-dot.active {
+  background: #6f58ff;
+  box-shadow: 0 0 8px rgba(111, 88, 255, 0.6);
+  transform: scale(1.3);
+}
+
+.perm-onb-dot.granted {
+  background: #4ade80;
+}
+
+.perm-onb-dot.denied {
+  background: #f87171;
+}

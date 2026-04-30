@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useLocaleCurrency } from "../../app/providers/LocaleCurrencyProvider";
 import { DEFAULT_CURRENCY_RATES } from "../../shared/constants/currencies";
-import { negotiations, resolveMediaUrl, type NegotiationSummary, type GroupNegotiationSummary, ApiError } from "../../lib/api-client";
+import { negotiations, negotiationAi, resolveMediaUrl, type NegotiationSummary, type GroupNegotiationSummary, ApiError } from "../../lib/api-client";
+import type { BuyerNegotiationHint } from "../../lib/services/ai.service";
 import { useSocket } from "../../hooks/useSocket";
 import "./negotiate-popup.css";
 
@@ -36,6 +37,20 @@ export function NegotiatePopup({ listing, onClose, onSuccess }: NegotiatePopupPr
   const [sent, setSent] = useState(false);
   const sentResultRef = useRef<NegotiationSummary | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // ── IA Marchand — Buyer hint (prix suggéré, contexte marché) ──
+  const [aiHint, setAiHint] = useState<BuyerNegotiationHint | null>(null);
+  const [aiHintLoading, setAiHintLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setAiHintLoading(true);
+    negotiationAi.buyerHint(listing.id)
+      .then((data) => { if (!cancelled) setAiHint(data); })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setAiHintLoading(false); });
+    return () => { cancelled = true; };
+  }, [listing.id]);
 
   // Grouped mode: existing open groups for this listing
   const [openGroups, setOpenGroups] = useState<GroupNegotiationSummary[]>([]);
@@ -129,11 +144,17 @@ export function NegotiatePopup({ listing, onClose, onSuccess }: NegotiatePopupPr
     GROUPED: { icon: "👥", label: t("negotiation.modeGrouped") },
   };
 
-  // Smart price suggestions (percentage discounts)
+  // Smart price suggestions: AI-powered or fallback static
   const originalLocal = listing.priceUsdCents / 100 * negRate;
   const suggestPercents = [10, 20, 30];
   const applySuggestion = (pct: number) => {
     const val = originalLocal * (1 - pct / 100);
+    const dec = currency === 'USD' || currency === 'EUR' || currency === 'MAD' ? 2 : 0;
+    setPriceDollars(val.toFixed(dec));
+    inputRef.current?.focus();
+  };
+  const applyAiSuggestion = (cents: number) => {
+    const val = cents / 100 * negRate;
     const dec = currency === 'USD' || currency === 'EUR' || currency === 'MAD' ? 2 : 0;
     setPriceDollars(val.toFixed(dec));
     inputRef.current?.focus();
@@ -206,6 +227,40 @@ export function NegotiatePopup({ listing, onClose, onSuccess }: NegotiatePopupPr
 
         {error && <div className="neg-error">{error}</div>}
 
+        {/* ── IA Marchand — Conseil acheteur ── */}
+        {(aiHintLoading || aiHint) && (
+          <div className="neg-ai-panel glass-container">
+            <div className="neg-ai-header">
+              <span className="neg-ai-icon">🤖</span>
+              <span className="neg-ai-title">IA Marchand</span>
+              {aiHintLoading && <span className="cart-ai-loading-dots"><span /><span /><span /></span>}
+            </div>
+            {aiHint && !aiHintLoading && (
+              <div className="neg-ai-body">
+                <div className="neg-ai-row">
+                  <span>💡 Prix suggéré :</span>
+                  <strong className="neg-ai-suggest-price">{formatMoneyFromUsdCents(aiHint.suggestedOfferUsdCents)}</strong>
+                  <button type="button" className="neg-suggest-pill neg-suggest-pill--ai" onClick={() => applyAiSuggestion(aiHint.suggestedOfferUsdCents)}>
+                    Appliquer
+                  </button>
+                </div>
+                <div className="neg-ai-row">
+                  <span>📊 Chances de succès : <strong>{aiHint.successRate}%</strong></span>
+                  <span className="neg-ai-context">
+                    {aiHint.marketContext === "FLEXIBLE" ? "🟢 Marché flexible" : aiHint.marketContext === "COMPETITIVE" ? "🟡 Compétitif" : "🔴 Prix fixe"}
+                  </span>
+                </div>
+                <p className="neg-ai-insight">{aiHint.insight}</p>
+                {aiHint.messageSuggestion && (
+                  <button type="button" className="neg-ai-msg-btn" onClick={() => setMessage(aiHint.messageSuggestion)}>
+                    ✍️ Utiliser le message suggéré
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* GROUPED mode: open groups list */}
         {mode === "GROUPED" && (
           <div className="neg-groups-section">
@@ -255,13 +310,24 @@ export function NegotiatePopup({ listing, onClose, onSuccess }: NegotiatePopupPr
               />
               <span className="neg-currency">{negSym}</span>
             </div>
-            {/* Smart price suggestions */}
+            {/* Smart price suggestions: IA-powered + static fallback */}
             <div className="neg-suggestions">
-              {suggestPercents.map((pct) => (
-                <button key={pct} type="button" className="neg-suggest-pill" onClick={() => applySuggestion(pct)}>
-                  −{pct}%
-                </button>
-              ))}
+              {aiHint ? (
+                <>
+                  <button type="button" className="neg-suggest-pill neg-suggest-pill--ai" onClick={() => applyAiSuggestion(aiHint.suggestedOfferUsdCents)}>
+                    🤖 {formatMoneyFromUsdCents(aiHint.suggestedOfferUsdCents)}
+                  </button>
+                  <button type="button" className="neg-suggest-pill" onClick={() => applyAiSuggestion(aiHint.minRealisticOfferUsdCents)}>
+                    Min {formatMoneyFromUsdCents(aiHint.minRealisticOfferUsdCents)}
+                  </button>
+                </>
+              ) : (
+                suggestPercents.map((pct) => (
+                  <button key={pct} type="button" className="neg-suggest-pill" onClick={() => applySuggestion(pct)}>
+                    −{pct}%
+                  </button>
+                ))
+              )}
             </div>
           </label>
 

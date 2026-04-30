@@ -860,10 +860,11 @@
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   display: flex;
-  align-items: flex-start;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
   padding: 8px 12px;
   animation: hm-fade-in 0.15s ease;
+  overflow-y: auto;
 }
 
 @keyframes hm-fade-in {
@@ -1063,6 +1064,55 @@
   opacity: 0.85;
 }
 
+.hm-drawer-download-btn {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 10px;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  background: rgba(34, 197, 94, 0.1);
+  color: #4ADE80;
+  font-size: 0.88rem;
+  font-weight: 700;
+  border-radius: 12px;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+  transition: opacity 0.15s, background 0.15s;
+}
+
+.hm-drawer-download-btn:active {
+  opacity: 0.85;
+  background: rgba(34, 197, 94, 0.18);
+}
+
+/* Drawer quick links (Forfaits + Contact) */
+.hm-drawer-quick-links {
+  display: flex;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--color-glass-border, rgba(255, 255, 255, 0.06));
+}
+
+.hm-drawer-quick-link {
+  flex: 1;
+  padding: 8px 4px;
+  text-align: center;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--color-text, #fff);
+  background: var(--color-glass-bg, rgba(255, 255, 255, 0.05));
+  border: 1px solid var(--color-glass-border, rgba(255, 255, 255, 0.08));
+  border-radius: 10px;
+  text-decoration: none;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.hm-drawer-quick-link:active {
+  background: rgba(111, 88, 255, 0.12);
+  border-color: rgba(111, 88, 255, 0.3);
+}
+
 /* Drawer Market Prefs */
 .hm-drawer-market-prefs {
   padding: 8px 12px 10px;
@@ -1159,6 +1209,28 @@
 }
 
 .hm-drawer-social-btn:active {
+  background: var(--color-glass-bg, rgba(255, 255, 255, 0.12));
+}
+
+.hm-drawer-theme-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 10px;
+  border: 1px solid var(--color-primary);
+  background: var(--color-glass-bg, rgba(255, 255, 255, 0.06));
+  color: var(--color-primary);
+  font-size: 0.84rem;
+  font-weight: 600;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.hm-drawer-theme-toggle:active {
   background: var(--color-glass-bg, rgba(255, 255, 255, 0.12));
 }
 
@@ -1275,4 +1347,7 @@
     padding-top: env(safe-area-inset-top);
   }
 }
+
+
+
 

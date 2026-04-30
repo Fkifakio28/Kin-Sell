@@ -10,7 +10,7 @@
  * - Order Anomaly       : détection d'anomalies dans les commandes
  */
 
-import { CartStatus } from "@prisma/client";
+import { CartStatus } from "../../shared/db/prisma-enums.js";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
@@ -23,6 +23,8 @@ import {
   clearSubscriptionCache,
 } from "../../shared/billing/subscription-guard.js";
 import { sendPushToUser } from "../notifications/push.service.js";
+import { getBlendedInsight, getTradeRoutes } from "../knowledge-base/knowledge-base.service.js";
+import { getFusedIntelligence } from "../external-intel/external-intelligence-fusion.service.js";
 
 // ─────────────────────────────────────────────
 // Checkout Advisor
@@ -170,21 +172,83 @@ export async function getCheckoutAdvice(
       ? "Pour les achats > $100, un virement bancaire peut vous éviter les frais PayPal."
       : "PayPal est recommandé pour ce montant — rapide et sécurisé.";
 
-  // ── Delivery estimate (basé sur ville commune) ──
+  // ── Delivery estimate (basé sur ville commune + KB trade routes) ──
   const sameCityItems = cart.items.filter(
     (i) => i.listing?.city?.toLowerCase() === cities[0]?.toLowerCase()
   );
-  const estimatedDeliveryHours =
-    sameCityItems.length === cart.items.length
-      ? { min: 2, max: 24 }  // même ville
-      : { min: 24, max: 72 };
+  let estimatedDeliveryHours: { min: number; max: number } | null;
+  if (sameCityItems.length === cart.items.length) {
+    estimatedDeliveryHours = { min: 2, max: 24 }; // même ville
+  } else {
+    estimatedDeliveryHours = { min: 24, max: 72 };
+    // Enrichir avec les routes commerciales KB si inter-villes
+    try {
+      const tradeRoutes = await getTradeRoutes("CD", "BOTH");
+      const relevantRoute = tradeRoutes.find(
+        (r) =>
+          cities.some((c) => c.toLowerCase() === r.sourceCity.toLowerCase()) ||
+          cities.some((c) => c.toLowerCase() === r.destCity.toLowerCase()),
+      );
+      if (relevantRoute) {
+        estimatedDeliveryHours = {
+          min: Math.max(2, relevantRoute.avgTransitDays * 12),
+          max: relevantRoute.avgTransitDays * 24 + 24,
+        };
+      }
+    } catch { /* KB non critique */ }
+  }
+
+  // ── KB-enriched payment optimization ──
+  let paymentOptimizationKb = paymentOptimization;
+  try {
+    if (categories.length > 0) {
+      const blended = await getBlendedInsight(categories[0], "CD", cities[0]);
+      if (blended && blended.seasonalFactor > 1.15) {
+        paymentOptimizationKb += ` 📅 Période de forte demande — pour garantir vos articles, commandez rapidement.`;
+      }
+    }
+  } catch { /* KB non critique */ }
+
+  // ── External Intelligence enrichment (best-effort) ──
+  let externalInsight: string | null = null;
+  try {
+    if (categories.length > 0) {
+      const fused = await getFusedIntelligence(categories[0], "CD", cities[0]);
+      if (fused.confidence > 25) {
+        // Ajouter urgence si triggers saisonniers actifs
+        const seasonalTriggers = fused.activeTriggers.filter((t) =>
+          ["SEASONAL_SCHOOL_PEAK", "RELIGIOUS_EVENT_SPIKE", "TOURISM_WINDOW_PROMO"].includes(t.trigger),
+        );
+        if (seasonalTriggers.length > 0 && cart.items[0]?.listing) {
+          urgencySignals.push({
+            listingId: cart.items[0].listing.id,
+            title: cart.items[0].listing.title,
+            signal: "HIGH_DEMAND",
+            message: `🌍 ${seasonalTriggers[0].explanation}`,
+          });
+        }
+        // Ajuster livraison si weather trigger
+        const weatherTrigger = fused.activeTriggers.find((t) => t.trigger === "RAINY_SEASON_SERVICE_SURGE");
+        if (weatherTrigger && estimatedDeliveryHours) {
+          estimatedDeliveryHours.max = Math.round(estimatedDeliveryHours.max * 1.3);
+          paymentOptimizationKb += " ⛈️ Saison des pluies — délais livraison possiblement allongés.";
+        }
+        // Currency shock warning
+        const fxTrigger = fused.activeTriggers.find((t) => t.trigger === "CURRENCY_SHOCK_REPRICING");
+        if (fxTrigger) {
+          paymentOptimizationKb += ` 💱 ${fxTrigger.explanation}`;
+        }
+        externalInsight = fused.explanation;
+      }
+    }
+  } catch { /* external intel non critique */ }
 
   return {
     cartId,
     bundleSuggestions,
     discountTrigger,
     urgencySignals,
-    paymentOptimization,
+    paymentOptimization: paymentOptimizationKb,
     estimatedDeliveryHours,
   };
 }

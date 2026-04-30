@@ -1,4 +1,4 @@
-# Dépendances
+﻿# Dependencies
 node_modules/
 
 # Build outputs
@@ -6,16 +6,20 @@ dist/
 build/
 .turbo/
 
-# Variables d'environnement (SECRETS — ne jamais commit)
+# Environment secrets (NEVER commit)
 .env
 .env.*
 !.env.example
-!apps/web/.env.production
+
+# Firebase Admin SDK service account keys (NEVER commit)
+*firebase-adminsdk*.json
+firebase-admin.json
+serviceAccountKey.json
 
 # VS Code
 .vscode/
 
-# Couverture de tests
+# Test coverage
 coverage/
 
 # Prisma
@@ -33,12 +37,32 @@ pnpm-debug.log*
 .DS_Store
 Thumbs.db
 
+# Keystore & signing secrets (NEVER commit)
+keystore/
+apps/web/android/keystore/
+apps/web/android/key.properties
+*.jks
+*.keystore
+
+# Firebase config (contains API key)
+apps/web/android/app/google-services.json
+
 # Cache Vite / TypeScript
 *.tsbuildinfo
 .vite/
 
 # Generated sitemaps
 apps/web/public/sitemap*.xml
-kin-sell-v2.0.0.apk
+
+# Build artifacts
+kin-sell-*.apk
+kin-sell-*.aab
 build-log.txt
+temp-apk-extract/
+temp-apk-icon.png
+temp-apk.zip
+temp-icon-check.png
+apps/web/dist.tar.gz
+
+# Scripts with credentials
 scripts/fix-env-firebase.py

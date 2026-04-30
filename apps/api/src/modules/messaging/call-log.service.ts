@@ -29,6 +29,23 @@ export async function updateCallLogStatus(
   });
 }
 
+/** Lookup léger pour l'endpoint /messaging/calls/:callId/state. */
+export async function getCallLogById(id: string) {
+  return prisma.callLog.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      conversationId: true,
+      callerUserId: true,
+      receiverUserId: true,
+      callType: true,
+      status: true,
+      startedAt: true,
+      endedAt: true,
+    },
+  });
+}
+
 export async function getUserCallLogs(userId: string, cursor?: string, limit = 40) {
   const logs = await prisma.callLog.findMany({
     where: {

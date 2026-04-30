@@ -12,10 +12,12 @@ type SocketEvents = {
   "presence:snapshot": (data: { userIds: string[] }) => void;
   "user:online": (data: { userId: string }) => void;
   "user:offline": (data: { userId: string }) => void;
-  "call:incoming": (data: { conversationId: string; callerId: string; callType: "audio" | "video" }) => void;
-  "call:accepted": (data: { conversationId: string; accepterId: string }) => void;
-  "call:rejected": (data: { conversationId: string; rejecterId: string }) => void;
-  "call:ended": (data: { conversationId: string; enderId: string }) => void;
+  "call:incoming": (data: { callId: string; conversationId: string; callerId: string; callType: "audio" | "video"; expiresAt: number }) => void;
+  "call:initiated": (data: { callId: string; conversationId: string; targetUserId: string; callType: "audio" | "video"; expiresAt: number }) => void;
+  "call:accepted": (data: { callId: string; conversationId: string; accepterId: string }) => void;
+  "call:rejected": (data: { callId: string; conversationId: string; rejecterId: string }) => void;
+  "call:ended": (data: { callId: string; conversationId: string; enderId: string }) => void;
+  "call:no-answer": (data: { callId: string; conversationId: string }) => void;
   "order:created": (data: {
     type: "ORDER_CREATED";
     orderId: string;

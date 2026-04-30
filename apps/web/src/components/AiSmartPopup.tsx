@@ -7,6 +7,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { aiRecommendations, aiTrials, type AiRecommendation } from "../lib/services/ai.service";
+import { incentives as incentivesApi } from "../lib/services/incentives.service";
 import { useNavigate } from "react-router-dom";
 
 const ENGINE_ICONS: Record<string, string> = {
@@ -83,9 +84,36 @@ export default function AiSmartPopup() {
       const isBiz = current.accountType === 'BUSINESS';
       const dashPath = isBiz ? '/business/dashboard' : '/account';
 
+      // ── Coupon / Grant IA embarqué dans actionData (Chantier D4) ──
+      const actionData = (current.actionData ?? {}) as Record<string, unknown>;
+      let couponCode = typeof actionData.couponCode === "string" ? actionData.couponCode : null;
+      const grantId = typeof actionData.grantId === "string" ? actionData.grantId : null;
+      const planCode = typeof actionData.planCode === "string"
+        ? actionData.planCode
+        : (current.actionType === "UPGRADE_PLAN" && current.actionTarget ? current.actionTarget : null);
+
+      // Si un grant est proposé mais pas encore converti → conversion à la volée
+      if (!couponCode && grantId) {
+        try {
+          const res = await incentivesApi.convertGrant(grantId);
+          couponCode = res.couponCode;
+        } catch { /* grant may already be consumed/expired — fallback redirection sans coupon */ }
+      }
+
+      const goPricingWithCoupon = () => {
+        const params = new URLSearchParams();
+        if (planCode) params.set("plan", planCode);
+        if (couponCode) params.set("coupon", couponCode);
+        const qs = params.toString();
+        navigate(qs ? `/forfaits?${qs}` : "/forfaits");
+      };
+
       if (current.actionType === "BOOST_ARTICLE" || current.actionType === "BOOST_SHOP" ||
         current.actionType === "UPGRADE_PLAN" || current.actionType === "ENABLE_AUTO_SALES") {
-        navigate("/pricing");
+        goPricingWithCoupon();
+      } else if (couponCode || planCode) {
+        // Tout autre type mais avec coupon/plan embarqué → rediriger vers pricing
+        goPricingWithCoupon();
       } else if (current.actionType === "VIEW_ANALYTICS") {
         if (isBiz) { sessionStorage.setItem('ud-section', 'analytics'); navigate(dashPath); }
         else { navigate(`${dashPath}?section=analytics`); }

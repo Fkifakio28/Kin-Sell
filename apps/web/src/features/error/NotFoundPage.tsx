@@ -1,4 +1,5 @@
 import { useNavigate } from "react-router-dom";
+import { SeoMeta } from "../../components/SeoMeta";
 import "./error.css";
 
 export function NotFoundPage() {
@@ -6,6 +7,7 @@ export function NotFoundPage() {
 
   return (
     <div className="err-page">
+      <SeoMeta title="Page introuvable | Kin-Sell" noIndex />
       <h1 className="err-title">404</h1>
       <p className="err-message">
         Cette page n'existe pas ou a été déplacée.

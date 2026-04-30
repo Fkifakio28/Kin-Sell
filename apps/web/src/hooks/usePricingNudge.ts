@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { pricingNudges, type PricingNudge } from "../lib/services/ai.service";
+import { useVisibleInterval } from "./useVisibleInterval";
 
 /**
  * Hook pour afficher des CTA intelligents vers la page forfaits.
@@ -24,9 +25,10 @@ export function usePricingNudge() {
 
   useEffect(() => {
     void fetchNudges();
-    const interval = setInterval(() => void fetchNudges(), 10 * 60 * 1000);
-    return () => clearInterval(interval);
   }, [fetchNudges]);
+
+  // Re-fetch toutes les 10 min, pausé quand l'app est en arrière-plan
+  useVisibleInterval(() => { void fetchNudges(); }, 10 * 60 * 1000);
 
   const dismiss = useCallback((triggerType: string) => {
     setDismissed((prev) => new Set(prev).add(triggerType));

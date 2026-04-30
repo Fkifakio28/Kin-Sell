@@ -1,7 +1,9 @@
-import { CartStatus, NegotiationStatus, OrderStatus, Prisma } from "@prisma/client";
+import { CartStatus, NegotiationStatus, OrderStatus } from "../../shared/db/prisma-enums.js";
+import type { Prisma } from "@prisma/client";
 import { randomBytes } from "crypto";
 import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
+import { emitOrderStatusChanged } from "../notifications/notification.events.js";
 
 type PagingInput = {
   page: number;
@@ -65,6 +67,7 @@ const mapCart = (cart: {
       status: NegotiationStatus;
       originalPriceUsdCents: number;
       finalPriceUsdCents: number | null;
+      resolvedAt: Date | null;
     } | null;
     listing: {
       id: string;
@@ -82,20 +85,36 @@ const mapCart = (cart: {
   }>;
   [key: string]: unknown;
 }) => {
-  const subtotalUsdCents = cart.items.reduce((sum, item) => sum + item.unitPriceUsdCents * item.quantity, 0);
+  const REFUSAL_DEADLINE_MS = 24 * 60 * 60 * 1000; // 24h
+  const now = Date.now();
+
+  // Filtrer les items dont la négo refusée a expiré (> 24h)
+  const validItems = cart.items.filter((item) => {
+    if (item.negotiation?.status === "REFUSED" && item.negotiation.resolvedAt) {
+      const deadline = new Date(item.negotiation.resolvedAt).getTime() + REFUSAL_DEADLINE_MS;
+      if (now > deadline) return false; // expiré, sera nettoyé
+    }
+    return true;
+  });
+
+  const subtotalUsdCents = validItems.reduce((sum, item) => sum + item.unitPriceUsdCents * item.quantity, 0);
 
   return {
     id: cart.id,
     status: cart.status,
     currency: cart.currency,
     subtotalUsdCents,
-    itemsCount: cart.items.length,
+    itemsCount: validItems.length,
     createdAt: cart.createdAt.toISOString(),
     updatedAt: cart.updatedAt.toISOString(),
-    items: cart.items.map((item) => {
+    items: validItems.map((item) => {
       const isNegotiating = !!item.negotiationId && item.negotiation
         && ["PENDING", "COUNTERED"].includes(item.negotiation.status);
       const isAccepted = !!item.negotiation && item.negotiation.status === "ACCEPTED";
+      const isRefused = !!item.negotiation && item.negotiation.status === "REFUSED";
+      const refusalDeadline = isRefused && item.negotiation?.resolvedAt
+        ? new Date(new Date(item.negotiation.resolvedAt).getTime() + REFUSAL_DEADLINE_MS).toISOString()
+        : null;
 
       return {
         id: item.id,
@@ -105,8 +124,9 @@ const mapCart = (cart: {
         lineTotalUsdCents: item.unitPriceUsdCents * item.quantity,
         negotiationId: item.negotiationId,
         negotiationStatus: item.negotiation?.status ?? null,
-        originalPriceUsdCents: item.listing.priceUsdCents,
+        originalPriceUsdCents: item.negotiation?.originalPriceUsdCents ?? item.listing.priceUsdCents,
         itemState: isNegotiating ? "MARCHANDAGE" as const : "COMMANDE" as const,
+        refusalDeadline,
         listing: {
           id: item.listing.id,
           type: item.listing.type,
@@ -153,7 +173,14 @@ const mapOrder = (order: {
     lineTotalUsdCents: number;
     listing?: { imageUrl: string | null } | null;
   }>;
-}) => ({
+}) => {
+  const ORDER_EXPIRY_DAYS = 30;
+  const isActive = !(["DELIVERED", "CANCELED"] as string[]).includes(order.status);
+  const autoExpireAt = isActive
+    ? new Date(order.createdAt.getTime() + ORDER_EXPIRY_DAYS * 24 * 60 * 60 * 1000).toISOString()
+    : null;
+
+  return {
   id: order.id,
   status: order.status,
   currency: order.currency,
@@ -163,6 +190,7 @@ const mapOrder = (order: {
   confirmedAt: order.confirmedAt?.toISOString() ?? null,
   deliveredAt: order.deliveredAt?.toISOString() ?? null,
   canceledAt: order.canceledAt?.toISOString() ?? null,
+  autoExpireAt,
   buyer: {
     userId: order.buyer.id,
     displayName: order.buyer.profile?.displayName ?? "Acheteur Kin-Sell",
@@ -189,24 +217,27 @@ const mapOrder = (order: {
     lineTotalUsdCents: item.lineTotalUsdCents,
     imageUrl: item.listing?.imageUrl ?? null
   }))
-});
+};
+};
 
 const getOpenCartId = async (userId: string) => {
-  const existing = await prisma.cart.findFirst({
-    where: { buyerUserId: userId, status: CartStatus.OPEN },
-    select: { id: true },
-    orderBy: { createdAt: "desc" }
+  return prisma.$transaction(async (tx) => {
+    const existing = await tx.cart.findFirst({
+      where: { buyerUserId: userId, status: CartStatus.OPEN },
+      select: { id: true },
+      orderBy: { createdAt: "desc" }
+    });
+
+    if (existing) {
+      return existing.id;
+    }
+
+    const created = await tx.cart.create({
+      data: { buyerUserId: userId, status: CartStatus.OPEN }
+    });
+
+    return created.id;
   });
-
-  if (existing) {
-    return existing.id;
-  }
-
-  const created = await prisma.cart.create({
-    data: { buyerUserId: userId, status: CartStatus.OPEN }
-  });
-
-  return created.id;
 };
 
 const getOpenCartOrThrowItem = async (userId: string, itemId: string) => {
@@ -246,7 +277,7 @@ export const getBuyerCart = async (userId: string) => {
             }
           },
           negotiation: {
-            select: { id: true, status: true, originalPriceUsdCents: true, finalPriceUsdCents: true }
+            select: { id: true, status: true, originalPriceUsdCents: true, finalPriceUsdCents: true, resolvedAt: true }
           }
         },
         orderBy: { createdAt: "desc" }
@@ -256,6 +287,38 @@ export const getBuyerCart = async (userId: string) => {
 
   if (!cart) {
     throw new HttpError(404, "Panier introuvable");
+  }
+
+  // Nettoyer les items dont la négo refusée a dépassé 24h
+  const REFUSAL_DEADLINE_MS = 24 * 60 * 60 * 1000;
+  const now = Date.now();
+  const invalidItemIds = cart.items
+    .filter((item) => {
+      const listing = item.listing as typeof item.listing | null | undefined;
+      return !listing
+        || !listing.id
+        || !listing.ownerUserId
+        || !listing.title
+        || !listing.type
+        || !listing.category
+        || !listing.city;
+    })
+    .map((item) => item.id);
+  const expiredItemIds = cart.items
+    .filter((item) =>
+      item.negotiation?.status === "REFUSED"
+      && item.negotiation.resolvedAt
+      && now > new Date(item.negotiation.resolvedAt).getTime() + REFUSAL_DEADLINE_MS
+    )
+    .map((item) => item.id);
+
+  const itemIdsToDelete = Array.from(new Set([...expiredItemIds, ...invalidItemIds]));
+
+  if (itemIdsToDelete.length > 0) {
+    await prisma.cartItem.deleteMany({ where: { id: { in: itemIdsToDelete } } });
+    // Filtrer en mémoire au lieu de re-requêter la DB
+    cart.items = cart.items.filter((item) => !itemIdsToDelete.includes(item.id));
+    return mapCart(cart);
   }
 
   return mapCart(cart);
@@ -367,7 +430,7 @@ export const checkoutBuyerCart = async (userId: string, notes?: string, delivery
       items: {
         include: {
           listing: true,
-          negotiation: { select: { id: true, status: true } }
+          negotiation: { select: { id: true, status: true, resolvedAt: true } }
         }
       }
     },
@@ -398,6 +461,20 @@ export const checkoutBuyerCart = async (userId: string, notes?: string, delivery
     throw new HttpError(400, "Tous les articles sont en cours de négociation. Attendez la résolution ou annulez les négociations.");
   }
 
+  // ── Retirer les items dont la négo refusée dépasse 24h ──
+  const REFUSAL_DEADLINE_MS = 24 * 60 * 60 * 1000;
+  const checkoutNow = Date.now();
+  const expiredRefusalItems = readyItems.filter(
+    (item) => item.negotiation?.status === NegotiationStatus.REFUSED
+      && item.negotiation.resolvedAt
+      && checkoutNow > new Date(item.negotiation.resolvedAt).getTime() + REFUSAL_DEADLINE_MS
+  );
+  if (expiredRefusalItems.length > 0) {
+    // Supprimer les articles expirés du panier
+    await prisma.cartItem.deleteMany({ where: { id: { in: expiredRefusalItems.map((i) => i.id) } } });
+    throw new HttpError(400, `Le délai de 24h pour commander après refus de négociation a expiré pour ${expiredRefusalItems.length} article(s). Ils ont été retirés du panier.`);
+  }
+
   const itemWithoutPrice = readyItems.find((item) => item.unitPriceUsdCents <= 0);
   if (itemWithoutPrice) {
     throw new HttpError(400, "Renseignez un prix (> 0) pour chaque article avant validation");
@@ -407,6 +484,19 @@ export const checkoutBuyerCart = async (userId: string, notes?: string, delivery
   const unpublishedItem = readyItems.find((item) => !item.listing.isPublished);
   if (unpublishedItem) {
     throw new HttpError(400, `L'article "${unpublishedItem.listing.title}" n'est plus disponible. Retirez-le du panier.`);
+  }
+
+  // ── Vérifier le stock disponible ──
+  for (const item of readyItems) {
+    const stock = item.listing.stockQuantity;
+    if (stock !== null && stock !== undefined) {
+      if (stock <= 0) {
+        throw new HttpError(400, `L'article "${item.listing.title}" est en rupture de stock.`);
+      }
+      if (item.quantity > stock) {
+        throw new HttpError(400, `Stock insuffisant pour "${item.listing.title}" (demandé: ${item.quantity}, disponible: ${stock}).`);
+      }
+    }
   }
 
   // ── Grouper les articles prêts par vendeur ──
@@ -766,6 +856,28 @@ export const buyerConfirmDelivery = async (userId: string, orderId: string, code
     }
   });
 
+  // Emit CPA growth grant to seller on successful delivery
+  try {
+    const { emitGrowthGrant } = await import("../incentives/incentive.service.js");
+    const sellerId = updated.seller?.id ?? updated.sellerBusiness?.ownerUserId;
+    if (sellerId) {
+      await emitGrowthGrant(sellerId, "CPA", {
+        metadata: { orderId: order.id, source: "order_delivered" },
+      });
+    }
+  } catch { /* non-blocking */ }
+
+  // Notif unifiée (BD + push + email) acheteur + vendeur
+  void emitOrderStatusChanged({
+    orderId: updated.id,
+    buyerUserId: updated.buyerUserId,
+    sellerUserId: updated.sellerUserId,
+    totalUsdCents: updated.totalUsdCents,
+    itemsCount: updated.items?.length ?? 1,
+    itemTitle: updated.items?.[0]?.title,
+    status: "DELIVERED",
+  });
+
   return mapOrder(updated);
 };
 
@@ -810,9 +922,76 @@ export const updateSellerOrderStatus = async (userId: string, orderId: string, n
       buyer: { include: { profile: true } },
       seller: { include: { profile: true } },
       sellerBusiness: true,
-      items: { orderBy: { createdAt: "asc" }, include: { listing: { select: { imageUrl: true } } } }
+      items: { orderBy: { createdAt: "asc" }, include: { listing: { select: { imageUrl: true, stockQuantity: true } } } }
     }
   });
 
-  return mapOrder(updated);
+  // ── Décrémenter le stock quand le vendeur confirme la commande ──
+  const exhaustedListings: Array<{ id: string; title: string }> = [];
+  if (nextStatus === OrderStatus.CONFIRMED) {
+    for (const item of updated.items) {
+      if (!item.listingId) continue;
+      const listing = await prisma.listing.findUnique({
+        where: { id: item.listingId },
+        select: { id: true, title: true, stockQuantity: true }
+      });
+      if (!listing || listing.stockQuantity === null) continue;
+
+      const newStock = Math.max(0, listing.stockQuantity - item.quantity);
+      await prisma.listing.update({
+        where: { id: listing.id },
+        data: { stockQuantity: newStock }
+      });
+
+      if (newStock === 0) {
+        exhaustedListings.push({ id: listing.id, title: listing.title });
+      }
+    }
+  }
+
+  const mapped = mapOrder(updated);
+  return { ...mapped, _exhaustedListings: exhaustedListings };
+};
+
+// ── Auto-annulation des commandes sans validation depuis 30 jours ──
+const ORDER_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000; // 30 jours
+
+export const cancelExpiredOrders = async (): Promise<{ canceled: number }> => {
+  const cutoff = new Date(Date.now() - ORDER_EXPIRY_MS);
+
+  const expiredOrders = await prisma.order.findMany({
+    where: {
+      status: { in: [OrderStatus.PENDING, OrderStatus.CONFIRMED, OrderStatus.PROCESSING, OrderStatus.SHIPPED] },
+      createdAt: { lt: cutoff },
+    },
+    select: { id: true, buyerUserId: true, sellerUserId: true, status: true, totalUsdCents: true },
+    take: 200,
+  });
+
+  if (expiredOrders.length === 0) return { canceled: 0 };
+
+  const ids = expiredOrders.map((o) => o.id);
+  await prisma.order.updateMany({
+    where: { id: { in: ids } },
+    data: { status: OrderStatus.CANCELED, canceledAt: new Date() },
+  });
+
+  // Audit + notifications
+  for (const order of expiredOrders) {
+    await prisma.auditLog.create({
+      data: {
+        actorUserId: "SYSTEM",
+        action: "ORDER_AUTO_CANCELED_30_DAYS",
+        entityType: "ORDER",
+        entityId: order.id,
+        metadata: {
+          reason: "Validation code not entered within 30 days",
+          previousStatus: order.status,
+          totalUsdCents: order.totalUsdCents,
+        },
+      },
+    }).catch(() => {});
+  }
+
+  return { canceled: expiredOrders.length };
 };

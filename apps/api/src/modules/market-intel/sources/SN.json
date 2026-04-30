@@ -1,0 +1,41 @@
+{
+  "country": "SN",
+  "currency": "XOF",
+  "languages": ["fr"],
+  "sources": [
+    { "name": "Jumia Sénégal",            "baseUrl": "https://www.jumia.sn",              "type": "marketplace", "parser": "jumia",         "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Auchan Sénégal",           "baseUrl": "https://www.auchan.sn",             "type": "marketplace", "parser": "generic-price", "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Xoomaal",                  "baseUrl": "https://www.xoomaal.com",           "type": "marketplace", "parser": "generic-price", "language": "fr", "trusted": false, "verified": true },
+    { "name": "Afrimarket Sénégal",       "baseUrl": "https://www.afrimarket.sn",         "type": "marketplace", "parser": "generic-price", "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Yango Deli SN",            "baseUrl": "https://deli.yango.com",            "type": "marketplace", "parser": "generic-price", "language": "fr", "trusted": true,  "verified": true },
+
+    { "name": "Expat-Dakar",              "baseUrl": "https://www.expat-dakar.com",       "type": "classifieds", "parser": "expat-dakar",   "language": "fr", "trusted": true,  "verified": true },
+    { "name": "CoinAfrique Sénégal",      "baseUrl": "https://www.coinafrique.com/senegal","type": "classifieds", "parser": "coinafrique",   "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Dakarvente",               "baseUrl": "https://www.dakarvente.com",        "type": "classifieds", "parser": "generic-price", "language": "fr", "trusted": false, "verified": true },
+    { "name": "Senauto",                  "baseUrl": "https://www.senauto.com",           "type": "classifieds", "parser": "generic-price", "language": "fr", "trusted": true,  "verified": true },
+
+    { "name": "Seneweb",                  "baseUrl": "https://www.seneweb.com",           "type": "news",        "parser": "news-rss",      "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Dakaractu",                "baseUrl": "https://www.dakaractu.com",         "type": "news",        "parser": "news-rss",      "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Leral",                    "baseUrl": "https://www.leral.net",             "type": "news",        "parser": "news-rss",      "language": "fr", "trusted": true,  "verified": true },
+    { "name": "PressAfrik",               "baseUrl": "https://www.pressafrik.com",        "type": "news",        "parser": "news-rss",      "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Le Soleil",                "baseUrl": "https://lesoleil.sn",               "type": "news",        "parser": "news-rss",      "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Walf Quotidien",           "baseUrl": "https://walf-groupe.com",           "type": "news",        "parser": "news-rss",      "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Le Quotidien",             "baseUrl": "https://lequotidien.sn",            "type": "news",        "parser": "news-rss",      "language": "fr", "trusted": true,  "verified": true },
+    { "name": "SenePlus",                 "baseUrl": "https://www.seneplus.com",          "type": "news",        "parser": "news-rss",      "language": "fr", "trusted": true,  "verified": true },
+    { "name": "APS (Agence Press.)",      "baseUrl": "https://aps.sn",                    "type": "news",        "parser": "news-rss",      "language": "fr", "trusted": true,  "verified": true },
+    { "name": "L'Observateur",            "baseUrl": "https://www.igfm.sn",               "type": "news",        "parser": "news-rss",      "language": "fr", "trusted": true,  "verified": true },
+
+    { "name": "ANSD — Statistique & Démo.", "baseUrl": "https://www.ansd.sn",             "type": "stats",       "parser": "ansd",          "language": "fr", "trusted": true,  "verified": true },
+    { "name": "BCEAO",                    "baseUrl": "https://www.bceao.int",             "type": "stats",       "parser": "bceao",         "language": "fr", "trusted": true,  "verified": true },
+    { "name": "DPEE (Prévisions)",        "baseUrl": "https://www.dpee.sn",               "type": "stats",       "parser": "generic-stats", "language": "fr", "trusted": true,  "verified": true },
+    { "name": "APIX",                     "baseUrl": "https://www.apix.sn",               "type": "stats",       "parser": "generic-stats", "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Ministère Finances SN",    "baseUrl": "https://www.finances.gouv.sn",      "type": "stats",       "parser": "generic-stats", "language": "fr", "trusted": true,  "verified": true },
+
+    { "name": "Emploi.sn",                "baseUrl": "https://www.emploi.sn",             "type": "jobs",        "parser": "generic-jobs",  "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Senjob",                   "baseUrl": "https://www.senjob.com",            "type": "jobs",        "parser": "generic-jobs",  "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Jobberman Sénégal",        "baseUrl": "https://www.jobberman.sn",          "type": "jobs",        "parser": "generic-jobs",  "language": "fr", "trusted": true,  "verified": true },
+    { "name": "Novojob Sénégal",          "baseUrl": "https://www.novojob.com",           "type": "jobs",        "parser": "generic-jobs",  "language": "fr", "trusted": true,  "verified": true },
+    { "name": "AfricaWork SN",            "baseUrl": "https://www.africawork.com/fr/senegal", "type": "jobs",    "parser": "generic-jobs",  "language": "fr", "trusted": true,  "verified": true },
+    { "name": "LinkedIn Jobs SN",         "baseUrl": "https://www.linkedin.com/jobs/search?location=Senegal", "type": "jobs", "parser": "linkedin-jobs", "language": "fr", "trusted": true, "verified": true }
+  ]
+}

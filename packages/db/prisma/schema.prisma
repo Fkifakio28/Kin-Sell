@@ -107,6 +107,8 @@ enum PaymentMethod {
   ORANGE_MONEY
   MPESA
   PAYPAL
+  APPLE_IAP
+  GOOGLE_PLAY
 }
 
 enum MomoStatus {
@@ -119,13 +121,13 @@ enum MomoStatus {
 }
 
 enum PaymentOrderStatus {
-  PENDING           // Commande créée, en attente de paiement
-  USER_CONFIRMED    // Utilisateur déclare avoir payé (virement)
-  PAID              // Paiement confirmé (PayPal capture / admin / MoMo callback)
-  VALIDATED         // Rétro-compat : alias historique de PAID
-  FAILED            // Paiement échoué
-  CANCELED          // Annulé
-  EXPIRED           // Expiré
+  PENDING // Commande créée, en attente de paiement
+  USER_CONFIRMED // Utilisateur déclare avoir payé (virement)
+  PAID // Paiement confirmé (PayPal capture / admin / MoMo callback)
+  VALIDATED // Rétro-compat : alias historique de PAID
+  FAILED // Paiement échoué
+  CANCELED // Annulé
+  EXPIRED // Expiré
 }
 
 enum CartStatus {
@@ -190,63 +192,79 @@ model User {
   subscriptions            Subscription[]
   paymentOrders            PaymentOrder[]
   buyerCarts               Cart[]
-  buyerOrders              Order[]                   @relation("BuyerOrders")
-  sellerOrders             Order[]                   @relation("SellerOrders")
-  auditLogs                AuditLog[]                @relation("AuditActor")
+  buyerOrders              Order[]                     @relation("BuyerOrders")
+  sellerOrders             Order[]                     @relation("SellerOrders")
+  auditLogs                AuditLog[]                  @relation("AuditActor")
   conversationParticipants ConversationParticipant[]
-  sentMessages             Message[]                 @relation("SentMessages")
+  sentMessages             Message[]                   @relation("SentMessages")
   readReceipts             MessageReadReceipt[]
-  buyerNegotiations        Negotiation[]             @relation("BuyerNegotiations")
-  sellerNegotiations       Negotiation[]             @relation("SellerNegotiations")
+  buyerNegotiations        Negotiation[]               @relation("BuyerNegotiations")
+  sellerNegotiations       Negotiation[]               @relation("SellerNegotiations")
   negotiationOffers        NegotiationOffer[]
   pushSubscriptions        PushSubscription[]
   fcmTokens                FcmToken[]
-  callerCallLogs           CallLog[]                 @relation("CallerCallLogs")
-  receiverCallLogs         CallLog[]                 @relation("ReceiverCallLogs")
+  notifications            Notification[]              @relation("UserNotifications")
+  callerCallLogs           CallLog[]                   @relation("CallerCallLogs")
+  receiverCallLogs         CallLog[]                   @relation("ReceiverCallLogs")
   adminProfile             AdminProfile?
-  reportsFiled             Report[]                  @relation("ReporterReports")
-  reportsReceived          Report[]                  @relation("ReportedReports")
-  blogPosts                BlogPost[]                @relation("BlogPosts")
-  trustScoreHistory        TrustScoreEvent[]         @relation("TrustScoreUser")
-  securityEvents           SecurityEvent[]           @relation("SecurityUser")
-  restrictions             UserRestriction[]         @relation("RestrictedUser")
-  fraudSignals             FraudSignal[]             @relation("FraudSignalUser")
-  bundlesCreated           NegotiationBundle[]       @relation("BundleCreator")
-  bundlesAsSeller          NegotiationBundle[]       @relation("BundleSeller")
-  messageGuardLogs         MessageGuardLog[]         @relation("MessageGuardUser")
-  sokinPosts               SoKinPost[]               @relation("SoKinPosts")
-  soKinComments            SoKinComment[]            @relation("SoKinComments")
-  adDonations              AdDonation[]              @relation("UserDonations")
-  advertisements           Advertisement[]           @relation("UserAds")
-  importedContacts         UserContact[]             @relation("ImportedContacts")
-  matchedContacts          UserContact[]             @relation("MatchedContacts")
-  suggestionsFor           SoKinSuggestion[]         @relation("SuggestionTarget")
-  suggestedAs              SoKinSuggestion[]         @relation("SuggestedUser")
-  connectionsSent          SoKinConnection[]         @relation("ConnectionRequester")
-  connectionsReceived      SoKinConnection[]         @relation("ConnectionReceiver")
+  reportsFiled             Report[]                    @relation("ReporterReports")
+  reportsReceived          Report[]                    @relation("ReportedReports")
+  blogPosts                BlogPost[]                  @relation("BlogPosts")
+  trustScoreHistory        TrustScoreEvent[]           @relation("TrustScoreUser")
+  securityEvents           SecurityEvent[]             @relation("SecurityUser")
+  restrictions             UserRestriction[]           @relation("RestrictedUser")
+  fraudSignals             FraudSignal[]               @relation("FraudSignalUser")
+  bundlesCreated           NegotiationBundle[]         @relation("BundleCreator")
+  bundlesAsSeller          NegotiationBundle[]         @relation("BundleSeller")
+  messageGuardLogs         MessageGuardLog[]           @relation("MessageGuardUser")
+  sokinPosts               SoKinPost[]                 @relation("SoKinPosts")
+  soKinComments            SoKinComment[]              @relation("SoKinComments")
+  adDonations              AdDonation[]                @relation("UserDonations")
+  advertisements           Advertisement[]             @relation("UserAds")
+  importedContacts         UserContact[]               @relation("ImportedContacts")
+  matchedContacts          UserContact[]               @relation("MatchedContacts")
+  suggestionsFor           SoKinSuggestion[]           @relation("SuggestionTarget")
+  suggestedAs              SoKinSuggestion[]           @relation("SuggestedUser")
+  connectionsSent          SoKinConnection[]           @relation("ConnectionRequester")
+  connectionsReceived      SoKinConnection[]           @relation("ConnectionReceiver")
   mobileMoneyPayments      MobileMoneyPayment[]
-  aiMemorySnapshots        AiMemorySnapshot[]        @relation("AiMemoryUser")
-  aiAutonomyLogs           AiAutonomyLog[]           @relation("AiAutonomyUser")
-  categoryRulesUpdated     CategoryNegotiationRule[] @relation("CategoryRuleUpdater")
-  hostedLives              SoKinLive[]               @relation("SoKinLiveHost")
-  liveParticipations       SoKinLiveParticipant[]    @relation("SoKinLiveParticipants")
-  liveChatMessages         SoKinLiveChat[]           @relation("SoKinLiveChatMessages")
-  reviewsGiven             UserReview[]              @relation("ReviewsGiven")
-  reviewsReceived          UserReview[]              @relation("ReviewsReceived")
+  aiMemorySnapshots        AiMemorySnapshot[]          @relation("AiMemoryUser")
+  aiAutonomyLogs           AiAutonomyLog[]             @relation("AiAutonomyUser")
+  categoryRulesUpdated     CategoryNegotiationRule[]   @relation("CategoryRuleUpdater")
+  hostedLives              SoKinLive[]                 @relation("SoKinLiveHost")
+  liveParticipations       SoKinLiveParticipant[]      @relation("SoKinLiveParticipants")
+  liveChatMessages         SoKinLiveChat[]             @relation("SoKinLiveChatMessages")
+  reviewsGiven             UserReview[]                @relation("ReviewsGiven")
+  reviewsReceived          UserReview[]                @relation("ReviewsReceived")
   soKinReactions           SoKinReaction[]
-  soKinBookmarks           SoKinBookmark[]           @relation("SoKinBookmarks")
-  soKinReports             SoKinReport[]             @relation("SoKinReports")
-  soKinStories             SoKinStory[]              @relation("SoKinStories")
+  soKinBookmarks           SoKinBookmark[]             @relation("SoKinBookmarks")
+  soKinReports             SoKinReport[]               @relation("SoKinReports")
+  soKinStories             SoKinStory[]                @relation("SoKinStories")
   soKinStoryViews          SoKinStoryView[]
-  businessFollows          BusinessFollow[]          @relation("BusinessFollows")
-  aiRecommendations        AiRecommendation[]        @relation("AiRecommendations")
-  aiTrials                 AiTrial[]                 @relation("AiTrials")
-  adCreatives              AiAdCreative[]            @relation("AiAdCreativeUser")
-  adCampaigns              AiAdCampaign[]            @relation("AiAdCampaignUser")
-  verificationRequests     VerificationRequest[]     @relation("VerificationRequests")
-  verificationResolved     VerificationRequest[]     @relation("VerificationResolver")
-  promotions               Promotion[]               @relation("UserPromotions")
-  vitrines                 Vitrine[]                 @relation("UserVitrines")
+  businessFollows          BusinessFollow[]            @relation("BusinessFollows")
+  aiRecommendations        AiRecommendation[]          @relation("AiRecommendations")
+  aiTrials                 AiTrial[]                   @relation("AiTrials")
+  aiFreemiumUsages         AiFreemiumUsage[]           @relation("AiFreemiumUsages")
+  adCreatives              AiAdCreative[]              @relation("AiAdCreativeUser")
+  adCampaigns              AiAdCampaign[]              @relation("AiAdCampaignUser")
+  verificationRequests     VerificationRequest[]       @relation("VerificationRequests")
+  verificationResolved     VerificationRequest[]       @relation("VerificationResolver")
+  promotions               Promotion[]                 @relation("UserPromotions")
+  vitrines                 Vitrine[]                   @relation("UserVitrines")
+  incentiveCoupons         IncentiveCoupon[]           @relation("IncentiveCouponsReceived")
+  incentiveCouponsIssued   IncentiveCoupon[]           @relation("IncentiveCouponsIssued")
+  incentiveRedemptions     IncentiveCouponRedemption[] @relation("IncentiveRedemptions")
+  incentiveQuotas          IncentiveQuotaCounter[]     @relation("IncentiveQuotas")
+  growthGrants             GrowthIncentiveGrant[]      @relation("GrowthGrants")
+  growthEvents             GrowthIncentiveEvent[]      @relation("GrowthEvents")
+  knowledgeIntent          UserKnowledgeIntent?        @relation("UserKnowledgeIntent")
+  boostCampaigns           BoostCampaign[]             @relation("UserBoostCampaigns")
+  wallet                   Wallet?                     @relation("UserWallet")
+  walletTransactions       WalletTransaction[]         @relation("UserWalletTransactions")
+  jobListingsPosted        JobListing[]                @relation("JobListingRecruiter")
+  jobApplications          JobApplication[]            @relation("JobApplicationCandidate")
+  qualifications           UserQualification[]         @relation("UserQualifications")
+  experiences              UserExperience[]            @relation("UserExperiences")
 
   @@index([role])
   @@index([accountStatus])
@@ -375,22 +393,43 @@ model VerificationCode {
 }
 
 model UserPreference {
-  id                  String       @id @default(cuid())
-  userId              String       @unique
-  locale              String       @default("fr")
-  currency            String       @default("CDF")
-  countryCode         CountryCode? // Pays préféré de l'utilisateur
-  discoveryMode       String       @default("local_first") // local_first | local_only | all
-  theme               String       @default("dark")
-  onlineStatusVisible Boolean      @default(true)
-  marketingEmails     Boolean      @default(false)
-  marketingSms        Boolean      @default(false)
-  pushEnabled         Boolean      @default(true)
-  aiAdviceEnabled     Boolean      @default(true)
-  aiAutoNegoEnabled   Boolean      @default(false)
-  aiCommandeEnabled   Boolean      @default(true)
-  createdAt           DateTime     @default(now())
-  updatedAt           DateTime     @updatedAt
+  id                     String       @id @default(cuid())
+  userId                 String       @unique
+  locale                 String       @default("fr")
+  localeManual           Boolean      @default(false) // true = utilisateur a choisi sa langue manuellement (override la détection navigateur)
+  currency               String       @default("CDF")
+  countryCode            CountryCode? // Pays préféré de l'utilisateur (utilisé seulement si marketScope = "COUNTRY")
+  marketScope            String       @default("KIN_SELL") // "KIN_SELL" (global, tous pays) | "COUNTRY" (filtré sur countryCode)
+  discoveryMode          String       @default("local_first") // local_first | local_only | all
+  theme                  String       @default("dark")
+  onlineStatusVisible    Boolean      @default(true)
+  marketingEmails        Boolean      @default(false)
+  marketingSms           Boolean      @default(false)
+  pushEnabled            Boolean      @default(true)
+  aiAdviceEnabled        Boolean      @default(true)
+  aiAutoNegoEnabled      Boolean      @default(false)
+  aiCommandeEnabled      Boolean      @default(true)
+  // ── Préférences granulaires de notifications (par catégorie / canal) ──
+  notifyOrderEmail       Boolean      @default(true)
+  notifyOrderPush        Boolean      @default(true)
+  notifyOrderInApp       Boolean      @default(true)
+  notifyNegotiationEmail Boolean      @default(true)
+  notifyNegotiationPush  Boolean      @default(true)
+  notifyNegotiationInApp Boolean      @default(true)
+  notifyPaymentEmail     Boolean      @default(true)
+  notifyPaymentPush      Boolean      @default(true)
+  notifyPaymentInApp     Boolean      @default(true)
+  notifyMessageEmail     Boolean      @default(false)
+  notifyMessagePush      Boolean      @default(true)
+  notifyMessageInApp     Boolean      @default(true)
+  notifySocialEmail      Boolean      @default(false)
+  notifySocialPush       Boolean      @default(true)
+  notifySocialInApp      Boolean      @default(true)
+  notifySystemEmail      Boolean      @default(true)
+  notifySystemPush       Boolean      @default(true)
+  notifySystemInApp      Boolean      @default(true)
+  createdAt              DateTime     @default(now())
+  updatedAt              DateTime     @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
@@ -520,47 +559,49 @@ enum LocationVisibility {
 }
 
 model Listing {
-  id                 String             @id @default(cuid())
-  type               ListingType
-  status             ListingStatus      @default(ACTIVE)
-  title              String
-  description        String?
-  category           String
-  city               String
-  country            String? // Nom du pays (ex: "Maroc", "Sénégal")
-  countryCode        CountryCode? // Code pays formel
-  region             String?
-  district           String?
-  formattedAddress   String?
-  latitude           Float
-  longitude          Float
-  placeId            String?
-  locationVisibility LocationVisibility @default(CITY_PUBLIC)
-  serviceRadiusKm    Int? // Rayon d'intervention pour services
-  imageUrl           String?
-  mediaUrls          String[]           @default([])
-  priceUsdCents      Int                @default(0)
-  priceCurrency      String             @default("USD")
-  priceOriginal      Int                @default(0)
-  viewCount          Int                @default(0)
-  scope              ListingScope       @default(NATIONAL)
-  stockQuantity      Int?
-  serviceDurationMin Int?
-  serviceLocation    String?
-  isPublished        Boolean            @default(true)
-  isNegotiable       Boolean            @default(true)
+  id                   String             @id @default(cuid())
+  type                 ListingType
+  status               ListingStatus      @default(ACTIVE)
+  title                String
+  description          String?
+  category             String
+  city                 String
+  country              String? // Nom du pays (ex: "Maroc", "Sénégal")
+  countryCode          CountryCode? // Code pays formel
+  region               String?
+  district             String?
+  formattedAddress     String?
+  latitude             Float
+  longitude            Float
+  placeId              String?
+  locationVisibility   LocationVisibility @default(CITY_PUBLIC)
+  serviceRadiusKm      Int? // Rayon d'intervention pour services
+  imageUrl             String?
+  mediaUrls            String[]           @default([])
+  priceUsdCents        Int                @default(0)
+  priceCurrency        String             @default("USD")
+  priceOriginal        Int                @default(0)
+  viewCount            Int                @default(0)
+  scope                ListingScope       @default(NATIONAL)
+  stockQuantity        Int?
+  serviceDurationMin   Int?
+  serviceLocation      String?
+  isPublished          Boolean            @default(true)
+  isNegotiable         Boolean            @default(true)
   isBoosted            Boolean            @default(false)
   boostExpiresAt       DateTime?
   boostScope           PromotionScope?
   boostTargetCountries String[]           @default([])
   promoActive          Boolean            @default(false)
-  promoPriceUsdCents Int?
-  promoExpiresAt     DateTime?
-  promotionId        String? // Lien vers la Promotion groupée
-  ownerUserId        String
-  businessId         String?
-  createdAt          DateTime           @default(now())
-  updatedAt          DateTime           @updatedAt
+  promoPriceUsdCents   Int?
+  promoExpiresAt       DateTime?
+  promotionId          String? // Lien vers la Promotion groupée
+  autoNegoRules        Json? // { enabled, minFloorPercent, maxAutoDiscountPercent, preferredCounterPercent, firmness }
+  variants             Json? // { sizes?: string[], colors?: { name: string; hex: string }[] } — produits uniquement
+  ownerUserId          String
+  businessId           String?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
 
   ownerUser      User                    @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
   business       BusinessAccount?        @relation(fields: [businessId], references: [id], onDelete: SetNull)
@@ -584,6 +625,7 @@ model Listing {
   @@index([createdAt])
   @@index([countryCode, isPublished, createdAt])
   @@index([city, isPublished, createdAt])
+  @@index([category, isPublished, createdAt])
 }
 
 model Cart {
@@ -734,10 +776,11 @@ model NegotiationBundle {
 }
 
 model NegotiationBundleItem {
-  id        String @id @default(cuid())
-  bundleId  String
-  listingId String
-  quantity  Int    @default(1)
+  id                    String @id @default(cuid())
+  bundleId              String
+  listingId             String
+  quantity              Int    @default(1)
+  snapshotPriceUsdCents Int    @default(0) // prix effectif au moment de la création (promo-aware)
 
   bundle  NegotiationBundle @relation(fields: [bundleId], references: [id], onDelete: Cascade)
   listing Listing           @relation(fields: [listingId], references: [id], onDelete: Cascade)
@@ -909,6 +952,7 @@ enum CallStatus {
   ANSWERED
   REJECTED
   NO_ANSWER
+  CANCELLED
 }
 
 model CallLog {
@@ -930,6 +974,43 @@ model CallLog {
   @@index([callerUserId, startedAt])
   @@index([receiverUserId, startedAt])
   @@index([conversationId])
+}
+
+// ══════════════════════════════════════════════
+// Notifications persistantes (centre serveur multi-device)
+// ══════════════════════════════════════════════
+enum NotificationCategory {
+  ORDER
+  NEGOTIATION
+  PAYMENT
+  MESSAGE
+  SOCIAL
+  SYSTEM
+  AI
+  PROMO
+}
+
+model Notification {
+  id         String               @id @default(cuid())
+  userId     String
+  category   NotificationCategory
+  type       String // ex: "order.created", "negotiation.counter"
+  title      String
+  body       String
+  data       Json? // payload (orderId, negotiationId, etc.)
+  url        String? // deep link
+  icon       String?
+  readAt     DateTime?
+  archivedAt DateTime?
+  emailSent  Boolean              @default(false)
+  pushSent   Boolean              @default(false)
+  createdAt  DateTime             @default(now())
+
+  user User @relation("UserNotifications", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt, createdAt])
+  @@index([userId, category, createdAt])
+  @@index([userId, archivedAt])
 }
 
 // ══════════════════════════════════════════════
@@ -1342,15 +1423,15 @@ enum SoKinPostStatus {
 }
 
 enum SoKinPostType {
-  SHOWCASE   // Publication visuelle (ancien comportement par défaut)
+  SHOWCASE // Publication visuelle (ancien comportement par défaut)
   DISCUSSION // Discussion libre, texte seul OK
-  QUESTION   // Question communautaire
-  SELLING    // Annonce de vente (lié article/service)
-  PROMO      // Promotion/offre
-  SEARCH     // Recherche / demande
-  UPDATE     // Mise à jour / actualité
-  REVIEW     // Avis / témoignage
-  TREND      // Tendance / buzz
+  QUESTION // Question communautaire
+  SELLING // Annonce de vente (lié article/service)
+  PROMO // Promotion/offre
+  SEARCH // Recherche / demande
+  UPDATE // Mise à jour / actualité
+  REVIEW // Avis / témoignage
+  TREND // Tendance / buzz
 }
 
 model SoKinPost {
@@ -1369,18 +1450,21 @@ model SoKinPost {
   comments        Int             @default(0)
   shares          Int             @default(0)
   views           Int             @default(0)
-  socialScore     Int             @default(0)   // 0-100 potentiel social
-  businessScore   Int             @default(0)   // 0-100 potentiel business
-  boostScore      Int             @default(0)   // 0-100 potentiel boost
-  scoredAt        DateTime?                     // dernier recalcul
+  socialScore     Int             @default(0) // 0-100 potentiel social
+  businessScore   Int             @default(0) // 0-100 potentiel business
+  boostScore      Int             @default(0) // 0-100 potentiel boost
+  scoredAt        DateTime? // dernier recalcul
   sponsored       Boolean         @default(false)
+  isBoosted       Boolean         @default(false)
+  boostExpiresAt  DateTime?
+  boostCampaignId String?
   status          SoKinPostStatus @default(ACTIVE)
   moderatedBy     String?
   moderatedAt     DateTime?
   moderationNote  String?
   scheduledAt     DateTime?
   repostOfId      String?
-  backgroundStyle String?                     // fond personnalisé pour posts texte-seul
+  backgroundStyle String? // fond personnalisé pour posts texte-seul
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 
@@ -1396,8 +1480,11 @@ model SoKinPost {
   @@index([status])
   @@index([createdAt])
   @@index([status, createdAt])
+  @@index([authorId, status, createdAt])
   @@index([postType])
   @@index([repostOfId])
+  @@index([isBoosted])
+  @@index([boostCampaignId])
 }
 
 model SoKinComment {
@@ -1558,44 +1645,44 @@ enum AdvertisementType {
 }
 
 enum PromotionScope {
-  LOCAL        // Ville du vendeur uniquement
-  NATIONAL     // Pays du vendeur entier
+  LOCAL // Ville du vendeur uniquement
+  NATIONAL // Pays du vendeur entier
   CROSS_BORDER // Inter-pays avec ciblage explicite
 }
 
 model Advertisement {
-  id              String              @id @default(cuid())
-  title           String
-  description     String?
-  imageUrl        String?
-  linkUrl         String              @default("/")
-  ctaText         String?             @default("Découvrir")
-  type            AdvertisementType   @default(USER)
-  status          AdvertisementStatus @default(PENDING)
-  targetPages     String[]            @default([])
-  startDate       DateTime?
-  endDate         DateTime?
-  paymentRef      String?
-  amountPaidCents Int                 @default(0)
-  impressions     Int                 @default(0)
-  clicks          Int                 @default(0)
-  priority        Int                 @default(0)
-  cancelledBy     String?
-  cancelledAt     DateTime?
-  cancelNote      String?
-  advertiserEmail  String?
-  advertiserName   String?
-  promotionScope   PromotionScope      @default(LOCAL)
-  baseCountry      String?
-  baseRegion       String?
-  baseCity         String?
-  targetCountries  String[]            @default([])
-  targetRegions    String[]            @default([])
-  pricingMultiplier Float              @default(1.0)
-  userId           String?
-  businessId       String?
-  createdAt        DateTime            @default(now())
-  updatedAt        DateTime            @updatedAt
+  id                String              @id @default(cuid())
+  title             String
+  description       String?
+  imageUrl          String?
+  linkUrl           String              @default("/")
+  ctaText           String?             @default("Découvrir")
+  type              AdvertisementType   @default(USER)
+  status            AdvertisementStatus @default(PENDING)
+  targetPages       String[]            @default([])
+  startDate         DateTime?
+  endDate           DateTime?
+  paymentRef        String?
+  amountPaidCents   Int                 @default(0)
+  impressions       Int                 @default(0)
+  clicks            Int                 @default(0)
+  priority          Int                 @default(0)
+  cancelledBy       String?
+  cancelledAt       DateTime?
+  cancelNote        String?
+  advertiserEmail   String?
+  advertiserName    String?
+  promotionScope    PromotionScope      @default(LOCAL)
+  baseCountry       String?
+  baseRegion        String?
+  baseCity          String?
+  targetCountries   String[]            @default([])
+  targetRegions     String[]            @default([])
+  pricingMultiplier Float               @default(1.0)
+  userId            String?
+  businessId        String?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
 
   user     User?            @relation("UserAds", fields: [userId], references: [id], onDelete: SetNull)
   business BusinessAccount? @relation("BusinessAds", fields: [businessId], references: [id], onDelete: SetNull)
@@ -2057,15 +2144,15 @@ model SoKinReport {
 
 model SoKinEvent {
   id        String   @id @default(cuid())
-  event     String   // VIEW, COMMENT_OPEN, PROFILE_CLICK, LISTING_CLICK, CONTACT_CLICK, DM_OPEN
+  event     String // VIEW, COMMENT_OPEN, PROFILE_CLICK, LISTING_CLICK, CONTACT_CLICK, DM_OPEN
   postId    String
-  authorId  String   // dénormalisé pour agrégats rapides
-  viewerId  String?  // null si visiteur non connecté
-  postType  String?  // dénormalisé
+  authorId  String // dénormalisé pour agrégats rapides
+  viewerId  String? // null si visiteur non connecté
+  postType  String? // dénormalisé
   city      String?
   country   String?
-  source    String?  // feed tab: pour_toi, local, suivis, ventes, detail, direct
-  meta      Json?    // données complémentaires (listingId, hashtags, etc.)
+  source    String? // feed tab: pour_toi, local, suivis, ventes, detail, direct
+  meta      Json? // données complémentaires (listingId, hashtags, etc.)
   createdAt DateTime @default(now())
 
   @@index([postId, event])
@@ -2347,21 +2434,21 @@ enum PromotionType {
 }
 
 model Promotion {
-  id          String             @id @default(cuid())
-  ownerUserId String
-  businessId  String?
-  promoType   PromotionType      @default(ITEM) // ITEM ou BUNDLE
-  title       String? // Nom optionnel de la promo ("Soldes avril", "Pack Maison", etc.)
-  promoLabel  String? // Badge custom ("Offre Duo", "Pack Promo", "Bundle Deal")
-  status      PromotionStatus    @default(ACTIVE)
-  diffusion   PromotionDiffusion @default(SIMPLE)
-  startsAt    DateTime           @default(now())
-  expiresAt   DateTime? // Null = pas d'expiration auto
+  id                     String             @id @default(cuid())
+  ownerUserId            String
+  businessId             String?
+  promoType              PromotionType      @default(ITEM) // ITEM ou BUNDLE
+  title                  String? // Nom optionnel de la promo ("Soldes avril", "Pack Maison", etc.)
+  promoLabel             String? // Badge custom ("Offre Duo", "Pack Promo", "Bundle Deal")
+  status                 PromotionStatus    @default(ACTIVE)
+  diffusion              PromotionDiffusion @default(SIMPLE)
+  startsAt               DateTime           @default(now())
+  expiresAt              DateTime? // Null = pas d'expiration auto
   // ── Bundle-specific ──
   bundlePriceUsdCents    Int? // Prix promo du lot (BUNDLE uniquement)
   bundleOriginalUsdCents Int? // Total normal du lot (somme prix individuels)
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @updatedAt
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
 
   ownerUser User             @relation("UserPromotions", fields: [ownerUserId], references: [id], onDelete: Cascade)
   business  BusinessAccount? @relation("BusinessPromotions", fields: [businessId], references: [id], onDelete: SetNull)
@@ -2409,4 +2496,1043 @@ model Vitrine {
 
   @@index([userId])
   @@index([userId, displayOrder])
+}
+
+// ══════════════════════════════════════════════
+// KNOWLEDGE BASE — Base de connaissances IA (externe + interne)
+// ══════════════════════════════════════════════
+
+/// Catalogue produits/services avec prix de référence par pays/région (BASE EXTERNE ~2GB)
+model MarketProductCatalog {
+  id               String      @id @default(cuid())
+  countryCode      CountryCode
+  city             String?
+  region           String // "Central Africa", "West Africa", etc.
+  category         String // Alimentation, Électronique, etc.
+  subcategory      String // Riz importé, Smartphone Android, etc.
+  productName      String // Nom produit de référence
+  unitLabel        String      @default("unité") // kg, litre, pièce, lot, mois
+  avgPriceUsdCents Int
+  minPriceUsdCents Int
+  maxPriceUsdCents Int
+  localCurrency    String // CDF, XAF, XOF, etc.
+  avgPriceLocal    Float       @default(0)
+  margin           Float       @default(0) // Marge moyenne observée (%)
+  demandLevel      String      @default("MEDIUM") // LOW, MEDIUM, HIGH, VERY_HIGH
+  supplyLevel      String      @default("MEDIUM") // LOW, MEDIUM, HIGH, ABUNDANT
+  volatility       String      @default("STABLE") // STABLE, MODERATE, HIGH, EXTREME
+  seasonalPeak     String? // "DEC-FEB", "JUN-AUG", etc.
+  importOrigin     String? // Chine, Dubaï, Europe, Local, etc.
+  dataSource       String      @default("SEED") // SEED, API_EXTERNAL, MANUAL, PLATFORM
+  confidence       Int         @default(70) // 0-100 : fiabilité de la donnée
+  notes            String?
+  updatedAt        DateTime    @updatedAt
+  createdAt        DateTime    @default(now())
+
+  @@unique([countryCode, city, category, subcategory, productName])
+  @@index([countryCode, category])
+  @@index([category, subcategory])
+  @@index([region, category])
+  @@index([demandLevel])
+  @@index([dataSource])
+}
+
+/// Routes commerciales inter-pays / inter-régions
+model MarketTradeRoute {
+  id                 String      @id @default(cuid())
+  sourceCountryCode  CountryCode
+  sourceCity         String
+  destCountryCode    CountryCode
+  destCity           String
+  category           String // Catégorie principale échangée
+  topProducts        String[]    @default([]) // Produits phares
+  volumeLevel        String      @default("MEDIUM") // LOW, MEDIUM, HIGH, VERY_HIGH
+  avgMarkupPercent   Float       @default(0) // Marge typique sur le corridor
+  avgTransitDays     Int         @default(3)
+  transportMode      String      @default("ROAD") // ROAD, AIR, RIVER, MIXED
+  riskLevel          String      @default("MEDIUM") // LOW, MEDIUM, HIGH
+  regulatoryBarriers String?
+  seasonalNotes      String?
+  tradeVolumeTrend   String      @default("STABLE") // GROWING, STABLE, DECLINING
+  dataSource         String      @default("SEED")
+  confidence         Int         @default(60)
+  updatedAt          DateTime    @updatedAt
+  createdAt          DateTime    @default(now())
+
+  @@unique([sourceCountryCode, sourceCity, destCountryCode, destCity, category])
+  @@index([sourceCountryCode, destCountryCode])
+  @@index([category])
+  @@index([volumeLevel])
+}
+
+/// Insights business — ce qui marche par secteur/région
+model MarketBusinessInsight {
+  id                String      @id @default(cuid())
+  countryCode       CountryCode
+  city              String?
+  region            String
+  sector            String // Commerce général, Alimentation, Mode, Tech, Services
+  businessType      String // Boutique physique, E-commerce, Grossiste, Artisan
+  avgMonthlyRevenue Int         @default(0) // USD cents
+  avgMarginPercent  Float       @default(0)
+  topSellingItems   String[]    @default([])
+  challengesList    String[]    @default([])
+  successFactors    String[]    @default([])
+  digitalAdoption   String      @default("LOW") // LOW, MEDIUM, HIGH
+  paymentMethods    String[]    @default([])
+  customerBase      String      @default("LOCAL") // LOCAL, REGIONAL, NATIONAL, INTERNATIONAL
+  growthTrend       String      @default("STABLE") // GROWING, STABLE, DECLINING
+  avgEmployees      Int         @default(1)
+  fundingAccess     String      @default("VERY_LIMITED")
+  dataSource        String      @default("SEED")
+  confidence        Int         @default(60)
+  notes             String?
+  updatedAt         DateTime    @updatedAt
+  createdAt         DateTime    @default(now())
+
+  @@unique([countryCode, city, sector, businessType])
+  @@index([countryCode, sector])
+  @@index([region, sector])
+  @@index([growthTrend])
+}
+
+/// Patterns saisonniers — variations prix/demande par saison
+model MarketSeasonalPattern {
+  id               String      @id @default(cuid())
+  countryCode      CountryCode
+  region           String
+  category         String
+  monthStart       Int // 1-12
+  monthEnd         Int // 1-12
+  priceMultiplier  Float       @default(1.0) // 1.3 = +30%
+  demandMultiplier Float       @default(1.0)
+  reason           String // "Rentrée scolaire", "Fêtes de fin d'année"
+  impact           String      @default("MODERATE") // MINOR, MODERATE, MAJOR
+  dataSource       String      @default("SEED")
+  updatedAt        DateTime    @updatedAt
+  createdAt        DateTime    @default(now())
+
+  @@unique([countryCode, category, monthStart, monthEnd])
+  @@index([countryCode, category])
+  @@index([monthStart, monthEnd])
+}
+
+/// Snapshots agrégés des transactions internes Kin-Sell (BASE INTERNE ~2GB)
+model InternalTransactionInsight {
+  id                   String       @id @default(cuid())
+  periodType           String // DAILY, WEEKLY, MONTHLY
+  periodStart          DateTime
+  periodEnd            DateTime
+  countryCode          CountryCode?
+  city                 String?
+  category             String
+  subcategory          String?
+  // — Volume —
+  totalOrders          Int          @default(0)
+  totalRevenueCents    Int          @default(0)
+  totalNegotiations    Int          @default(0)
+  negoAcceptRate       Float        @default(0)
+  avgDiscountPercent   Float        @default(0)
+  // — Prix —
+  avgSellingPriceCents Int          @default(0)
+  medianSellingPrice   Int          @default(0)
+  minSellingPriceCents Int          @default(0)
+  maxSellingPriceCents Int          @default(0)
+  // — Comportement —
+  avgTimeToSaleHours   Float        @default(0)
+  returnRate           Float        @default(0)
+  repeatBuyerRate      Float        @default(0)
+  crossBorderPercent   Float        @default(0)
+  // — Scores —
+  marketHealthScore    Int          @default(50) // 0-100
+  confidenceScore      Int          @default(0)
+  sampleSize           Int          @default(0)
+  metadata             Json?
+  createdAt            DateTime     @default(now())
+
+  @@unique([periodType, periodStart, countryCode, city, category])
+  @@index([periodType, periodStart])
+  @@index([countryCode, category])
+  @@index([city, category])
+  @@index([category, periodStart])
+  @@index([marketHealthScore])
+}
+
+/// Journal de rafraîchissement de la base de connaissances
+model KnowledgeBaseRefreshLog {
+  id               String    @id @default(cuid())
+  refreshType      String // EXTERNAL_FULL, EXTERNAL_INCREMENTAL, INTERNAL_DAILY, INTERNAL_WEEKLY, MERGE_BLEND
+  status           String    @default("RUNNING") // RUNNING, SUCCESS, PARTIAL, FAILED
+  sourceType       String // SEED, PLATFORM, API_EXTERNAL, MERGE
+  recordsProcessed Int       @default(0)
+  recordsCreated   Int       @default(0)
+  recordsUpdated   Int       @default(0)
+  errors           Int       @default(0)
+  durationMs       Int       @default(0)
+  metadata         Json?
+  startedAt        DateTime  @default(now())
+  completedAt      DateTime?
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// EXTERNAL INTELLIGENCE — Sources de données externes Afrique
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Répertoire des sources de données externes configurées
+model ExternalDataSource {
+  id             String    @id @default(cuid())
+  name           String    @unique // e.g. "WORLDBANK", "FAOSTAT", "OPEN_METEO"
+  type           String // MARKET, JOB, SEASONAL, FX, WEATHER
+  baseUrl        String
+  apiKeyEnvVar   String? // nom de la variable d'environnement pour la clé API
+  license        String    @default("OPEN") // OPEN, RESTRICTED, COMMERCIAL
+  refreshCadence String    @default("DAILY") // DAILY, WEEKLY, MONTHLY
+  isActive       Boolean   @default(true)
+  lastSuccessAt  DateTime?
+  lastErrorAt    DateTime?
+  lastError      String?
+  avgLatencyMs   Int       @default(0)
+  totalCalls     Int       @default(0)
+  totalErrors    Int       @default(0)
+  metadata       Json?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  ingestionRuns   ExternalIngestionRun[]
+  marketSignals   ExternalMarketSignalDaily[]
+  jobSignals      ExternalJobSignalDaily[]
+  seasonalSignals ExternalSeasonalSignalDaily[]
+
+  @@index([type, isActive])
+}
+
+/// Log d'exécution d'une ingestion externe
+model ExternalIngestionRun {
+  id             String    @id @default(cuid())
+  sourceId       String
+  runDate        DateTime // date du jour traité
+  status         String    @default("RUNNING") // RUNNING, SUCCESS, PARTIAL, FAILED
+  recordsFetched Int       @default(0)
+  recordsStored  Int       @default(0)
+  errors         Int       @default(0)
+  errorDetails   String?
+  latencyMs      Int       @default(0)
+  startedAt      DateTime  @default(now())
+  completedAt    DateTime?
+
+  source ExternalDataSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@index([sourceId, runDate])
+  @@index([runDate, status])
+  @@index([status])
+}
+
+/// Signaux marché quotidiens (prix, volumes, FX) par source externe
+model ExternalMarketSignalDaily {
+  id            String      @id @default(cuid())
+  date          DateTime    @db.Date
+  countryCode   CountryCode
+  city          String?
+  category      String // taxonomie Kin-Sell
+  subcategory   String?
+  sourceId      String
+  signalType    String // PRICE_INDEX, TRADE_VOLUME, FOOD_PRICE, FX_RATE, COMMODITY
+  value         Float // valeur normalisée
+  unit          String // USD_CENTS, INDEX, PERCENT, RATIO
+  previousValue Float? // valeur précédente pour calcul delta
+  deltaPercent  Float? // variation en %
+  confidence    Int         @default(50) // 0-100
+  sourceUrl     String?
+  observedAt    DateTime    @default(now())
+  metadata      Json?
+  createdAt     DateTime    @default(now())
+
+  source ExternalDataSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@unique([date, countryCode, category, sourceId, signalType])
+  @@index([date, countryCode])
+  @@index([category, countryCode, date])
+  @@index([signalType, date])
+  @@index([sourceId])
+}
+
+/// Signaux emploi quotidiens (offres, demandes, salaires) multi-pays
+model ExternalJobSignalDaily {
+  id             String      @id @default(cuid())
+  date           DateTime    @db.Date
+  countryCode    CountryCode
+  city           String?
+  serviceType    String // e.g. "PLUMBER", "DEVELOPER", "TAILOR", "DELIVERY"
+  category       String // taxonomie Kin-Sell (Services, Transport, etc.)
+  sourceId       String
+  jobCount       Int         @default(0)
+  avgSalaryLocal Float?
+  avgSalaryUsd   Float?
+  demandTrend    String      @default("STABLE") // RISING, STABLE, DECLINING
+  topSkills      String[]    @default([])
+  confidence     Int         @default(50) // 0-100
+  sourceUrl      String?
+  observedAt     DateTime    @default(now())
+  metadata       Json?
+  createdAt      DateTime    @default(now())
+
+  source ExternalDataSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@unique([date, countryCode, serviceType, sourceId])
+  @@index([date, countryCode])
+  @@index([category, countryCode, date])
+  @@index([serviceType, date])
+  @@index([sourceId])
+}
+
+/// Signaux saisonniers quotidiens (météo, événements, calendrier)
+model ExternalSeasonalSignalDaily {
+  id             String      @id @default(cuid())
+  date           DateTime    @db.Date
+  countryCode    CountryCode
+  city           String?
+  signalType     String // WEATHER, RELIGIOUS_EVENT, SCHOOL_CALENDAR, HARVEST, TOURISM, CURRENCY
+  eventName      String? // e.g. "Ramadan", "Rentrée scolaire", "Saison pluies"
+  impactCategory String? // catégorie Kin-Sell impactée
+  severity       Int         @default(50) // 0-100 (impact sur le commerce)
+  priceImpact    Float       @default(0) // % impact sur les prix (-20 à +50)
+  demandImpact   Float       @default(0) // % impact sur la demande
+  sourceId       String
+  confidence     Int         @default(50)
+  sourceUrl      String?
+  observedAt     DateTime    @default(now())
+  metadata       Json? // données brutes (temp, précipitations, etc.)
+  createdAt      DateTime    @default(now())
+
+  source ExternalDataSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@unique([date, countryCode, signalType, sourceId])
+  @@index([date, countryCode])
+  @@index([signalType, date])
+  @@index([impactCategory, date])
+  @@index([sourceId])
+}
+
+// ══════════════════════════════════════════════
+// AI FREEMIUM USAGE — Consommation gratuite IA post-publication
+// ══════════════════════════════════════════════
+
+model AiFreemiumUsage {
+  id          String   @id @default(cuid())
+  userId      String
+  feature     String   @default("POST_PUBLISH_ADVISOR") // feature IA concernée
+  listingType String // PRODUCT | SERVICE
+  listingId   String // listing qui a consommé le crédit
+  consumedAt  DateTime @default(now())
+
+  user User @relation("AiFreemiumUsages", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, feature, listingType])
+  @@index([userId, feature])
+}
+
+// ══════════════════════════════════════════════════════════
+// INCENTIVE ENGINE — Coupons, quotas, CPC/CPI/CPA grants
+// ══════════════════════════════════════════════════════════
+
+enum CouponKind {
+  PLAN_DISCOUNT
+  ADDON_DISCOUNT
+  ADDON_FREE_GAIN
+  CPC
+  CPI
+  CPA
+}
+
+enum CouponTargetScope {
+  ALL_PLANS
+  USER_PLANS
+  BUSINESS_PLANS
+  ALL_ADDONS
+  SPECIFIC
+}
+
+enum CouponStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  EXPIRED
+  REVOKED
+}
+
+enum RedemptionStatus {
+  APPLIED
+  REJECTED
+  ROLLED_BACK
+}
+
+enum GrantStatus {
+  PENDING
+  ACTIVE
+  CONSUMED
+  EXPIRED
+  REVOKED
+}
+
+enum IncentiveSegment {
+  STANDARD
+  TESTER
+}
+
+model IncentiveCoupon {
+  id               String            @id @default(cuid())
+  code             String            @unique
+  kind             CouponKind
+  discountPercent  Int? // 10, 30, 50, 70, 100
+  targetScope      CouponTargetScope @default(ALL_PLANS)
+  targetPlanCodes  String[] // planCodes ciblés (si SPECIFIC)
+  targetAddonCodes String[] // addonCodes ciblés (si SPECIFIC)
+  maxUses          Int               @default(1)
+  usedCount        Int               @default(0)
+  maxUsesPerUser   Int               @default(1)
+  startsAt         DateTime          @default(now())
+  expiresAt        DateTime
+  status           CouponStatus      @default(DRAFT)
+  segment          IncentiveSegment  @default(STANDARD)
+  issuedByEngine   Boolean           @default(false) // true si auto-généré par IA
+  issuedById       String? // super-admin qui l'a créé
+  recipientUserId  String? // null = tout le monde, set = ciblé
+  metadata         Json?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  issuedBy    User?                       @relation("IncentiveCouponsIssued", fields: [issuedById], references: [id], onDelete: SetNull)
+  recipient   User?                       @relation("IncentiveCouponsReceived", fields: [recipientUserId], references: [id], onDelete: SetNull)
+  redemptions IncentiveCouponRedemption[]
+
+  @@index([code])
+  @@index([recipientUserId, status, expiresAt])
+  @@index([kind, status, createdAt])
+  @@index([status, expiresAt])
+}
+
+model IncentiveCouponRedemption {
+  id                     String           @id @default(cuid())
+  couponId               String
+  userId                 String
+  paymentOrderId         String?
+  subscriptionId         String?
+  originalAmountUsdCents Int
+  discountAmountUsdCents Int
+  finalAmountUsdCents    Int
+  status                 RedemptionStatus @default(APPLIED)
+  reason                 String?
+  createdAt              DateTime         @default(now())
+
+  coupon IncentiveCoupon @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  user   User            @relation("IncentiveRedemptions", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([couponId])
+  @@index([userId, createdAt])
+}
+
+model IncentiveQuotaCounter {
+  id              String @id @default(cuid())
+  userId          String
+  monthKey        String // YYYY-MM
+  couponCount     Int    @default(0) // max 7
+  coupon100Count  Int    @default(0)
+  cpcCount        Int    @default(0) // \
+  cpiCount        Int    @default(0) //  } max 15 combined
+  cpaCount        Int    @default(0) // /
+  discount80Count Int    @default(0) // max 3
+  addonGainCount  Int    @default(0) // max 1
+
+  user User @relation("IncentiveQuotas", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, monthKey])
+  @@index([userId, monthKey])
+}
+
+model GrowthIncentiveGrant {
+  id              String      @id @default(cuid())
+  userId          String
+  kind            CouponKind // CPC, CPI, CPA
+  discountPercent Int?
+  addonCode       String? // si ADDON_FREE_GAIN
+  status          GrantStatus @default(PENDING)
+  expiresAt       DateTime
+  metadata        Json?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  user   User                   @relation("GrowthGrants", fields: [userId], references: [id], onDelete: Cascade)
+  events GrowthIncentiveEvent[]
+
+  @@index([userId, status])
+  @@index([kind, status])
+  @@index([expiresAt])
+}
+
+model GrowthIncentiveEvent {
+  id        String   @id @default(cuid())
+  grantId   String
+  userId    String
+  eventType String // "click", "install", "action"
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  grant GrowthIncentiveGrant @relation(fields: [grantId], references: [id], onDelete: Cascade)
+  user  User                 @relation("GrowthEvents", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([grantId])
+  @@index([userId, createdAt])
+}
+
+model IncentivePolicy {
+  id                      String           @id @default(cuid())
+  segment                 IncentiveSegment @default(STANDARD)
+  allowedDiscounts        Int[] // [5, 10, 20, 30, 40, 50, 60, 70, 80, 100]
+  discountWeights         Json? // Pondération pour tirage non-uniforme. { "5":40,"10":30,... }
+  maxCouponsPerMonth      Int              @default(7)
+  maxGrowthGrantsPerMonth Int              @default(15)
+  maxDiscount80PerMonth   Int              @default(3)
+  maxAddonGainPerMonth    Int              @default(1)
+  couponProbability       Float            @default(0.10) // 1/10
+  growthProbability       Float            @default(0.10) // 1/10
+  target100Ratio          Float            @default(0.15) // 15% min de 100%
+  coupon100MaxDays        Int              @default(14) // max 2 semaines
+  isActive                Boolean          @default(true)
+  createdAt               DateTime         @default(now())
+  updatedAt               DateTime         @updatedAt
+
+  @@unique([segment])
+}
+
+// ══════════════════════════════════════════════
+// KNOWLEDGE IA — IA complémentaire de détection
+// des besoins utilisateur (conseils ciblés)
+// ══════════════════════════════════════════════
+
+enum KnowledgeGoal {
+  SELL // Vendre un produit / service
+  BUY // Acheter un produit / service
+  HIRE // Recruter / trouver de la main-d'œuvre
+  WORK // Chercher du travail / proposer ses services
+}
+
+/// Préférences "Que recherchez-vous sur Kin-Sell ?" — alimente Knowledge IA
+model UserKnowledgeIntent {
+  id                String          @id @default(cuid())
+  userId            String          @unique
+  goals             KnowledgeGoal[] @default([])
+  categories        String[]        @default([])
+  keywords          String[]        @default([])
+  countriesInterest CountryCode[]   @default([])
+  notes             String?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  user User @relation("UserKnowledgeIntent", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ══════════════════════════════════════════════
+// BOOST UNIFIÉ (Chantier B — 2026-04-22)
+// Campagnes polymorphes (Listing / Post / Profile / Shop)
+// + Wallet réel (débit, refund prorata)
+// + KPI quotidien BoostMetric
+// ══════════════════════════════════════════════
+
+enum BoostTarget {
+  LISTING
+  POST
+  PROFILE
+  SHOP
+}
+
+enum BoostStatus {
+  ACTIVE
+  PAUSED
+  EXPIRED
+  CANCELED
+  EXHAUSTED
+}
+
+model BoostCampaign {
+  id                   String         @id @default(cuid())
+  userId               String
+  target               BoostTarget
+  targetId             String
+  scope                PromotionScope @default(LOCAL)
+  targetCountries      String[]       @default([])
+  budgetUsdCents       Int
+  budgetSpentUsdCents  Int            @default(0)
+  dailyCapUsdCents     Int?
+  durationDays         Int
+  pricingMultiplier    Float          @default(1.0)
+  status               BoostStatus    @default(ACTIVE)
+  startsAt             DateTime       @default(now())
+  expiresAt            DateTime
+  pausedAt             DateTime?
+  canceledAt           DateTime?
+  lastPacingAt         DateTime?
+  estReachMin          Int            @default(0)
+  estReachMax          Int            @default(0)
+  estClicksMin         Int            @default(0)
+  estClicksMax         Int            @default(0)
+  totalImpressions     Int            @default(0)
+  totalClicks          Int            @default(0)
+  totalContacts        Int            @default(0)
+  totalDmOpens         Int            @default(0)
+  totalSalesAttributed Int            @default(0)
+  notes                String?
+  metadata             Json?
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+
+  user         User                @relation("UserBoostCampaigns", fields: [userId], references: [id], onDelete: Cascade)
+  metrics      BoostMetric[]
+  transactions WalletTransaction[] @relation("CampaignTransactions")
+
+  @@index([userId, status])
+  @@index([target, targetId])
+  @@index([status, expiresAt])
+  @@index([scope])
+  @@index([createdAt])
+  @@index([expiresAt])
+}
+
+model BoostMetric {
+  id              String   @id @default(cuid())
+  campaignId      String
+  date            DateTime
+  impressions     Int      @default(0)
+  clicks          Int      @default(0)
+  contacts        Int      @default(0)
+  dmOpens         Int      @default(0)
+  salesAttributed Int      @default(0)
+  spendUsdCents   Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  campaign BoostCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, date])
+  @@index([date])
+  @@index([campaignId, date])
+}
+
+model Wallet {
+  id               String   @id @default(cuid())
+  userId           String   @unique
+  balanceUsdCents  Int      @default(0)
+  totalCreditCents Int      @default(0)
+  totalDebitCents  Int      @default(0)
+  currency         String   @default("USD")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user         User                @relation("UserWallet", fields: [userId], references: [id], onDelete: Cascade)
+  transactions WalletTransaction[] @relation("WalletTransactions")
+
+  @@index([userId])
+}
+
+enum WalletTransactionType {
+  CREDIT
+  DEBIT
+  REFUND
+  ADJUSTMENT
+}
+
+model WalletTransaction {
+  id             String                @id @default(cuid())
+  walletId       String
+  userId         String
+  type           WalletTransactionType
+  amountUsdCents Int
+  balanceAfter   Int
+  reference      String?
+  campaignId     String?
+  description    String?
+  createdBy      String?
+  metadata       Json?
+  createdAt      DateTime              @default(now())
+
+  wallet   Wallet         @relation("WalletTransactions", fields: [walletId], references: [id], onDelete: Cascade)
+  user     User           @relation("UserWalletTransactions", fields: [userId], references: [id], onDelete: Cascade)
+  campaign BoostCampaign? @relation("CampaignTransactions", fields: [campaignId], references: [id], onDelete: SetNull)
+
+  @@index([walletId, createdAt])
+  @@index([userId, createdAt])
+  @@index([campaignId])
+  @@index([type])
+}
+
+// ══════════════════════════════════════════════
+// EMPLOI (Chantier C — 2026-04-22)
+// Modèles dédiés à la recherche d'emploi :
+//   - JobListing        : offre d'emploi structurée
+//   - JobApplication    : candidature
+//   - UserQualification : diplôme / certification
+//   - UserExperience    : poste passé / en cours
+//   - JobMarketSnapshot : agrégat demande par zone × catégorie
+// ══════════════════════════════════════════════
+
+enum EmploymentType {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  FREELANCE
+  INTERNSHIP
+  TEMPORARY
+}
+
+enum WorkMode {
+  ONSITE
+  HYBRID
+  REMOTE
+}
+
+enum JobListingStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  CLOSED
+  EXPIRED
+}
+
+enum JobApplicationStatus {
+  PENDING
+  SEEN
+  SHORTLISTED
+  INTERVIEW
+  ACCEPTED
+  REJECTED
+  WITHDRAWN
+}
+
+enum QualificationLevel {
+  NONE
+  PRIMARY
+  SECONDARY
+  VOCATIONAL
+  BACHELOR
+  MASTER
+  DOCTORATE
+  CERTIFICATION
+}
+
+/// Offre d'emploi publiée par un recruteur (user ou business).
+model JobListing {
+  id               String           @id @default(cuid())
+  recruiterUserId  String
+  businessId       String?
+  title            String
+  description      String
+  category         String
+  subCategory      String?
+  employmentType   EmploymentType   @default(FULL_TIME)
+  workMode         WorkMode         @default(ONSITE)
+  country          String
+  countryCode      CountryCode?
+  city             String
+  region           String?
+  latitude         Float?
+  longitude        Float?
+  requiredSkills   String[]         @default([])
+  requiredQualifs  String[]         @default([])
+  minExperienceYrs Int              @default(0)
+  salaryMinUsd     Int?
+  salaryMaxUsd     Int?
+  salaryCurrency   String           @default("USD")
+  salaryPeriod     String           @default("MONTH") // MONTH | HOUR | YEAR
+  openings         Int              @default(1)
+  status           JobListingStatus @default(ACTIVE)
+  expiresAt        DateTime?
+  viewCount        Int              @default(0)
+  applicationCount Int              @default(0)
+  isBoosted        Boolean          @default(false)
+  boostExpiresAt   DateTime?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  recruiter    User             @relation("JobListingRecruiter", fields: [recruiterUserId], references: [id], onDelete: Cascade)
+  applications JobApplication[] @relation("JobListingApplications")
+
+  @@index([recruiterUserId])
+  @@index([businessId])
+  @@index([status])
+  @@index([country])
+  @@index([countryCode])
+  @@index([city])
+  @@index([category])
+  @@index([createdAt])
+  @@index([countryCode, status, createdAt])
+  @@index([city, status, createdAt])
+  @@index([category, status, createdAt])
+}
+
+/// Candidature d'un utilisateur sur une offre.
+model JobApplication {
+  id                String               @id @default(cuid())
+  jobListingId      String
+  candidateUserId   String
+  status            JobApplicationStatus @default(PENDING)
+  coverLetter       String?
+  attachmentUrls    String[]             @default([])
+  alignmentScore    Float? // 0-1, calculé à la soumission
+  expectedSalaryUsd Int?
+  recruiterNotes    String?
+  firstSeenAt       DateTime?
+  respondedAt       DateTime?
+  withdrawnAt       DateTime?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  jobListing JobListing @relation("JobListingApplications", fields: [jobListingId], references: [id], onDelete: Cascade)
+  candidate  User       @relation("JobApplicationCandidate", fields: [candidateUserId], references: [id], onDelete: Cascade)
+
+  @@unique([jobListingId, candidateUserId])
+  @@index([candidateUserId, status])
+  @@index([jobListingId, status])
+  @@index([createdAt])
+}
+
+/// Qualification structurée (diplôme, certification).
+model UserQualification {
+  id            String             @id @default(cuid())
+  userId        String
+  label         String // ex: "Licence en informatique"
+  level         QualificationLevel @default(NONE)
+  institution   String?
+  fieldOfStudy  String?
+  countryCode   CountryCode?
+  obtainedYear  Int?
+  expiresAt     DateTime?
+  attachmentUrl String?
+  verified      Boolean            @default(false)
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  user User @relation("UserQualifications", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([level])
+}
+
+/// Expérience professionnelle structurée.
+model UserExperience {
+  id          String       @id @default(cuid())
+  userId      String
+  title       String // ex: "Développeur backend"
+  company     String?
+  category    String? // secteur (IT, Santé, Finance…)
+  countryCode CountryCode?
+  city        String?
+  startDate   DateTime
+  endDate     DateTime? // null = en cours
+  description String?
+  skills      String[]     @default([])
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  user User @relation("UserExperiences", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([category])
+}
+
+/// Agrégat quotidien de la demande emploi par zone × catégorie.
+/// Alimenté par un job scheduler (à créer Phase 3) pour éviter des COUNT() live coûteux.
+model JobMarketSnapshot {
+  id                   String       @id @default(cuid())
+  snapshotDate         DateTime     @default(now())
+  country              String
+  countryCode          CountryCode?
+  city                 String?
+  category             String
+  openJobs             Int          @default(0)
+  applicants           Int          @default(0)
+  saturationIndex      Float        @default(0) // applicants / max(1, openJobs)
+  avgSalaryUsdCents    Int?
+  medianSalaryUsdCents Int?
+  topSkills            String[]     @default([])
+  trend7dPercent       Float? // évolution openJobs sur 7j (en %)
+  isManualOverride     Boolean      @default(false)
+  overriddenBy         String? // userId admin
+  overriddenAt         DateTime?
+  sourceNotes          String? // commentaire libre admin
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+
+  @@unique([snapshotDate, country, city, category])
+  @@index([country, category])
+  @@index([countryCode, category])
+  @@index([snapshotDate])
+  @@index([isManualOverride])
+}
+
+// K3 — Traque les zones (cat+pays+ville) pour lesquelles l'advisor
+// n'a pas trouvé de snapshot → permet au super-admin de prioriser
+// refresh/override des zones les plus demandées.
+model MarketDataGap {
+  id            String       @id @default(cuid())
+  category      String
+  countryCode   CountryCode?
+  country       String
+  city          String?
+  scopeResolved String // "NONE" | "AFRICA_AGGREGATE" | "GEMINI_LIVE" — dernier niveau atteint
+  requestCount  Int          @default(1)
+  firstSeenAt   DateTime     @default(now())
+  lastSeenAt    DateTime     @default(now())
+  resolvedAt    DateTime? // quand admin comble via override/refresh
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@unique([category, countryCode, city])
+  @@index([requestCount])
+  @@index([lastSeenAt])
+  @@index([resolvedAt])
+}
+
+// -----------------------------------------------------------------------
+// Kin-Sell Analytique+ (module market-intel)
+// Voir docs/KIN-SELL-ANALYTIQUE-PLUS-SPEC.md
+// -----------------------------------------------------------------------
+
+model MarketProduct {
+  id             String        @id @default(cuid())
+  slug           String        @unique
+  displayName    String
+  categoryId     String
+  canonicalBrand String?
+  attributes     Json?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  prices         MarketPrice[]
+  trends         MarketTrend[] @relation("TrendProduct")
+
+  @@index([categoryId])
+  @@index([canonicalBrand])
+}
+
+model MarketPrice {
+  id                  String   @id @default(cuid())
+  productId           String
+  countryCode         String
+  city                String?
+  priceMinLocal       Int
+  priceMaxLocal       Int
+  priceMedianLocal    Int
+  localCurrency       String
+  priceMedianEurCents Int
+  sampleSize          Int      @default(1)
+  sourceIds           String[] @default([])
+  collectedAt         DateTime @default(now())
+  confidence          Float    @default(0.5)
+
+  product MarketProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([countryCode, productId])
+  @@index([productId, collectedAt])
+  @@index([collectedAt])
+}
+
+model MarketJob {
+  id               String         @id @default(cuid())
+  slug             String         @unique
+  displayName      String
+  parentCategoryId String
+  seniorityLevel   String         @default("mid") // "junior" | "mid" | "senior"
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  salaries         MarketSalary[]
+  trends           MarketTrend[]  @relation("TrendJob")
+
+  @@index([parentCategoryId])
+}
+
+model MarketSalary {
+  id                   String   @id @default(cuid())
+  jobId                String
+  countryCode          String
+  city                 String?
+  salaryMinLocal       Int
+  salaryMaxLocal       Int
+  salaryMedianLocal    Int
+  localCurrency        String
+  salaryMedianEurCents Int
+  unit                 String   @default("month") // "month" | "day" | "hour" | "project"
+  sampleSize           Int      @default(1)
+  sourceIds            String[] @default([])
+  collectedAt          DateTime @default(now())
+  confidence           Float    @default(0.5)
+
+  job MarketJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([countryCode, jobId])
+  @@index([jobId, collectedAt])
+}
+
+model MarketSource {
+  id            String    @id @default(cuid())
+  name          String
+  baseUrl       String
+  type          String // "marketplace" | "classifieds" | "press" | "stats" | "api"
+  countryCode   String
+  parser        String
+  language      String    @default("fr")
+  trusted       Boolean   @default(false)
+  active        Boolean   @default(true)
+  lastCrawledAt DateTime?
+  lastStatus    String?
+  lastError     String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([baseUrl, countryCode])
+  @@index([countryCode, type])
+  @@index([active, lastCrawledAt])
+}
+
+model MarketTrend {
+  id          String   @id @default(cuid())
+  scope       String // "product" | "job"
+  productId   String?
+  jobId       String?
+  countryCode String
+  period      String // "current" | "weekly" | "monthly" | "seasonal"
+  rank        Int
+  score       Float
+  deltaPct    Float?
+  season      String? // "dry-season" | "rainy-season" | "ramadan" | "back-to-school"
+  computedAt  DateTime @default(now())
+
+  product MarketProduct? @relation("TrendProduct", fields: [productId], references: [id], onDelete: Cascade)
+  job     MarketJob?     @relation("TrendJob", fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([countryCode, scope, period, rank])
+  @@index([computedAt])
+  @@index([productId])
+  @@index([jobId])
+}
+
+model ArbitrageOpportunity {
+  id                 String   @id @default(cuid())
+  scope              String // "product" | "job"
+  entityId           String
+  entityLabel        String
+  shortageCountry    String
+  surplusCountry     String
+  score              Float
+  demandIndex        Float
+  supplyIndex        Float
+  priceDeltaEurCents Int?
+  distanceKm         Int?
+  rationale          String
+  active             Boolean  @default(true)
+  computedAt         DateTime @default(now())
+
+  @@index([shortageCountry, score])
+  @@index([surplusCountry, score])
+  @@index([scope, active])
+  @@index([computedAt])
 }

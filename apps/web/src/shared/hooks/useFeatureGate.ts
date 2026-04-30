@@ -32,6 +32,19 @@ export function useFeatureGate(plan: PlanSummary | null | undefined, scope: "USE
     return featureIncluded || addonActive;
   }, [plan, scope]);
 
+  /**
+   * IA_MERCHANT_AUTO = marchandage automatique (l'IA répond seule aux offres).
+   * TOUJOURS payant : ne dépend pas du scope. Requiert feature IA_MERCHANT_AUTO
+   * dans le plan, OU add-on IA_MERCHANT actif (qui débloque l'auto pour
+   * cohérence avec le backend subscription-guard).
+   */
+  const hasIaMarchandAuto = useMemo(() => {
+    if (!plan) return false;
+    const featureIncluded = plan.features?.includes("IA_MERCHANT_AUTO") ?? false;
+    const addonActive = plan.addOns?.some((a) => a.code === "IA_MERCHANT" && a.status === "ACTIVE") ?? false;
+    return featureIncluded || addonActive;
+  }, [plan]);
+
   const hasIaOrder = useMemo(() => {
     if (!plan) return false;
     const featureIncluded = plan.features?.includes("IA_ORDER") ?? false;
@@ -39,5 +52,5 @@ export function useFeatureGate(plan: PlanSummary | null | undefined, scope: "USE
     return featureIncluded || addonActive;
   }, [plan]);
 
-  return { hasAnalytics, hasPremiumAnalytics, hasIaMarchand, hasIaOrder };
+  return { hasAnalytics, hasPremiumAnalytics, hasIaMarchand, hasIaMarchandAuto, hasIaOrder };
 }

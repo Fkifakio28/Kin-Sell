@@ -28,7 +28,8 @@ function getErrorMessage(error: unknown, t: (k: string) => string): string {
 
 function getRedirectPath(role: string): string {
   if (role === "ADMIN" || role === "SUPER_ADMIN") return "/admin/dashboard";
-  return role === "BUSINESS" ? "/business/dashboard" : "/account";
+  if (role === "BUSINESS") return "/business/dashboard";
+  return "/";
 }
 
 export function LoginPage() {
@@ -92,11 +93,11 @@ export function LoginPage() {
     }
   }, [step]);
 
-  const handleSocialClick = async (provider: "google" | "facebook") => {
+  const handleSocialClick = async (provider: "google" | "facebook" | "apple") => {
     setErrorMessage(null);
-    if (provider === "google") {
+    if (provider === "google" || provider === "apple") {
       const apiBase = import.meta.env.VITE_API_URL ?? "/api";
-      const authUrl = `${apiBase}/auth/google${Capacitor.isNativePlatform() ? "?source=app" : ""}`;
+      const authUrl = `${apiBase}/auth/${provider}${Capacitor.isNativePlatform() ? "?source=app" : ""}`;
       if (Capacitor.isNativePlatform()) {
         await Browser.open({ url: authUrl });
       } else {
@@ -367,7 +368,7 @@ export function LoginPage() {
 
           <TurnstileWidget onToken={handleTurnstileToken} />
 
-          <button type="submit" className="auth-submit-button" disabled={isSubmitting || isLoading}>
+          <button type="submit" className="auth-submit-button" disabled={isSubmitting || isLoading || !cfToken}>
             {isSubmitting ? t("auth.loggingIn") : t("auth.loginBtn")}
           </button>
 
