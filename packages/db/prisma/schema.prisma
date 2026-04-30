@@ -393,41 +393,43 @@ model VerificationCode {
 }
 
 model UserPreference {
-  id                  String       @id @default(cuid())
-  userId              String       @unique
-  locale              String       @default("fr")
-  currency            String       @default("CDF")
-  countryCode         CountryCode? // Pays préféré de l'utilisateur
-  discoveryMode       String       @default("local_first") // local_first | local_only | all
-  theme               String       @default("dark")
-  onlineStatusVisible Boolean      @default(true)
-  marketingEmails     Boolean      @default(false)
-  marketingSms        Boolean      @default(false)
-  pushEnabled         Boolean      @default(true)
-  aiAdviceEnabled     Boolean      @default(true)
-  aiAutoNegoEnabled   Boolean      @default(false)
-  aiCommandeEnabled   Boolean      @default(true)
+  id                     String       @id @default(cuid())
+  userId                 String       @unique
+  locale                 String       @default("fr")
+  localeManual           Boolean      @default(false) // true = utilisateur a choisi sa langue manuellement (override la détection navigateur)
+  currency               String       @default("CDF")
+  countryCode            CountryCode? // Pays préféré de l'utilisateur (utilisé seulement si marketScope = "COUNTRY")
+  marketScope            String       @default("KIN_SELL") // "KIN_SELL" (global, tous pays) | "COUNTRY" (filtré sur countryCode)
+  discoveryMode          String       @default("local_first") // local_first | local_only | all
+  theme                  String       @default("dark")
+  onlineStatusVisible    Boolean      @default(true)
+  marketingEmails        Boolean      @default(false)
+  marketingSms           Boolean      @default(false)
+  pushEnabled            Boolean      @default(true)
+  aiAdviceEnabled        Boolean      @default(true)
+  aiAutoNegoEnabled      Boolean      @default(false)
+  aiCommandeEnabled      Boolean      @default(true)
   // ── Préférences granulaires de notifications (par catégorie / canal) ──
-  notifyOrderEmail        Boolean @default(true)
-  notifyOrderPush         Boolean @default(true)
-  notifyOrderInApp        Boolean @default(true)
-  notifyNegotiationEmail  Boolean @default(true)
-  notifyNegotiationPush   Boolean @default(true)
-  notifyNegotiationInApp  Boolean @default(true)
-  notifyPaymentEmail      Boolean @default(true)
-  notifyPaymentPush       Boolean @default(true)
-  notifyPaymentInApp      Boolean @default(true)
-  notifyMessageEmail      Boolean @default(false)
-  notifyMessagePush       Boolean @default(true)
-  notifyMessageInApp      Boolean @default(true)
-  notifySocialEmail       Boolean @default(false)
-  notifySocialPush        Boolean @default(true)
-  notifySocialInApp       Boolean @default(true)
-  notifySystemEmail       Boolean @default(true)
-  notifySystemPush        Boolean @default(true)
-  notifySystemInApp       Boolean @default(true)
-  createdAt           DateTime     @default(now())
-  updatedAt           DateTime     @updatedAt
+  notifyOrderEmail       Boolean      @default(true)
+  notifyOrderPush        Boolean      @default(true)
+  notifyOrderInApp       Boolean      @default(true)
+  notifyNegotiationEmail Boolean      @default(true)
+  notifyNegotiationPush  Boolean      @default(true)
+  notifyNegotiationInApp Boolean      @default(true)
+  notifyPaymentEmail     Boolean      @default(true)
+  notifyPaymentPush      Boolean      @default(true)
+  notifyPaymentInApp     Boolean      @default(true)
+  notifyMessageEmail     Boolean      @default(false)
+  notifyMessagePush      Boolean      @default(true)
+  notifyMessageInApp     Boolean      @default(true)
+  notifySocialEmail      Boolean      @default(false)
+  notifySocialPush       Boolean      @default(true)
+  notifySocialInApp      Boolean      @default(true)
+  notifySystemEmail      Boolean      @default(true)
+  notifySystemPush       Boolean      @default(true)
+  notifySystemInApp      Boolean      @default(true)
+  createdAt              DateTime     @default(now())
+  updatedAt              DateTime     @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
@@ -992,11 +994,11 @@ model Notification {
   id         String               @id @default(cuid())
   userId     String
   category   NotificationCategory
-  type       String               // ex: "order.created", "negotiation.counter"
+  type       String // ex: "order.created", "negotiation.counter"
   title      String
   body       String
-  data       Json?                // payload (orderId, negotiationId, etc.)
-  url        String?              // deep link
+  data       Json? // payload (orderId, negotiationId, etc.)
+  url        String? // deep link
   icon       String?
   readAt     DateTime?
   archivedAt DateTime?

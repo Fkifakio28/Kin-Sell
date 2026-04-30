@@ -46,6 +46,7 @@ const validatePostContent = (text: string, mediaUrls: string[], backgroundStyle?
 // Résoudre les termes pays pour la recherche
 function resolveCountryTerms(country?: string): string[] {
   if (!country) return [];
+  if (country.trim().toUpperCase() === "GLOBAL") return [];
   const map: Record<string, string[]> = {
     "DRC": ["Congo", "Kinshasa", "RDC", "Katanga"],
     "CD": ["Congo", "Kinshasa", "RDC", "Katanga"],

@@ -1,6 +1,6 @@
-export type MarketCountryCode = "CD" | "GA" | "CG" | "AO" | "CI" | "GN" | "SN" | "MA";
+export type MarketCountryCode = "GLOBAL" | "CD" | "GA" | "CG" | "AO" | "CI" | "GN" | "SN" | "MA";
 
-export type MarketRegionCode = "central-africa" | "west-africa" | "north-africa" | "southern-africa";
+export type MarketRegionCode = "global" | "central-africa" | "west-africa" | "north-africa" | "southern-africa";
 
 export type MarketCurrencyCode = "CDF" | "USD" | "EUR" | "XAF" | "AOA" | "XOF" | "GNF" | "MAD";
 
@@ -19,6 +19,7 @@ export type MarketCountryConfig = {
 };
 
 export const MARKET_COUNTRIES: MarketCountryConfig[] = [
+  { code: "GLOBAL", name: "🌍 Global (Tous les pays)", region: "global", defaultCurrency: "USD", defaultContentLanguage: "fr", defaultCity: "Kinshasa", defaultLat: -4.325, defaultLng: 15.322, timezone: "Africa/Kinshasa" },
   { code: "CD", name: "RDC (Kinshasa)", region: "central-africa", defaultCurrency: "CDF", defaultContentLanguage: "fr", defaultCity: "Kinshasa", defaultLat: -4.325, defaultLng: 15.322, timezone: "Africa/Kinshasa" },
   { code: "GA", name: "Gabon", region: "central-africa", defaultCurrency: "XAF", defaultContentLanguage: "fr", defaultCity: "Libreville", defaultLat: 0.4162, defaultLng: 9.4673, timezone: "Africa/Libreville" },
   { code: "CG", name: "Congo-Brazzaville", region: "central-africa", defaultCurrency: "XAF", defaultContentLanguage: "fr", defaultCity: "Brazzaville", defaultLat: -4.2634, defaultLng: 15.2429, timezone: "Africa/Brazzaville" },

@@ -1110,8 +1110,13 @@ export const getPublicListingDetail = async (listingId: string) => {
 
 /* ── Latest published listings (public, no auth) ── */
 export const latestListings = async (input: { type?: ListingType; city?: string; country?: string; countryCode?: string; limit: number }) => {
-  const resolvedCode = input.countryCode?.toUpperCase() ?? resolveCountryCode(input.country) ?? undefined;
-  const countryTerms = resolveCountryTerms(input.country);
+  // "GLOBAL" = pseudo-pays Kin-sell → ignorer tout filtre pays
+  const isGlobal =
+    input.countryCode?.toUpperCase() === "GLOBAL" || input.country?.toUpperCase() === "GLOBAL";
+  const resolvedCode = isGlobal
+    ? undefined
+    : (input.countryCode?.toUpperCase() ?? resolveCountryCode(input.country) ?? undefined);
+  const countryTerms = isGlobal ? [] : resolveCountryTerms(input.country);
   const andClauses: Record<string, unknown>[] = [];
 
   if (resolvedCode) {

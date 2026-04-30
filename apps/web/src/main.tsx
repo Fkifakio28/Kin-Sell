@@ -8,6 +8,7 @@ import { StatusBar, Style } from "@capacitor/status-bar";
 import App from "./App";
 import { ThemeProvider } from "./app/providers/ThemeProvider";
 import { AuthProvider } from "./app/providers/AuthProvider";
+import { AccountPreferencesSync } from "./app/providers/AccountPreferencesSync";
 import { GlobalNotificationProvider } from "./app/providers/GlobalNotificationProvider";
 import { LocaleCurrencyProvider } from "./app/providers/LocaleCurrencyProvider";
 import { MarketPreferenceProvider } from "./app/providers/MarketPreferenceProvider";
@@ -106,6 +107,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           <MarketPreferenceProvider>
             <LocaleCurrencyProvider>
               <AuthProvider>
+                <AccountPreferencesSync />
                 <SocketProvider>
                   <GlobalNotificationProvider>
                     <NativePermissionsGate>

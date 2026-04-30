@@ -79,6 +79,16 @@ const refreshSchema = z.object({
   refreshToken: z.string().min(16)
 });
 
+const updatePreferencesSchema = z.object({
+  locale: z.enum(["fr", "en", "ln", "ar"]).optional(),
+  localeManual: z.boolean().optional(),
+  currency: z.enum(["CDF", "USD", "EUR", "XAF", "AOA", "XOF", "GNF", "MAD"]).optional(),
+  countryCode: z.enum(["CD", "GA", "CG", "AO", "CI", "GN", "SN", "MA"]).nullable().optional(),
+  marketScope: z.enum(["KIN_SELL", "COUNTRY"]).optional(),
+  theme: z.enum(["dark", "light"]).optional(),
+  onlineStatusVisible: z.boolean().optional(),
+});
+
 const sessionIdSchema = z.object({
   sessionId: z.string().min(10)
 });
@@ -191,6 +201,16 @@ router.patch(
   asyncHandler(async (request: AuthenticatedRequest, response) => {
     const payload = profileCompletionSchema.parse(request.body);
     const result = await accountService.completeProfile(request.auth!.userId, payload);
+    response.json(result);
+  })
+);
+
+router.patch(
+  "/preferences",
+  requireAuth,
+  asyncHandler(async (request: AuthenticatedRequest, response) => {
+    const payload = updatePreferencesSchema.parse(request.body);
+    const result = await accountService.updateUserPreferences(request.auth!.userId, payload);
     response.json(result);
   })
 );

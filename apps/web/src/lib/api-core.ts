@@ -137,8 +137,14 @@ export type AccountUser = {
     addressLine1: string | null;
   };
   preferences?: {
+    locale?: string | null;
+    localeManual?: boolean;
+    currency?: string | null;
+    countryCode?: string | null;
+    marketScope?: "KIN_SELL" | "COUNTRY";
+    theme?: string | null;
     onlineStatusVisible?: boolean;
-  };
+  } | null;
 };
 
 type RequestOptions = {

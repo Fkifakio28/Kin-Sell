@@ -124,7 +124,49 @@ const userPayload = async (userId: string) => {
       addressLine1: user.profile?.addressLine1 ?? null
     },
     preferences: user.preferences
+      ? {
+          locale: user.preferences.locale ?? null,
+          localeManual: user.preferences.localeManual ?? false,
+          currency: user.preferences.currency ?? null,
+          countryCode: user.preferences.countryCode ?? null,
+          marketScope: user.preferences.marketScope ?? "KIN_SELL",
+          theme: user.preferences.theme ?? null,
+          onlineStatusVisible: user.preferences.onlineStatusVisible ?? true,
+        }
+      : null,
   };
+};
+
+export const updateUserPreferences = async (
+  userId: string,
+  payload: {
+    locale?: string;
+    localeManual?: boolean;
+    currency?: string;
+    countryCode?: string | null;
+    marketScope?: "KIN_SELL" | "COUNTRY";
+    theme?: string;
+    onlineStatusVisible?: boolean;
+  }
+) => {
+  const data: Record<string, unknown> = {};
+  if (payload.locale !== undefined) data.locale = payload.locale;
+  if (payload.localeManual !== undefined) data.localeManual = payload.localeManual;
+  if (payload.currency !== undefined) data.currency = payload.currency;
+  if (payload.countryCode !== undefined) {
+    data.countryCode = payload.countryCode === null ? null : (payload.countryCode as any);
+  }
+  if (payload.marketScope !== undefined) data.marketScope = payload.marketScope;
+  if (payload.theme !== undefined) data.theme = payload.theme;
+  if (payload.onlineStatusVisible !== undefined) data.onlineStatusVisible = payload.onlineStatusVisible;
+
+  await prisma.userPreference.upsert({
+    where: { userId },
+    create: { userId, ...data },
+    update: data,
+  });
+
+  return userPayload(userId);
 };
 
 const issueUserSession = async (input: {

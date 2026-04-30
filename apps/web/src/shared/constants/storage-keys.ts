@@ -21,6 +21,8 @@ export const SK_CURRENCY_RATES_TS = "ks-currency-rates-ts";
 /* ── Market Preference ── */
 export const SK_MARKET_COUNTRY = "ks-market-country";
 export const SK_MARKET_SELECTION_MODE = "ks-market-selection-mode";
+/** Flag de migration : la valeur par défaut "GLOBAL" a été appliquée pour tous les utilisateurs. */
+export const SK_MARKET_GLOBAL_DEFAULT_APPLIED = "ks-market-global-default-applied-v1";
 
 /* ── Auth Form Memory ── */
 export const SK_REMEMBERED_IDENTIFIER = "kin-sell.remembered-identifier";
