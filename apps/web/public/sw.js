@@ -1,5 +1,5 @@
 /* Service Worker — Push Notifications + Runtime Caching (Phase 3) */
-const SW_VERSION = "v6-2026-04-23-sound";
+const SW_VERSION = "v7-2026-04-30-purge";
 const CACHE_STATIC = `ks-static-${SW_VERSION}`;
 const CACHE_IMAGES = `ks-images-${SW_VERSION}`;
 const CACHE_PAGES = `ks-pages-${SW_VERSION}`;

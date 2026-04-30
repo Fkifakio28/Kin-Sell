@@ -2194,7 +2194,7 @@ function SoKinPageInner() {
   const navigate = useNavigate();
   const { isLoggedIn, user, logout } = useAuth();
   const { t } = useLocaleCurrency();
-  const { effectiveCountry, getCountryConfig } = useMarketPreference();
+  const { effectiveCountry, getCountryConfig, isGlobalScope } = useMarketPreference();
   const { on, off } = useSocket();
   const isMobile = useIsMobile(1023);
   const toast = useSoKinToast();
@@ -2271,6 +2271,7 @@ function SoKinPageInner() {
   const [scoringLoading, setScoringLoading] = useState(false);
 
   const city = user?.profile?.city ?? getCountryConfig(effectiveCountry).defaultCity;
+  const cityForApi = isGlobalScope ? undefined : city;
   const country = effectiveCountry;
   const avatarUrl = user?.profile?.avatarUrl ?? '';
   const displayName = user?.profile?.displayName ?? 'Utilisateur';
@@ -2291,7 +2292,7 @@ function SoKinPageInner() {
         const limit = 20;
         const currentOffset = reset ? 0 : offsetRef.current;
         const feedParams: { limit: number; offset: number; city?: string; types?: string[] } = { limit, offset: currentOffset };
-        if (feedTab === 'local') feedParams.city = city;
+        if (feedTab === 'local' && cityForApi) feedParams.city = cityForApi;
         // 'suivis' tab is disabled in UI — no feed branch needed
         if (feedTab === 'ventes') feedParams.types = VENTES_TYPES;
         const data = await sokinApi.publicFeed(feedParams);
@@ -2331,7 +2332,7 @@ function SoKinPageInner() {
         loadingRef.current = false;
       }
     },
-    [hasMore, feedTab, city, isLoggedIn]
+    [hasMore, feedTab, cityForApi, isLoggedIn]
   );
 
   const loadMyPublishedPosts = useCallback(async (tab?: SoKinContentTab) => {
@@ -2457,9 +2458,9 @@ function SoKinPageInner() {
     const loadTrends = async () => {
       try {
         const [trendsData, profilesData, smartData] = await Promise.all([
-          sokinTrends.trending({ city, limit: 8 }).catch(() => ({ topics: [], hashtags: [] })),
-          sokinTrends.suggestedProfiles({ city, limit: 5 }).catch(() => ({ profiles: [] })),
-          sokinTrends.smartFeed({ city }).catch(() => null),
+          sokinTrends.trending({ city: cityForApi, limit: 8 }).catch(() => ({ topics: [], hashtags: [] })),
+          sokinTrends.suggestedProfiles({ city: cityForApi, limit: 5 }).catch(() => ({ profiles: [] })),
+          sokinTrends.smartFeed({ city: cityForApi }).catch(() => null),
         ]);
         if (cancelled) return;
         setTrendingTopics(trendsData.topics ?? []);
@@ -2472,7 +2473,7 @@ function SoKinPageInner() {
     };
     void loadTrends();
     return () => { cancelled = true; };
-  }, [city]);
+  }, [cityForApi]);
 
   // ── Chargement des tips IA Ads (auteur connecté) ──
   useEffect(() => {

@@ -10,7 +10,7 @@ import { SeoMeta } from '../../components/SeoMeta';
 
 export function ExplorerShopsPage() {
   const navigate = useNavigate();
-  const { effectiveCountry, getCountryConfig } = useMarketPreference();
+  const { effectiveCountry, getCountryConfig, isGlobalScope } = useMarketPreference();
   const defaultCity = getCountryConfig(effectiveCountry).defaultCity;
   const [shops, setShops] = useState<ExplorerShopApi[]>([]);
   const [loading, setLoading] = useState(true);
@@ -21,7 +21,7 @@ export function ExplorerShopsPage() {
     let cancelled = false;
     const load = async () => {
       try {
-        const data = await explorerApi.shops({ limit: 50, city: defaultCity, country: effectiveCountry });
+        const data = await explorerApi.shops({ limit: 50, city: isGlobalScope ? undefined : defaultCity, country: effectiveCountry });
         if (!cancelled) setShops(data);
       } catch {
         // silencieux
@@ -31,7 +31,7 @@ export function ExplorerShopsPage() {
     };
     load();
     return () => { cancelled = true; };
-  }, [defaultCity, effectiveCountry]);
+  }, [defaultCity, effectiveCountry, isGlobalScope]);
 
   return (
     <section className="explorer-directory-shell animate-fade-in">

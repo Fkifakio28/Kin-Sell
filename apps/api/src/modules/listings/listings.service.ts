@@ -799,12 +799,16 @@ export const searchListings = async (input: SearchListingsInput) => {
   const discoveryMode = input.discoveryMode ?? "local_first";
 
   // ── Résolution du code pays ──
-  const resolvedCode = input.countryCode?.toUpperCase()
-    ?? resolveCountryCode(input.country)
-    ?? undefined;
+  // "GLOBAL" = pseudo-pays Kin-Sell → ignorer tout filtre pays + ville
+  const isGlobal =
+    input.countryCode?.toUpperCase() === "GLOBAL" || input.country?.toUpperCase() === "GLOBAL";
+  const resolvedCode = isGlobal
+    ? undefined
+    : (input.countryCode?.toUpperCase() ?? resolveCountryCode(input.country) ?? undefined);
 
   // ── Country-aware filtering (utilise Listing.countryCode si disponible) ──
-  const countryTerms = resolveCountryTerms(input.country);
+  const countryTerms = isGlobal ? [] : resolveCountryTerms(input.country);
+  const cityFilter = isGlobal ? undefined : input.city;
   const andClauses: Record<string, unknown>[] = [];
 
   if (resolvedCode && discoveryMode !== "all") {
@@ -830,7 +834,7 @@ export const searchListings = async (input: SearchListingsInput) => {
     where: {
       isPublished: true,
       type: input.type,
-      ...(input.city ? { city: { contains: input.city, mode: "insensitive" as const } } : {}),
+      ...(cityFilter ? { city: { contains: cityFilter, mode: "insensitive" as const } } : {}),
       ...(andClauses.length > 0 ? { AND: andClauses } : {}),
       OR: input.q
         ? [
@@ -846,7 +850,7 @@ export const searchListings = async (input: SearchListingsInput) => {
   });
 
   // Fallback: sans filtre ville si aucun résultat
-  if (rows.length === 0 && input.city) {
+  if (rows.length === 0 && cityFilter) {
     rows = await prisma.listing.findMany({
       where: {
         isPublished: true,

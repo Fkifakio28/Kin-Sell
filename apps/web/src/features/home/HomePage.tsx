@@ -115,9 +115,10 @@ export function HomePage() {
   const sokinTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   void sokinTimer; // kept for compatibility
   const { isLoggedIn, user, logout } = useAuth();
-  const { effectiveCountry, getCountryConfig } = useMarketPreference();
+  const { effectiveCountry, getCountryConfig, isGlobalScope } = useMarketPreference();
   const { lowBandwidth } = useDataSaver();
   const defaultCity = getCountryConfig(effectiveCountry).defaultCity;
+  const cityForApi = isGlobalScope ? undefined : defaultCity;
   const { on, off } = useSocket();
   const navigate = useNavigate();
   const articleHover = useHoverPopup<ArticleHoverData>();
@@ -320,7 +321,7 @@ export function HomePage() {
     let cancelled = false;
     const loadType = async (type: 'PRODUIT' | 'SERVICE', limit: number) => {
       // Try with city + country
-      let results = await listingsApi.latest({ type, city: defaultCity, country: effectiveCountry, limit }).catch(() => []);
+      let results = await listingsApi.latest({ type, city: cityForApi, country: effectiveCountry, limit }).catch(() => []);
       if (results.length > 0) return results;
       // Fallback: country only (no city filter)
       results = await listingsApi.latest({ type, country: effectiveCountry, limit }).catch(() => []);
@@ -346,15 +347,15 @@ export function HomePage() {
     };
     void load();
     return () => { cancelled = true; };
-  }, [defaultCity, effectiveCountry]);
+  }, [defaultCity, effectiveCountry, cityForApi]);
 
   // Load sidebar data: trending shops, profiles, So-Kin feed
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
       const [shopsRes, profilesRes, feedRes, blogRes] = await Promise.allSettled([
-        explorerApi.shops({ limit: 3, city: defaultCity, country: effectiveCountry }),
-        explorerApi.profiles({ limit: 3, city: defaultCity, country: effectiveCountry }),
+        explorerApi.shops({ limit: 3, city: cityForApi, country: effectiveCountry }),
+        explorerApi.profiles({ limit: 3, city: cityForApi, country: effectiveCountry }),
         sokinApi.publicFeed({ limit: 4 }),
         blogApi.publicPosts({ limit: 3 }),
       ]);
@@ -372,7 +373,7 @@ export function HomePage() {
       void load();
     }, intervalMs);
     return () => { cancelled = true; clearInterval(poll); };
-  }, [defaultCity, effectiveCountry, lowBandwidth]);
+  }, [defaultCity, effectiveCountry, lowBandwidth, cityForApi]);
 
   // Load cart, seller stats, last buyer order
   useEffect(() => {

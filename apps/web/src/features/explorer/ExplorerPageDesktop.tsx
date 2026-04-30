@@ -31,11 +31,12 @@ const MODAL_PAGE_SIZE = 8;
 
 export function ExplorerPageDesktop() {
   const { t, formatPriceLabelFromUsdCents } = useLocaleCurrency();
-  const { effectiveCountry, getCountryConfig } = useMarketPreference();
+  const { effectiveCountry, getCountryConfig, isGlobalScope } = useMarketPreference();
   const { lowBandwidth } = useDataSaver();
   const lockedCats = useLockedCategories();
   const tutorial = useTutorial('explorer-desktop');
   const defaultCity = getCountryConfig(effectiveCountry).defaultCity;
+  const cityForApi = isGlobalScope ? undefined : defaultCity;
   const [searchParams, setSearchParams] = useSearchParams();
   const urlType = searchParams.get('type');
   const urlCategory = searchParams.get('category');
@@ -335,7 +336,7 @@ export function ExplorerPageDesktop() {
 
     const loadShops = async () => {
       try {
-        const data = await explorerApi.shops({ limit: 4, city: defaultCity, country: effectiveCountry });
+        const data = await explorerApi.shops({ limit: 4, city: cityForApi, country: effectiveCountry });
         setShops(data);
       } catch {
         // silencieux
@@ -344,7 +345,7 @@ export function ExplorerPageDesktop() {
 
     const loadProfiles = async () => {
       try {
-        const data = await explorerApi.profiles({ limit: 4, city: defaultCity, country: effectiveCountry });
+        const data = await explorerApi.profiles({ limit: 4, city: cityForApi, country: effectiveCountry });
         setProfiles(data);
       } catch {
         // silencieux
@@ -359,7 +360,7 @@ export function ExplorerPageDesktop() {
     return () => {
       controller.abort();
     };
-  }, [defaultCity, effectiveCountry]);
+  }, [defaultCity, effectiveCountry, cityForApi]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -389,14 +390,14 @@ export function ExplorerPageDesktop() {
             type: 'PRODUIT',
             q: normalizedQuery || undefined,
             country: effectiveCountry,
-            city: defaultCity,
+            city: cityForApi,
             limit,
           }),
           listingsApi.search({
             type: 'SERVICE',
             q: normalizedQuery || undefined,
             country: effectiveCountry,
-            city: defaultCity,
+            city: cityForApi,
             limit,
           }),
         ]);
@@ -447,7 +448,7 @@ export function ExplorerPageDesktop() {
     }, intervalMs);
 
     return () => { cancelled = true; clearInterval(poll); };
-  }, [formatPriceLabelFromUsdCents, debouncedQuery, effectiveCountry, defaultCity, lowBandwidth]);
+  }, [formatPriceLabelFromUsdCents, debouncedQuery, effectiveCountry, cityForApi, lowBandwidth]);
 
   return (
     <>
