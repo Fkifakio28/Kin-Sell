@@ -1,7 +1,7 @@
-/* ════════════════════════════════════════
-   DashboardJobAnalytics — Chantier C Phase 7
+/* ââââââââââââââââââââââââââââââââââââââââ
+   DashboardJobAnalytics â Chantier C Phase 7
    Design system LOCK (variables CSS uniquement)
-   ════════════════════════════════════════ */
+   ââââââââââââââââââââââââââââââââââââââââ */
 
 .dja-root {
   display: flex;
@@ -42,7 +42,7 @@
 
 .dja-error { color: var(--color-danger, #ef4444); border-color: rgba(239, 68, 68, 0.25); }
 
-/* ── Cards ── */
+/* ââ Cards ââ */
 
 .dja-card {
   padding: 16px 18px;
@@ -73,7 +73,7 @@
   letter-spacing: 0.04em;
 }
 
-/* ── KPIs ── */
+/* ââ KPIs ââ */
 
 .dja-kpi-row {
   display: grid;
@@ -106,7 +106,7 @@
   letter-spacing: 0.03em;
 }
 
-/* ── Chips catégories ── */
+/* Chips categories */
 
 .dja-chips-block { margin-bottom: 10px; }
 
@@ -155,7 +155,7 @@
 .dja-sat--medium { color: #ca8a04; }
 .dja-sat--high { color: var(--color-danger, #ef4444); }
 
-/* ── Applications statuses ── */
+/* ââ Applications statuses ââ */
 
 .dja-statuses {
   display: grid;
@@ -220,7 +220,7 @@
 
 .dja-best-cat strong { color: var(--color-text-primary, #ffffff); }
 
-/* ── Demand zones ── */
+/* ââ Demand zones ââ */
 
 .dja-zones {
   display: grid;
@@ -349,7 +349,7 @@
 .dja-hidden-cta-text strong { color: #9b7aff; font-weight: 700; }
 .dja-hidden-cta-arrow { color: #9b7aff; font-weight: 700; }
 
-/* ── Responsive ── */
+/* ââ Responsive ââ */
 
 @media (max-width: 480px) {
   .dja-card { padding: 14px; }
@@ -359,7 +359,7 @@
 
 
 /* ----------------------------------------
-   J6 � Regional Context + Direct Answers
+   J6 - Regional Context + Direct Answers
    ---------------------------------------- */
 
 .dja-card--answers {

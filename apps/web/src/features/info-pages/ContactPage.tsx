@@ -90,14 +90,32 @@ const FORM_PROBLEM_OPTIONS = [
   "Autre",
 ];
 
+function buildPayPalContributionUrl(amount?: number) {
+  const configuredUrl = import.meta.env.VITE_PAYPAL_SUPPORT_URL
+    ?? import.meta.env.VITE_PAYPAL_DONATION_URL
+    ?? "https://www.paypal.com/cgi-bin/webscr?business=filikifakio%40gmail.com&currency_code=USD";
+  const url = new URL(configuredUrl);
+
+  url.searchParams.set("cmd", "_xclick");
+  url.searchParams.set("item_name", "Contribution au developpement de Kin-Sell");
+  url.searchParams.set("currency_code", url.searchParams.get("currency_code") ?? "USD");
+
+  if (amount) {
+    url.searchParams.set("amount", String(amount));
+  } else {
+    url.searchParams.delete("amount");
+  }
+
+  return url.toString();
+}
+
 /* ═══════════════════════════════════════════
    COMPONENT
    ═══════════════════════════════════════════ */
 
 export function ContactPage() {
   const { user } = useAuth();
-  const paypalDonationUrl = import.meta.env.VITE_PAYPAL_DONATION_URL
-    ?? "https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=filikifakio%40gmail.com&currency_code=USD";
+  const paypalContributionUrl = buildPayPalContributionUrl();
   const isAdmin = user?.role === "ADMIN" || user?.role === "SUPER_ADMIN";
 
   const [formData, setFormData] = useState({
@@ -409,7 +427,7 @@ export function ContactPage() {
         </div>
       </section>
 
-      {/* ══════ 7. ESPACE DON ══════ */}
+      {/* ══════ 7. ESPACE CONTRIBUTION ══════ */}
       <section className="contact-donation">
         <div className="contact-donation-card glass-container">
           <div className="contact-donation-head">
@@ -417,9 +435,9 @@ export function ContactPage() {
             <div>
               <h2 className="contact-donation-title">Soutenir Kin-Sell</h2>
               <p className="contact-donation-subtitle">
-                Kin-Sell est un projet indépendant construit avec passion. Chaque don nous aide
-                à améliorer la plateforme, renforcer la sécurité et développer de nouvelles
-                fonctionnalités pour toute la communauté.
+                Kin-Sell est un projet indépendant construit avec passion. Chaque contribution
+                nous aide à améliorer la plateforme, renforcer la sécurité et développer de
+                nouvelles fonctionnalités pour toute la communauté.
               </p>
             </div>
           </div>
@@ -428,10 +446,11 @@ export function ContactPage() {
             {[2, 5, 10, 25, 50].map((amount) => (
               <a
                 key={amount}
-                href={`${paypalDonationUrl}&amount=${amount}`}
+                href={buildPayPalContributionUrl(amount)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="contact-donation-amount glass-card"
+                aria-label={`Contribuer ${amount} dollars via PayPal`}
               >
                 <span className="contact-donation-amount-value">${amount}</span>
               </a>
@@ -440,12 +459,12 @@ export function ContactPage() {
 
           <div className="contact-donation-actions">
             <a
-              href={paypalDonationUrl}
+              href={paypalContributionUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="glass-button"
             >
-              <IconGift /> Montant libre via PayPal
+              <IconGift /> Contribution libre via PayPal
             </a>
 
             {isAdmin && (
@@ -453,13 +472,13 @@ export function ContactPage() {
                 href="/admin/dashboard?section=donations"
                 className="glass-button glass-button--outline"
               >
-                Ouvrir l'onglet Dons (Super Admin)
+                Ouvrir le suivi des contributions
               </a>
             )}
           </div>
 
           <p className="contact-donation-note">
-            <IconShield /> 100% sécurisé via PayPal — Kin-Sell ne stocke aucune donnée bancaire.
+            <IconShield /> Paiement sécurisé via PayPal — Kin-Sell ne stocke aucune donnée bancaire.
           </p>
         </div>
       </section>

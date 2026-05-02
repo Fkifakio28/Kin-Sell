@@ -167,6 +167,39 @@ export class ApiError extends Error {
   }
 }
 
+function getApiPayloadString(data: unknown, key: "error" | "message" | "detail"): string | null {
+  if (!data || typeof data !== "object" || !(key in data)) return null;
+  const value = (data as Record<string, unknown>)[key];
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function looksTechnical(message: string): boolean {
+  return /^[A-Z0-9_:-]{3,}$/.test(message) || /^API\s+\d{3}$/i.test(message) || /^[a-z]+(?:_[a-z]+)+$/.test(message);
+}
+
+function friendlyStatusMessage(status: number): string {
+  if (status === 400) return "La demande est invalide. Vérifiez les informations saisies.";
+  if (status === 401) return "Votre session a expiré. Reconnectez-vous.";
+  if (status === 403) return "Vous n'avez pas l'autorisation d'effectuer cette action.";
+  if (status === 404) return "L'élément demandé est introuvable ou n'est plus disponible.";
+  if (status === 409) return "Cette action entre en conflit avec une donnée déjà existante.";
+  if (status === 422) return "Certaines informations ne sont pas valides.";
+  if (status === 429) return "Trop de tentatives. Patientez quelques instants puis réessayez.";
+  if (status >= 500) return "Le serveur rencontre un problème. Réessayez dans quelques instants.";
+  return "Une erreur est survenue. Réessayez dans quelques instants.";
+}
+
+function buildApiError(status: number, data?: unknown): ApiError {
+  const serverMessage =
+    getApiPayloadString(data, "error") ??
+    getApiPayloadString(data, "message") ??
+    getApiPayloadString(data, "detail");
+  const message = serverMessage && !looksTechnical(serverMessage)
+    ? serverMessage
+    : friendlyStatusMessage(status);
+  return new ApiError(status, message, data);
+}
+
 // ── Refresh Logic ────────────────────────────────────────────────────────────
 let _refreshPromise: Promise<boolean> | null = null;
 
@@ -336,13 +369,13 @@ export async function request<T>(path: string, opts: RequestOptions = {}, allowR
 
         // Retry sur 5xx (serveur temporairement indisponible)
         if (canRetry && res.status >= 500 && attempt < MAX_RETRIES) {
-          lastError = new ApiError(res.status, `API ${res.status}`);
+          lastError = buildApiError(res.status);
           continue;
         }
 
         let data: unknown;
         try { data = await res.json(); } catch { /* ignore */ }
-        throw new ApiError(res.status, `API ${res.status}`, data);
+        throw buildApiError(res.status, data);
       }
 
       if (res.status === 204) return undefined as T;

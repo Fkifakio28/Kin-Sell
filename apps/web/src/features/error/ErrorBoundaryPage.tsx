@@ -5,29 +5,35 @@ export function ErrorBoundaryPage() {
   const error = useRouteError();
   const navigate = useNavigate();
 
-  // Log temporaire pour diagnostic
-  console.error("[KS ErrorBoundary] error:", error);
+  if (import.meta.env.DEV) {
+    console.error("[KS ErrorBoundary] error:", error);
+  }
 
   let title = "Erreur inattendue";
   let message = "Quelque chose s'est mal passé. Veuillez réessayer.";
+  const showDebugInfo = import.meta.env.DEV;
 
-  // Extraire le message réel pour affichage debug
+  // Garder le détail technique uniquement en développement.
   let debugInfo: string | null = null;
-  if (error instanceof Error) {
-    debugInfo = `${error.name}: ${error.message}`;
-  } else if (typeof error === "string") {
-    debugInfo = error;
-  } else if (error && typeof error === "object" && "message" in error) {
-    debugInfo = String((error as { message: unknown }).message);
+  if (showDebugInfo) {
+    if (error instanceof Error) {
+      debugInfo = `${error.name}: ${error.message}`;
+    } else if (typeof error === "string") {
+      debugInfo = error;
+    } else if (error && typeof error === "object" && "message" in error) {
+      debugInfo = String((error as { message: unknown }).message);
+    }
   }
 
   if (isRouteErrorResponse(error)) {
     if (error.status === 404) {
-      title = "404 — Page introuvable";
+      title = "Page introuvable";
       message = "Cette page n'existe pas ou a été déplacée.";
     } else {
-      title = `Erreur ${error.status}`;
-      message = error.statusText || message;
+      title = "Action impossible";
+      message = error.statusText && !/^Error$/i.test(error.statusText)
+        ? error.statusText
+        : "Cette action ne peut pas être terminée pour le moment. Réessayez dans quelques instants.";
     }
   }
 

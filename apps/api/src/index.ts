@@ -170,6 +170,26 @@ app.use("/uploads", (req, res, next) => {
 });
 app.use("/uploads", express.static(path.resolve(process.cwd(), "uploads")));
 
+let _healthCache: { data: unknown; expiresAt: number } | null = null;
+
+app.get("/health", async (_req, res) => {
+  const now = Date.now();
+  if (_healthCache && now < _healthCache.expiresAt) {
+    res.set("Cache-Control", "public, max-age=30");
+    return res.json(_healthCache.data);
+  }
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    const redisOk = !!getRedis();
+    _healthCache = { data: { status: "ok", service: "kinsell-api", db: "connected", redis: redisOk ? "connected" : "fallback-memory", uptime: Math.floor(process.uptime()) }, expiresAt: now + 30_000 };
+    res.set("Cache-Control", "public, max-age=30");
+    res.json(_healthCache.data);
+  } catch {
+    _healthCache = null;
+    res.status(503).json({ status: "degraded", service: "kinsell-api", db: "unreachable" });
+  }
+});
+
 // ── Global scrape guard (block bots/scrapers on all routes) ──
 import { scrapeGuard } from "./shared/middleware/scrape-guard.middleware.js";
 app.use(scrapeGuard());
@@ -211,26 +231,6 @@ app.use((_req, res, next) => {
 });
 // Activer l'ETag natif Express (weak, CRC32 — pas de double sérialisation)
 app.set("etag", "weak");
-
-let _healthCache: { data: unknown; expiresAt: number } | null = null;
-
-app.get("/health", async (_req, res) => {
-  const now = Date.now();
-  if (_healthCache && now < _healthCache.expiresAt) {
-    res.set("Cache-Control", "public, max-age=30");
-    return res.json(_healthCache.data);
-  }
-  try {
-    await prisma.$queryRaw`SELECT 1`;
-    const redisOk = !!getRedis();
-    _healthCache = { data: { status: "ok", service: "kinsell-api", db: "connected", redis: redisOk ? "connected" : "fallback-memory", uptime: Math.floor(process.uptime()) }, expiresAt: now + 30_000 };
-    res.set("Cache-Control", "public, max-age=30");
-    res.json(_healthCache.data);
-  } catch {
-    _healthCache = null;
-    res.status(503).json({ status: "degraded", service: "kinsell-api", db: "unreachable" });
-  }
-});
 
 app.get("/roles", (_req, res) => {
   const roles = Object.values(Role).map((role) => ({

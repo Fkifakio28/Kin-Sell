@@ -108,7 +108,7 @@ export function LoginPage() {
     setSocialMessage(t("auth.socialReady").replace("{provider}", "Facebook"));
   };
 
-  // �"?�"? Connexion email/identifiant �"?�"?
+  // Connexion email/identifiant
   const handleSubmitIdentifiant = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setErrorMessage(null);
@@ -142,7 +142,7 @@ export function LoginPage() {
     }
   };
 
-  // �"?�"? Vérification code TOTP �"?�"?
+  // Verification code TOTP
   const handleTotpVerify = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setErrorMessage(null);
@@ -162,7 +162,7 @@ export function LoginPage() {
     }
   };
 
-  // �"?�"? Envoi OTP téléphone �"?�"?
+  // Envoi OTP telephone
   const handleSendOtp = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setErrorMessage(null);
@@ -186,7 +186,7 @@ export function LoginPage() {
     }
   };
 
-  // �"?�"? Vérification OTP téléphone �"?�"?
+  // Verification OTP telephone
   const handleVerifyOtp = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setErrorMessage(null);
@@ -210,7 +210,7 @@ export function LoginPage() {
     }
   };
 
-  // �"?�"? Renvoyer OTP �"?�"?
+  // Renvoyer OTP
   const handleResendOtp = async () => {
     setErrorMessage(null);
     setSocialMessage(null);
@@ -224,7 +224,7 @@ export function LoginPage() {
     }
   };
 
-  // �"?�"? Step TOTP �"?�"?
+  // Step TOTP
   if (step === "totp") {
     return (
       <AuthShell
@@ -302,7 +302,7 @@ export function LoginPage() {
         </button>
       </div>
 
-      {/* �"?�"? Onglet Email/Identifiant �"?�"? */}
+      {/* Onglet Email/Identifiant */}
       {tab === "identifiant" && (
         <form className="auth-form" onSubmit={handleSubmitIdentifiant}>
           <div className="auth-field-group">
@@ -379,7 +379,7 @@ export function LoginPage() {
         </form>
       )}
 
-      {/* �"?�"? Onglet Téléphone (OTP) �"?�"? */}
+      {/* Onglet Telephone (OTP) */}
       {tab === "telephone" && !otpSent && (
         <form className="auth-form" onSubmit={handleSendOtp}>
           <div className="auth-helper-text">{t("auth.otpHelper")}</div>

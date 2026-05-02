@@ -664,7 +664,7 @@ export const cartEmptySteps: TutorialStep[] = [
 ];
 
 /* -------------------------------------------------------
-   USER — Articles (espace de vente : publication & gestion)
+   USER - Articles (espace de vente : publication & gestion)
    ------------------------------------------------------- */
 
 export const userArticlesSteps: TutorialStep[] = [
@@ -673,7 +673,7 @@ export const userArticlesSteps: TutorialStep[] = [
     selector: ".ud-art-topbar",
     title: "Votre espace de vente",
     description:
-      "C'est ici que vous gérez tout ce que vous vendez : produits et services. En un coup d'œil, vous voyez le nombre d'articles actifs, inactifs et archivés.",
+      "C'est ici que vous gerez tout ce que vous vendez : produits et services. En un coup d'oeil, vous voyez le nombre d'articles actifs, inactifs et archives.",
     placement: "bottom",
   },
   {
@@ -681,7 +681,7 @@ export const userArticlesSteps: TutorialStep[] = [
     selector: ".ud-art-stats-inline",
     title: "Statistiques rapides",
     description:
-      "Les chips colorés vous indiquent combien de vos annonces sont visibles (vert) vs hors-ligne. Un article INACTIF n'apparaît plus aux acheteurs.",
+      "Les indicateurs colores vous montrent combien de vos annonces sont visibles (vert) ou hors ligne. Un article INACTIF n'apparait plus aux acheteurs.",
     placement: "bottom",
   },
   {
@@ -689,7 +689,7 @@ export const userArticlesSteps: TutorialStep[] = [
     selector: ".ud-art-publish-btn",
     title: "Publier un article",
     description:
-      "Cliquez sur + pour créer une nouvelle annonce en quelques étapes : titre, catégorie, prix, photos et localisation. C'est gratuit !",
+      "Cliquez sur + pour creer une nouvelle annonce en quelques etapes : titre, categorie, prix, photos et localisation. C'est gratuit !",
     placement: "left",
   },
   {
@@ -697,7 +697,7 @@ export const userArticlesSteps: TutorialStep[] = [
     selector: ".ud-art-filters",
     title: "Filtrer vos articles",
     description:
-      "Affichez uniquement les actifs, inactifs, archivés ou en promo pour retrouver rapidement un article à modifier.",
+      "Affichez uniquement les actifs, inactifs, archives ou en promo pour retrouver rapidement un article a modifier.",
     placement: "bottom",
   },
   {
@@ -705,13 +705,13 @@ export const userArticlesSteps: TutorialStep[] = [
     selector: ".ud-art-list",
     title: "Liste de vos annonces",
     description:
-      "Chaque ligne est un article : image, titre, type, prix et statut. Les actions rapides sont à droite pour modifier, promouvoir ou désactiver.",
+      "Chaque ligne est un article : image, titre, type, prix et statut. Les actions rapides sont a droite pour modifier, promouvoir ou desactiver.",
     placement: "top",
   },
 ];
 
 /* -------------------------------------------------------
-   BUSINESS — Produits (catalogue)
+   BUSINESS - Produits (catalogue)
    ------------------------------------------------------- */
 
 export const businessProductsSteps: TutorialStep[] = [
@@ -720,7 +720,7 @@ export const businessProductsSteps: TutorialStep[] = [
     selector: ".bz-art-topbar",
     title: "Catalogue produits",
     description:
-      "Votre espace de vente produits. Stock, statut et prix sont gérés ici. Les acheteurs voient uniquement les produits ACTIFS.",
+      "Votre espace de vente produits. Stock, statut et prix sont geres ici. Les acheteurs voient uniquement les produits ACTIFS.",
     placement: "bottom",
   },
   {
@@ -728,7 +728,7 @@ export const businessProductsSteps: TutorialStep[] = [
     selector: ".bz-art-stats-inline",
     title: "Compteurs du catalogue",
     description:
-      "Actifs / inactifs / archivés. Pensez à réactiver vos articles hors-ligne pour qu'ils reviennent dans les résultats.",
+      "Actifs / inactifs / archives. Pensez a reactiver vos articles hors ligne pour qu'ils reviennent dans les resultats.",
     placement: "bottom",
   },
   {
@@ -736,7 +736,7 @@ export const businessProductsSteps: TutorialStep[] = [
     selector: ".bz-art-publish-btn",
     title: "Ajouter un produit",
     description:
-      "Créez un nouveau produit en 3 étapes (infos, prix/stock, médias) ou importez-en plusieurs à la fois via CSV / JSON / XML.",
+      "Creez un nouveau produit en 3 etapes (infos, prix/stock, medias) ou importez-en plusieurs a la fois via CSV / JSON / XML.",
     placement: "left",
   },
   {
@@ -752,13 +752,13 @@ export const businessProductsSteps: TutorialStep[] = [
     selector: ".bz-art-grid",
     title: "Vos produits",
     description:
-      "Chaque carte affiche visuel, statut, prix et stock. Cliquez pour éditer, désactiver, archiver ou lancer une promo.",
+      "Chaque carte affiche visuel, statut, prix et stock. Cliquez pour editer, desactiver, archiver ou lancer une promo.",
     placement: "top",
   },
 ];
 
 /* -------------------------------------------------------
-   BUSINESS — Services
+   BUSINESS - Services
    ------------------------------------------------------- */
 
 export const businessServicesSteps: TutorialStep[] = [
@@ -767,15 +767,15 @@ export const businessServicesSteps: TutorialStep[] = [
     selector: ".bz-art-topbar",
     title: "Vos services",
     description:
-      "L'espace dédié à vos prestations. Définissez une description claire, une zone d'intervention et votre tarif pour être trouvé par les clients.",
+      "L'espace dedie a vos prestations. Definissez une description claire, une zone d'intervention et votre tarif pour etre trouve par les clients.",
     placement: "bottom",
   },
   {
     id: "bs-stats",
     selector: ".bz-art-stats-inline",
-    title: "Visibilité de vos services",
+    title: "Visibilite de vos services",
     description:
-      "Nombre de services actifs, en pause ou archivés. Un service ACTIF apparaît dans l'Explorer et sur votre vitrine.",
+      "Nombre de services actifs, en pause ou archives. Un service ACTIF apparait dans l'Explorer et sur votre vitrine.",
     placement: "bottom",
   },
   {
@@ -783,7 +783,7 @@ export const businessServicesSteps: TutorialStep[] = [
     selector: ".bz-art-publish-btn",
     title: "Proposer un service",
     description:
-      "Cliquez pour créer un nouveau service. Titre clair, catégorie précise et description détaillée = plus de contacts.",
+      "Cliquez pour creer un nouveau service. Titre clair, categorie precise et description detaillee = plus de contacts.",
     placement: "left",
   },
   {
@@ -791,7 +791,7 @@ export const businessServicesSteps: TutorialStep[] = [
     selector: ".bz-art-filters",
     title: "Filtrer par statut",
     description:
-      "Affichez uniquement les services actifs pour vous concentrer sur ce qui est visible auprès des clients.",
+      "Affichez uniquement les services actifs pour vous concentrer sur ce qui est visible aupres des clients.",
     placement: "bottom",
   },
   {
@@ -799,7 +799,7 @@ export const businessServicesSteps: TutorialStep[] = [
     selector: ".bz-art-grid",
     title: "Votre grille de services",
     description:
-      "Chaque carte = un service. Éditez, désactivez ou boostez directement depuis la carte pour gagner du temps.",
+      "Chaque carte = un service. Editez, desactivez ou boostez directement depuis la carte pour gagner du temps.",
     placement: "top",
   },
 ];

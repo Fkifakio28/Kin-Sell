@@ -1,8 +1,8 @@
 import { request } from "../api-core";
 
-// ══════════════════════════════════════════════
+// ââââââââââââââââââââââââââââââââââââââââââââââ
 // SECURITY TYPES
-// ══════════════════════════════════════════════
+// ââââââââââââââââââââââââââââââââââââââââââââââ
 
 export type SecurityDashboard = {
   events24h: number;
@@ -69,9 +69,9 @@ export type UserTrustInfo = {
   history: TrustScoreEvent[];
 };
 
-// ══════════════════════════════════════════════
+// ââââââââââââââââââââââââââââââââââââââââââââââ
 // ADMIN TYPES
-// ══════════════════════════════════════════════
+// ââââââââââââââââââââââââââââââââââââââââââââââ
 
 export type AdminStats = {
   totalUsers: number;
@@ -347,7 +347,7 @@ export type AdminAppeal = {
   createdAt: string;
 };
 
-/* ── MessageGuard AI Types ── */
+/* ââ MessageGuard AI Types ââ */
 export type MessageGuardLogEntry = {
   id: string;
   userId: string;
@@ -389,7 +389,7 @@ export type MessageGuardConfigResponse = {
   [key: string]: any;
 };
 
-// ── Feed (So-Kin) Admin ──
+// ââ Feed (So-Kin) Admin ââ
 export type AdminFeedPost = {
   id: string;
   authorId: string;
@@ -416,7 +416,7 @@ export type AdminFeedStats = {
   deleted: number;
 };
 
-// ── Donations ──
+// ââ Donations ââ
 export type AdminDonation = {
   id: string;
   userId: string;
@@ -435,7 +435,7 @@ export type AdminDonationSummary = {
   pendingCount: number;
 };
 
-// ── Advertisements Admin ──
+// ââ Advertisements Admin ââ
 export type AdminAdvertisement = {
   id: string;
   title: string;
@@ -489,9 +489,9 @@ export type CategoryNegotiationRule = {
   updatedAt: string | null;
 };
 
-// ══════════════════════════════════════════════
+// ââââââââââââââââââââââââââââââââââââââââââââââ
 // ADMIN API
-// ══════════════════════════════════════════════
+// ââââââââââââââââââââââââââââââââââââââââââââââ
 
 export const admin = {
   me: () => request<AdminMe>("/admin/me"),
@@ -553,7 +553,7 @@ export const admin = {
   deleteAdOffer: (id: string) =>
     request<{ success: boolean }>(`/admin/ads/${encodeURIComponent(id)}`, { method: "DELETE" }),
 
-  // AI Agents — Centre de pilotage
+  // AI Agents â Centre de pilotage
   aiAgents: (params?: { status?: string; domain?: string; type?: string }) =>
     request<AdminAiAgent[]>("/admin/ai-agents", { params: params as Record<string, string | number | undefined> }),
   aiAgentStats: () => request<AiManagementStats>("/admin/ai-agents/stats"),
@@ -616,7 +616,7 @@ export const admin = {
   userRestrictions: (userId: string) =>
     request<{ restrictions: UserRestriction[] }>(`/admin/security/users/${encodeURIComponent(userId)}/restrictions`),
 
-  // ── MessageGuard AI ──
+  // ââ MessageGuard AI ââ
   messageGuardDashboard: () =>
     request<MessageGuardDashboard>("/admin/message-guard/dashboard"),
   messageGuardLogs: (params?: { page?: number; limit?: number; verdict?: string; userId?: string; category?: string }) =>
@@ -682,7 +682,7 @@ export const admin = {
   createAdmin: (body: { email: string; password: string; displayName: string; level?: string; permissions?: string[] }) =>
     request<{ id: string; email: string; role: string; displayName: string; level: string; permissions: string[] }>("/admin/admins/create", { method: "POST", body }),
 
-  // ── Subscriptions & AI Trials ──
+  // ââ Subscriptions & AI Trials ââ
   aiRecommendationStats: () =>
     request<AdminAiRecommendationStats>("/admin/ai-recommendations/stats"),
   subscriptions: (params?: { page?: number; limit?: number; status?: string; scope?: string; email?: string; planCode?: string; source?: string; dateFrom?: string; dateTo?: string }) =>
@@ -698,7 +698,7 @@ export const admin = {
   activatePlan: (body: { userId: string; planCode: string; durationDays?: number; reason: string; exempt?: boolean }) =>
     request<unknown>("/admin/subscriptions/activate", { method: "POST", body }),
 
-  // ── Billing admin — Commandes & validation ──
+  // ââ Billing admin â Commandes & validation ââ
   billingOrders: (params?: { page?: number; limit?: number; status?: string; method?: string }) =>
     request<AdminBillingOrderList>("/admin/billing/orders", { params: params as Record<string, string | number | undefined> }),
   billingValidateOrder: (body: { orderId: string; reason?: string }) =>
@@ -706,7 +706,7 @@ export const admin = {
   billingFailOrder: (body: { orderId: string; reason?: string }) =>
     request<{ orderId: string; status: string; message: string }>("/admin/billing/fail-order", { method: "POST", body }),
 
-  // ── Kin-Sell Analytique (enrichi) ──
+  // ââ Kin-Sell Analytique (enrichi) ââ
   analytique: () =>
     request<AnalytiqueData>("/admin/ia/analytique"),
   marketIntelligence: (params?: { city?: string; category?: string; period?: string }) =>
@@ -718,7 +718,7 @@ export const admin = {
   logExport: (body: { type: string; title: string; tier: string; format: string; size?: string }) =>
     request<ExportHistoryItem>("/admin/ia/exports", { method: "POST", body }),
 
-  // ── IA Sources & Enrichment ──
+  // ââ IA Sources & Enrichment ââ
   iaSources: (domain?: string) =>
     request<{ sources: IaSource[]; total: number }>("/admin/ia/sources", { params: domain ? { domain } : undefined }),
   iaAddSource: (body: { domain: string; type: "URL" | "FILE"; name: string; url?: string; fileType?: string; notes?: string }) =>
@@ -726,21 +726,21 @@ export const admin = {
   iaDeleteSource: (id: string) =>
     request<{ ok: boolean }>(`/admin/ia/sources/${encodeURIComponent(id)}`, { method: "DELETE" }),
 
-  // ── IA Commande: toggle user ──
+  // ââ IA Commande: toggle user ââ
   iaCommandeToggleUser: (body: { userId: string; enabled: boolean; reason: string }) =>
     request<{ ok: boolean }>("/admin/ia/commande/toggle-user", { method: "POST", body }),
 
-  // ── IA ADS: create admin ad ──
+  // ââ IA ADS: create admin ad ââ
   iaAdsCreate: (body: { title: string; description?: string; imageUrl?: string; linkUrl?: string; ctaText?: string; targetPages?: string[]; startDate?: string; endDate?: string; priority?: number }) =>
     request<unknown>("/admin/ia/ads/create", { method: "POST", body }),
 
-  // ── IA Message: send promo ──
+  // ââ IA Message: send promo ââ
   iaMessageSend: (body: { recipientIds: string[]; channel: "EMAIL" | "PUSH" | "INTERNAL"; subject: string; body: string; reason?: string }) =>
     request<{ ok: boolean; sent: number; total: number }>("/admin/ia/messages/send", { method: "POST", body }),
   iaMessageTargetUsers: (params?: { search?: string; role?: string; limit?: number }) =>
     request<{ users: IaTargetUser[] }>("/admin/ia/messages/target-users", { params: params as Record<string, string | number | undefined> }),
 
-  // ── Chantier J5 : Job Analytics Admin ──
+  // ââ Chantier J5 : Job Analytics Admin ââ
   jobSnapshots: (params?: {
     country?: string;
     countryCode?: string;
@@ -795,7 +795,7 @@ export const admin = {
   resetJobGeminiMetrics: () =>
     request<{ ok: boolean }>("/admin/analytics/jobs/gemini-metrics/reset", { method: "POST" }),
 
-  // K3 — Market data gaps
+  // K3 â Market data gaps
   jobDataGaps: (onlyOpen = true, limit = 30) =>
     request<{ gaps: AdminJobDataGap[]; total: number }>("/admin/analytics/jobs/data-gaps", {
       params: { onlyOpen: onlyOpen ? "true" : "false", limit },
@@ -807,7 +807,7 @@ export const admin = {
     ),
 };
 
-// ── Admin AI/Subscription types ──
+// ââ Admin AI/Subscription types ââ
 export type AdminAiRecommendationStats = {
   total: number;
   active: number;
@@ -858,7 +858,7 @@ export type AdminAiTrialItem = {
 };
 export type AdminAiTrialList = { total: number; page: number; totalPages: number; trials: AdminAiTrialItem[] };
 
-// ── Billing orders types ──
+// ââ Billing orders types ââ
 export type AdminBillingOrderItem = {
   id: string;
   userId: string | null;
@@ -880,7 +880,7 @@ export type AdminBillingOrderItem = {
 };
 export type AdminBillingOrderList = { items: AdminBillingOrderItem[]; total: number; page: number; limit: number };
 
-// ── KPI & Detail types ──
+// ââ KPI & Detail types ââ
 export type AdminSubscriptionKpi = {
   active: number;
   expired: number;
@@ -917,9 +917,9 @@ export type AdminSubscriptionDetail = {
   paymentOrders: Array<{ id: string; planCode: string; amountUsdCents: number; method: string; status: string; transferReference: string; createdAt: string; validatedAt: string | null }>;
 };
 
-// ══════════════════════════════════════════════
+// ââââââââââââââââââââââââââââââââââââââââââââââ
 // ANALYTICS TYPES
-// ══════════════════════════════════════════════
+// ââââââââââââââââââââââââââââââââââââââââââââââ
 
 export type AnalytiqueData = {
   users: { total: number; new24h: number; new7d: number };
@@ -1035,7 +1035,7 @@ export type IaTargetUser = {
 };
 
 // ----------------------------------------------
-// CHANTIER J5 � JOB ANALYTICS ADMIN TYPES
+// CHANTIER J5 - JOB ANALYTICS ADMIN TYPES
 // ----------------------------------------------
 
 export type AdminJobSnapshot = {
