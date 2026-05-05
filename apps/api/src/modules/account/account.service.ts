@@ -14,6 +14,7 @@ import { createSessionTokens, revokeOtherSessions, revokeSession, rotateSessionT
 import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
 import { sendOtpEmail, isMailConfigured } from "../../shared/email/mailer.js";
+import { sendOtpSms, isSmsConfigured } from "../../shared/sms/sms-sender.js";
 import { normalizeEmail, normalizePhone, slugifyUsername } from "../../shared/utils/identity-normalizers.js";
 import { normalizeImageInput } from "../../shared/utils/media-storage.js";
 
@@ -516,10 +517,38 @@ export const authEntry = async (input: EntryEmailInput | EntryProviderInput) => 
 
 export const requestPhoneOtp = async (input: OtpRequestInput) => {
   const phone = normalizePhone(input.phone);
+
+  const smsConfigured = isSmsConfigured();
+  const isDev = env.NODE_ENV === "development";
+
+  // Garde-fou : en production/test, exiger un provider SMS configuré.
+  // En développement, on autorise le flow sans provider et on retourne previewCode.
+  // Note : ce check est fait AVANT le cooldown pour ne pas pénaliser un utilisateur
+  // si aucun SMS ne peut être envoyé (sinon il prendrait un 429 sur les essais suivants).
+  if (!smsConfigured && !isDev) {
+    throw new HttpError(
+      503,
+      "Service SMS temporairement indisponible. Réessayez plus tard ou utilisez l'inscription par email."
+    );
+  }
+
+  // Cooldown appliqué seulement quand un envoi est autorisé.
   ensurePhoneCooldown(phone);
 
   const otpCode = randomOtp();
   const expiresAt = new Date(Date.now() + env.OTP_TTL_SECONDS * 1000);
+
+  // Invalider les anciens codes PHONE actifs pour ce destinataire/purpose
+  // (consumedAt = now → considérés comme consommés, donc inutilisables)
+  await prisma.verificationCode.updateMany({
+    where: {
+      destination: phone,
+      provider: AuthProvider.PHONE,
+      purpose: input.purpose,
+      consumedAt: null,
+    },
+    data: { consumedAt: new Date() },
+  });
 
   const verification = await prisma.verificationCode.create({
     data: {
@@ -533,8 +562,23 @@ export const requestPhoneOtp = async (input: OtpRequestInput) => {
     }
   });
 
-  // In production this should enqueue an SMS provider job.
-  const previewCode = env.NODE_ENV === "development" ? otpCode : undefined;
+  // Envoi réel via le provider SMS (si configuré).
+  if (smsConfigured) {
+    const sent = await sendOtpSms(phone, otpCode);
+    if (!sent) {
+      // Nettoyage du code orphelin si l'envoi échoue
+      await prisma.verificationCode.delete({ where: { id: verification.id } }).catch(() => undefined);
+      // Le SMS n'est pas parti → libérer le cooldown pour que l'utilisateur puisse réessayer.
+      phoneCooldown.delete(phone);
+      throw new HttpError(
+        503,
+        "Service SMS temporairement indisponible. Réessayez plus tard ou utilisez l'inscription par email."
+      );
+    }
+  }
+
+  // previewCode : uniquement en development (utilisé par le frontend pour pré-remplir en local).
+  const previewCode = isDev ? otpCode : undefined;
 
   return {
     verificationId: verification.id,
@@ -898,8 +942,30 @@ export const revokeAllOtherUserSessions = async (userId: string, currentSessionI
 
 export const requestEmailVerification = async (userId: string, email: string) => {
   const normalizedEmail = normalizeEmail(email);
+
+  // Garde-fou : SMTP doit être configuré pour ce flow
+  if (!isMailConfigured()) {
+    throw new HttpError(
+      503,
+      "Service email temporairement indisponible. Réessayez plus tard ou contactez le support."
+    );
+  }
+
   const code = randomOtp();
   const expiresAt = new Date(Date.now() + env.OTP_TTL_SECONDS * 1000);
+
+  // Invalider les anciens codes VERIFY_EMAIL actifs pour ce user/email
+  // (consumedAt = now → considérés comme consommés, donc inutilisables)
+  await prisma.verificationCode.updateMany({
+    where: {
+      userId,
+      destination: normalizedEmail,
+      provider: AuthProvider.EMAIL,
+      purpose: VerificationPurpose.VERIFY_EMAIL,
+      consumedAt: null,
+    },
+    data: { consumedAt: new Date() },
+  });
 
   const verification = await prisma.verificationCode.create({
     data: {
@@ -913,7 +979,15 @@ export const requestEmailVerification = async (userId: string, email: string) =>
     }
   });
 
-  await sendOtpEmail(normalizedEmail, code);
+  const sent = await sendOtpEmail(normalizedEmail, code);
+  if (!sent) {
+    // Nettoyage du code orphelin si l'envoi échoue
+    await prisma.verificationCode.delete({ where: { id: verification.id } }).catch(() => undefined);
+    throw new HttpError(
+      503,
+      "Service email temporairement indisponible. Réessayez plus tard ou contactez le support."
+    );
+  }
 
   return {
     verificationId: verification.id,

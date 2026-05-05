@@ -63,6 +63,23 @@ const schema = z.object({
   SMTP_PASS: z.string().optional(),
   SMTP_FROM: z.string().default("Kin-Sell <contact@kin-sell.com>"),
 
+  // ── SMS OTP (provider) ──
+  // "disabled" | "africastalking" | "beem"
+  SMS_PROVIDER: z.enum(["disabled", "africastalking", "beem"]).default("disabled"),
+
+  // ── Africa's Talking (backup / RDC bas coût) ──
+  AT_USERNAME: z.string().optional(),
+  AT_API_KEY: z.string().optional(),
+  AT_SENDER_ID: z.string().optional(),
+  AT_SANDBOX: z.enum(["true", "false"]).default("true").transform((v) => v === "true"),
+
+  // ── Beem Africa (provider principal multi-pays) ──
+  // https://login.beem.africa → API Settings
+  // Le Sender ID doit être enregistré (white-list) auprès de Beem.
+  BEEM_API_KEY: z.string().optional(),
+  BEEM_SECRET_KEY: z.string().optional(),
+  BEEM_SENDER_ID: z.string().default("Kin-sell"),
+
   // ── Google OAuth ──
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
