@@ -1,4 +1,5 @@
 import { useNavigate, useRouteError, isRouteErrorResponse } from "react-router-dom";
+import { isChunkLoadError } from "../../shared/chunk-load-error";
 import "./error.css";
 
 export function ErrorBoundaryPage() {
@@ -7,6 +8,28 @@ export function ErrorBoundaryPage() {
 
   if (import.meta.env.DEV) {
     console.error("[KS ErrorBoundary] error:", error);
+  }
+
+  // Cas dédié : échec de chargement d'un module lazy / chunk (réseau ou déploiement).
+  // On affiche une UI simple avec un bouton "Réessayer" qui recharge la page.
+  if (isChunkLoadError(error)) {
+    return (
+      <div className="err-page">
+        <h1 className="err-title err-title--sm">Chargement interrompu</h1>
+        <p className="err-message">
+          La page n'a pas pu être chargée. Vérifiez votre connexion puis réessayez.
+        </p>
+        <div className="err-actions">
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="glass-btn glass-btn--primary err-btn"
+          >
+            Réessayer
+          </button>
+        </div>
+      </div>
+    );
   }
 
   let title = "Erreur inattendue";

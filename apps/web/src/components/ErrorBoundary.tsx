@@ -1,4 +1,5 @@
 import React from "react";
+import { isChunkLoadError } from "../shared/chunk-load-error";
 
 interface ErrorBoundaryState {
   hasError: boolean;
@@ -21,6 +22,11 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
+    // Les erreurs de chargement dynamique (chunk/lazy) sont presque toujours
+    // dues au réseau ou à un déploiement qui a invalidé les hashes de chunks.
+    // On évite de spammer le backend avec ces cas attendus.
+    if (isChunkLoadError(error)) return;
+
     // Report to backend error logging endpoint
     reportError({
       type: "react-error-boundary",
@@ -34,6 +40,32 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
 
   render() {
     if (this.state.hasError) {
+      // Cas spécifique : chunk/lazy import qui n'a pas pu se charger.
+      // Message simple, pas de stack trace, bouton de rechargement.
+      if (isChunkLoadError(this.state.error)) {
+        return (
+          <div style={{
+            display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+            minHeight: "60vh", padding: "2rem", textAlign: "center", color: "var(--color-text, #fff)",
+          }}>
+            <h2 style={{ marginBottom: "1rem" }}>Chargement interrompu</h2>
+            <p style={{ opacity: 0.7, marginBottom: "1.5rem", maxWidth: "32rem" }}>
+              La page n'a pas pu être chargée. Vérifiez votre connexion puis réessayez.
+            </p>
+            <button
+              onClick={() => window.location.reload()}
+              style={{
+                padding: "0.75rem 2rem", borderRadius: "12px",
+                background: "var(--color-primary, #6f58ff)", color: "#fff",
+                border: "none", cursor: "pointer", fontSize: "1rem",
+              }}
+            >
+              Réessayer
+            </button>
+          </div>
+        );
+      }
+
       if (this.props.fallback) return this.props.fallback;
 
       return (
@@ -102,6 +134,13 @@ function reportError(report: ErrorReport): void {
 
 if (typeof window !== "undefined") {
   window.addEventListener("error", (event) => {
+    // Erreurs de chargement de modules dynamiques / chunks : ne pas spammer le backend
+    // et empêcher l'affichage brut de l'erreur par le navigateur quand possible.
+    // Le rendu propre (page "Réessayer") est pris en charge par les ErrorBoundary React.
+    if (isChunkLoadError(event.error) || isChunkLoadError(event.message)) {
+      event.preventDefault();
+      return;
+    }
     reportError({
       type: "window-error",
       message: event.message || "Unknown error",
@@ -113,6 +152,11 @@ if (typeof window !== "undefined") {
 
   window.addEventListener("unhandledrejection", (event) => {
     const reason = event.reason;
+    // Ne pas spammer le backend pour les erreurs de chunks (chargement lazy interrompu).
+    if (isChunkLoadError(reason)) {
+      event.preventDefault();
+      return;
+    }
     reportError({
       type: "unhandled-rejection",
       message: reason?.message || String(reason) || "Unhandled promise rejection",
