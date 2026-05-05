@@ -13,7 +13,7 @@ import { hashPassword, verifyPassword } from "../../shared/auth/password.js";
 import { createSessionTokens, revokeOtherSessions, revokeSession, rotateSessionTokens } from "../../shared/auth/session.js";
 import { prisma } from "../../shared/db/prisma.js";
 import { HttpError } from "../../shared/errors/http-error.js";
-import { isMailConfigured, sendOtpEmail } from "../../shared/email/mailer.js";
+import { sendOtpEmail } from "../../shared/email/mailer.js";
 import { normalizeEmail, normalizePhone, slugifyUsername } from "../../shared/utils/identity-normalizers.js";
 import { normalizeImageInput } from "../../shared/utils/media-storage.js";
 
@@ -1144,13 +1144,6 @@ export const submitSuspensionAppeal = async (userId: string, message: string) =>
 export const requestPasswordReset = async (email: string) => {
   const normalizedEmail = normalizeEmail(email);
 
-  if (!isMailConfigured()) {
-    throw new HttpError(
-      503,
-      "Service email temporairement indisponible. Réessayez plus tard ou contactez le support.",
-    );
-  }
-
   const identity = await prisma.userIdentity.findUnique({
     where: {
       provider_providerSubject: {
@@ -1185,15 +1178,7 @@ export const requestPasswordReset = async (email: string) => {
     },
   });
 
-  const sent = await sendOtpEmail(normalizedEmail, code);
-  if (!sent) {
-    // Nettoyage : pas de code orphelin si l'envoi réel a échoué.
-    await prisma.verificationCode.delete({ where: { id: verification.id } }).catch(() => undefined);
-    throw new HttpError(
-      503,
-      "Service email temporairement indisponible. Réessayez plus tard ou contactez le support.",
-    );
-  }
+  await sendOtpEmail(normalizedEmail, code);
 
   return {
     ok: true,

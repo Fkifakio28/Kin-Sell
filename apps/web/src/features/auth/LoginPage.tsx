@@ -11,11 +11,6 @@ import { TurnstileWidget } from "../../components/TurnstileWidget";
 type LoginTab = "identifiant" | "telephone";
 type LoginStep = "credentials" | "totp" | "otp";
 
-// Feature flag : auth par téléphone désactivée tant qu'aucun fournisseur SMS
-// n'est branché côté backend (cf. apps/api/src/modules/account/account.service.ts).
-// Mettre à true ici réactivera l'onglet téléphone dans la page de connexion.
-const PHONE_AUTH_ENABLED = false;
-
 const rememberedIdentifierKey = "kin-sell.auth.identifier";
 
 function getErrorMessage(error: unknown, t: (k: string) => string): string {
@@ -98,15 +93,19 @@ export function LoginPage() {
     }
   }, [step]);
 
-  const handleSocialClick = async (provider: "google" | "apple") => {
+  const handleSocialClick = async (provider: "google" | "facebook" | "apple") => {
     setErrorMessage(null);
-    const apiBase = import.meta.env.VITE_API_URL ?? "/api";
-    const authUrl = `${apiBase}/auth/${provider}${Capacitor.isNativePlatform() ? "?source=app" : ""}`;
-    if (Capacitor.isNativePlatform()) {
-      await Browser.open({ url: authUrl });
-    } else {
-      window.location.href = authUrl;
+    if (provider === "google" || provider === "apple") {
+      const apiBase = import.meta.env.VITE_API_URL ?? "/api";
+      const authUrl = `${apiBase}/auth/${provider}${Capacitor.isNativePlatform() ? "?source=app" : ""}`;
+      if (Capacitor.isNativePlatform()) {
+        await Browser.open({ url: authUrl });
+      } else {
+        window.location.href = authUrl;
+      }
+      return;
     }
+    setSocialMessage(t("auth.socialReady").replace("{provider}", "Facebook"));
   };
 
   // Connexion email/identifiant
@@ -281,29 +280,27 @@ export function LoginPage() {
       socialMessage={socialMessage}
       onSocialClick={handleSocialClick}
     >
-      {/* Onglets Email / Téléphone — masqués tant que PHONE_AUTH_ENABLED = false */}
-      {PHONE_AUTH_ENABLED && (
-        <div className="auth-tabs" role="tablist">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === "identifiant"}
-            className={`auth-tab${tab === "identifiant" ? " auth-tab--active" : ""}`}
-            onClick={() => { setTab("identifiant"); setErrorMessage(null); setOtpSent(false); setOtpCode(""); }}
-          >
-            {t("auth.tabEmail")}
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === "telephone"}
-            className={`auth-tab${tab === "telephone" ? " auth-tab--active" : ""}`}
-            onClick={() => { setTab("telephone"); setErrorMessage(null); }}
-          >
-            {t("auth.tabPhone")}
-          </button>
-        </div>
-      )}
+      {/* Onglets Email / Téléphone */}
+      <div className="auth-tabs" role="tablist">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === "identifiant"}
+          className={`auth-tab${tab === "identifiant" ? " auth-tab--active" : ""}`}
+          onClick={() => { setTab("identifiant"); setErrorMessage(null); setOtpSent(false); setOtpCode(""); }}
+        >
+          {t("auth.tabEmail")}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === "telephone"}
+          className={`auth-tab${tab === "telephone" ? " auth-tab--active" : ""}`}
+          onClick={() => { setTab("telephone"); setErrorMessage(null); }}
+        >
+          {t("auth.tabPhone")}
+        </button>
+      </div>
 
       {/* Onglet Email/Identifiant */}
       {tab === "identifiant" && (
@@ -383,7 +380,7 @@ export function LoginPage() {
       )}
 
       {/* Onglet Telephone (OTP) */}
-      {PHONE_AUTH_ENABLED && tab === "telephone" && !otpSent && (
+      {tab === "telephone" && !otpSent && (
         <form className="auth-form" onSubmit={handleSendOtp}>
           <div className="auth-helper-text">{t("auth.otpHelper")}</div>
 
@@ -413,7 +410,7 @@ export function LoginPage() {
         </form>
       )}
 
-      {PHONE_AUTH_ENABLED && tab === "telephone" && otpSent && (
+      {tab === "telephone" && otpSent && (
         <form className="auth-form" onSubmit={handleVerifyOtp}>
           <div className="auth-helper-text">
             {t("auth.codeSentTo")} <strong>{phone}</strong>. {t("auth.checkSms")}

@@ -12,8 +12,6 @@ const transporter =
       })
     : null;
 
-export const isMailConfigured = (): boolean => transporter !== null;
-
 export interface MailOptions {
   to: string;
   subject: string;

@@ -11,10 +11,6 @@ import { TurnstileWidget } from "../../components/TurnstileWidget";
 type ProfileType = "user" | "business";
 type RegisterTab = "email" | "telephone";
 
-// Feature flag : inscription par téléphone désactivée tant qu'aucun fournisseur
-// SMS n'est branché côté backend. Mettre à true pour réactiver l'onglet.
-const PHONE_AUTH_ENABLED = false;
-
 const rememberedRoleKey = "kin-sell.auth.role";
 
 function getErrorMessage(error: unknown, t: (k: string) => string): string {
@@ -91,15 +87,19 @@ export function RegisterPage() {
     return () => clearInterval(id);
   }, [otpResendAt]);
 
-  const handleSocialClick = async (provider: "google" | "apple") => {
+  const handleSocialClick = async (provider: "google" | "facebook" | "apple") => {
     setErrorMessage(null);
-    const apiBase = import.meta.env.VITE_API_URL ?? "/api";
-    const authUrl = `${apiBase}/auth/${provider}${Capacitor.isNativePlatform() ? "?source=app" : ""}`;
-    if (Capacitor.isNativePlatform()) {
-      await Browser.open({ url: authUrl });
-    } else {
-      window.location.href = authUrl;
+    if (provider === "google" || provider === "apple") {
+      const apiBase = import.meta.env.VITE_API_URL ?? "/api";
+      const authUrl = `${apiBase}/auth/${provider}${Capacitor.isNativePlatform() ? "?source=app" : ""}`;
+      if (Capacitor.isNativePlatform()) {
+        await Browser.open({ url: authUrl });
+      } else {
+        window.location.href = authUrl;
+      }
+      return;
     }
+    setSocialMessage(t("auth.socialRegisterReady").replace("{provider}", "Facebook"));
   };
 
   const handleSendOtp = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -202,21 +202,18 @@ export function RegisterPage() {
       socialMessage={socialMessage}
       onSocialClick={handleSocialClick}
     >
-      {/* Onglets Email / Téléphone — masqués tant que PHONE_AUTH_ENABLED = false */}
-      {PHONE_AUTH_ENABLED && (
-        <div className="auth-tabs" role="tablist">
-          <button type="button" role="tab" aria-selected={tab === "email"}
-            className={`auth-tab${tab === "email" ? " auth-tab--active" : ""}`}
-            onClick={() => { setTab("email"); setErrorMessage(null); setOtpSent(false); setOtpCode(""); }}>
-            {t("auth.tabEmail")}
-          </button>
-          <button type="button" role="tab" aria-selected={tab === "telephone"}
-            className={`auth-tab${tab === "telephone" ? " auth-tab--active" : ""}`}
-            onClick={() => { setTab("telephone"); setErrorMessage(null); }}>
-            {t("auth.tabPhone")}
-          </button>
-        </div>
-      )}
+      <div className="auth-tabs" role="tablist">
+        <button type="button" role="tab" aria-selected={tab === "email"}
+          className={`auth-tab${tab === "email" ? " auth-tab--active" : ""}`}
+          onClick={() => { setTab("email"); setErrorMessage(null); setOtpSent(false); setOtpCode(""); }}>
+          {t("auth.tabEmail")}
+        </button>
+        <button type="button" role="tab" aria-selected={tab === "telephone"}
+          className={`auth-tab${tab === "telephone" ? " auth-tab--active" : ""}`}
+          onClick={() => { setTab("telephone"); setErrorMessage(null); }}>
+          {t("auth.tabPhone")}
+        </button>
+      </div>
 
       {tab === "email" && (
         <form className="auth-form" onSubmit={handleSubmit}>
@@ -353,7 +350,7 @@ export function RegisterPage() {
         </form>
       )}
 
-      {PHONE_AUTH_ENABLED && tab === "telephone" && !otpSent && (
+      {tab === "telephone" && !otpSent && (
         <form className="auth-form" onSubmit={handleSendOtp}>
           <div className="auth-helper-text">
             Créez votre compte avec votre numéro de téléphone. Un code SMS sera envoyé pour vérification.
@@ -417,7 +414,7 @@ export function RegisterPage() {
         </form>
       )}
 
-      {PHONE_AUTH_ENABLED && tab === "telephone" && otpSent && (
+      {tab === "telephone" && otpSent && (
         <form className="auth-form" onSubmit={handleVerifyOtp}>
           <div className="auth-helper-text">
             {t("auth.codeSentTo")} <strong>{phone}</strong>. {t("auth.checkSms")}
