@@ -10,41 +10,21 @@ type AuthShellProps = {
   role?: "user" | "business";
   onRoleChange?: (role: "user" | "business") => void;
   socialMessage: string | null;
-  onSocialClick: (provider: "google" | "facebook" | "apple") => void;
+  onSocialClick: (provider: "google" | "apple") => void;
   children: ReactNode;
 };
 
-const GoogleIcon = () => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-    <path d="M21.805 12.23c0-.79-.064-1.364-.202-1.96H12.24v3.702h5.496c-.11.92-.706 2.306-2.03 3.237l-.019.124 2.96 2.247.205.02c1.88-1.704 2.953-4.214 2.953-7.37Z" fill="#4285F4" />
-    <path d="M12.24 21.75c2.693 0 4.95-.867 6.6-2.35l-3.146-2.39c-.843.574-1.975.976-3.454.976-2.637 0-4.876-1.703-5.671-4.057l-.12.01-3.078 2.333-.041.113c1.64 3.184 5.02 5.365 8.91 5.365Z" fill="#34A853" />
-    <path d="M6.57 13.93a5.85 5.85 0 0 1-.332-1.93c0-.674.12-1.327.322-1.93l-.006-.129-3.118-2.37-.102.047A9.61 9.61 0 0 0 2.32 12c0 1.532.377 2.979 1.046 4.257l3.204-2.327Z" fill="#FBBC05" />
-    <path d="M12.24 6.015c1.864 0 3.123.79 3.842 1.45l2.803-2.672C17.17 3.26 14.933 2.25 12.24 2.25c-3.89 0-7.27 2.18-8.91 5.365l3.226 2.451c.804-2.354 3.044-4.05 5.681-4.05Z" fill="#EA4335" />
-  </svg>
-);
-
-const FacebookIcon = () => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-    <path d="M24 12.073C24 5.405 18.627 0 12 0S0 5.405 0 12.073c0 6.026 4.388 11.022 10.125 11.927v-8.437H7.078v-3.49h3.047V9.412c0-3.029 1.792-4.702 4.533-4.702 1.313 0 2.686.236 2.686.236v2.973H15.83c-1.491 0-1.956.931-1.956 1.887v2.267h3.328l-.532 3.49h-2.796V24C19.612 23.095 24 18.099 24 12.073Z" fill="#1877F2" />
-    <path d="M16.671 15.563l.532-3.49h-3.328V9.806c0-.956.465-1.887 1.956-1.887h1.513V4.946s-1.373-.236-2.686-.236c-2.74 0-4.533 1.673-4.533 4.702v2.661H7.078v3.49h3.047V24a12.2 12.2 0 0 0 3.75 0v-8.437h2.796Z" fill="#fff" />
-  </svg>
-);
-
-const AppleIcon = () => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-    <path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.53-3.23 0-1.44.62-2.2.44-3.06-.4C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09ZM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25Z" />
-  </svg>
-);
+// Icônes Google/Apple supprimées : auth simple email + mot de passe.
 
 export function AuthShell({
   eyebrow,
   title,
   subtitle,
-  dividerText,
+  dividerText: _dividerText,
   role,
   onRoleChange,
   socialMessage,
-  onSocialClick,
+  onSocialClick: _onSocialClick,
   children,
 }: AuthShellProps) {
   const { t } = useLocaleCurrency();
@@ -111,26 +91,11 @@ export function AuthShell({
             </div>
           </div>
 
-          <div className="auth-socials">
-            <button type="button" className="auth-social-button auth-social-button--google" onClick={() => onSocialClick("google")}>
-              <GoogleIcon />
-              <span>{t("auth.socialGoogle")}</span>
-            </button>
-            <button type="button" className="auth-social-button auth-social-button--facebook" onClick={() => onSocialClick("facebook")}>
-              <FacebookIcon />
-              <span>{t("auth.socialFacebook")}</span>
-            </button>
-            <button type="button" className="auth-social-button auth-social-button--apple" onClick={() => onSocialClick("apple")}>
-              <AppleIcon />
-              <span>{t("auth.socialApple")}</span>
-            </button>
-          </div>
+          {/* Social login (Google/Apple/Facebook) désactivé : auth simple email + mot de passe.
+              Boutons masqués volontairement — props onSocialClick / dividerText conservés
+              pour compatibilité avec LoginPage/RegisterPage. */}
 
           {socialMessage ? <div className="auth-inline-note">{socialMessage}</div> : null}
-
-          <div className="auth-divider" aria-hidden="true">
-            <span>{dividerText}</span>
-          </div>
 
           {children}
 

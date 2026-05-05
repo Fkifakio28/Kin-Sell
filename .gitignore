@@ -66,3 +66,14 @@ apps/web/dist.tar.gz
 
 # Scripts with credentials
 scripts/fix-env-firebase.py
+
+# Local pitch-deck work artifacts (Edge browser profile, caches, history, cookies)
+docs/pitch-deck-work/
+
+# Local downloads / binaries (APK distribution placed at runtime)
+/downloads/
+apps/web/public/downloads/
+*.apk
+
+# Local SMTP / email diagnostic tooling (uses .env, not for prod)
+scripts/test-smtp.mjs
