@@ -38,6 +38,13 @@ Regles metier critiques:
 ## Variables d environnement
 Copier .env.example vers .env puis completer les valeurs.
 
+### SMTP & mot de passe oublié
+Le flow `mot de passe oublié` dépend du SMTP :
+- Si `SMTP_USER` ou `SMTP_PASS` est vide, ou si l'envoi échoue, l'API renvoie **HTTP 503** avec un message clair.
+- `SMTP_USER` doit être une boîte SMTP valide chez votre fournisseur (Hostinger, etc.).
+- `SMTP_FROM` peut afficher une adresse différente de `SMTP_USER` tant qu'elle est autorisée par le fournisseur.
+- Aucun email n'est consigné en BDD si l'envoi échoue (le code OTP orphelin est supprimé).
+
 ## API Listings geolocalises
 - `GET /listings/search`: recherche par texte/type/ville et, si `latitude` + `longitude` sont fournis, filtrage par rayon (`radiusKm`, 25 km par defaut) avec tri par distance.
 - `POST /listings`: publication d'un produit ou service avec coordonnees (`latitude`, `longitude`) pour l'indexation locale.

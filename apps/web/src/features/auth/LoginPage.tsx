@@ -93,19 +93,15 @@ export function LoginPage() {
     }
   }, [step]);
 
-  const handleSocialClick = async (provider: "google" | "facebook" | "apple") => {
+  const handleSocialClick = async (provider: "google" | "apple") => {
     setErrorMessage(null);
-    if (provider === "google" || provider === "apple") {
-      const apiBase = import.meta.env.VITE_API_URL ?? "/api";
-      const authUrl = `${apiBase}/auth/${provider}${Capacitor.isNativePlatform() ? "?source=app" : ""}`;
-      if (Capacitor.isNativePlatform()) {
-        await Browser.open({ url: authUrl });
-      } else {
-        window.location.href = authUrl;
-      }
-      return;
+    const apiBase = import.meta.env.VITE_API_URL ?? "/api";
+    const authUrl = `${apiBase}/auth/${provider}${Capacitor.isNativePlatform() ? "?source=app" : ""}`;
+    if (Capacitor.isNativePlatform()) {
+      await Browser.open({ url: authUrl });
+    } else {
+      window.location.href = authUrl;
     }
-    setSocialMessage(t("auth.socialReady").replace("{provider}", "Facebook"));
   };
 
   // Connexion email/identifiant

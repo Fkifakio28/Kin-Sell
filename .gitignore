@@ -66,3 +66,10 @@ apps/web/dist.tar.gz
 
 # Scripts with credentials
 scripts/fix-env-firebase.py
+scripts/test-smtp.mjs
+
+# Heavy / sensitive artefacts (never commit)
+docs/pitch-deck-work/
+/downloads/
+apps/web/public/downloads/
+*.apk
