@@ -7,6 +7,7 @@ import { useAuth } from "../../app/providers/AuthProvider";
 import { useLocaleCurrency } from "../../app/providers/LocaleCurrencyProvider";
 import { ApiError, auth as authApi } from "../../lib/api-client";
 import { TurnstileWidget } from "../../components/TurnstileWidget";
+import { isPhoneAuthEnabled } from "../../shared/feature-flags";
 
 type ProfileType = "user" | "business";
 type RegisterTab = "email" | "telephone";
@@ -62,13 +63,34 @@ export function RegisterPage() {
   const [otpResendAt, setOtpResendAt] = useState(0);
   const [otpCountdown, setOtpCountdown] = useState(0);
 
+  // Email OTP verification state (after email/password signup)
+  type EmailOtpStep = "idle" | "pending" | "sent" | "unavailable";
+  const [emailOtpStep, setEmailOtpStep] = useState<EmailOtpStep>("idle");
+  const [emailOtpVerifId, setEmailOtpVerifId] = useState("");
+  const [emailOtpCode, setEmailOtpCode] = useState("");
+  const [emailOtpResendAt, setEmailOtpResendAt] = useState(0);
+  const [emailOtpCountdown, setEmailOtpCountdown] = useState(0);
+  const [registeredEmail, setRegisteredEmail] = useState("");
+  const [registeredRole, setRegisteredRole] = useState<string>("USER");
+  const [infoMessage, setInfoMessage] = useState<string | null>(null);
+
   const handleTurnstileToken = useCallback((token: string) => setCfToken(token), []);
 
   useEffect(() => {
-    if (!isLoading && isLoggedIn && user) {
+    // Ne pas rediriger automatiquement pendant les étapes post-inscription email OTP.
+    // La redirection se fait alors via : confirmation OTP, bouton "Continuer sans vérifier",
+    // ou bouton "Continuer vers mon compte".
+    if (!isLoading && isLoggedIn && user && emailOtpStep === "idle") {
       navigate(getRedirectPath(user.role), { replace: true });
     }
-  }, [isLoading, isLoggedIn, navigate, user]);
+  }, [isLoading, isLoggedIn, navigate, user, emailOtpStep]);
+
+  // Garde-fou prod-safe : si le flag téléphone est désactivé, forcer l'onglet email.
+  useEffect(() => {
+    if (!isPhoneAuthEnabled && tab === "telephone") {
+      setTab("email");
+    }
+  }, [tab]);
 
   const helperText = useMemo(() => {
     return profileType === "business"
@@ -86,6 +108,17 @@ export function RegisterPage() {
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
   }, [otpResendAt]);
+
+  useEffect(() => {
+    if (emailOtpResendAt <= 0) return;
+    const tick = () => {
+      const remaining = Math.max(0, Math.ceil((emailOtpResendAt - Date.now()) / 1000));
+      setEmailOtpCountdown(remaining);
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [emailOtpResendAt]);
 
   const handleSocialClick = async (provider: "google" | "apple") => {
     setErrorMessage(null);
@@ -177,14 +210,71 @@ export function RegisterPage() {
     setIsSubmitting(true);
 
     try {
-      const nextUser = await register(email.trim().toLowerCase(), password, displayName.trim(), profileType === "business" ? "BUSINESS" : "USER", cfToken);
+      const normalizedEmail = email.trim().toLowerCase();
+      const nextUser = await register(normalizedEmail, password, displayName.trim(), profileType === "business" ? "BUSINESS" : "USER", cfToken);
+      // Bloque immédiatement la redirection auto avant l'await suivant.
+      setEmailOtpStep("pending");
       localStorage.setItem(rememberedRoleKey, profileType);
-      navigate(getRedirectPath(nextUser.role), { replace: true });
+      setRegisteredEmail(normalizedEmail);
+      setRegisteredRole(nextUser.role);
+
+      // Tente l'envoi d'un OTP email pour vérifier l'adresse.
+      // En cas d'échec (503 SMTP, etc.), on ne bloque pas l'utilisateur.
+      try {
+        const res = await authApi.requestEmailVerification(normalizedEmail);
+        setEmailOtpVerifId(res.verificationId);
+        setEmailOtpStep("sent");
+        setEmailOtpResendAt(Date.now() + 60 * 1000);
+        if (res.previewCode) setSocialMessage(`[DEV] Code email : ${res.previewCode}`);
+      } catch (verifError) {
+        setEmailOtpStep("unavailable");
+        setInfoMessage(
+          "Votre compte a été créé, mais l'envoi du code de vérification email est temporairement indisponible. Vous pourrez vérifier votre adresse plus tard depuis votre espace Sécurité.",
+        );
+        // log silencieux : on n'affiche pas une erreur bloquante
+        if (verifError instanceof Error) {
+          console.warn("[register] requestEmailVerification failed:", verifError.message);
+        }
+      }
     } catch (error) {
       setErrorMessage(getErrorMessage(error, t));
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleConfirmEmailOtp = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setErrorMessage(null);
+    if (emailOtpCode.length !== 6) { setErrorMessage(t("auth.code6digits")); return; }
+    setIsSubmitting(true);
+    try {
+      await authApi.confirmEmailVerification({ verificationId: emailOtpVerifId, code: emailOtpCode });
+      const refreshed = await refreshUser();
+      navigate(getRedirectPath(refreshed?.role ?? registeredRole), { replace: true });
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error, t));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleResendEmailOtp = async () => {
+    setErrorMessage(null);
+    setSocialMessage(null);
+    try {
+      const res = await authApi.requestEmailVerification(registeredEmail);
+      setEmailOtpVerifId(res.verificationId);
+      setEmailOtpResendAt(Date.now() + 60 * 1000);
+      if (res.previewCode) setSocialMessage(`[DEV] Code email : ${res.previewCode}`);
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error, t));
+    }
+  };
+
+  const handleSkipEmailVerification = async () => {
+    const refreshed = await refreshUser().catch(() => null);
+    navigate(getRedirectPath(refreshed?.role ?? registeredRole), { replace: true });
   };
 
   return (
@@ -198,20 +288,78 @@ export function RegisterPage() {
       socialMessage={socialMessage}
       onSocialClick={handleSocialClick}
     >
-      <div className="auth-tabs" role="tablist">
-        <button type="button" role="tab" aria-selected={tab === "email"}
-          className={`auth-tab${tab === "email" ? " auth-tab--active" : ""}`}
-          onClick={() => { setTab("email"); setErrorMessage(null); setOtpSent(false); setOtpCode(""); }}>
-          {t("auth.tabEmail")}
-        </button>
-        <button type="button" role="tab" aria-selected={tab === "telephone"}
-          className={`auth-tab${tab === "telephone" ? " auth-tab--active" : ""}`}
-          onClick={() => { setTab("telephone"); setErrorMessage(null); }}>
-          {t("auth.tabPhone")}
-        </button>
-      </div>
+      {emailOtpStep === "idle" && isPhoneAuthEnabled && (
+        <div className="auth-tabs" role="tablist">
+          <button type="button" role="tab" aria-selected={tab === "email"}
+            className={`auth-tab${tab === "email" ? " auth-tab--active" : ""}`}
+            onClick={() => { setTab("email"); setErrorMessage(null); setOtpSent(false); setOtpCode(""); }}>
+            {t("auth.tabEmail")}
+          </button>
+          <button type="button" role="tab" aria-selected={tab === "telephone"}
+            className={`auth-tab${tab === "telephone" ? " auth-tab--active" : ""}`}
+            onClick={() => { setTab("telephone"); setErrorMessage(null); }}>
+            {t("auth.tabPhone")}
+          </button>
+        </div>
+      )}
 
-      {tab === "email" && (
+      {emailOtpStep === "pending" && (
+        <div className="auth-form">
+          <div className="auth-helper-text">Compte créé. Envoi du code de vérification email…</div>
+        </div>
+      )}
+
+      {emailOtpStep === "sent" && (
+        <form className="auth-form" onSubmit={handleConfirmEmailOtp}>
+          <div className="auth-helper-text">
+            Un code à 6 chiffres a été envoyé à <strong>{registeredEmail}</strong>. Vérifiez votre boîte mail (et vos spams).
+          </div>
+
+          <div className="auth-field-group">
+            <label htmlFor="register-email-otp" className="auth-label">{t("auth.otpLabel")}</label>
+            <input
+              id="register-email-otp"
+              type="text"
+              inputMode="numeric"
+              className="auth-input auth-input--otp"
+              placeholder="000000"
+              maxLength={6}
+              value={emailOtpCode}
+              onChange={(e) => setEmailOtpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+              autoComplete="one-time-code"
+              required
+            />
+          </div>
+
+          {errorMessage ? <div className="auth-error">{errorMessage}</div> : null}
+
+          <button type="submit" className="auth-submit-button" disabled={isSubmitting || emailOtpCode.length !== 6}>
+            {isSubmitting ? t("auth.verifying") : t("auth.confirmCode")}
+          </button>
+
+          <div className="auth-row auth-row--between" style={{ marginTop: 8 }}>
+            <button type="button" className="auth-link-button" onClick={handleSkipEmailVerification}>
+              Continuer sans vérifier
+            </button>
+            <button type="button" className="auth-link-button" disabled={emailOtpCountdown > 0} onClick={handleResendEmailOtp}>
+              {emailOtpCountdown > 0 ? `${t("auth.resendIn")} (${emailOtpCountdown}s)` : t("auth.resendCode")}
+            </button>
+          </div>
+        </form>
+      )}
+
+      {emailOtpStep === "unavailable" && (
+        <div className="auth-form">
+          <div className="auth-helper-text">
+            {infoMessage ?? "Votre compte a été créé. La vérification email est temporairement indisponible."}
+          </div>
+          <button type="button" className="auth-submit-button" onClick={handleSkipEmailVerification}>
+            Continuer vers mon compte
+          </button>
+        </div>
+      )}
+
+      {emailOtpStep === "idle" && tab === "email" && (
         <form className="auth-form" onSubmit={handleSubmit}>
           <div className="auth-helper-text">{helperText}</div>
 
@@ -346,7 +494,7 @@ export function RegisterPage() {
         </form>
       )}
 
-      {tab === "telephone" && !otpSent && (
+      {emailOtpStep === "idle" && tab === "telephone" && isPhoneAuthEnabled && !otpSent && (
         <form className="auth-form" onSubmit={handleSendOtp}>
           <div className="auth-helper-text">
             Créez votre compte avec votre numéro de téléphone. Un code SMS sera envoyé pour vérification.
@@ -410,7 +558,7 @@ export function RegisterPage() {
         </form>
       )}
 
-      {tab === "telephone" && otpSent && (
+      {emailOtpStep === "idle" && tab === "telephone" && isPhoneAuthEnabled && otpSent && (
         <form className="auth-form" onSubmit={handleVerifyOtp}>
           <div className="auth-helper-text">
             {t("auth.codeSentTo")} <strong>{phone}</strong>. {t("auth.checkSms")}

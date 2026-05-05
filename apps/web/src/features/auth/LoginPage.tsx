@@ -7,6 +7,7 @@ import { useAuth } from "../../app/providers/AuthProvider";
 import { useLocaleCurrency } from "../../app/providers/LocaleCurrencyProvider";
 import { ApiError, auth as authApi } from "../../lib/api-client";
 import { TurnstileWidget } from "../../components/TurnstileWidget";
+import { isPhoneAuthEnabled } from "../../shared/feature-flags";
 
 type LoginTab = "identifiant" | "telephone";
 type LoginStep = "credentials" | "totp" | "otp";
@@ -73,6 +74,13 @@ export function LoginPage() {
       navigate(getRedirectPath(user.role), { replace: true });
     }
   }, [isLoading, isLoggedIn, navigate, user]);
+
+  // Garde-fou prod-safe : si le flag téléphone est désactivé, forcer l'onglet identifiant.
+  useEffect(() => {
+    if (!isPhoneAuthEnabled && tab === "telephone") {
+      setTab("identifiant");
+    }
+  }, [tab]);
 
   // Countdown OTP resend
   useEffect(() => {
@@ -287,15 +295,17 @@ export function LoginPage() {
         >
           {t("auth.tabEmail")}
         </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === "telephone"}
-          className={`auth-tab${tab === "telephone" ? " auth-tab--active" : ""}`}
-          onClick={() => { setTab("telephone"); setErrorMessage(null); }}
-        >
-          {t("auth.tabPhone")}
-        </button>
+        {isPhoneAuthEnabled && (
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === "telephone"}
+            className={`auth-tab${tab === "telephone" ? " auth-tab--active" : ""}`}
+            onClick={() => { setTab("telephone"); setErrorMessage(null); }}
+          >
+            {t("auth.tabPhone")}
+          </button>
+        )}
       </div>
 
       {/* Onglet Email/Identifiant */}
@@ -376,7 +386,7 @@ export function LoginPage() {
       )}
 
       {/* Onglet Telephone (OTP) */}
-      {tab === "telephone" && !otpSent && (
+      {tab === "telephone" && isPhoneAuthEnabled && !otpSent && (
         <form className="auth-form" onSubmit={handleSendOtp}>
           <div className="auth-helper-text">{t("auth.otpHelper")}</div>
 
@@ -406,7 +416,7 @@ export function LoginPage() {
         </form>
       )}
 
-      {tab === "telephone" && otpSent && (
+      {tab === "telephone" && isPhoneAuthEnabled && otpSent && (
         <form className="auth-form" onSubmit={handleVerifyOtp}>
           <div className="auth-helper-text">
             {t("auth.codeSentTo")} <strong>{phone}</strong>. {t("auth.checkSms")}
